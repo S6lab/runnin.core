@@ -1,0 +1,56 @@
+# OS / Editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.iml
+
+# Local env / secrets
+.env
+.env.*
+server-sa-key.json
+*.pem
+*.p12
+*.jks
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Root temporary/debug artifacts
+dataconnect-debug.log
+
+# Flutter / Dart
+app/.dart_tool/
+app/.flutter-plugins
+app/.flutter-plugins-dependencies
+app/.packages
+app/.pub/
+app/.pub-cache/
+app/build/
+app/coverage/
+app/android/.gradle/
+app/android/local.properties
+app/android/**/GeneratedPluginRegistrant.java
+app/ios/Flutter/Flutter.framework
+app/ios/Flutter/App.framework
+app/ios/Flutter/ephemeral/
+app/ios/Pods/
+app/macos/Pods/
+app/linux/flutter/ephemeral/
+app/windows/flutter/ephemeral/
+app/web/.dart_tool/
+
+# Node / TypeScript
+server/node_modules/
+server/dist/
+server/.turbo/
+server/.next/
+
+# Misc caches
+.cache/
+.tmp/
+tmp/

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "267248310658",
+    "project_id": "rumo-492120",
+    "storage_bucket": "rumo-492120.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:267248310658:android:cf9c5bd47100e025fe579b",
+        "android_client_info": {
+          "package_name": "com.reniuslab.runnin"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCl4NprHEg8a8BCzsQjD6FBBOTfCCakpDM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

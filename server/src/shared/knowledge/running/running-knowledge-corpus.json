@@ -1,0 +1,100 @@
+[
+  {
+    "id": "rrk-001",
+    "title": "Volume semanal deve progredir de forma individual, não por regra fixa",
+    "summary": "A literatura sobre lesoes relacionadas a corrida nao sustenta uma regra universal de aumento semanal de 10%. A progressao de volume e intensidade deve considerar experiencia, sintomas, recuperacao recente e tolerancia de carga.",
+    "guidance": [
+      "Evitar prescrever aumentos fixos de volume para todos os corredores.",
+      "Reduzir ou estabilizar carga quando houver dor persistente, fadiga acumulada ou baixa aderencia.",
+      "Priorizar continuidade sustentavel em vez de crescimento agressivo de quilometragem."
+    ],
+    "tags": ["load-management", "injury-risk", "novice", "progression"],
+    "sourceType": "systematic_review",
+    "sourceTitle": "The Association Between Running Injuries and Training Parameters: A Systematic Review",
+    "sourceUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC9528699/"
+  },
+  {
+    "id": "rrk-002",
+    "title": "A maior parte do treino de endurance deve permanecer em baixa intensidade",
+    "summary": "Revisoes sobre distribuicao de intensidade mostram que programas eficazes de endurance concentram a maior parte do volume em baixa intensidade, com pequena parcela em intensidade alta e uso criterioso de intensidade moderada.",
+    "guidance": [
+      "Construir o plano com predominio de sessoes leves.",
+      "Limitar sessoes exigentes a uma ou duas por semana para corredores recreacionais, conforme nivel e recuperacao.",
+      "Evitar acumular varios dias duros consecutivos."
+    ],
+    "tags": ["intensity-distribution", "easy-run", "interval", "tempo"],
+    "sourceType": "systematic_review",
+    "sourceTitle": "Comparison of Polarized Versus Other Types of Endurance Training Intensity Distribution on Athletes' Endurance Performance: A Systematic Review with Meta-analysis",
+    "sourceUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC11329428/"
+  },
+  {
+    "id": "rrk-003",
+    "title": "Treinamento de forca complementa a corrida e melhora determinantes de performance",
+    "summary": "Revisao sistematica encontrou beneficios do treinamento de forca para economia de corrida e determinantes fisiologicos relevantes em corredores de media e longa distancia.",
+    "guidance": [
+      "Inserir pelo menos duas sessoes semanais de forca ou sugeri-las como trabalho complementar.",
+      "Dar enfase a membros inferiores, core e estabilidade, sem comprometer recuperacao dos treinos-chave.",
+      "Usar forca como suporte de desempenho e resiliencia musculoesqueletica."
+    ],
+    "tags": ["strength", "injury-prevention", "performance-support"],
+    "sourceType": "systematic_review",
+    "sourceTitle": "Effects of Strength Training on the Physiological Determinants of Middle- and Long-Distance Running Performance: A Systematic Review",
+    "sourceUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC5889786/"
+  },
+  {
+    "id": "rrk-004",
+    "title": "Taper antes da prova deve reduzir volume mantendo intensidade",
+    "summary": "Meta-analise em atletas de endurance encontrou melhora de performance com taper de ate 21 dias, reducao de volume em torno de 41% a 60% e manutencao relativa de intensidade e frequencia.",
+    "guidance": [
+      "Nas semanas finais antes de prova-alvo, reduzir volume total sem transformar tudo em rodagem leve sem qualidade.",
+      "Preservar alguns estimulos especificos de ritmo com menor carga total.",
+      "Evitar aumentos de volume ou blocos muito agressivos imediatamente antes do evento."
+    ],
+    "tags": ["taper", "race-prep", "competition"],
+    "sourceType": "systematic_review",
+    "sourceTitle": "Effects of tapering on performance in endurance athletes: A systematic review and meta-analysis",
+    "sourceUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC10171681/"
+  },
+  {
+    "id": "rrk-005",
+    "title": "HIIT pode melhorar VO2max, mas precisa ser dosado dentro do plano",
+    "summary": "Meta-analise sobre trainability de VO2max mostrou que blocos de HIIT entre 6 e 12 semanas podem melhorar VO2max. Em corredores recreacionais, esse estimulo deve coexistir com volume leve predominante e recuperacao adequada.",
+    "guidance": [
+      "Usar intervalados como ferramenta especifica, nao como base de todo o plano.",
+      "Introduzir sessoes de alta intensidade apenas quando o nivel do corredor suportar.",
+      "Separar treinos duros com dias leves ou descanso."
+    ],
+    "tags": ["hiit", "vo2max", "interval", "advanced-load"],
+    "sourceType": "meta_analysis",
+    "sourceTitle": "VO2max Trainability and High Intensity Interval Training in Humans: A Meta-Analysis",
+    "sourceUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC3774727/"
+  },
+  {
+    "id": "rrk-006",
+    "title": "Corredores iniciantes concentram risco de lesao cedo no processo",
+    "summary": "Cohorts com corredores iniciantes mostram incidencia relevante de lesoes nas primeiras dezenas a centenas de quilometros, reforcando a necessidade de progressao conservadora e monitoramento de sintomas no inicio do plano.",
+    "guidance": [
+      "Para iniciantes, priorizar frequencia sustentavel e treinos leves antes de aumentar volume e intensidade.",
+      "Evitar combinar aumento de distancia e intensidade na mesma semana.",
+      "Prever dias de descanso e possibilidade de repeticao de semanas quando a adaptacao nao ocorrer bem."
+    ],
+    "tags": ["novice", "injury-risk", "recovery", "onboarding"],
+    "sourceType": "cohort",
+    "sourceTitle": "A Prospective Study on Time to Recovery in 254 Injured Novice Runners",
+    "sourceUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC4055729/"
+  },
+  {
+    "id": "rrk-007",
+    "title": "Planos devem respeitar recomendacoes minimas de atividade fisica para saude",
+    "summary": "A OMS recomenda para adultos de 18 a 64 anos entre 150 e 300 minutos semanais de atividade aerobica moderada, ou 75 a 150 minutos vigorosos, alem de fortalecimento muscular em dois ou mais dias por semana.",
+    "guidance": [
+      "Para objetivos de saude e base aerobia, garantir acumulacao semanal coerente de minutos ativos.",
+      "Se o objetivo do corredor for saude geral, nao prescrever estrutura de atleta competitivo desnecessariamente complexa.",
+      "Lembrar de sugerir fortalecimento complementar duas vezes por semana."
+    ],
+    "tags": ["health", "beginner", "weekly-minutes", "strength"],
+    "sourceType": "guideline",
+    "sourceTitle": "WHO Physical activity recommendations for adults",
+    "sourceUrl": "https://www.who.int/europe/news-room/fact-sheets/item/physical-activity"
+  }
+]

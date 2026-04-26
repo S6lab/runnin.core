@@ -1,0 +1,143 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:hive_flutter/hive_flutter.dart';
+import 'package:runnin/features/auth/presentation/pages/login_page.dart';
+import 'package:runnin/features/home/presentation/pages/home_page.dart';
+import 'package:runnin/features/onboarding/presentation/pages/onboarding_page.dart';
+import 'package:runnin/features/run/presentation/bloc/run_bloc.dart';
+import 'package:runnin/features/run/presentation/pages/prep_page.dart';
+import 'package:runnin/features/run/presentation/pages/active_run_page.dart';
+import 'package:runnin/features/run/presentation/pages/report_page.dart';
+import 'package:runnin/features/training/presentation/pages/training_page.dart';
+import 'package:runnin/features/coach/presentation/pages/coach_chat_page.dart';
+import 'package:runnin/features/history/presentation/pages/history_page.dart';
+import 'package:runnin/features/profile/presentation/pages/account_page.dart';
+import 'package:runnin/features/profile/presentation/pages/account_access_page.dart';
+import 'package:runnin/features/profile/presentation/pages/profile_page.dart';
+import 'package:runnin/features/dashboard/presentation/pages/dashboard_page.dart';
+import 'package:runnin/shared/widgets/main_layout.dart';
+
+final _rootNavigatorKey = GlobalKey<NavigatorState>();
+final _shellNavigatorKey = GlobalKey<NavigatorState>();
+final _runFlowNavigatorKey = GlobalKey<NavigatorState>();
+
+// Cache em memória para o status de onboarding (evita fetch a cada redirect)
+bool? _onboardingDone;
+const _settingsBoxName = 'runnin_settings';
+const _onboardingCacheKey = 'onboarding_completed';
+
+Box<dynamic>? _settingsBoxOrNull() {
+  if (!Hive.isBoxOpen(_settingsBoxName)) return null;
+  return Hive.box<dynamic>(_settingsBoxName);
+}
+
+bool? onboardingCacheStatus() {
+  final cached = _onboardingDone;
+  if (cached != null) return cached;
+
+  final box = _settingsBoxOrNull();
+  final persisted = box?.get(_onboardingCacheKey);
+  if (persisted is bool) {
+    _onboardingDone = persisted;
+    return persisted;
+  }
+  return null;
+}
+
+void markOnboardingDone() {
+  _onboardingDone = true;
+  _settingsBoxOrNull()?.put(_onboardingCacheKey, true);
+}
+
+void markOnboardingPending() {
+  _onboardingDone = false;
+  _settingsBoxOrNull()?.put(_onboardingCacheKey, false);
+}
+
+void clearOnboardingCache() {
+  _onboardingDone = null;
+  _settingsBoxOrNull()?.delete(_onboardingCacheKey);
+}
+
+final appRouter = GoRouter(
+  navigatorKey: _rootNavigatorKey,
+  initialLocation: '/home',
+  redirect: (context, state) {
+    final loggedIn = FirebaseAuth.instance.currentUser != null;
+    final loc = state.matchedLocation;
+    final onboardingStatus = onboardingCacheStatus();
+
+    if (!loggedIn) {
+      if (loc != '/login') return '/login';
+      return null;
+    }
+
+    // Logado mas ainda não fez onboarding
+    if (onboardingStatus == false && loc != '/onboarding') {
+      return '/onboarding';
+    }
+
+    if (onboardingStatus == true && loc == '/onboarding') {
+      return '/home';
+    }
+
+    if (loc == '/login') return '/home';
+    return null;
+  },
+  refreshListenable: _AuthChangeNotifier(),
+  routes: [
+    GoRoute(path: '/login', builder: (_, _) => const LoginPage()),
+    GoRoute(path: '/onboarding', builder: (_, _) => const OnboardingPage()),
+
+    // Fluxo de corrida — RunBloc compartilhado entre prep → run → report
+    ShellRoute(
+      parentNavigatorKey: _rootNavigatorKey,
+      navigatorKey: _runFlowNavigatorKey,
+      builder: (context, state, child) =>
+          BlocProvider(create: (_) => RunBloc(), child: child),
+      routes: [
+        GoRoute(path: '/prep', builder: (_, _) => const PrepPage()),
+        GoRoute(
+          path: '/run',
+          builder: (_, state) =>
+              ActiveRunPage(runId: state.extra as String? ?? ''),
+        ),
+        GoRoute(
+          path: '/report',
+          builder: (_, state) =>
+              ReportPage(runId: state.extra as String? ?? ''),
+        ),
+      ],
+    ),
+
+    // Shell com bottom nav
+    ShellRoute(
+      navigatorKey: _shellNavigatorKey,
+      builder: (context, state, child) => MainLayout(child: child),
+      routes: [
+        GoRoute(path: '/home', builder: (_, _) => const HomePage()),
+        GoRoute(path: '/training', builder: (_, _) => const TrainingPage()),
+        GoRoute(path: '/coach', builder: (_, _) => const CoachChatPage()),
+        GoRoute(path: '/history', builder: (_, _) => const HistoryPage()),
+        GoRoute(path: '/profile', builder: (_, _) => const AccountPage()),
+        GoRoute(
+          path: '/profile/access',
+          builder: (_, _) => const AccountAccessPage(),
+        ),
+        GoRoute(
+          path: '/profile/edit',
+          builder: (_, _) => const ProfilePage(initialEditing: true),
+        ),
+        GoRoute(path: '/dashboard', builder: (_, _) => const DashboardPage()),
+      ],
+    ),
+  ],
+);
+
+class _AuthChangeNotifier extends ChangeNotifier {
+  _AuthChangeNotifier() {
+    FirebaseAuth.instance.authStateChanges().listen((_) => notifyListeners());
+  }
+}
