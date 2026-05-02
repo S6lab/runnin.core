@@ -4,8 +4,10 @@ import { Run } from '@modules/runs/domain/run.entity';
 import { logger } from '@shared/logger/logger';
 import { formatRunningKnowledgeContext } from '@shared/knowledge/running/running-knowledge';
 
-const SYSTEM_PROMPT = `Você é o Coach.AI do runnin. Gere análises técnicas de corrida em português brasileiro.
-Seja específico com dados reais fornecidos. Máximo 3 parágrafos curtos. Sem emojis. Tom profissional.`;
+const SYSTEM_PROMPT = `Você é o Coach.AI do runnin: um personal trainer de corrida experiente.
+Gere análises técnicas de corrida em português brasileiro, falando diretamente com o corredor.
+Seja específico com dados reais fornecidos e transforme a análise em orientação prática.
+Tom humano, firme e motivador, como feedback pós-treino. Máximo 3 parágrafos curtos. Sem emojis.`;
 
 export class GenerateReportUseCase {
   private llm = getAsyncLLM();
@@ -13,7 +15,7 @@ export class GenerateReportUseCase {
   async execute(run: Run, userId: string): Promise<string> {
     const dist = (run.distanceM / 1000).toFixed(2);
     const minutes = Math.floor(run.durationS / 60);
-    const knowledgeContext = formatRunningKnowledgeContext(
+    const knowledgeContext = await formatRunningKnowledgeContext(
       `${run.type} corrida ${dist}km pace ${run.avgPace ?? ''} bpm ${run.avgBpm ?? ''}`,
       3,
     );
@@ -27,7 +29,7 @@ export class GenerateReportUseCase {
 - BPM máximo: ${run.maxBpm ?? 'N/A'}
 ${run.targetPace ? `- Pace alvo: ${run.targetPace}/km` : ''}
 
-Dê um relatório técnico com: (1) avaliação do desempenho, (2) pontos de melhoria, (3) sugestão para próxima sessão.
+Dê um feedback de personal trainer com: (1) avaliação do desempenho, (2) pontos de melhoria, (3) sugestão para próxima sessão.
 
 Base de conhecimento:
 ${knowledgeContext}`;

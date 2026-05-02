@@ -11,7 +11,7 @@
 - Backend publicado no Cloud Run:
   - Serviço: `runrun-api`
   - Região: `southamerica-east1`
-  - URL: `https://runrun-api-267248310658.southamerica-east1.run.app`
+  - URL: `https://runnin-api-rogiz7losq-rj.a.run.app`
   - Revisão atual: `runrun-api-00003-gvc`
 - App com:
   - login Google
@@ -244,7 +244,7 @@ Observações do estado real:
 
 ### Base URL
 ```
-https://runrun-api-267248310658.southamerica-east1.run.app/v1   (produção atual)
+https://runnin-api-rogiz7losq-rj.a.run.app/v1   (produção atual)
 http://localhost:3000/v1                                         (local)
 ```
 
@@ -422,7 +422,7 @@ PORT=3000
 NODE_ENV=development
 
 # Firebase Admin
-FIREBASE_PROJECT_ID=rumo-492120
+FIREBASE_PROJECT_ID=runnin-494520
 FIREBASE_CLIENT_EMAIL=...
 FIREBASE_PRIVATE_KEY=...
 
@@ -464,7 +464,7 @@ CMD ["node", "dist/main.js"]
 ## TODO — Prioridades Reais
 
 ### PRÉ-REQUISITOS (fazer antes de começar)
-- [x] Criar projeto no Firebase Console (`rumo-492120`)
+- [x] Criar projeto no Firebase Console (`runnin-494520`)
 - [x] Ativar Firestore
 - [x] Ativar Firebase Auth
 - [x] Ativar Anonymous Auth
@@ -589,7 +589,7 @@ gcloud run deploy runrun-api \
   --min-instances 0 \
   --max-instances 10 \
   --memory 512Mi \
-  --set-env-vars "NODE_ENV=production,FIREBASE_PROJECT_ID=rumo-492120"
+  --set-env-vars "NODE_ENV=production,FIREBASE_PROJECT_ID=runnin-494520"
 
 # Ver logs Cloud Run em tempo real
 gcloud run logs tail runrun-api --region southamerica-east1

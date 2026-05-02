@@ -13,6 +13,8 @@ import 'package:runnin/features/training/domain/entities/plan.dart';
 import 'package:runnin/shared/widgets/app_page_header.dart';
 import 'package:runnin/shared/widgets/app_panel.dart';
 import 'package:runnin/shared/widgets/app_tag.dart';
+import 'package:runnin/shared/widgets/coach_narrative_card.dart';
+import 'package:runnin/shared/widgets/metric_card.dart';
 
 enum _TrainingTab { plan, reports, adjustments }
 
@@ -257,7 +259,11 @@ class _TrainingPageState extends State<TrainingPage> {
           id: planId,
           goal: goal,
           level: level,
-          weeksCount: 8,
+          weeksCount: _estimatePlanWeeks(
+            goal: goal,
+            level: level,
+            frequency: profile.frequency,
+          ),
           status: 'generating',
           weeks: const [],
           createdAt: DateTime.now().toIso8601String(),
@@ -354,6 +360,52 @@ class _TrainingPageState extends State<TrainingPage> {
   }
 }
 
+int _estimatePlanWeeks({
+  required String goal,
+  required String level,
+  int? frequency,
+}) {
+  final normalizedGoal = goal
+      .toLowerCase()
+      .replaceAll(RegExp(r'[áàãâä]'), 'a')
+      .replaceAll(RegExp(r'[éèêë]'), 'e')
+      .replaceAll(RegExp(r'[íìîï]'), 'i')
+      .replaceAll(RegExp(r'[óòõôö]'), 'o')
+      .replaceAll(RegExp(r'[úùûü]'), 'u')
+      .replaceAll('ç', 'c');
+  final freq = (frequency ?? 3).clamp(1, 7);
+  final isBeginner = level == 'iniciante';
+  final isAdvanced = level == 'avancado';
+
+  var weeks = switch (normalizedGoal) {
+    final value when value.contains('maratona') || value.contains('42') =>
+      isAdvanced ? 14 : 16,
+    final value
+        when value.contains('meia') ||
+            value.contains('21') ||
+            value.contains('half') =>
+      isBeginner ? 14 : (isAdvanced ? 10 : 12),
+    final value when value.contains('10k') || value.contains('10 km') =>
+      isBeginner ? 10 : 8,
+    final value when value.contains('5k') || value.contains('5 km') =>
+      isBeginner ? 8 : 6,
+    final value
+        when value.contains('emagrec') ||
+            value.contains('saude') ||
+            value.contains('condicion') =>
+      isAdvanced ? 6 : 8,
+    _ => isBeginner ? 8 : (isAdvanced ? 10 : 8),
+  };
+
+  if (freq <= 2) {
+    weeks += 2;
+  } else if (freq >= 5 && !isBeginner && weeks > 8) {
+    weeks -= 2;
+  }
+
+  return weeks.clamp(4, 16);
+}
+
 class _EmptyState extends StatelessWidget {
   final bool generating;
   final VoidCallback onGenerate;
@@ -378,12 +430,7 @@ class _EmptyState extends StatelessWidget {
                 color: palette.border,
               ),
               const SizedBox(height: 16),
-              Text(
-                'Nenhum plano ativo',
-                style: Theme.of(
-                  context,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
-              ),
+              Text('Nenhum plano ativo', style: context.runninType.displaySm),
               const SizedBox(height: 8),
               Text(
                 'Gere seu plano de treino personalizado com IA. Leva em conta seu nível e objetivo.',
@@ -463,9 +510,7 @@ class _PlanGeneratingState extends StatelessWidget {
               const SizedBox(height: 16),
               Text(
                 'Criando seu plano',
-                style: Theme.of(
-                  context,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+                style: context.runninType.displaySm,
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 8),
@@ -549,9 +594,7 @@ class _PlanFailedState extends StatelessWidget {
               const SizedBox(height: 16),
               Text(
                 'Nao foi possivel finalizar seu plano',
-                style: Theme.of(
-                  context,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+                style: context.runninType.displaySm,
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 8),
@@ -691,7 +734,7 @@ class _PlanContextCard extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            'Plano salvo: $planSummary',
+            'Plano pronto: $planSummary. Agora é executar com constância e ajustar quando o corpo pedir.',
             style: TextStyle(
               color: palette.text.withValues(alpha: 0.86),
               height: 1.4,
@@ -1002,29 +1045,26 @@ class _WeeklyPlanView extends StatelessWidget {
           subtitle: _buildWeekHeadline(week),
         ),
         const SizedBox(height: 12),
-        _CoachNarrative(
-          title: 'RESUMO DA SEMANA',
-          body: _buildWeekSummary(week),
-        ),
+        CoachNarrativeCard(text: _buildWeekSummary(week)),
         const SizedBox(height: 12),
         Row(
           children: [
             Expanded(
-              child: _SummaryBox(
+              child: MetricCard(
                 label: 'VOLUME',
                 value: '${totalDistance.toStringAsFixed(0)}K',
               ),
             ),
             const SizedBox(width: 8),
             Expanded(
-              child: _SummaryBox(
+              child: MetricCard(
                 label: 'SESSÕES',
                 value: '${orderedSessions.length}',
               ),
             ),
             const SizedBox(width: 8),
             Expanded(
-              child: _SummaryBox(
+              child: MetricCard(
                 label: 'DESCANSO',
                 value: '${7 - orderedSessions.length}',
               ),
@@ -1071,28 +1111,28 @@ class _MonthlyPlanView extends StatelessWidget {
         Row(
           children: [
             Expanded(
-              child: _SummaryBox(
+              child: MetricCard(
                 label: 'VOL TOTAL',
                 value: '${stats.totalKm.toStringAsFixed(0)}K',
               ),
             ),
             const SizedBox(width: 8),
             Expanded(
-              child: _SummaryBox(
+              child: MetricCard(
                 label: 'SESSÕES',
                 value: '${stats.totalSessions}',
               ),
             ),
             const SizedBox(width: 8),
             Expanded(
-              child: _SummaryBox(
+              child: MetricCard(
                 label: 'DIAS TREINO',
                 value: '${stats.totalSessions}',
               ),
             ),
             const SizedBox(width: 8),
             Expanded(
-              child: _SummaryBox(label: 'DESCANSO', value: '${stats.restDays}'),
+              child: MetricCard(label: 'DESCANSO', value: '${stats.restDays}'),
             ),
           ],
         ),
@@ -1233,13 +1273,7 @@ class _SectionTitle extends StatelessWidget {
         Row(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            Text(
-              title,
-              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                fontWeight: FontWeight.w900,
-                letterSpacing: -0.03,
-              ),
-            ),
+            Text(title, style: context.runninType.displayMd),
             const SizedBox(width: 6),
             Text(
               indexLabel,
@@ -1281,9 +1315,7 @@ class _TabEmptyState extends StatelessWidget {
               Text(
                 title,
                 textAlign: TextAlign.center,
-                style: Theme.of(
-                  context,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+                style: context.runninType.displaySm,
               ),
               const SizedBox(height: 8),
               Text(
@@ -1294,88 +1326,6 @@ class _TabEmptyState extends StatelessWidget {
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _CoachNarrative extends StatelessWidget {
-  final String title;
-  final String body;
-
-  const _CoachNarrative({required this.title, required this.body});
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.runninPalette;
-
-    return AppPanel(
-      color: palette.surfaceAlt,
-      child: Container(
-        decoration: BoxDecoration(
-          border: Border(left: BorderSide(color: palette.secondary, width: 3)),
-        ),
-        padding: const EdgeInsets.only(left: 12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              title,
-              style: TextStyle(
-                color: palette.secondary,
-                fontSize: 11,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 0.08,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              body,
-              style: TextStyle(
-                color: palette.text.withValues(alpha: 0.82),
-                height: 1.5,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _SummaryBox extends StatelessWidget {
-  final String label;
-  final String value;
-
-  const _SummaryBox({required this.label, required this.value});
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.runninPalette;
-
-    return AppPanel(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 9,
-              fontWeight: FontWeight.w700,
-              color: palette.muted,
-              letterSpacing: 0.08,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.w900,
-              color: palette.primary,
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -1785,7 +1735,7 @@ String _buildWeekHeadline(PlanWeek? week) {
 
 String _buildWeekSummary(PlanWeek? week) {
   if (week == null || week.sessions.isEmpty) {
-    return 'Nenhuma sessao planejada para esta semana.';
+    return 'Semana livre no plano. Use para recuperar bem e chegar inteiro no proximo bloco.';
   }
 
   final ordered = [...week.sessions]
@@ -1798,10 +1748,10 @@ String _buildWeekSummary(PlanWeek? week) {
       .join(' ');
 
   if (notes.isEmpty) {
-    return 'A semana combina $sessionTypes com distribuicao pensada para manter consistencia e recuperacao.';
+    return 'Nesta semana vamos combinar $sessionTypes. Mantem constancia, respeita os dias leves e chega forte no treino-chave.';
   }
 
-  return 'A semana combina $sessionTypes. $notes';
+  return 'Nesta semana vamos combinar $sessionTypes. $notes';
 }
 
 String _deriveWeekFocus(PlanWeek week) {

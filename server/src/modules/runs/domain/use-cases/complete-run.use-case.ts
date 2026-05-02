@@ -4,8 +4,8 @@ import { Run } from '../run.entity';
 import { NotFoundError } from '@shared/errors/app-error';
 
 export const CompleteRunSchema = z.object({
-  distanceM: z.number().positive(),
-  durationS: z.number().positive(),
+  distanceM: z.number().nonnegative(),
+  durationS: z.number().nonnegative(),
   avgBpm: z.number().optional(),
   maxBpm: z.number().optional(),
 });
@@ -13,7 +13,7 @@ export const CompleteRunSchema = z.object({
 export type CompleteRunInput = z.infer<typeof CompleteRunSchema>;
 
 function formatPace(distanceM: number, durationS: number): string {
-  if (distanceM === 0) return '0:00';
+  if (distanceM <= 0) return '--:--';
   const paceSecPerKm = (durationS / distanceM) * 1000;
   const min = Math.floor(paceSecPerKm / 60);
   const sec = Math.round(paceSecPerKm % 60);
@@ -21,6 +21,7 @@ function formatPace(distanceM: number, durationS: number): string {
 }
 
 function calcXp(distanceM: number, durationS: number): number {
+  if (distanceM <= 0) return 0;
   const km = distanceM / 1000;
   const minutes = durationS / 60;
   return Math.round(km * 10 + minutes * 0.5);

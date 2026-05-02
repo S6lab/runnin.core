@@ -1,17 +1,37 @@
-# runrun
+# runnin
 
-A new Flutter project.
+runnin.ai — AI Running Coach
 
-## Getting Started
+## Rodando localmente
 
-This project is a starting point for a Flutter application.
+Em um terminal, suba o server local:
 
-A few resources to get you started if this is your first Flutter project:
+```bash
+cd /home/nalin/Projects/runnin.app/server
+npm run dev
+```
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+Em outro terminal, rode o app no Chrome apontando para o server local:
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+```bash
+cd /home/nalin/Projects/runnin.app/app
+flutter run -d chrome --dart-define=API_BASE_URL=http://localhost:3000
+```
+
+O app adiciona `/v1` automaticamente ao `API_BASE_URL`, então use apenas a raiz do server.
+
+## Deploy
+
+Deploy do backend no Cloud Run:
+
+```bash
+cd /home/nalin/Projects/runnin.app
+./deploy-server.sh
+```
+
+Deploy do frontend no Firebase Hosting:
+
+```bash
+cd /home/nalin/Projects/runnin.app
+./deploy-web.sh
+```

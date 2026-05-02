@@ -12,6 +12,7 @@ class UserProfile {
   final String? weight;
   final String? height;
   final bool hasWearable;
+  final String coachVoiceId;
   final bool onboarded;
 
   const UserProfile({
@@ -24,6 +25,7 @@ class UserProfile {
     required this.weight,
     required this.height,
     required this.hasWearable,
+    required this.coachVoiceId,
     required this.onboarded,
   });
 
@@ -37,6 +39,7 @@ class UserProfile {
     weight: j['weight'] as String?,
     height: j['height'] as String?,
     hasWearable: j['hasWearable'] as bool? ?? false,
+    coachVoiceId: j['coachVoiceId'] as String? ?? 'coach-bruno',
     onboarded: j['onboarded'] as bool? ?? false,
   );
 }
@@ -63,7 +66,8 @@ class UserRemoteDatasource {
     final res = await _dio.post(
       '/users/provision',
       data: {
-        if (effectiveName != null && effectiveName.isNotEmpty) 'name': effectiveName,
+        if (effectiveName != null && effectiveName.isNotEmpty)
+          'name': effectiveName,
       },
     );
     return UserProfile.fromJson(res.data as Map<String, dynamic>);
@@ -105,6 +109,7 @@ class UserRemoteDatasource {
     String? weight,
     String? height,
     bool? hasWearable,
+    String? coachVoiceId,
     bool? onboarded,
   }) async {
     final data = <String, dynamic>{
@@ -116,6 +121,7 @@ class UserRemoteDatasource {
       'weight': weight,
       'height': height,
       'hasWearable': hasWearable,
+      'coachVoiceId': coachVoiceId,
       'onboarded': onboarded,
     }..removeWhere((_, value) => value == null);
 

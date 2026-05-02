@@ -47,29 +47,29 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyCl4NprHEg8a8BCzsQjD6FBBOTfCCakpDM',
-    appId: '1:267248310658:android:cf9c5bd47100e025fe579b',
-    messagingSenderId: '267248310658',
-    projectId: 'rumo-492120',
-    storageBucket: 'rumo-492120.firebasestorage.app',
+    apiKey: 'AIzaSyDnJ9D5glmXQ29o4gwiUF5MBhelgalLw4I',
+    appId: '1:506126899076:android:dad670e264e4523b4b6fd1',
+    messagingSenderId: '506126899076',
+    projectId: 'runnin-494520',
+    storageBucket: 'runnin-494520.firebasestorage.app',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyBLwj66M0LTOXsDYQsfktF7W7iyriDU2XA',
-    appId: '1:267248310658:ios:95642c767a8a058efe579b',
-    messagingSenderId: '267248310658',
-    projectId: 'rumo-492120',
-    storageBucket: 'rumo-492120.firebasestorage.app',
+    apiKey: 'AIzaSyDyYL_V3a-BMckWDXDasYmhWJqqaJGogz4',
+    appId: '1:506126899076:ios:9176f04cb7a9be694b6fd1',
+    messagingSenderId: '506126899076',
+    projectId: 'runnin-494520',
+    storageBucket: 'runnin-494520.firebasestorage.app',
     iosBundleId: 'com.reniuslab.runnin',
   );
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyCiZdh-xXd9tLZz8OSdxQYIGNjEwu_UqjA',
-    appId: '1:267248310658:web:ec2b81abb2a55aacfe579b',
-    messagingSenderId: '267248310658',
-    projectId: 'rumo-492120',
-    authDomain: 'rumo-492120.firebaseapp.com',
-    storageBucket: 'rumo-492120.firebasestorage.app',
+    apiKey: 'AIzaSyBK8Cpb9qnW__VhzqkCqi9wf-rcIYj3a9o',
+    appId: '1:506126899076:web:d4fd630dc0d2b9364b6fd1',
+    messagingSenderId: '506126899076',
+    projectId: 'runnin-494520',
+    authDomain: 'runnin-494520.firebaseapp.com',
+    storageBucket: 'runnin-494520.firebasestorage.app',
+    measurementId: 'G-D0CG03CYC9',
   );
-
 }

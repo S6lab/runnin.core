@@ -4,6 +4,7 @@ import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 import 'core/router/app_router.dart';
@@ -14,12 +15,16 @@ import 'firebase_options.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  usePathUrlStrategy();
 
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   await Hive.initFlutter();
   await themeController.load();
 
-  if (FirebaseAuth.instance.currentUser == null) {
+  final isAdminEntry =
+      Uri.base.path == '/admin' || Uri.base.path.startsWith('/admin/');
+
+  if (!isAdminEntry && FirebaseAuth.instance.currentUser == null) {
     try {
       await FirebaseAuth.instance.signInAnonymously();
     } catch (_) {
@@ -27,7 +32,7 @@ void main() async {
     }
   }
 
-  if (FirebaseAuth.instance.currentUser != null) {
+  if (!isAdminEntry && FirebaseAuth.instance.currentUser != null) {
     try {
       await UserRemoteDatasource().provisionMe();
     } catch (_) {

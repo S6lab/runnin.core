@@ -233,7 +233,7 @@ class _CoachOverview extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            'Seu coach está pronto para ajustar volume, ritmo, recuperação e estratégia da próxima corrida a partir do plano atual.',
+            'Estou acompanhando seu plano. Me chama para ajustar volume, ritmo, recuperação ou a estratégia da próxima corrida.',
             style: TextStyle(
               color: palette.text.withValues(alpha: 0.8),
               height: 1.45,

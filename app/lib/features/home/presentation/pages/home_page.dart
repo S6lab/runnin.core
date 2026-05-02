@@ -12,6 +12,10 @@ import 'package:runnin/features/run/domain/entities/run.dart';
 import 'package:runnin/features/training/domain/entities/plan.dart';
 import 'package:runnin/shared/widgets/app_panel.dart';
 import 'package:runnin/shared/widgets/app_tag.dart';
+import 'package:runnin/shared/widgets/notification_tile.dart';
+
+const _homeHeroImageUrl =
+    'https://images.unsplash.com/photo-1707741099794-252b0409230e?auto=format&fit=crop&w=1200&q=80';
 
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
@@ -92,6 +96,8 @@ class _HomeViewState extends State<_HomeView> {
                     const SizedBox(height: 20),
                     _SemanaSection(data: state.data),
                     const SizedBox(height: 20),
+                    _CoachAiWeeklySummary(data: state.data),
+                    const SizedBox(height: 20),
                     _PerformanceSection(data: state.data),
                     const SizedBox(height: 20),
                     _StatusCorporalSection(data: state.data),
@@ -127,20 +133,17 @@ class _HomeHeader extends StatelessWidget {
           children: [
             Text(
               'RUNIN',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.w900,
-                letterSpacing: -0.03,
-              ),
+              style: context.runninType.displaySm.copyWith(fontSize: 16),
             ),
             const SizedBox(width: 6),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
               decoration: BoxDecoration(color: palette.primary),
               child: Text(
                 '.AI',
                 style: TextStyle(
-                  color: Colors.black,
-                  fontSize: 10,
+                  color: palette.background,
+                  fontSize: 9,
                   fontWeight: FontWeight.w900,
                   letterSpacing: 0.05,
                 ),
@@ -210,8 +213,7 @@ class _IniciarSessaoButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (data.plan == null) {
-      return AppPanel(
-        color: context.runninPalette.surfaceAlt,
+      return _HomeHeroShell(
         borderColor: context.runninPalette.primary.withValues(alpha: 0.35),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -220,10 +222,7 @@ class _IniciarSessaoButton extends StatelessWidget {
             const SizedBox(height: 14),
             Text(
               'Seu app ja esta pronto para gerar o primeiro bloco de treino.',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.w900,
-                height: 1,
-              ),
+              style: context.runninType.displaySm,
             ),
             const SizedBox(height: 10),
             Text(
@@ -264,20 +263,162 @@ class _IniciarSessaoButton extends StatelessWidget {
       );
     }
 
-    return SizedBox(
-      width: double.infinity,
-      child: ElevatedButton.icon(
-        onPressed: () => context.push('/prep'),
-        icon: const Icon(Icons.play_arrow, size: 20),
-        label: Text(
-          data.todaySession != null
-              ? 'INICIAR SESSAO'
-              : 'INICIAR CORRIDA LIVRE',
-          style: const TextStyle(
-            letterSpacing: 0.1,
-            fontWeight: FontWeight.w900,
+    final palette = context.runninPalette;
+    final session = data.todaySession;
+    final isFreeRun = session == null;
+
+    return _HomeHeroShell(
+      borderColor: isFreeRun
+          ? palette.border
+          : palette.primary.withValues(alpha: 0.45),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text('HOJE', style: context.runninType.displaySm),
+              const SizedBox(width: 8),
+              AppTag(
+                label: isFreeRun ? 'LIVRE' : session.type.toUpperCase(),
+                color: isFreeRun ? palette.muted : palette.primary,
+              ),
+              const Spacer(),
+              Text(
+                isFreeRun ? 'SEM SESSAO' : 'PLANO',
+                style: context.runninType.labelCaps,
+              ),
+            ],
           ),
-        ),
+          const SizedBox(height: 12),
+          if (session == null) ...[
+            Text(
+              'Nenhuma sessao planejada para hoje.',
+              style: context.runninType.displaySm.copyWith(fontSize: 18),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              data.plan == null
+                  ? 'Gere um plano para o coach montar a agenda da semana. Enquanto isso, voce pode registrar uma corrida livre.'
+                  : 'Use uma corrida livre ou revise a distribuicao da semana no modulo de treino.',
+              style: TextStyle(
+                color: palette.text.withValues(alpha: 0.78),
+                height: 1.5,
+              ),
+            ),
+          ] else ...[
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  _formatKm(session.distanceKm).replaceAll(' km', 'K'),
+                  style: context.runninType.dataMd.copyWith(
+                    color: palette.text,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      session.targetPace ?? 'PACE LIVRE',
+                      style: TextStyle(
+                        color: palette.secondary,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    Text(
+                      session.targetPace == null ? 'sem alvo definido' : '/km',
+                      style: TextStyle(color: palette.muted, fontSize: 11),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.only(left: 12),
+              decoration: BoxDecoration(
+                border: Border(
+                  left: BorderSide(color: palette.secondary, width: 3),
+                ),
+              ),
+              child: Text(
+                session.notes.trim().isNotEmpty
+                    ? session.notes
+                    : 'Mantenha o treino controlado e priorize consistencia. Ajuste o ritmo se sinais de fadiga aparecerem.',
+                style: TextStyle(
+                  color: palette.text.withValues(alpha: 0.82),
+                  height: 1.5,
+                ),
+              ),
+            ),
+          ],
+          const SizedBox(height: 18),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: () => context.push('/prep'),
+              icon: const Icon(Icons.play_arrow, size: 20),
+              label: Text(
+                session != null ? 'INICIAR SESSAO' : 'INICIAR CORRIDA LIVRE',
+                style: const TextStyle(
+                  letterSpacing: 0.1,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HomeHeroShell extends StatelessWidget {
+  final Widget child;
+  final Color borderColor;
+
+  const _HomeHeroShell({required this.child, required this.borderColor});
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+
+    return Container(
+      clipBehavior: Clip.hardEdge,
+      decoration: BoxDecoration(
+        color: palette.surfaceAlt,
+        border: Border.all(color: borderColor),
+      ),
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: Image.network(
+              _homeHeroImageUrl,
+              fit: BoxFit.cover,
+              alignment: Alignment.center,
+              errorBuilder: (_, _, _) => Container(color: palette.surfaceAlt),
+            ),
+          ),
+          Positioned.fill(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    palette.background.withValues(alpha: 0.70),
+                    palette.background.withValues(alpha: 0.42),
+                    palette.background.withValues(alpha: 0.94),
+                  ],
+                  stops: const [0, 0.42, 1],
+                ),
+              ),
+            ),
+          ),
+          Padding(padding: const EdgeInsets.all(16), child: child),
+        ],
       ),
     );
   }
@@ -293,140 +434,136 @@ class _CoachNotifications extends StatelessWidget {
   Widget build(BuildContext context) {
     final palette = context.runninPalette;
     final profile = data.profile;
+    final hydrationGoal = _hydrationGoalLiters(profile);
+    final hydrationLogged = _hydrationIntakeLiters();
+    final nextSession = data.todaySession ?? _nextPlannedSession(data.weekDays);
+    final hasBpmData = _hasRealBpmData(data);
+    final hasSleepData = _hasRealSleepData(data);
     final items = <_CoachItem>[
       _CoachItem(
-        icon: Icons.flag_outlined,
-        label: 'OBJETIVO ATUAL',
-        time: profile?.level.toUpperCase() ?? 'PERFIL',
-        body: profile != null && profile.goal.trim().isNotEmpty
-            ? 'Seu plano esta alinhado ao objetivo "${profile.goal}" e a sua frequencia de ${profile.frequency} treinos por semana.'
-            : 'Preencha seu objetivo e frequencia para personalizar as recomendacoes do coach.',
+        icon: Icons.alarm_outlined,
+        label: 'MELHOR HORARIO',
+        time: nextSession == null ? 'AGORA' : _dayName(nextSession.dayOfWeek),
+        body: nextSession == null
+            ? 'Sem proxima sessao planejada. Quando houver plano, o coach sugere horario e janela de aquecimento.'
+            : 'Janela sugerida para ${nextSession.type}: escolha um horario em que voce consiga aquecer sem pressa e manter recuperacao depois.',
         accent: palette.primary,
-        ctaLabel: profile == null || profile.goal.trim().isEmpty
-            ? 'COMPLETAR PERFIL'
-            : null,
-        onTap: profile == null || profile.goal.trim().isEmpty
+        ctaLabel: nextSession == null ? 'ABRIR TREINO' : null,
+        onTap: nextSession == null ? () => context.push('/training') : null,
+      ),
+      _CoachItem(
+        icon: Icons.restaurant_outlined,
+        label: 'PREPARO NUTRICIONAL',
+        time: data.todaySession == null ? 'PENDENTE' : 'ANTES',
+        body: data.todaySession == null
+            ? 'Sem sessao marcada hoje. Para corrida livre, mantenha refeicao leve e evite testar alimentos novos.'
+            : 'Para ${data.todaySession!.type}, faca uma refeicao leve 45-60 minutos antes e evite exagerar em fibra ou gordura.',
+        accent: palette.secondary,
+      ),
+      _CoachItem(
+        icon: Icons.water_drop_outlined,
+        label: 'HIDRATACAO',
+        time: hydrationGoal == null
+            ? 'SEM META'
+            : hydrationLogged == null
+            ? '0%'
+            : '${((hydrationLogged / hydrationGoal).clamp(0.0, 1.0) * 100).round()}%',
+        body: hydrationGoal == null
+            ? 'Informe seu peso para o app calcular uma meta diaria de hidratacao.'
+            : hydrationLogged == null
+            ? 'Meta estimada: ${hydrationGoal.toStringAsFixed(1)}L hoje. Registre consumo para o coach acompanhar.'
+            : 'Voce registrou ${hydrationLogged.toStringAsFixed(1)}L de ${hydrationGoal.toStringAsFixed(1)}L hoje.',
+        accent: palette.primary,
+        ctaLabel: hydrationGoal == null ? 'INFORMAR PESO' : null,
+        onTap: hydrationGoal == null
             ? () => context.push('/profile/edit')
             : null,
       ),
       _CoachItem(
-        icon: Icons.directions_run_outlined,
-        label: 'SESSAO DE HOJE',
-        time: data.todaySession != null ? 'PLANO' : 'LIVRE',
-        body: data.todaySession != null
-            ? 'Hoje voce tem ${data.todaySession!.type} com ${_formatKm(data.todaySession!.distanceKm)} e foco em ${_sessionGoal(data.todaySession!)}.'
-            : 'Ainda nao existe sessao planejada para hoje. Voce pode iniciar uma corrida livre ou revisar seu plano.',
+        icon: Icons.checklist_outlined,
+        label: 'CHECKLIST PRE-EASY RUN',
+        time: data.todaySession == null ? 'LIVRE' : 'HOJE',
+        body: data.todaySession == null
+            ? 'Para corrida livre: aquecimento de 5 minutos, cadarco firme, GPS pronto e intensidade confortavel.'
+            : 'Aquecimento de 5-8 minutos, mobilidade leve e primeiros minutos controlados antes de entrar no ritmo previsto.',
         accent: palette.secondary,
-        ctaLabel: data.todaySession == null ? 'ABRIR TREINO' : null,
-        onTap: data.todaySession == null
-            ? () => context.push('/training')
-            : null,
+      ),
+      _CoachItem(
+        icon: Icons.bedtime_outlined,
+        label: 'SONO → PERFORMANCE',
+        time: hasSleepData ? 'SINCRONIZADO' : 'SEM DADO',
+        body: profile?.hasWearable == true
+            ? 'Voce informou que tem ou pretende usar wearable, mas ainda nao ha dados reais de sono sincronizados no app.'
+            : 'Sem wearable ou origem de sono conectada. Este bloco fica em estado vazio ate a integracao existir.',
+        accent: hasSleepData ? palette.primary : palette.muted,
+        ctaLabel: hasSleepData ? null : 'REVISAR PERFIL',
+        onTap: hasSleepData ? null : () => context.push('/profile/edit'),
       ),
       _CoachItem(
         icon: Icons.monitor_heart_outlined,
-        label: 'DADOS CONECTADOS',
-        time: profile?.hasWearable == true ? 'WEARABLE' : 'PENDENTE',
-        body: profile?.hasWearable == true
-            ? 'Seu perfil indica wearable conectado. Assim que entrarem dados de BPM e sono, o coach passa a usar isso nas recomendacoes.'
-            : 'Sem wearable conectado, o coach ainda personaliza por perfil, plano e corridas, mas nao consegue estimar sono ou prontidao fisiologica.',
-        accent: profile?.hasWearable == true ? palette.primary : palette.muted,
-        ctaLabel: profile?.hasWearable == true ? null : 'ATUALIZAR PERFIL',
-        onTap: profile?.hasWearable == true
-            ? null
-            : () => context.push('/profile/edit'),
+        label: 'BPM REAL',
+        time: hasBpmData ? 'REGISTRADO' : 'SEM DADO',
+        body: hasBpmData
+            ? 'Ha BPM registrado em corrida concluida. O coach pode usar esse dado real nas leituras de carga e zonas.'
+            : 'Ainda nao existe BPM real em corridas concluídas. Nao vamos tratar preferencia de wearable como conexao ativa.',
+        accent: hasBpmData ? palette.primary : palette.muted,
       ),
       _CoachItem(
-        icon: Icons.person_outline,
-        label: 'BASE DO PERFIL',
-        time: _profileCompletenessLabel(profile),
-        body: _buildProfileContext(profile),
+        icon: Icons.medical_information_outlined,
+        label: 'FECHAMENTO MENSAL',
+        time: data.completedRuns.isEmpty ? 'SEM HISTORICO' : 'ATIVO',
+        body: data.completedRuns.isEmpty
+            ? 'Quando voce tiver corridas e exames cadastrados, este card destaca sinais relevantes para calibrar zonas e limites.'
+            : 'Com ${data.completedRuns.length} corrida(s) no historico recente, revise exames ou observacoes para melhorar as recomendacoes.',
         accent: palette.secondary,
-        ctaLabel: _isBodyProfileComplete(profile) ? null : 'PREENCHER DADOS',
-        onTap: _isBodyProfileComplete(profile)
-            ? null
-            : () => context.push('/profile/edit'),
+        ctaLabel: data.completedRuns.isEmpty ? 'VER PERFIL' : null,
+        onTap: data.completedRuns.isEmpty
+            ? () => context.push('/profile')
+            : null,
       ),
     ];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // Header: COACH.AI > NOTIFICAÇÕES N  LIMPAR
         Row(
           children: [
-            Expanded(
-              child: RichText(
-                text: TextSpan(
-                  children: [
-                    TextSpan(
-                      text: 'COACH',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: -0.02,
-                      ),
-                    ),
-                    TextSpan(
-                      text: '.AI',
-                      style: TextStyle(
-                        color: palette.primary,
-                        fontWeight: FontWeight.w900,
-                        fontSize: 13,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            AppTag(label: '${items.length}', color: palette.primary),
-            const SizedBox(width: 8),
+            Icon(Icons.remove_outlined, size: 12, color: palette.muted),
+            const SizedBox(width: 6),
             Text(
-              'LIMPAR',
-              style: TextStyle(
-                color: palette.muted,
-                fontSize: 10,
-                fontWeight: FontWeight.w700,
-              ),
+              'COACH.AI > NOTIFICAÇÕES',
+              style: context.runninType.labelCaps,
             ),
+            const SizedBox(width: 8),
+            AppTag(label: '${items.length}', color: palette.primary),
+            const Spacer(),
+            Text('LIMPAR', style: context.runninType.labelCaps),
           ],
         ),
-        const SizedBox(height: 12),
-        ...items.map((item) => _CoachCard(item: item)),
+        const SizedBox(height: 8),
+        Container(
+          decoration: BoxDecoration(border: Border.all(color: palette.border)),
+          child: Column(
+            children: items
+                .map(
+                  (item) => NotificationTile(
+                    icon: item.icon,
+                    title: item.label,
+                    preview: item.body.length > 80
+                        ? '${item.body.substring(0, 80)}...'
+                        : item.body,
+                    fullText: item.body,
+                    timestamp: item.time,
+                    ctaLabel: item.ctaLabel,
+                    onCta: item.onTap,
+                  ),
+                )
+                .toList(),
+          ),
+        ),
       ],
     );
-  }
-
-  static bool _isBodyProfileComplete(UserProfile? profile) {
-    if (profile == null) return false;
-    return (profile.birthDate?.trim().isNotEmpty ?? false) &&
-        (profile.weight?.trim().isNotEmpty ?? false) &&
-        (profile.height?.trim().isNotEmpty ?? false);
-  }
-
-  static String _profileCompletenessLabel(UserProfile? profile) {
-    if (_isBodyProfileComplete(profile)) return 'COMPLETO';
-    return 'INCOMPLETO';
-  }
-
-  static String _buildProfileContext(UserProfile? profile) {
-    if (profile == null) {
-      return 'Seu perfil ainda nao foi carregado. Entre no perfil para revisar seus dados.';
-    }
-
-    final parts = <String>[];
-    if (profile.birthDate?.trim().isNotEmpty ?? false) {
-      parts.add('data de nascimento informada');
-    }
-    if (profile.weight?.trim().isNotEmpty ?? false) {
-      parts.add('peso ${profile.weight}');
-    }
-    if (profile.height?.trim().isNotEmpty ?? false) {
-      parts.add('altura ${profile.height}');
-    }
-
-    if (parts.isEmpty) {
-      return 'Faltam idade, peso e altura para destravar analises corporais mais personalizadas.';
-    }
-
-    return 'O coach esta usando ${parts.join(', ')} junto com seu nivel e objetivo para personalizar o app.';
   }
 }
 
@@ -448,78 +585,6 @@ class _CoachItem {
     this.ctaLabel,
     this.onTap,
   });
-}
-
-class _CoachCard extends StatelessWidget {
-  final _CoachItem item;
-  const _CoachCard({required this.item});
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.runninPalette;
-
-    return AppPanel(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(item.icon, size: 18, color: item.accent),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        item.label,
-                        style: TextStyle(
-                          color: palette.text,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.08,
-                        ),
-                      ),
-                    ),
-                    Text(
-                      item.time,
-                      style: TextStyle(
-                        color: item.accent,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  item.body,
-                  style: TextStyle(
-                    color: palette.muted,
-                    fontSize: 12,
-                    height: 1.45,
-                  ),
-                ),
-                if (item.ctaLabel != null && item.onTap != null) ...[
-                  const SizedBox(height: 10),
-                  TextButton(
-                    onPressed: item.onTap,
-                    style: TextButton.styleFrom(
-                      padding: EdgeInsets.zero,
-                      minimumSize: const Size(0, 0),
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
-                    child: Text(item.ctaLabel!),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 // ─── Semana ───────────────────────────────────────────────────────────────────
@@ -545,12 +610,8 @@ class _SemanaSection extends StatelessWidget {
       children: [
         Row(
           children: [
-            Text(
-              'SEMANA',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w900,
-                letterSpacing: -0.02,
-              ),
+            Flexible(
+              child: Text('SEMANA', style: context.runninType.displaySm),
             ),
             const SizedBox(width: 8),
             AppTag(
@@ -594,23 +655,20 @@ class _SemanaSection extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 6),
-        ClipRect(
-          child: SizedBox(
-            height: 3,
-            child: Row(
-              children: [
-                Flexible(
-                  flex: (volumePct * 100).round(),
-                  child: Container(color: palette.primary),
-                ),
-                Flexible(
-                  flex: 100 - (volumePct * 100).round(),
-                  child: Container(color: palette.border),
-                ),
-              ],
+        _MiniProgressBar(value: volumePct, color: palette.primary),
+        if (data.plannedSessions == 0) ...[
+          const SizedBox(height: 10),
+          AppPanel(
+            padding: const EdgeInsets.all(14),
+            color: palette.surfaceAlt,
+            child: Text(
+              data.plan == null
+                  ? 'Nenhum plano ativo ainda. A semana fica pronta assim que voce gerar o primeiro plano.'
+                  : 'O plano existe, mas esta semana nao tem sessoes distribuidas. Revise o plano em Treino.',
+              style: TextStyle(color: palette.muted, height: 1.5),
             ),
           ),
-        ),
+        ],
       ],
     );
   }
@@ -755,6 +813,155 @@ class _WeekGrid extends StatelessWidget {
   }
 }
 
+// ─── Coach AI Semanal ────────────────────────────────────────────────────────
+
+class _CoachAiWeeklySummary extends StatelessWidget {
+  final HomeData data;
+  const _CoachAiWeeklySummary({required this.data});
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    final planKm = _plannedWeeklyDistance(data);
+    final completion = data.plannedSessions == 0
+        ? 0.0
+        : (data.completedSessions / data.plannedSessions).clamp(0.0, 1.0);
+    final hasPlan = data.plan != null && data.plannedSessions > 0;
+    final hasRuns = data.completedRuns.isNotEmpty;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        RichText(
+          text: TextSpan(
+            children: [
+              TextSpan(text: 'COACH.AI', style: context.runninType.displaySm),
+              TextSpan(
+                text: ' ᴬᴵ',
+                style: TextStyle(color: palette.primary, fontSize: 10),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        AppPanel(
+          color: palette.surfaceAlt,
+          borderColor: palette.secondary.withValues(alpha: 0.45),
+          child: Container(
+            padding: const EdgeInsets.only(left: 12),
+            decoration: BoxDecoration(
+              border: Border(
+                left: BorderSide(color: palette.secondary, width: 3),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '> RESUMO SEMANAL',
+                  style: context.runninType.labelCaps.copyWith(
+                    color: palette.secondary,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                _CoachSummaryBlock(
+                  title: 'PROGRESSO',
+                  body: hasPlan
+                      ? '${data.completedSessions} de ${data.plannedSessions} sessoes concluidas. Volume registrado: ${data.weeklyDistanceKm.toStringAsFixed(1)} de ${planKm.toStringAsFixed(1)} km planejados.'
+                      : 'Sem plano semanal ativo. Gere um plano para o coach acompanhar sessoes, descanso e volume.',
+                ),
+                const SizedBox(height: 12),
+                _MiniProgressBar(value: completion, color: palette.primary),
+                const SizedBox(height: 14),
+                _CoachSummaryBlock(
+                  title: 'PERFORMANCE',
+                  body: hasRuns
+                      ? 'Ultima corrida: ${(data.latestRun!.distanceM / 1000).toStringAsFixed(1)} km${data.latestRun!.avgPace == null ? '' : ' em ${data.latestRun!.avgPace}/km'}. O historico ja alimenta pace, streak e carga muscular.'
+                      : 'Ainda nao ha corrida concluida. Depois da primeira sessao, este bloco mostra tendencia de pace, BPM e resposta ao treino.',
+                ),
+                const SizedBox(height: 14),
+                _CoachSummaryBlock(
+                  title: 'RECOMENDACAO',
+                  body: _weeklyRecommendation(data),
+                ),
+                if (!hasPlan || !hasRuns) ...[
+                  const SizedBox(height: 14),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      if (!hasPlan)
+                        OutlinedButton(
+                          onPressed: () => context.push('/training'),
+                          child: const Text('GERAR PLANO'),
+                        ),
+                      if (!hasRuns)
+                        ElevatedButton(
+                          onPressed: () => context.push('/prep'),
+                          child: const Text('REGISTRAR CORRIDA'),
+                        ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _CoachSummaryBlock extends StatelessWidget {
+  final String title;
+  final String body;
+
+  const _CoachSummaryBlock({required this.title, required this.body});
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: context.runninType.labelCaps.copyWith(color: palette.primary),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          body,
+          style: TextStyle(
+            color: palette.text.withValues(alpha: 0.86),
+            height: 1.55,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _MiniProgressBar extends StatelessWidget {
+  final double value;
+  final Color color;
+
+  const _MiniProgressBar({required this.value, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(999),
+      child: LinearProgressIndicator(
+        minHeight: 3,
+        value: value.clamp(0.0, 1.0),
+        backgroundColor: palette.border,
+        valueColor: AlwaysStoppedAnimation<Color>(color),
+      ),
+    );
+  }
+}
+
 // ─── Performance ─────────────────────────────────────────────────────────────
 
 class _PerformanceSection extends StatelessWidget {
@@ -780,10 +987,7 @@ class _PerformanceSection extends StatelessWidget {
             children: [
               TextSpan(
                 text: 'PERFORMANCE',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: -0.02,
-                ),
+                style: context.runninType.displaySm,
               ),
               TextSpan(
                 text: ' ᴬᴵ',
@@ -896,7 +1100,7 @@ class _PerformanceSection extends StatelessWidget {
                       if (run?.avgBpm == null)
                         TextButton(
                           onPressed: () => context.push('/profile/edit'),
-                          child: const Text('ATIVAR DADOS DE BPM'),
+                          child: const Text('REVISAR DADOS'),
                         ),
                     ],
                   ),
@@ -1141,6 +1345,8 @@ class _StatusCorporalSectionState extends State<_StatusCorporalSection> {
   Widget build(BuildContext context) {
     final palette = context.runninPalette;
     final profile = widget.data.profile;
+    final hasBpmData = _hasRealBpmData(widget.data);
+    final hasSleepData = _hasRealSleepData(widget.data);
     final bmi = _calculateBmi(profile);
     final hasBodyData = bmi != null;
     final readinessScore = hasBodyData
@@ -1160,10 +1366,7 @@ class _StatusCorporalSectionState extends State<_StatusCorporalSection> {
             children: [
               TextSpan(
                 text: 'STATUS CORPORAL',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: -0.02,
-                ),
+                style: context.runninType.displaySm,
               ),
               TextSpan(
                 text: ' ᴬᴵ',
@@ -1221,22 +1424,9 @@ class _StatusCorporalSectionState extends State<_StatusCorporalSection> {
                       ),
                       const Spacer(),
                       if (hasBodyData)
-                        ClipRect(
-                          child: SizedBox(
-                            height: 3,
-                            child: Row(
-                              children: [
-                                Flexible(
-                                  flex: readinessScore!,
-                                  child: Container(color: palette.secondary),
-                                ),
-                                Flexible(
-                                  flex: 100 - readinessScore,
-                                  child: Container(color: palette.border),
-                                ),
-                              ],
-                            ),
-                          ),
+                        _MiniProgressBar(
+                          value: readinessScore! / 100,
+                          color: palette.secondary,
                         )
                       else
                         TextButton(
@@ -1265,7 +1455,7 @@ class _StatusCorporalSectionState extends State<_StatusCorporalSection> {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        profile?.hasWearable == true ? 'AGUARDANDO' : '--',
+                        hasSleepData ? 'OK' : '--',
                         style: TextStyle(
                           color: palette.primary,
                           fontSize: 22,
@@ -1274,17 +1464,15 @@ class _StatusCorporalSectionState extends State<_StatusCorporalSection> {
                       ),
                       Text(
                         profile?.hasWearable == true
-                            ? 'Conecte a origem de sono para sincronizar'
-                            : 'Sem wearable conectado',
+                            ? 'Wearable informado, mas sem sono sincronizado'
+                            : 'Sem origem de sono conectada',
                         style: TextStyle(color: palette.muted, fontSize: 10),
                       ),
                       const Spacer(),
                       TextButton(
                         onPressed: () => context.push('/profile/edit'),
                         child: Text(
-                          profile?.hasWearable == true
-                              ? 'REVISAR PERFIL'
-                              : 'ATUALIZAR PERFIL',
+                          hasSleepData ? 'VER DETALHES' : 'REVISAR PERFIL',
                         ),
                       ),
                     ],
@@ -1324,7 +1512,9 @@ class _StatusCorporalSectionState extends State<_StatusCorporalSection> {
                         ),
                       ),
                       Text(
-                        'Baseado na ultima corrida e no volume da semana',
+                        hasBpmData
+                            ? 'Baseado em corrida com BPM e volume da semana'
+                            : 'Baseado em distancia e volume; sem BPM real ainda',
                         style: TextStyle(color: palette.muted, fontSize: 10),
                       ),
                       const Spacer(),
@@ -1401,22 +1591,9 @@ class _StatusCorporalSectionState extends State<_StatusCorporalSection> {
                       ),
                       const Spacer(),
                       if (hydrationPct != null)
-                        ClipRect(
-                          child: SizedBox(
-                            height: 3,
-                            child: Row(
-                              children: [
-                                Flexible(
-                                  flex: (hydrationPct * 100).round(),
-                                  child: Container(color: palette.primary),
-                                ),
-                                Flexible(
-                                  flex: 100 - (hydrationPct * 100).round(),
-                                  child: Container(color: palette.border),
-                                ),
-                              ],
-                            ),
-                          ),
+                        _MiniProgressBar(
+                          value: hydrationPct,
+                          color: palette.primary,
                         ),
                       const SizedBox(height: 8),
                       TextButton(
@@ -1635,10 +1812,7 @@ class _UltimaCorrida extends StatelessWidget {
             children: [
               TextSpan(
                 text: 'ULTIMA CORRIDA',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: -0.02,
-                ),
+                style: context.runninType.displaySm,
               ),
               TextSpan(
                 text: ' ᴬᴵ',
@@ -1667,18 +1841,29 @@ String _formatKm(double km) {
   return '${km.toStringAsFixed(dec)} km';
 }
 
-String _sessionGoal(PlanSession session) {
-  final type = session.type.toLowerCase();
-  if (type.contains('interval')) {
-    return 'estimulo de velocidade';
+PlanSession? _nextPlannedSession(List<WeekDayData> weekDays) {
+  final today = DateTime.now().weekday;
+  final ordered = [
+    ...weekDays.where((day) => day.dayOfWeek >= today),
+    ...weekDays.where((day) => day.dayOfWeek < today),
+  ];
+  for (final day in ordered) {
+    if (day.session != null) return day.session;
   }
-  if (type.contains('tempo')) {
-    return 'sustentar ritmo controlado';
-  }
-  if (type.contains('long')) {
-    return 'resistencia aerobia';
-  }
-  return 'consistencia e base aerobia';
+  return null;
+}
+
+String _dayName(int dayOfWeek) {
+  const names = {
+    1: 'SEG',
+    2: 'TER',
+    3: 'QUA',
+    4: 'QUI',
+    5: 'SEX',
+    6: 'SAB',
+    7: 'DOM',
+  };
+  return names[dayOfWeek] ?? 'PLANO';
 }
 
 String? _averagePace(List<Run> runs) {
@@ -1709,6 +1894,33 @@ double _plannedWeeklyDistance(HomeData data) {
     0,
     (sum, day) => sum + (day.session?.distanceKm ?? 0),
   );
+}
+
+bool _hasRealBpmData(HomeData data) {
+  return data.completedRuns.any((run) => run.avgBpm != null);
+}
+
+bool _hasRealSleepData(HomeData data) {
+  return false;
+}
+
+String _weeklyRecommendation(HomeData data) {
+  if (data.plan == null) {
+    return 'Comece gerando um plano. A Home ja mostra os blocos vazios para voce saber quais dados vao aparecer depois.';
+  }
+  if (data.plannedSessions == 0) {
+    return 'Revise o plano: nao ha sessoes nesta semana para o coach comparar volume, descanso e progresso.';
+  }
+  if (data.completedRuns.isEmpty) {
+    return 'Faca a primeira corrida da semana em intensidade confortavel. Depois disso, o coach passa a comparar execucao e plano.';
+  }
+  if (data.completedSessions >= data.plannedSessions) {
+    return 'Semana completa. Priorize recuperacao, hidratacao e sono antes do proximo bloco.';
+  }
+  if (data.todaySession != null) {
+    return 'Ha treino planejado hoje. Mantenha ritmo controlado e ajuste por sensacao se houver fadiga acumulada.';
+  }
+  return 'Ainda ha sessoes pendentes na semana. Use os dias restantes com prioridade para consistencia e recuperacao.';
 }
 
 double? _parseDouble(String? raw) {
@@ -1835,14 +2047,7 @@ class _RunCard extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Text(
-                '${distKm}K',
-                style: Theme.of(context).textTheme.displaySmall?.copyWith(
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: -0.03,
-                  height: 1,
-                ),
-              ),
+              Text('${distKm}K', style: context.runninType.dataMd),
               Text(
                 duration,
                 style: TextStyle(

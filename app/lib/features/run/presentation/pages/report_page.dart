@@ -2,7 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:runnin/core/network/api_client.dart';
-import 'package:runnin/core/theme/app_colors.dart';
+import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/features/run/data/datasources/run_remote_datasource.dart';
 import 'package:runnin/features/run/domain/entities/run.dart';
 
@@ -62,8 +62,10 @@ class _ReportPageState extends State<ReportPage> {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: palette.background,
       appBar: AppBar(
         title: const Text('RELATÓRIO'),
         leading: IconButton(icon: const Icon(Icons.close), onPressed: () => context.go('/home')),
@@ -73,47 +75,55 @@ class _ReportPageState extends State<ReportPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('CORRIDA CONCLUÍDA', style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: AppColors.accent, letterSpacing: 0.15)),
+            Text(
+              'CORRIDA CONCLUÍDA',
+              style: context.runninType.labelCaps.copyWith(color: palette.primary),
+            ),
             const SizedBox(height: 24),
 
-            // Stats
             if (_loadingRun)
-              const Center(child: CircularProgressIndicator(color: AppColors.accent, strokeWidth: 2))
+              Center(child: CircularProgressIndicator(color: palette.primary, strokeWidth: 2))
             else if (_run != null)
               _StatsRow(run: _run!),
 
             const SizedBox(height: 24),
 
-            // XP badge
             if (_run?.xpEarned != null && _run!.xpEarned! > 0)
               _XpBadge(xp: _run!.xpEarned!),
 
             if (_run?.xpEarned != null && _run!.xpEarned! > 0)
               const SizedBox(height: 24),
 
-            // Coach report
+            // Coach narrative card
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                border: Border(left: BorderSide(color: AppColors.secondary, width: 3)),
-                color: AppColors.secondary.withValues(alpha: 0.05),
+                border: Border(left: BorderSide(color: palette.secondary, width: 3)),
+                color: palette.secondary.withValues(alpha: 0.05),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('COACH.AI', style: TextStyle(
-                    fontSize: 10, color: AppColors.secondary, letterSpacing: 0.15, fontWeight: FontWeight.w700)),
+                  Text(
+                    'COACH.AI',
+                    style: context.runninType.labelCaps.copyWith(color: palette.secondary),
+                  ),
                   const SizedBox(height: 8),
                   _loadingReport
-                    ? const Row(children: [
-                        SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 1.5, color: AppColors.muted)),
-                        SizedBox(width: 10),
-                        Text('Analisando sua corrida...', style: TextStyle(color: AppColors.muted, fontSize: 13)),
+                    ? Row(children: [
+                        SizedBox(
+                          width: 12, height: 12,
+                          child: CircularProgressIndicator(strokeWidth: 1.5, color: palette.muted),
+                        ),
+                        const SizedBox(width: 10),
+                        Text(
+                          'Analisando sua corrida...',
+                          style: context.runninType.bodySm,
+                        ),
                       ])
                     : Text(
                         _summary ?? 'Relatório não disponível.',
-                        style: const TextStyle(color: Color(0xCCFFFFFF), fontSize: 14, height: 1.6),
+                        style: context.runninType.bodyMd.copyWith(height: 1.6),
                       ),
                 ],
               ),
@@ -145,11 +155,12 @@ class _StatsRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.runninPalette;
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: AppColors.surface,
-        border: Border.all(color: AppColors.border),
+        color: palette.surface,
+        border: Border.all(color: palette.border),
       ),
       child: Row(
         children: [
@@ -181,28 +192,31 @@ class _StatCell extends StatelessWidget {
   const _StatCell({required this.label, required this.value, required this.unit});
 
   @override
-  Widget build(BuildContext context) => Expanded(
-    child: Column(
-      children: [
-        Text(label, style: const TextStyle(fontSize: 9, color: AppColors.muted, letterSpacing: 0.1)),
-        const SizedBox(height: 6),
-        RichText(text: TextSpan(
-          text: value,
-          style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: AppColors.text),
-          children: [if (unit.isNotEmpty) TextSpan(
-            text: ' $unit',
-            style: const TextStyle(fontSize: 11, color: AppColors.muted, fontWeight: FontWeight.normal),
-          )],
-        )),
-      ],
-    ),
-  );
+  Widget build(BuildContext context) {
+    final type = context.runninType;
+    return Expanded(
+      child: Column(
+        children: [
+          Text(label, style: type.labelCaps),
+          const SizedBox(height: 6),
+          RichText(text: TextSpan(
+            text: value,
+            style: type.dataMd,
+            children: [if (unit.isNotEmpty) TextSpan(
+              text: ' $unit',
+              style: type.bodySm,
+            )],
+          )),
+        ],
+      ),
+    );
+  }
 }
 
 class _Divider extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
-    width: 1, height: 40, color: AppColors.border,
+    width: 1, height: 40, color: context.runninPalette.border,
   );
 }
 
@@ -211,20 +225,28 @@ class _XpBadge extends StatelessWidget {
   const _XpBadge({required this.xp});
 
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-    decoration: BoxDecoration(
-      color: AppColors.accent.withValues(alpha: 0.1),
-      border: Border.all(color: AppColors.accent.withValues(alpha: 0.3)),
-    ),
-    child: Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        const Icon(Icons.bolt, size: 14, color: AppColors.accent),
-        const SizedBox(width: 6),
-        Text('+$xp XP', style: const TextStyle(
-          fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.accent, letterSpacing: 0.1)),
-      ],
-    ),
-  );
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+        color: palette.primary.withValues(alpha: 0.1),
+        border: Border.all(color: palette.primary.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.bolt, size: 14, color: palette.primary),
+          const SizedBox(width: 6),
+          Text(
+            '+$xp XP',
+            style: context.runninType.labelMd.copyWith(
+              color: palette.primary,
+              fontSize: 13,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }

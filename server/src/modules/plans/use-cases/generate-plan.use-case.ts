@@ -6,12 +6,16 @@ import { Plan, PlanSession, PlanWeek } from '../domain/plan.entity';
 import { logger } from '@shared/logger/logger';
 import { formatRunningKnowledgeContext } from '@shared/knowledge/running/running-knowledge';
 
-const SYSTEM_PROMPT = `Você é um coach de corrida especialista. Gere um plano de treino estruturado em JSON válido.
+const SYSTEM_PROMPT = `Você é o Coach.AI do runnin: um personal trainer de corrida experiente, presente e direto.
+Gere um plano de treino estruturado em JSON válido.
 O JSON deve ser um array de semanas. Cada semana tem weekNumber e sessions.
 Cada sessão tem: dayOfWeek (1=Seg,7=Dom), type (Easy Run/Intervalado/Tempo Run/Long Run), distanceKm (number), targetPace (string opcional, ex: "6:00"), notes (string curta).
 Retorne SOMENTE o JSON, sem explicação, sem markdown.
 Nao invente justificativas cientificas fora da base fornecida.
-Se o atleta for iniciante, seja conservador com intensidade e progressao.`;
+Se o atleta for iniciante, seja conservador com intensidade e progressao.
+As notes devem falar diretamente com o corredor, como um personal trainer: tom humano, motivador, firme e pratico.
+Use frases curtas no imperativo ou primeira pessoa do plural, como "Segura o pace", "Vamos trabalhar base" e "Fecha leve para recuperar".
+Evite texto robotico, explicacao academica longa ou linguagem de relatorio.`;
 
 const PlanSessionSchema = z.object({
   dayOfWeek: z.number().int().min(1).max(7),
@@ -32,7 +36,7 @@ export const GeneratePlanSchema = z.object({
   goal: z.string().min(1),
   level: z.enum(['iniciante', 'intermediario', 'avancado']),
   frequency: z.number().int().min(2).max(7).optional(),
-  weeksCount: z.number().int().min(4).max(16).default(8),
+  weeksCount: z.number().int().min(4).max(16).optional(),
 });
 
 export type GeneratePlanInput = z.infer<typeof GeneratePlanSchema>;
@@ -45,6 +49,7 @@ export class GeneratePlanUseCase {
   async execute(userId: string, input: GeneratePlanInput): Promise<Plan> {
     const planId = uuid();
     const now = new Date().toISOString();
+    const weeksCount = input.weeksCount ?? resolvePlanWeeksCount(input);
 
     // Cria o plano como "generating" imediatamente
     const plan: Plan = {
@@ -52,7 +57,7 @@ export class GeneratePlanUseCase {
       userId,
       goal: input.goal,
       level: input.level,
-      weeksCount: input.weeksCount,
+      weeksCount,
       status: 'generating',
       weeks: [],
       createdAt: now,
@@ -61,7 +66,7 @@ export class GeneratePlanUseCase {
     await this.repo.create(plan);
 
     // Gera o plano em background
-    this._generateAsync(plan, input).catch(err =>
+    this._generateAsync(plan, { ...input, weeksCount }).catch(err =>
       logger.error('plan.generate.background_failed', {
         planId,
         err: err instanceof Error ? err.message : String(err),
@@ -71,11 +76,14 @@ export class GeneratePlanUseCase {
     return plan;
   }
 
-  private async _generateAsync(plan: Plan, input: GeneratePlanInput): Promise<void> {
+  private async _generateAsync(
+    plan: Plan,
+    input: GeneratePlanInput & { weeksCount: number },
+  ): Promise<void> {
     const freq =
         input.frequency ??
         (input.level === 'iniciante' ? 3 : input.level === 'intermediario' ? 4 : 5);
-    const knowledgeContext = formatRunningKnowledgeContext(
+    const knowledgeContext = await formatRunningKnowledgeContext(
       `${input.goal} ${input.level} ${input.weeksCount} semanas corrida`,
       5,
     );
@@ -99,6 +107,8 @@ Requisitos:
 - Em iniciantes, use no maximo 1 sessao de intensidade por semana.
 - Em intermediarios e avancados, use no maximo 2 sessoes de qualidade por semana.
 - Notes deve explicar o objetivo da sessao em portugues brasileiro, de forma curta.
+- Notes deve soar como uma orientacao de personal trainer para o corredor: direta, motivadora, pratica e natural.
+- Fale com o corredor em segunda pessoa ou primeira pessoa do plural ("voce", "vamos", "mantem", "fecha").
 - Se nao houver dados suficientes para pace exato, deixe targetPace ausente.
 - Nao inclua sessoes de fortalecimento dentro do JSON; mencione isso em notes quando relevante.`;
 
@@ -565,9 +575,47 @@ ${JSON.stringify(normalizedWeeks)}`,
 
   private _deriveExpandedWeekNotes(notes: string, weekNumber: number, isRecoveryWeek: boolean): string {
     const suffix = isRecoveryWeek
-      ? `Semana ${weekNumber}: consolidacao com carga reduzida.`
-      : `Semana ${weekNumber}: progressao conservadora.`;
+      ? `Semana ${weekNumber}: baixa a carga, respira e consolida o ganho.`
+      : `Semana ${weekNumber}: vamos subir com controle, sem forcar alem da conta.`;
     if (!notes.trim()) return suffix;
     return `${notes} ${suffix}`;
   }
+}
+
+export function resolvePlanWeeksCount(input: Pick<GeneratePlanInput, 'goal' | 'level' | 'frequency'>): number {
+  const goal = normalizeGoal(input.goal);
+  const frequency = Math.min(Math.max(input.frequency ?? 3, 1), 7);
+  const isBeginner = input.level === 'iniciante';
+  const isAdvanced = input.level === 'avancado';
+
+  let weeks: number;
+  if (goal.includes('maratona') || goal.includes('42')) {
+    weeks = isAdvanced ? 14 : 16;
+  } else if (goal.includes('meia') || goal.includes('21') || goal.includes('half')) {
+    weeks = isBeginner ? 14 : isAdvanced ? 10 : 12;
+  } else if (goal.includes('10k') || goal.includes('10 km')) {
+    weeks = isBeginner ? 10 : 8;
+  } else if (goal.includes('5k') || goal.includes('5 km')) {
+    weeks = isBeginner ? 8 : 6;
+  } else if (goal.includes('emagrec') || goal.includes('saude') || goal.includes('condicion')) {
+    weeks = isAdvanced ? 6 : 8;
+  } else {
+    weeks = isBeginner ? 8 : isAdvanced ? 10 : 8;
+  }
+
+  if (frequency <= 2) {
+    weeks += 2;
+  } else if (frequency >= 5 && !isBeginner && weeks > 8) {
+    weeks -= 2;
+  }
+
+  return Math.min(Math.max(weeks, 4), 16);
+}
+
+function normalizeGoal(goal: string): string {
+  return goal
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/ç/g, 'c');
 }

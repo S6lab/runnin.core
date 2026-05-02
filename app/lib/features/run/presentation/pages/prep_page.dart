@@ -1,7 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
-import 'package:runnin/core/theme/app_colors.dart';
+import 'package:runnin/core/audio/coach_audio_player.dart';
+import 'package:runnin/core/theme/app_palette.dart';
+import 'package:runnin/features/run/data/datasources/run_coach_remote_datasource.dart';
 import 'package:runnin/features/run/presentation/bloc/run_bloc.dart';
 
 class PrepPage extends StatelessWidget {
@@ -19,6 +23,7 @@ class _PrepView extends StatefulWidget {
 }
 
 class _PrepViewState extends State<_PrepView> {
+  final _coachRemote = RunCoachRemoteDatasource();
   final _types = [
     'Easy Run',
     'Intervalado',
@@ -56,8 +61,78 @@ class _PrepViewState extends State<_PrepView> {
     ),
   };
 
+  StreamSubscription<CoachCue>? _coachSub;
+  Timer? _coachDebounce;
+  String? _coachCue;
+  bool _coachLoading = false;
+  bool _coachMuted = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _requestPreRunCue();
+  }
+
+  @override
+  void dispose() {
+    _coachDebounce?.cancel();
+    _coachSub?.cancel();
+    super.dispose();
+  }
+
+  void _selectType(String type) {
+    setState(() => _selectedType = type);
+    _coachDebounce?.cancel();
+    _coachDebounce = Timer(
+      const Duration(milliseconds: 350),
+      _requestPreRunCue,
+    );
+  }
+
+  void _requestPreRunCue() {
+    _coachSub?.cancel();
+    setState(() {
+      _coachLoading = true;
+      _coachCue = null;
+    });
+
+    _coachSub = _coachRemote
+        .streamCoachCue(
+          event: 'pre_run',
+          runType: _selectedType,
+          currentPaceMinKm: 0,
+          distanceM: 0,
+          elapsedS: 0,
+        )
+        .listen(
+          (cue) {
+            if (!mounted) return;
+            setState(() {
+              _coachCue = cue.text;
+              _coachLoading = false;
+            });
+            final audio = cue.audioBase64;
+            if (!_coachMuted && audio != null && audio.isNotEmpty) {
+              playCoachAudio(
+                audio,
+                mimeType: cue.audioMimeType ?? 'audio/mpeg',
+                volume: 1.0,
+              );
+            }
+          },
+          onError: (_) {
+            if (mounted) setState(() => _coachLoading = false);
+          },
+          onDone: () {
+            if (mounted) setState(() => _coachLoading = false);
+          },
+        );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    final type = context.runninType;
     final detail = _typeDetails[_selectedType] ?? _typeDetails['Free Run']!;
 
     return BlocListener<RunBloc, RunState>(
@@ -77,7 +152,7 @@ class _PrepViewState extends State<_PrepView> {
         }
       },
       child: Scaffold(
-        backgroundColor: AppColors.background,
+        backgroundColor: palette.background,
         appBar: AppBar(
           title: const Text('PREPARAR CORRIDA'),
           leading: IconButton(
@@ -101,13 +176,7 @@ class _PrepViewState extends State<_PrepView> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        'TIPO DE TREINO',
-                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                          color: AppColors.muted,
-                          letterSpacing: 0.15,
-                        ),
-                      ),
+                      Text('TIPO DE TREINO', style: type.labelCaps),
                       const SizedBox(height: 12),
                       Wrap(
                         spacing: 8,
@@ -115,31 +184,24 @@ class _PrepViewState extends State<_PrepView> {
                         children: _types.map((t) {
                           final sel = _selectedType == t;
                           return GestureDetector(
-                            onTap: () => setState(() => _selectedType = t),
+                            onTap: () => _selectType(t),
                             child: Container(
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 14,
                                 vertical: 8,
                               ),
                               decoration: BoxDecoration(
-                                color: sel
-                                    ? AppColors.accent
-                                    : AppColors.surface,
+                                color: sel ? palette.primary : palette.surface,
                                 border: Border.all(
-                                  color: sel
-                                      ? AppColors.accent
-                                      : AppColors.border,
+                                  color: sel ? palette.primary : palette.border,
                                 ),
                               ),
                               child: Text(
                                 t.toUpperCase(),
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w700,
-                                  letterSpacing: 0.1,
+                                style: type.labelCaps.copyWith(
                                   color: sel
-                                      ? AppColors.background
-                                      : AppColors.muted,
+                                      ? palette.background
+                                      : palette.muted,
                                 ),
                               ),
                             ),
@@ -151,30 +213,22 @@ class _PrepViewState extends State<_PrepView> {
                         width: double.infinity,
                         padding: const EdgeInsets.all(18),
                         decoration: BoxDecoration(
-                          color: AppColors.surface,
-                          border: Border.all(color: AppColors.border),
+                          color: palette.surface,
+                          border: Border.all(color: palette.border),
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
                               detail.$1.toUpperCase(),
-                              style: const TextStyle(
+                              style: type.labelCaps.copyWith(
+                                color: palette.primary,
                                 fontSize: 11,
                                 fontWeight: FontWeight.w800,
-                                letterSpacing: 0.1,
-                                color: AppColors.accent,
                               ),
                             ),
                             const SizedBox(height: 10),
-                            Text(
-                              detail.$2,
-                              style: const TextStyle(
-                                color: AppColors.text,
-                                fontSize: 14,
-                                height: 1.5,
-                              ),
-                            ),
+                            Text(detail.$2, style: type.bodyMd),
                             const SizedBox(height: 16),
                             ...detail.$3.map(
                               (item) => Padding(
@@ -182,23 +236,20 @@ class _PrepViewState extends State<_PrepView> {
                                 child: Row(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    const Padding(
-                                      padding: EdgeInsets.only(top: 5),
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 5),
                                       child: Icon(
                                         Icons.circle,
                                         size: 6,
-                                        color: AppColors.accent,
+                                        color: palette.primary,
                                       ),
                                     ),
                                     const SizedBox(width: 10),
                                     Expanded(
                                       child: Text(
                                         item,
-                                        style: const TextStyle(
-                                          color: AppColors.muted,
-                                          fontSize: 12,
+                                        style: type.bodySm.copyWith(
                                           fontWeight: FontWeight.w600,
-                                          height: 1.4,
                                         ),
                                       ),
                                     ),
@@ -208,6 +259,15 @@ class _PrepViewState extends State<_PrepView> {
                             ),
                           ],
                         ),
+                      ),
+                      const SizedBox(height: 14),
+                      _PreRunCoachCard(
+                        loading: _coachLoading,
+                        cue: _coachCue,
+                        muted: _coachMuted,
+                        onToggleMute: () =>
+                            setState(() => _coachMuted = !_coachMuted),
+                        onRefresh: _requestPreRunCue,
                       ),
                     ],
                   ),
@@ -227,8 +287,8 @@ class _PrepViewState extends State<_PrepView> {
                             );
                           },
                     child: state.status == RunStatus.starting
-                        ? const CircularProgressIndicator(
-                            color: AppColors.background,
+                        ? CircularProgressIndicator(
+                            color: palette.background,
                             strokeWidth: 2,
                           )
                         : const Text('INICIAR CORRIDA'),
@@ -239,6 +299,87 @@ class _PrepViewState extends State<_PrepView> {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _PreRunCoachCard extends StatelessWidget {
+  final bool loading;
+  final String? cue;
+  final bool muted;
+  final VoidCallback onToggleMute;
+  final VoidCallback onRefresh;
+
+  const _PreRunCoachCard({
+    required this.loading,
+    required this.cue,
+    required this.muted,
+    required this.onToggleMute,
+    required this.onRefresh,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    final type = context.runninType;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: palette.surfaceAlt,
+        border: Border.all(color: palette.primary.withValues(alpha: 0.28)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.record_voice_over_outlined, color: palette.primary),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('COACH', style: type.labelCaps),
+                const SizedBox(height: 8),
+                if (loading)
+                  Row(
+                    children: [
+                      SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(
+                          color: palette.muted,
+                          strokeWidth: 1.5,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Text('Analisando seu contexto...', style: type.bodySm),
+                    ],
+                  )
+                else
+                  Text(
+                    cue ??
+                        'Vou cruzar seu objetivo, plano e histórico para orientar a largada.',
+                    style: type.bodySm.copyWith(height: 1.45),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          IconButton(
+            tooltip: muted ? 'Ativar voz' : 'Mutar voz',
+            onPressed: onToggleMute,
+            icon: Icon(
+              muted ? Icons.volume_off_outlined : Icons.volume_up_outlined,
+            ),
+          ),
+          IconButton(
+            tooltip: 'Atualizar orientação',
+            onPressed: loading ? null : onRefresh,
+            icon: const Icon(Icons.refresh),
+          ),
+        ],
       ),
     );
   }

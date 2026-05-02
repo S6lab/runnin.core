@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { FirestorePlanRepository } from '../infra/firestore-plan.repository';
 import { GeneratePlanUseCase, GeneratePlanSchema } from '../use-cases/generate-plan.use-case';
 import { NotFoundError } from '@shared/errors/app-error';
-import { getRunningKnowledgeCorpus } from '@shared/knowledge/running/running-knowledge';
+import { getRunningKnowledgeCorpusWithStorage } from '@shared/knowledge/running/running-knowledge';
 
 const repo = new FirestorePlanRepository();
 const generatePlan = new GeneratePlanUseCase(repo);
@@ -17,7 +17,7 @@ export async function getCurrentPlan(req: Request, res: Response, next: NextFunc
 
 export async function getPlanKnowledge(_req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    res.json({ chunks: getRunningKnowledgeCorpus() });
+    res.json({ chunks: await getRunningKnowledgeCorpusWithStorage() });
   } catch (err) { next(err); }
 }
 

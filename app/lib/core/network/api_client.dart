@@ -2,7 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 const _defaultProdBaseUrl =
-    'https://runrun-api-267248310658.southamerica-east1.run.app/v1';
+    'https://runnin-api-rogiz7losq-rj.a.run.app/v1';
 const _baseUrlFromEnv = String.fromEnvironment('API_BASE_URL', defaultValue: '');
 
 String _resolveBaseUrl() {

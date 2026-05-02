@@ -36,6 +36,7 @@ export class CompleteOnboardingUseCase {
       weight: input.weight,
       height: input.height,
       hasWearable: input.hasWearable,
+      coachVoiceId: undefined,
       premium: false,
       onboarded: true,
       createdAt: now,
@@ -48,7 +49,6 @@ export class CompleteOnboardingUseCase {
       goal: input.goal,
       level: input.level,
       frequency: input.frequency,
-      weeksCount: 8,
     });
 
     return { user: profile, planId: plan.id };

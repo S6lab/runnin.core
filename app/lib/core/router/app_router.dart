@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:runnin/features/admin/presentation/pages/admin_page.dart';
 import 'package:runnin/features/auth/presentation/pages/login_page.dart';
 import 'package:runnin/features/home/presentation/pages/home_page.dart';
 import 'package:runnin/features/onboarding/presentation/pages/onboarding_page.dart';
@@ -17,6 +18,7 @@ import 'package:runnin/features/profile/presentation/pages/account_page.dart';
 import 'package:runnin/features/profile/presentation/pages/account_access_page.dart';
 import 'package:runnin/features/profile/presentation/pages/profile_page.dart';
 import 'package:runnin/features/dashboard/presentation/pages/dashboard_page.dart';
+import 'package:runnin/features/gamification/presentation/pages/gamification_page.dart';
 import 'package:runnin/shared/widgets/main_layout.dart';
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
@@ -63,11 +65,16 @@ void clearOnboardingCache() {
 
 final appRouter = GoRouter(
   navigatorKey: _rootNavigatorKey,
-  initialLocation: '/home',
+  initialLocation: _initialLocation(),
   redirect: (context, state) {
     final loggedIn = FirebaseAuth.instance.currentUser != null;
     final loc = state.matchedLocation;
+    final path = state.uri.path;
     final onboardingStatus = onboardingCacheStatus();
+
+    if (loc == '/admin' || path == '/admin' || path.startsWith('/admin/')) {
+      return null;
+    }
 
     if (!loggedIn) {
       if (loc != '/login') return '/login';
@@ -88,6 +95,7 @@ final appRouter = GoRouter(
   },
   refreshListenable: _AuthChangeNotifier(),
   routes: [
+    GoRoute(path: '/admin', builder: (_, _) => const AdminPage()),
     GoRoute(path: '/login', builder: (_, _) => const LoginPage()),
     GoRoute(path: '/onboarding', builder: (_, _) => const OnboardingPage()),
 
@@ -131,10 +139,17 @@ final appRouter = GoRouter(
           builder: (_, _) => const ProfilePage(initialEditing: true),
         ),
         GoRoute(path: '/dashboard', builder: (_, _) => const DashboardPage()),
+        GoRoute(path: '/gamification', builder: (_, _) => const GamificationPage()),
       ],
     ),
   ],
 );
+
+String _initialLocation() {
+  final path = Uri.base.path;
+  if (path == '/admin' || path.startsWith('/admin/')) return '/admin';
+  return '/home';
+}
 
 class _AuthChangeNotifier extends ChangeNotifier {
   _AuthChangeNotifier() {

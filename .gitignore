@@ -9,6 +9,8 @@ Thumbs.db
 .env
 .env.*
 server-sa-key.json
+backend-service-account.json
+server/backend-service-account.json
 *.pem
 *.p12
 *.jks
@@ -52,5 +54,6 @@ server/.next/
 
 # Misc caches
 .cache/
+.firebase/
 .tmp/
 tmp/

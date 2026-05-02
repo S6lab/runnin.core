@@ -9,16 +9,28 @@ import 'package:runnin/features/run/domain/entities/run.dart';
 
 // ── Events ──────────────────────────────────────────────────────────────────
 abstract class RunEvent {}
+
 class StartRun extends RunEvent {
   final String type;
   final String? targetPace;
   final String? targetDistance;
   StartRun({required this.type, this.targetPace, this.targetDistance});
 }
-class _GpsUpdate extends RunEvent { final Position pos; _GpsUpdate(this.pos); }
+
+class _GpsUpdate extends RunEvent {
+  final Position pos;
+  _GpsUpdate(this.pos);
+}
+
 class _TimerTick extends RunEvent {}
-class _CoachChunk extends RunEvent { final String text; _CoachChunk(this.text); }
+
+class _CoachChunk extends RunEvent {
+  final CoachCue cue;
+  _CoachChunk(this.cue);
+}
+
 class CompleteRun extends RunEvent {}
+
 class AbandonRun extends RunEvent {}
 
 // ── State ────────────────────────────────────────────────────────────────────
@@ -35,6 +47,8 @@ class RunState {
   final String? targetPace;
   final String? targetDistance;
   final String? coachLiveMessage;
+  final String? coachAudioBase64;
+  final String? coachAudioMimeType;
   final String? error;
   final Run? completedRun;
 
@@ -49,15 +63,27 @@ class RunState {
     this.targetPace,
     this.targetDistance,
     this.coachLiveMessage,
+    this.coachAudioBase64,
+    this.coachAudioMimeType,
     this.error,
     this.completedRun,
   });
 
   RunState copyWith({
-    RunStatus? status, String? runId, List<GpsPoint>? points,
-    double? distanceM, int? elapsedS, double? currentPaceMinKm,
-    String? runType, String? targetPace, String? targetDistance,
-    String? coachLiveMessage, String? error, Run? completedRun,
+    RunStatus? status,
+    String? runId,
+    List<GpsPoint>? points,
+    double? distanceM,
+    int? elapsedS,
+    double? currentPaceMinKm,
+    String? runType,
+    String? targetPace,
+    String? targetDistance,
+    String? coachLiveMessage,
+    String? coachAudioBase64,
+    String? coachAudioMimeType,
+    String? error,
+    Run? completedRun,
   }) => RunState(
     status: status ?? this.status,
     runId: runId ?? this.runId,
@@ -69,15 +95,19 @@ class RunState {
     targetPace: targetPace ?? this.targetPace,
     targetDistance: targetDistance ?? this.targetDistance,
     coachLiveMessage: coachLiveMessage ?? this.coachLiveMessage,
+    coachAudioBase64: coachAudioBase64 ?? this.coachAudioBase64,
+    coachAudioMimeType: coachAudioMimeType ?? this.coachAudioMimeType,
     error: error ?? this.error,
     completedRun: completedRun ?? this.completedRun,
   );
 
   String get formattedDistance => '${(distanceM / 1000).toStringAsFixed(2)}km';
   String get formattedElapsed {
-    final m = elapsedS ~/ 60; final s = elapsedS % 60;
+    final m = elapsedS ~/ 60;
+    final s = elapsedS % 60;
     return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
   }
+
   String get formattedPace {
     if (currentPaceMinKm == null) return '--:--';
     final min = currentPaceMinKm!.floor();
@@ -100,6 +130,8 @@ class RunBloc extends Bloc<RunEvent, RunState> {
   int _lastCoachKm = 0;
 
   static const _accuracyThreshold = 15.0; // metros
+  static const _displayAccuracyThreshold = 150.0; // metros
+  static const stationaryDistanceThresholdM = 10.0;
   static const _flushBatchSize = 30;
   static const _flushIntervalS = 30;
 
@@ -134,7 +166,9 @@ class RunBloc extends Bloc<RunEvent, RunState> {
       }
 
       if (permission == LocationPermission.denied) {
-        throw Exception('Permita o acesso a localizacao para iniciar a corrida.');
+        throw Exception(
+          'Permita o acesso a localizacao para iniciar a corrida.',
+        );
       }
 
       if (permission == LocationPermission.deniedForever) {
@@ -164,6 +198,8 @@ class RunBloc extends Bloc<RunEvent, RunState> {
           distanceM: 0,
           elapsedS: 0,
           coachLiveMessage: null,
+          coachAudioBase64: '',
+          coachAudioMimeType: '',
           error: null,
         ),
       );
@@ -172,7 +208,10 @@ class RunBloc extends Bloc<RunEvent, RunState> {
       _requestCoachCue(event: 'start');
 
       // Timer de tempo decorrido
-      _timer = Timer.periodic(const Duration(seconds: 1), (_) => add(_TimerTick()));
+      _timer = Timer.periodic(
+        const Duration(seconds: 1),
+        (_) => add(_TimerTick()),
+      );
 
       // Stream de GPS
       _gpsSub = Geolocator.getPositionStream(
@@ -182,8 +221,21 @@ class RunBloc extends Bloc<RunEvent, RunState> {
         ),
       ).listen((pos) => add(_GpsUpdate(pos)));
 
+      Geolocator.getCurrentPosition(
+            locationSettings: const LocationSettings(
+              accuracy: LocationAccuracy.high,
+            ),
+          )
+          .then((pos) {
+            if (!isClosed) add(_GpsUpdate(pos));
+          })
+          .catchError((_) {});
+
       // Flush periódico
-      _flushTimer = Timer.periodic(const Duration(seconds: _flushIntervalS), (_) => _flush());
+      _flushTimer = Timer.periodic(
+        const Duration(seconds: _flushIntervalS),
+        (_) => _flush(),
+      );
     } catch (e) {
       emit(state.copyWith(status: RunStatus.error, error: e.toString()));
     }
@@ -195,7 +247,13 @@ class RunBloc extends Bloc<RunEvent, RunState> {
   }
 
   void _onCoachChunk(_CoachChunk event, Emitter<RunState> emit) {
-    emit(state.copyWith(coachLiveMessage: event.text));
+    emit(
+      state.copyWith(
+        coachLiveMessage: event.cue.text,
+        coachAudioBase64: event.cue.audioBase64 ?? '',
+        coachAudioMimeType: event.cue.audioMimeType ?? '',
+      ),
+    );
   }
 
   void _onGpsUpdate(_GpsUpdate event, Emitter<RunState> emit) {
@@ -203,11 +261,12 @@ class RunBloc extends Bloc<RunEvent, RunState> {
 
     final pos = event.pos;
 
-    // Filtra ruído de GPS
-    if (pos.accuracy > _accuracyThreshold) return;
+    // Filtra ruído extremo, mas mantém precisão moderada para mostrar o mapa no web.
+    if (pos.accuracy > _displayAccuracyThreshold) return;
 
     final newPoint = GpsPoint(
-      lat: pos.latitude, lng: pos.longitude,
+      lat: pos.latitude,
+      lng: pos.longitude,
       ts: pos.timestamp.millisecondsSinceEpoch,
       accuracy: pos.accuracy,
       pace: pos.speed > 0 ? (1000 / pos.speed) / 60 : null, // m/s → min/km
@@ -217,9 +276,17 @@ class RunBloc extends Bloc<RunEvent, RunState> {
     double addedDistance = 0;
     if (state.points.isNotEmpty) {
       final last = state.points.last;
-      addedDistance = Geolocator.distanceBetween(
-        last.lat, last.lng, pos.latitude, pos.longitude,
-      );
+      final accurateEnough =
+          pos.accuracy <= _accuracyThreshold &&
+          last.accuracy <= _accuracyThreshold;
+      if (accurateEnough) {
+        addedDistance = Geolocator.distanceBetween(
+          last.lat,
+          last.lng,
+          pos.latitude,
+          pos.longitude,
+        );
+      }
     }
 
     final newPoints = [...state.points, newPoint];
@@ -235,11 +302,13 @@ class RunBloc extends Bloc<RunEvent, RunState> {
         ? null
         : recentPaces.reduce((a, b) => a + b) / recentPaces.length;
 
-    emit(state.copyWith(
-      points: newPoints,
-      distanceM: newDistance,
-      currentPaceMinKm: smoothedPace,
-    ));
+    emit(
+      state.copyWith(
+        points: newPoints,
+        distanceM: newDistance,
+        currentPaceMinKm: smoothedPace,
+      ),
+    );
 
     final kmReached = (newDistance / 1000).floor();
     if (kmReached > _lastCoachKm && kmReached > 0) {
@@ -262,7 +331,11 @@ class RunBloc extends Bloc<RunEvent, RunState> {
   }
 
   Future<void> _flush() async {
-    if (state.runId == null || state.points.isEmpty || _isLocalRunId(state.runId!)) return;
+    if (state.runId == null ||
+        state.points.isEmpty ||
+        _isLocalRunId(state.runId!)) {
+      return;
+    }
     final pending = state.points.takeLast(_pendingFlushCount).toList();
     if (pending.isEmpty) return;
     try {
@@ -275,7 +348,9 @@ class RunBloc extends Bloc<RunEvent, RunState> {
 
   Future<void> _onComplete(CompleteRun event, Emitter<RunState> emit) async {
     if (state.runId == null) return;
-    _requestCoachCue(event: 'finish');
+    if (state.distanceM >= stationaryDistanceThresholdM) {
+      _requestCoachCue(event: 'finish');
+    }
     emit(state.copyWith(status: RunStatus.completing));
     _stop();
 
@@ -322,7 +397,9 @@ class RunBloc extends Bloc<RunEvent, RunState> {
     _gpsSub?.cancel();
     _timer?.cancel();
     _flushTimer?.cancel();
-    _gpsSub = null; _timer = null; _flushTimer = null;
+    _gpsSub = null;
+    _timer = null;
+    _flushTimer = null;
     _coachRequestInFlight = false;
   }
 
@@ -346,20 +423,26 @@ class RunBloc extends Bloc<RunEvent, RunState> {
         .streamCoachCue(
           runId: state.runId!,
           event: event,
+          runType: state.runType,
           currentPaceMinKm: currentPaceMinKm ?? _computePaceMinKm(),
           targetPaceMinKm: _parsePaceMinKm(state.targetPace),
+          targetDistance: state.targetDistance,
           distanceM: distanceM ?? state.distanceM,
           elapsedS: elapsedS ?? state.elapsedS,
           kmReached: kmReached,
         )
-        .listen((chunk) {
-          if (isClosed) return;
-          add(_CoachChunk(chunk));
-        }, onError: (_) {
-          _coachRequestInFlight = false;
-        }, onDone: () {
-          _coachRequestInFlight = false;
-        });
+        .listen(
+          (cue) {
+            if (isClosed) return;
+            add(_CoachChunk(cue));
+          },
+          onError: (_) {
+            _coachRequestInFlight = false;
+          },
+          onDone: () {
+            _coachRequestInFlight = false;
+          },
+        );
   }
 
   double _computePaceMinKm() {

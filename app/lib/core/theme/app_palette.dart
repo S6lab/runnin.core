@@ -1,4 +1,131 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
+
+// Cores semânticas de zona cardíaca — independentes de skin
+abstract final class HeartZoneColors {
+  static const z1 = Color(0xFF4D7DFF); // Leve < 120bpm
+  static const z2 = Color(0xFF25C56B); // Moderado 120-140bpm
+  static const z3 = Color(0xFFF3BF31); // Aeróbico 140-160bpm
+  static const z4 = Color(0xFFFF6E40); // Limiar 160-175bpm
+  static const z5 = Color(0xFFFF3B46); // Máximo > 175bpm
+
+  static Color forZone(int zone) => switch (zone) {
+    1 => z1,
+    2 => z2,
+    3 => z3,
+    4 => z4,
+    _ => z5,
+  };
+}
+
+@immutable
+class RunninTypography {
+  // Display — headers de seção, títulos de página (all-caps, peso alto)
+  final TextStyle displayLg;
+  final TextStyle displayMd;
+  final TextStyle displaySm;
+
+  // Data — pace, distância, BPM (monospace/tabular)
+  final TextStyle dataXl;
+  final TextStyle dataMd;
+  final TextStyle dataSm;
+
+  // Body — textos narrativos do Coach, descrições
+  final TextStyle bodyMd;
+  final TextStyle bodySm;
+
+  // Label — microcopy, tags, nav labels
+  final TextStyle labelCaps;
+  final TextStyle labelMd;
+
+  const RunninTypography({
+    required this.displayLg,
+    required this.displayMd,
+    required this.displaySm,
+    required this.dataXl,
+    required this.dataMd,
+    required this.dataSm,
+    required this.bodyMd,
+    required this.bodySm,
+    required this.labelCaps,
+    required this.labelMd,
+  });
+
+  static RunninTypography build(Color textColor, Color mutedColor) {
+    return RunninTypography(
+      displayLg: GoogleFonts.barlow(
+        fontSize: 52,
+        fontWeight: FontWeight.w800,
+        letterSpacing: -0.5,
+        height: 1.0,
+        color: textColor,
+      ),
+      displayMd: GoogleFonts.barlow(
+        fontSize: 32,
+        fontWeight: FontWeight.w700,
+        letterSpacing: -0.2,
+        height: 1.1,
+        color: textColor,
+      ),
+      displaySm: GoogleFonts.barlow(
+        fontSize: 20,
+        fontWeight: FontWeight.w700,
+        letterSpacing: 0.0,
+        height: 1.2,
+        color: textColor,
+      ),
+      dataXl: GoogleFonts.jetBrainsMono(
+        fontSize: 48,
+        fontWeight: FontWeight.w700,
+        letterSpacing: -1.0,
+        height: 1.0,
+        color: textColor,
+      ),
+      dataMd: GoogleFonts.jetBrainsMono(
+        fontSize: 28,
+        fontWeight: FontWeight.w600,
+        letterSpacing: -0.5,
+        height: 1.0,
+        color: textColor,
+      ),
+      dataSm: GoogleFonts.jetBrainsMono(
+        fontSize: 16,
+        fontWeight: FontWeight.w500,
+        letterSpacing: 0.0,
+        height: 1.2,
+        color: textColor,
+      ),
+      bodyMd: GoogleFonts.inter(
+        fontSize: 14,
+        fontWeight: FontWeight.w400,
+        letterSpacing: 0.0,
+        height: 1.5,
+        color: textColor,
+      ),
+      bodySm: GoogleFonts.inter(
+        fontSize: 12,
+        fontWeight: FontWeight.w400,
+        letterSpacing: 0.0,
+        height: 1.4,
+        color: mutedColor,
+      ),
+      labelCaps: GoogleFonts.inter(
+        fontSize: 10,
+        fontWeight: FontWeight.w700,
+        letterSpacing: 0.12,
+        height: 1.2,
+        color: mutedColor,
+      ),
+      labelMd: GoogleFonts.inter(
+        fontSize: 12,
+        fontWeight: FontWeight.w600,
+        letterSpacing: 0.04,
+        height: 1.3,
+        color: textColor,
+      ),
+    );
+  }
+}
 
 @immutable
 class RunninPalette {
@@ -120,12 +247,20 @@ enum RunninSkin {
 @immutable
 class RunninThemeTokens extends ThemeExtension<RunninThemeTokens> {
   final RunninPalette palette;
+  final RunninTypography typography;
 
-  const RunninThemeTokens({required this.palette});
+  RunninThemeTokens({required this.palette})
+      : typography = RunninTypography.build(palette.text, palette.muted);
+
+  const RunninThemeTokens._({required this.palette, required this.typography});
 
   @override
   RunninThemeTokens copyWith({RunninPalette? palette}) {
-    return RunninThemeTokens(palette: palette ?? this.palette);
+    final p = palette ?? this.palette;
+    return RunninThemeTokens._(
+      palette: p,
+      typography: RunninTypography.build(p.text, p.muted),
+    );
   }
 
   @override
@@ -142,5 +277,14 @@ extension RunninThemeContext on BuildContext {
   RunninPalette get runninPalette {
     final tokens = Theme.of(this).extension<RunninThemeTokens>();
     return tokens?.palette ?? RunninSkin.artico.palette;
+  }
+
+  RunninTypography get runninType {
+    final tokens = Theme.of(this).extension<RunninThemeTokens>();
+    return tokens?.typography ??
+        RunninTypography.build(
+          RunninSkin.artico.palette.text,
+          RunninSkin.artico.palette.muted,
+        );
   }
 }

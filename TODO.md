@@ -28,7 +28,7 @@
 ## Pendente — PRIORITÁRIO
 
 - [ ] **Ativar Google Sign-In no Firebase Console**
-  - console.firebase.google.com → rumo-492120 → Authentication → Sign-in method → Google → Ativar
+  - console.firebase.google.com → runnin-494520 → Authentication → Sign-in method → Google → Ativar
 
 - [ ] **Preencher API keys/config dos providers no Cloud Run:**
   ```

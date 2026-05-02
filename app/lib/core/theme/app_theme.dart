@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import 'app_palette.dart';
 
@@ -7,7 +8,8 @@ class AppTheme {
 
   static ThemeData build(RunninPalette palette) {
     final base = ThemeData.dark();
-    final textTheme = base.textTheme.apply(
+
+    final textTheme = GoogleFonts.interTextTheme(base.textTheme).apply(
       bodyColor: palette.text,
       displayColor: palette.text,
     );
@@ -26,9 +28,11 @@ class AppTheme {
       appBarTheme: AppBarTheme(
         backgroundColor: palette.background,
         elevation: 0,
-        titleTextStyle: textTheme.titleMedium?.copyWith(
+        titleTextStyle: GoogleFonts.barlow(
+          fontSize: 14,
           fontWeight: FontWeight.w700,
-          letterSpacing: 0.05,
+          letterSpacing: 0.1,
+          color: palette.text,
         ),
       ),
       dividerTheme: DividerThemeData(color: palette.border, thickness: 1),
@@ -47,16 +51,33 @@ class AppTheme {
           borderRadius: BorderRadius.zero,
           borderSide: BorderSide(color: palette.primary),
         ),
+        labelStyle: TextStyle(color: palette.muted),
+        hintStyle: TextStyle(color: palette.muted),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: palette.primary,
           foregroundColor: palette.background,
           shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-          textStyle: const TextStyle(
-            fontWeight: FontWeight.w700,
-            letterSpacing: 0.1,
+          textStyle: GoogleFonts.barlow(
+            fontWeight: FontWeight.w800,
+            letterSpacing: 0.08,
+            fontSize: 14,
           ),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: palette.text,
+          side: BorderSide(color: palette.border),
+          shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+          textStyle: GoogleFonts.barlow(
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.08,
+            fontSize: 14,
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
         ),
       ),
     );

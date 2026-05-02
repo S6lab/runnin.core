@@ -1,1 +1,23 @@
-{"flutter":{"platforms":{"android":{"default":{"projectId":"rumo-492120","appId":"1:267248310658:android:cf9c5bd47100e025fe579b","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"rumo-492120","configurations":{"android":"1:267248310658:android:cf9c5bd47100e025fe579b","ios":"1:267248310658:ios:95642c767a8a058efe579b","web":"1:267248310658:web:ec2b81abb2a55aacfe579b"}}}}}}
+{
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "runnin-494520",
+          "appId": "1:506126899076:android:dad670e264e4523b4b6fd1",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "runnin-494520",
+          "configurations": {
+            "android": "1:506126899076:android:dad670e264e4523b4b6fd1",
+            "ios": "1:506126899076:ios:9176f04cb7a9be694b6fd1",
+            "web": "1:506126899076:web:d4fd630dc0d2b9364b6fd1"
+          }
+        }
+      }
+    }
+  }
+}

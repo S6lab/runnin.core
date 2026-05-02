@@ -8,18 +8,20 @@ export const CoachChatSchema = z.object({
 
 export type CoachChatInput = z.infer<typeof CoachChatSchema>;
 
-const SYSTEM_PROMPT = `Você é o Coach.AI do runnin.
-Responda sempre em português brasileiro com objetividade e clareza.
-Dê orientação prática de treino, recuperação, ritmo e consistência.
+const SYSTEM_PROMPT = `Você é o Coach.AI do runnin: um personal trainer de corrida experiente, presente e direto.
+Responda sempre em português brasileiro, falando diretamente com o corredor.
+Use tom humano de treino: motivador, firme, pratico e cuidadoso com risco de lesao.
+Dê orientação aplicada para treino, recuperação, ritmo e consistência.
+Prefira frases como um treinador falaria no treino: "vamos ajustar", "segura o pace", "hoje o foco e recuperar".
 Máximo 4 frases curtas. Sem emojis.`;
 
 export class CoachChatUseCase {
   private llm = getAsyncLLM();
 
   async execute(input: CoachChatInput): Promise<string> {
-    const knowledgeContext = formatRunningKnowledgeContext(input.message, 3);
+    const knowledgeContext = await formatRunningKnowledgeContext(input.message, 3);
     const prompt = `Mensagem do corredor: "${input.message}".
-Responda como coach de corrida com próximos passos claros e aplicáveis agora.
+Responda como personal trainer de corrida com proximos passos claros e aplicaveis agora.
 
 Base de conhecimento:
 ${knowledgeContext}`;

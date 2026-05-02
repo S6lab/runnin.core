@@ -24,18 +24,15 @@ class _BottomNav extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final palette = context.runninPalette;
+    final type = context.runninType;
 
     final leftItems = [
       _NavItem(icon: Icons.home_outlined, label: 'HOME', path: '/home'),
-      _NavItem(
-        icon: Icons.calendar_today_outlined,
-        label: 'TREINO',
-        path: '/training',
-      ),
+      _NavItem(icon: Icons.calendar_today_outlined, label: 'TREINO', path: '/training'),
     ];
     final rightItems = [
       _NavItem(icon: Icons.history_outlined, label: 'HIST', path: '/history'),
-      _NavItem(icon: Icons.person_outline, label: 'CONTA', path: '/profile'),
+      _NavItem(icon: Icons.person_outline, label: 'PERFIL', path: '/profile'),
     ];
 
     return Container(
@@ -45,10 +42,10 @@ class _BottomNav extends StatelessWidget {
       ),
       child: SafeArea(
         child: SizedBox(
-          height: 60,
+          height: 64,
           child: Row(
             children: [
-              // Itens da esquerda
+              // Itens esquerda
               ...leftItems.map((item) {
                 final isActive = currentLocation.startsWith(item.path);
                 return Expanded(
@@ -62,14 +59,12 @@ class _BottomNav extends StatelessWidget {
                           size: 20,
                           color: isActive ? palette.primary : palette.muted,
                         ),
-                        const SizedBox(height: 2),
+                        const SizedBox(height: 3),
                         Text(
                           item.label,
-                          style: TextStyle(
-                            fontSize: 9,
-                            letterSpacing: 0.08,
-                            fontWeight: FontWeight.w700,
+                          style: type.labelCaps.copyWith(
                             color: isActive ? palette.primary : palette.muted,
+                            fontSize: 9,
                           ),
                         ),
                       ],
@@ -78,44 +73,27 @@ class _BottomNav extends StatelessWidget {
                 );
               }),
 
-              // Botão RUN central
-              SizedBox(
-                width: 72,
-                child: GestureDetector(
-                  onTap: () => context.push('/prep'),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          color: palette.primary,
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.play_arrow,
-                          color: Colors.black,
-                          size: 22,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        'RUN',
-                        style: TextStyle(
-                          fontSize: 9,
-                          letterSpacing: 0.08,
-                          fontWeight: FontWeight.w900,
-                          color: palette.primary,
-                        ),
-                      ),
-                    ],
+              // Botão RUN central — retangular conforme protótipo
+              GestureDetector(
+                onTap: () => context.push('/prep'),
+                child: Container(
+                  width: 72,
+                  height: 64,
+                  color: palette.primary,
+                  alignment: Alignment.center,
+                  child: Text(
+                    'RUN',
+                    style: type.labelCaps.copyWith(
+                      color: palette.background,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 0.15,
+                    ),
                   ),
                 ),
               ),
 
-              // Itens da direita
+              // Itens direita
               ...rightItems.map((item) {
                 final isActive = currentLocation.startsWith(item.path);
                 return Expanded(
@@ -129,14 +107,12 @@ class _BottomNav extends StatelessWidget {
                           size: 20,
                           color: isActive ? palette.primary : palette.muted,
                         ),
-                        const SizedBox(height: 2),
+                        const SizedBox(height: 3),
                         Text(
                           item.label,
-                          style: TextStyle(
-                            fontSize: 9,
-                            letterSpacing: 0.08,
-                            fontWeight: FontWeight.w700,
+                          style: type.labelCaps.copyWith(
                             color: isActive ? palette.primary : palette.muted,
+                            fontSize: 9,
                           ),
                         ),
                       ],

@@ -745,11 +745,11 @@ class _ProfileEditor extends StatelessWidget {
             activeTrackColor: palette.primary.withValues(alpha: 0.35),
             contentPadding: EdgeInsets.zero,
             title: Text(
-              hasWearable ? 'Conectado/pretendo conectar' : 'Depois',
+              hasWearable ? 'Tenho/pretendo conectar' : 'Depois',
               style: TextStyle(color: palette.text),
             ),
             subtitle: Text(
-              'Health Connect / HealthKit será usado na próxima fase.',
+              'Isso ainda nao confirma dados conectados. Health Connect / HealthKit sera usado na proxima fase.',
               style: TextStyle(color: palette.muted),
             ),
           ),

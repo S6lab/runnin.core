@@ -10,6 +10,7 @@ const coachChat = new CoachChatUseCase();
 export async function postCoachMessage(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const ctx = CoachContextSchema.parse(req.body);
+    const cue = await coachMessage.generate(ctx, req.uid);
 
     // SSE headers
     res.setHeader('Content-Type', 'text/event-stream');
@@ -17,10 +18,7 @@ export async function postCoachMessage(req: Request, res: Response, next: NextFu
     res.setHeader('Connection', 'keep-alive');
     res.flushHeaders();
 
-    const stream = coachMessage.stream(ctx);
-    for await (const chunk of stream) {
-      res.write(`data: ${JSON.stringify({ text: chunk })}\n\n`);
-    }
+    res.write(`data: ${JSON.stringify(cue)}\n\n`);
     res.write('data: [DONE]\n\n');
     res.end();
   } catch (err) {

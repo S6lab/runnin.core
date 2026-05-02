@@ -21,14 +21,14 @@ class PlanRemoteDatasource {
     required String goal,
     required String level,
     int? frequency,
-    int weeksCount = 8,
+    int? weeksCount,
   }) async {
     final res = await _dio.post(
       '/plans/generate',
       data: {
         'goal': goal,
         'level': level,
-        'weeksCount': weeksCount,
+        'weeksCount': ?weeksCount,
         'frequency': ?frequency,
       },
     );

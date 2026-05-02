@@ -2,7 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
-import 'package:runnin/core/theme/app_colors.dart';
+import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 
 class LoginPage extends StatefulWidget {
@@ -17,10 +17,7 @@ class _LoginPageState extends State<LoginPage> {
   String? _error;
 
   Future<void> _signInWithGoogle() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+    setState(() { _loading = true; _error = null; });
     try {
       if (kIsWeb) {
         await FirebaseAuth.instance.signInWithPopup(GoogleAuthProvider());
@@ -38,7 +35,6 @@ class _LoginPageState extends State<LoginPage> {
         await FirebaseAuth.instance.signInWithCredential(credential);
       }
       await UserRemoteDatasource().provisionMe();
-      // Router redireciona automaticamente via authStateChanges
     } catch (e) {
       setState(() {
         _error = 'Erro ao fazer login. Tente novamente.';
@@ -48,10 +44,7 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Future<void> _signInAnonymously() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+    setState(() { _loading = true; _error = null; });
     try {
       await FirebaseAuth.instance.signInAnonymously();
       await UserRemoteDatasource().provisionMe();
@@ -65,8 +58,11 @@ class _LoginPageState extends State<LoginPage> {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    final type = context.runninType;
+
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: palette.background,
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(32),
@@ -74,20 +70,26 @@ class _LoginPageState extends State<LoginPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Spacer(),
-              Text(
-                'RUNNIN',
-                style: Theme.of(context).textTheme.displaySmall?.copyWith(
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: -0.05,
-                  color: AppColors.text,
+              // Logo
+              Row(children: [
+                Text('RUNIN', style: type.displayMd),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  color: palette.primary,
+                  child: Text(
+                    '.AI',
+                    style: type.labelMd.copyWith(
+                      color: palette.background,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
                 ),
-              ),
+              ]),
               const SizedBox(height: 8),
               Text(
                 'Seu coach de corrida com IA.',
-                style: Theme.of(
-                  context,
-                ).textTheme.bodyLarge?.copyWith(color: AppColors.muted),
+                style: type.bodyMd.copyWith(color: palette.muted),
               ),
               const Spacer(flex: 2),
               if (_error != null)
@@ -95,10 +97,7 @@ class _LoginPageState extends State<LoginPage> {
                   padding: const EdgeInsets.only(bottom: 16),
                   child: Text(
                     _error!,
-                    style: const TextStyle(
-                      color: AppColors.error,
-                      fontSize: 13,
-                    ),
+                    style: type.bodySm.copyWith(color: palette.error),
                   ),
                 ),
               SizedBox(
@@ -107,12 +106,11 @@ class _LoginPageState extends State<LoginPage> {
                 child: ElevatedButton(
                   onPressed: _loading ? null : _signInWithGoogle,
                   child: _loading
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
+                      ? SizedBox(
+                          width: 20, height: 20,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
-                            color: AppColors.background,
+                            color: palette.background,
                           ),
                         )
                       : const Text('ENTRAR COM GOOGLE'),
@@ -128,9 +126,9 @@ class _LoginPageState extends State<LoginPage> {
                 ),
               ),
               const SizedBox(height: 12),
-              const Text(
+              Text(
                 'Você pode começar anônimo e conectar sua conta depois.',
-                style: TextStyle(color: AppColors.muted, fontSize: 12),
+                style: type.bodySm,
               ),
               const SizedBox(height: 32),
             ],

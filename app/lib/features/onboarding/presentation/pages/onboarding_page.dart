@@ -21,12 +21,13 @@ class _OnboardingPageState extends State<OnboardingPage> {
   final _weightCtrl = TextEditingController(text: '70');
   final _heightCtrl = TextEditingController(text: '175');
 
+  static const _totalSteps = 7; // 0–5 dados + 6 loading
+
   int _step = 0;
   String _level = 'iniciante';
   String _goal = 'Completar 10K';
   int _frequency = 4;
-  bool _hasWearable = true;
-  bool _submitting = false;
+  bool _hasWearable = false;
   String? _error;
 
   static const _levels = [
@@ -47,10 +48,10 @@ class _OnboardingPageState extends State<OnboardingPage> {
   static const _wearableOptions = [
     (
       true,
-      'Sim (recomendado)',
-      'Dados de BPM e sono deixam o coach mais preciso',
+      'Tenho wearable',
+      'Vamos marcar a preferencia, mas a integracao ainda precisa ser conectada',
     ),
-    (false, 'Depois', 'Você pode conectar mais tarde no perfil'),
+    (false, 'Depois', 'Nenhum dado sera tratado como conectado por enquanto'),
   ];
 
   @override
@@ -77,12 +78,15 @@ class _OnboardingPageState extends State<OnboardingPage> {
 
   Future<void> _submit() async {
     if (!_canProceed()) return;
-
+    // Vai para o passo de loading antes de chamar a API
     setState(() {
-      _submitting = true;
+      _step = _totalSteps - 1;
       _error = null;
     });
+    _doSubmit();
+  }
 
+  Future<void> _doSubmit() async {
     try {
       await _ds.completeOnboarding(
         name: _nameCtrl.text.trim(),
@@ -101,14 +105,12 @@ class _OnboardingPageState extends State<OnboardingPage> {
         hasWearable: _hasWearable,
       );
       markOnboardingDone();
-      if (mounted) {
-        context.go('/home');
-      }
+      if (mounted) context.go('/home');
     } catch (_) {
       if (mounted) {
         setState(() {
           _error = 'Erro ao salvar perfil. Tente novamente.';
-          _submitting = false;
+          _step = _totalSteps - 2; // volta ao último passo de dados
         });
       }
     }
@@ -128,11 +130,13 @@ class _OnboardingPageState extends State<OnboardingPage> {
             children: [
               Row(
                 children: List.generate(
-                  6,
+                  _totalSteps,
                   (index) => Expanded(
                     child: Container(
                       height: 2,
-                      margin: EdgeInsets.only(right: index < 5 ? 4 : 0),
+                      margin: EdgeInsets.only(
+                        right: index < _totalSteps - 1 ? 4 : 0,
+                      ),
                       color: index <= _step ? palette.primary : palette.border,
                     ),
                   ),
@@ -184,6 +188,8 @@ class _OnboardingPageState extends State<OnboardingPage> {
           options: _wearableOptions,
           onSelect: (value) => setState(() => _hasWearable = value),
         );
+      case 6:
+        return const _StepGeneratingPlan();
       default:
         return const SizedBox.shrink();
     }
@@ -202,31 +208,29 @@ class _OnboardingPageState extends State<OnboardingPage> {
               style: TextStyle(color: palette.error, fontSize: 13),
             ),
           ),
-        SizedBox(
-          width: double.infinity,
-          height: 52,
-          child: ElevatedButton(
-            onPressed: _canProceed() ? (_step < 5 ? _nextStep : _submit) : null,
-            child: _submitting
-                ? SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: palette.background,
-                    ),
-                  )
-                : Text(_step < 5 ? 'PRÓXIMO' : 'CRIAR MEU PLANO'),
-          ),
-        ),
-        if (_step > 0)
-          TextButton(
-            onPressed: () => setState(() => _step--),
-            child: Text(
-              'VOLTAR',
-              style: TextStyle(color: palette.muted, fontSize: 12),
+        // Passo de loading não mostra botões
+        if (_step < _totalSteps - 1) ...[
+          SizedBox(
+            width: double.infinity,
+            height: 52,
+            child: ElevatedButton(
+              onPressed: _canProceed()
+                  ? (_step < _totalSteps - 2 ? _nextStep : _submit)
+                  : null,
+              child: Text(
+                _step < _totalSteps - 2 ? 'PRÓXIMO' : 'CRIAR MEU PLANO',
+              ),
             ),
           ),
+          if (_step > 0)
+            TextButton(
+              onPressed: () => setState(() => _step--),
+              child: Text(
+                'VOLTAR',
+                style: TextStyle(color: palette.muted, fontSize: 12),
+              ),
+            ),
+        ],
       ],
     );
   }
@@ -304,14 +308,7 @@ class _StepIdentity extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
-          Text(
-            'Como te chamo?',
-            style: Theme.of(context).textTheme.displaySmall?.copyWith(
-              fontWeight: FontWeight.w900,
-              letterSpacing: -0.04,
-              height: 1.0,
-            ),
-          ),
+          Text('Como te chamo?', style: context.runninType.displayMd),
           const SizedBox(height: 10),
           Text(
             'Nome e data de nascimento ajudam o Coach a personalizar comunicação, zonas e progressão.',
@@ -426,14 +423,7 @@ class _StepLevel extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 12),
-        Text(
-          'Qual seu nível atual?',
-          style: Theme.of(context).textTheme.displaySmall?.copyWith(
-            fontWeight: FontWeight.w900,
-            letterSpacing: -0.04,
-            height: 1.0,
-          ),
-        ),
+        Text('Qual seu nível atual?', style: context.runninType.displayMd),
         const SizedBox(height: 10),
         Text(
           'O Coach adapta intensidade, volume e progressão ao seu momento.',
@@ -499,14 +489,7 @@ class _StepBody extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
-          Text(
-            'Peso e altura',
-            style: Theme.of(context).textTheme.displaySmall?.copyWith(
-              fontWeight: FontWeight.w900,
-              letterSpacing: -0.04,
-              height: 1.0,
-            ),
-          ),
+          Text('Peso e altura', style: context.runninType.displayMd),
           const SizedBox(height: 10),
           Text(
             'Usamos isso para estimar gasto calórico, zonas e carga de impacto.',
@@ -564,14 +547,7 @@ class _StepGoal extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
-          Text(
-            'Qual sua meta principal?',
-            style: Theme.of(context).textTheme.displaySmall?.copyWith(
-              fontWeight: FontWeight.w900,
-              letterSpacing: -0.04,
-              height: 1.0,
-            ),
-          ),
+          Text('Qual sua meta principal?', style: context.runninType.displayMd),
           const SizedBox(height: 10),
           Text(
             'A periodização nasce do objetivo certo.',
@@ -649,11 +625,7 @@ class _StepFrequency extends StatelessWidget {
               const SizedBox(height: 12),
               Text(
                 'Quantas vezes por semana?',
-                style: Theme.of(context).textTheme.displaySmall?.copyWith(
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: -0.04,
-                  height: 1.0,
-                ),
+                style: context.runninType.displayMd,
               ),
               const SizedBox(height: 10),
               Text(
@@ -674,8 +646,9 @@ class _StepFrequency extends StatelessWidget {
                         color: isSelected
                             ? palette.primary.withValues(alpha: 0.08)
                             : null,
-                        borderColor:
-                            isSelected ? palette.primary : palette.border,
+                        borderColor: isSelected
+                            ? palette.primary
+                            : palette.border,
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -760,17 +733,10 @@ class _StepWearable extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 12),
-        Text(
-          'Conectar wearable?',
-          style: Theme.of(context).textTheme.displaySmall?.copyWith(
-            fontWeight: FontWeight.w900,
-            letterSpacing: -0.04,
-            height: 1.0,
-          ),
-        ),
+        Text('Conectar wearable?', style: context.runninType.displayMd),
         const SizedBox(height: 10),
         Text(
-          'BPM e sono deixam o plano e os alertas mais inteligentes.',
+          'Por enquanto isso registra apenas uma preferencia. Dados reais aparecem depois que houver integracao ou corrida com BPM.',
           style: TextStyle(color: palette.muted, height: 1.5),
         ),
         const SizedBox(height: 24),
@@ -871,6 +837,44 @@ class _MetricInput extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _StepGeneratingPlan extends StatelessWidget {
+  const _StepGeneratingPlan();
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    final type = context.runninType;
+
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            width: 56,
+            height: 56,
+            child: CircularProgressIndicator(
+              color: palette.primary,
+              strokeWidth: 2,
+            ),
+          ),
+          const SizedBox(height: 32),
+          Text(
+            'GERANDO SEU PLANO',
+            style: type.displaySm,
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'O Coach está montando sua periodização\ncom base no seu perfil.',
+            style: type.bodyMd.copyWith(color: palette.muted, height: 1.6),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
     );
   }
 }
