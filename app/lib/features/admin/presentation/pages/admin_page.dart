@@ -335,24 +335,32 @@ class _AdminPageState extends State<AdminPage> {
       return;
     }
 
+    const allowedExtensions = [
+      'pdf',
+      'txt',
+      'md',
+      'csv',
+      'json',
+      'doc',
+      'docx',
+    ];
+
     final picked = await FilePicker.pickFiles(
       allowMultiple: false,
       withData: true,
-      type: FileType.custom,
-      allowedExtensions: const [
-        'pdf',
-        'txt',
-        'md',
-        'csv',
-        'json',
-        'doc',
-        'docx',
-      ],
+      type: kIsWeb ? FileType.any : FileType.custom,
+      allowedExtensions: kIsWeb ? null : allowedExtensions,
     );
 
     if (picked == null || picked.files.isEmpty) return;
 
     final file = picked.files.single;
+    final extension = (file.extension ?? '').toLowerCase();
+    if (!allowedExtensions.contains(extension)) {
+      setState(() => _error = 'Formato de arquivo nao suportado.');
+      return;
+    }
+
     final bytes = file.bytes;
     if (bytes == null) {
       setState(() => _error = 'Nao foi possivel ler o arquivo selecionado.');
