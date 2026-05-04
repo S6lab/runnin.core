@@ -6,22 +6,36 @@ service firebase.storage {
       return request.auth.token.role;
     }
 
+    function adminRole() {
+      return request.auth.token.adminRole;
+    }
+
+    function roles() {
+      return request.auth.token.roles;
+    }
+
+    function hasRole(roleName) {
+      return role() == roleName
+        || adminRole() == roleName
+        || (roles() is list && roles().hasAny([roleName]));
+    }
+
     function hasAdminAccess() {
       return request.auth != null
         && (
           request.auth.token.admin == true
-          || role() == 'admin'
-          || role() == 'editor'
+          || hasRole('admin')
+          || hasRole('editor')
         );
     }
 
     function isAdmin() {
       return request.auth != null
-        && (request.auth.token.admin == true || role() == 'admin');
+        && (request.auth.token.admin == true || hasRole('admin'));
     }
 
-    match /rag/uploads/{fileName} {
-      allow read: if hasAdminAccess();
+    match /rag/uploads/{allFiles=**} {
+      allow get, list: if hasAdminAccess();
       allow create, update: if hasAdminAccess()
         && request.resource.size < 25 * 1024 * 1024;
       allow delete: if isAdmin();

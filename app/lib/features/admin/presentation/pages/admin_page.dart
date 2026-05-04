@@ -1,12 +1,12 @@
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:runnin/core/theme/app_palette.dart';
+import 'package:runnin/features/admin/data/admin_file_picker.dart';
 
 class AdminPage extends StatefulWidget {
   const AdminPage({super.key});
@@ -345,28 +345,16 @@ class _AdminPageState extends State<AdminPage> {
       'docx',
     ];
 
-    final picked = await FilePicker.pickFiles(
-      allowMultiple: false,
-      withData: true,
-      type: kIsWeb ? FileType.any : FileType.custom,
-      allowedExtensions: kIsWeb ? null : allowedExtensions,
-    );
+    final file = await pickAdminFile(allowedExtensions);
+    if (file == null) return;
 
-    if (picked == null || picked.files.isEmpty) return;
-
-    final file = picked.files.single;
-    final extension = (file.extension ?? '').toLowerCase();
+    final extension = file.extension;
     if (!allowedExtensions.contains(extension)) {
       setState(() => _error = 'Formato de arquivo nao suportado.');
       return;
     }
 
     final bytes = file.bytes;
-    if (bytes == null) {
-      setState(() => _error = 'Nao foi possivel ler o arquivo selecionado.');
-      return;
-    }
-
     final safeName = _safeStorageName(file.name);
     final now = DateTime.now().toUtc();
     final path =
