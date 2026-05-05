@@ -17,7 +17,10 @@ export async function getCurrentPlan(req: Request, res: Response, next: NextFunc
 
 export async function getPlanKnowledge(_req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    res.json({ chunks: await getRunningKnowledgeCorpusWithStorage() });
+    const chunks = await getRunningKnowledgeCorpusWithStorage();
+    res.json({
+      chunks: chunks.map(({ embedding: _embedding, ...chunk }) => chunk),
+    });
   } catch (err) { next(err); }
 }
 

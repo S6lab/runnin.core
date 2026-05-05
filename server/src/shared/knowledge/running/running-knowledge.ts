@@ -1,6 +1,10 @@
 import corpus from './running-knowledge-corpus.json';
-import { getStorageBucket } from '@shared/infra/firebase/firebase.client';
+import { createHash } from 'node:crypto';
+import { getFirestore, getStorageBucket } from '@shared/infra/firebase/firebase.client';
+import { GeminiEmbeddingService } from '@shared/infra/embedding/gemini-embedding.service';
 import { logger } from '@shared/logger/logger';
+import mammoth from 'mammoth';
+import { PDFParse } from 'pdf-parse';
 
 export interface RunningKnowledgeChunk {
   id: string;
@@ -11,13 +15,23 @@ export interface RunningKnowledgeChunk {
   sourceType: 'guideline' | 'systematic_review' | 'meta_analysis' | 'cohort' | 'article';
   sourceTitle: string;
   sourceUrl: string;
+  content?: string;
+  embedding?: number[];
+  embeddingModel?: string;
+  contentHash?: string;
+  storagePath?: string;
+  chunkIndex?: number;
 }
 
 const RAG_STORAGE_ROOT = 'rag/uploads';
+const RAG_CHUNKS_COLLECTION = 'rag_chunks';
 const STORAGE_CACHE_TTL_MS = 5 * 60 * 1000;
+const STORAGE_CHUNK_MAX_CHARS = 2200;
+const STORAGE_CHUNK_OVERLAP_CHARS = 280;
 const chunks = corpus as RunningKnowledgeChunk[];
 let storageChunksCache: { loadedAt: number; chunks: RunningKnowledgeChunk[] } | undefined;
 let storageSeedAttempted = false;
+let embeddingService: GeminiEmbeddingService | undefined;
 
 type StorageRagFile = {
   name: string;
@@ -118,12 +132,9 @@ function retrieveFromChunks(
 
 export async function retrieveRunningKnowledge(query: string, limit = 4): Promise<RunningKnowledgeChunk[]> {
   const storageChunks = await getStorageRunningKnowledge();
-  let selected = retrieveFromChunks(query, [...storageChunks, ...chunks], limit);
-  const includesStorage = selected.some(chunk => storageChunks.includes(chunk));
-  if (storageChunks.length > 0 && !includesStorage && limit > 0) {
-    const storageCandidate = retrieveFromChunks(query, storageChunks, 1)[0] ?? storageChunks[0];
-    selected = [storageCandidate, ...selected].slice(0, limit);
-  }
+  const selectedStorage = await retrieveStorageKnowledge(query, storageChunks, Math.max(1, Math.min(3, limit)));
+  const selectedBase = retrieveFromChunks(query, chunks, Math.max(0, limit - selectedStorage.length));
+  let selected = [...selectedStorage, ...selectedBase].slice(0, limit);
   if (selected.length > 0) return selected;
   return retrieveFromChunks(query, chunks, limit);
 }
@@ -138,6 +149,7 @@ export async function formatRunningKnowledgeContext(query: string, limit = 4): P
       return [
         `[KB${index + 1}] ${chunk.title}`,
         `Resumo: ${chunk.summary}`,
+        ...(chunk.content ? [`Trecho: ${compactText(chunk.content).slice(0, 1400)}`] : []),
         'Aplicacao pratica:',
         guidance,
         `Fonte: ${chunk.sourceTitle} (${chunk.sourceType})`,
@@ -174,7 +186,8 @@ async function getStorageRunningKnowledge(): Promise<RunningKnowledgeChunk[]> {
       files = files.filter(file => !file.name.endsWith('/'));
     }
 
-    const storageChunks = await readStorageChunks(files);
+    const parsedChunks = await readStorageChunks(files);
+    const storageChunks = await syncEmbeddedStorageChunks(parsedChunks);
     storageChunksCache = { loadedAt: now, chunks: storageChunks };
     return storageChunks;
   } catch (err) {
@@ -253,7 +266,7 @@ async function readStorageChunks(files: StorageRagFile[]): Promise<RunningKnowle
       ]);
       const buffer = downloadResult[0];
       const metadata = normalizeFileMetadata(metadataResult[0]);
-      const content = buffer.toString('utf8').trim();
+      const content = (await extractStorageText(file.name, buffer, metadata)).trim();
       if (!content) continue;
       result.push(...parseStorageDocument(file.name, content, metadata));
     } catch (err) {
@@ -269,13 +282,62 @@ async function readStorageChunks(files: StorageRagFile[]): Promise<RunningKnowle
 
 function normalizeFileMetadata(value: unknown): Record<string, string> {
   if (!value || typeof value !== 'object') return {};
+  const topLevel = value as Record<string, unknown>;
   const custom = (value as { metadata?: unknown }).metadata;
-  if (!custom || typeof custom !== 'object') return {};
+  const customMetadata = custom && typeof custom === 'object'
+    ? Object.fromEntries(
+        Object.entries(custom as Record<string, unknown>)
+          .filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
+      )
+    : {};
 
-  return Object.fromEntries(
-    Object.entries(custom as Record<string, unknown>)
-      .filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
-  );
+  return {
+    ...customMetadata,
+    ...(typeof topLevel['contentType'] === 'string'
+      ? { contentType: topLevel['contentType'] }
+      : {}),
+  };
+}
+
+async function extractStorageText(
+  path: string,
+  buffer: Buffer,
+  metadata: Record<string, string>,
+): Promise<string> {
+  const extension = extensionFromPath(path);
+  const contentType = metadata['contentType'] ?? '';
+
+  if (extension === 'pdf' || contentType.includes('pdf')) {
+    const parser = new PDFParse({ data: buffer });
+    try {
+      const data = await parser.getText();
+      return data.text;
+    } finally {
+      await parser.destroy().catch(() => undefined);
+    }
+  }
+
+  if (
+    extension === 'docx' ||
+    contentType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+  ) {
+    const data = await mammoth.extractRawText({ buffer });
+    return data.value;
+  }
+
+  if (extension === 'doc') {
+    logger.warn('knowledge.storage.unsupported_doc_format', { file: path });
+    return '';
+  }
+
+  return buffer.toString('utf8');
+}
+
+function extensionFromPath(path: string): string {
+  const fileName = path.split('/').pop() ?? path;
+  const dotIndex = fileName.lastIndexOf('.');
+  if (dotIndex < 0 || dotIndex === fileName.length - 1) return '';
+  return fileName.substring(dotIndex + 1).toLowerCase();
 }
 
 function parseStorageDocument(
@@ -284,20 +346,22 @@ function parseStorageDocument(
   metadata: Record<string, string>,
 ): RunningKnowledgeChunk[] {
   const jsonChunks = parseStorageJson(content);
-  if (jsonChunks.length > 0) return jsonChunks;
+  if (jsonChunks.length > 0) {
+    return jsonChunks.map((chunk, index) => enrichStorageChunk(chunk, path, index));
+  }
 
   const title = metadata['title'] || metadata['sourceTitle'] || path.split('/').pop() || path;
   const sourceTitle = metadata['sourceTitle'] || title;
   const sourceUrl = metadata['sourceUrl'] || `gs://${path}`;
-  const summary = summarizeText(content);
-  const guidance = extractGuidance(content);
+  const textChunks = splitTextIntoChunks(content);
 
-  return [
-    {
-      id: `storage-${path}`,
+  return textChunks.map((chunkContent, index) => {
+    const chunkTitle = textChunks.length > 1 ? `${title} - parte ${index + 1}` : title;
+    return enrichStorageChunk({
+      id: `storage-${path}-${index}`,
       title,
-      summary,
-      guidance,
+      summary: summarizeText(chunkContent),
+      guidance: extractGuidance(chunkContent),
       tags: (metadata['tags'] ?? 'storage,admin-rag')
         .split(',')
         .map(tag => tag.trim())
@@ -305,8 +369,9 @@ function parseStorageDocument(
       sourceType: normalizeSourceType(metadata['sourceType']),
       sourceTitle,
       sourceUrl,
-    },
-  ];
+      content: chunkContent,
+    }, path, index, chunkTitle);
+  });
 }
 
 function parseStorageJson(content: string): RunningKnowledgeChunk[] {
@@ -337,6 +402,7 @@ function normalizeStorageJsonChunk(item: unknown, index: number): RunningKnowled
     sourceType: normalizeSourceType(stringValue(record['sourceType'])),
     sourceTitle: stringValue(record['sourceTitle']) || title,
     sourceUrl: stringValue(record['sourceUrl']) || '',
+    content: stringValue(record['content']) || stringValue(record['text']) || stringValue(record['body']),
   };
 }
 
@@ -345,6 +411,217 @@ function summarizeText(content: string): string {
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, 900);
+}
+
+function compactText(content: string): string {
+  return content.replace(/\s+/g, ' ').trim();
+}
+
+function splitTextIntoChunks(content: string): string[] {
+  const paragraphs = content
+    .split(/\n{2,}/)
+    .map(paragraph => paragraph.replace(/\s+/g, ' ').trim())
+    .filter(Boolean);
+
+  const result: string[] = [];
+  let current = '';
+
+  for (const paragraph of paragraphs.length > 0 ? paragraphs : [compactText(content)]) {
+    if (!current) {
+      current = paragraph;
+      continue;
+    }
+
+    if (`${current}\n\n${paragraph}`.length <= STORAGE_CHUNK_MAX_CHARS) {
+      current = `${current}\n\n${paragraph}`;
+      continue;
+    }
+
+    result.push(current);
+    const overlap = current.slice(Math.max(0, current.length - STORAGE_CHUNK_OVERLAP_CHARS));
+    current = `${overlap}\n\n${paragraph}`.trim();
+  }
+
+  if (current) result.push(current);
+  return result.flatMap(chunk => splitOversizedChunk(chunk));
+}
+
+function splitOversizedChunk(content: string): string[] {
+  if (content.length <= STORAGE_CHUNK_MAX_CHARS) return [content];
+
+  const chunks: string[] = [];
+  let start = 0;
+  while (start < content.length) {
+    const end = Math.min(content.length, start + STORAGE_CHUNK_MAX_CHARS);
+    chunks.push(content.slice(start, end).trim());
+    if (end === content.length) break;
+    start = Math.max(0, end - STORAGE_CHUNK_OVERLAP_CHARS);
+  }
+  return chunks.filter(Boolean);
+}
+
+function enrichStorageChunk(
+  chunk: RunningKnowledgeChunk,
+  storagePath: string,
+  chunkIndex: number,
+  titleOverride?: string,
+): RunningKnowledgeChunk {
+  const content = chunk.content || [chunk.title, chunk.summary, ...chunk.guidance].join('\n');
+  const contentHash = hashText(content);
+  return {
+    ...chunk,
+    id: stableStorageChunkId(storagePath, chunkIndex),
+    title: titleOverride ?? chunk.title,
+    sourceUrl: chunk.sourceUrl || `gs://${storagePath}`,
+    storagePath,
+    chunkIndex,
+    content,
+    contentHash,
+  };
+}
+
+async function retrieveStorageKnowledge(
+  query: string,
+  sourceChunks: RunningKnowledgeChunk[],
+  limit: number,
+): Promise<RunningKnowledgeChunk[]> {
+  if (limit <= 0 || sourceChunks.length === 0) return [];
+
+  const chunksWithEmbedding = sourceChunks.filter(chunk => Array.isArray(chunk.embedding));
+  if (chunksWithEmbedding.length === 0) return retrieveFromChunks(query, sourceChunks, limit);
+
+  try {
+    const queryEmbedding = await getEmbeddingService().embedQuery(query);
+    if (queryEmbedding.length === 0) return retrieveFromChunks(query, sourceChunks, limit);
+
+    const semanticMatches = chunksWithEmbedding
+      .map(chunk => ({
+        chunk,
+        score: cosineSimilarity(queryEmbedding, chunk.embedding ?? []),
+      }))
+      .filter(item => item.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, limit)
+      .map(item => item.chunk);
+
+    if (semanticMatches.length > 0) return semanticMatches;
+  } catch (err) {
+    logger.warn('knowledge.embedding.query_failed', {
+      err: err instanceof Error ? err.message : String(err),
+    });
+  }
+
+  return retrieveFromChunks(query, sourceChunks, limit);
+}
+
+async function syncEmbeddedStorageChunks(
+  parsedChunks: RunningKnowledgeChunk[],
+): Promise<RunningKnowledgeChunk[]> {
+  if (parsedChunks.length === 0) return [];
+
+  try {
+    const service = getEmbeddingService();
+    const db = getFirestore();
+
+    const indexedChunks: RunningKnowledgeChunk[] = [];
+    for (const chunk of parsedChunks) {
+      const docRef = db.collection(RAG_CHUNKS_COLLECTION).doc(chunk.id);
+      const doc = await docRef.get();
+      const existing = doc.exists ? normalizeIndexedChunk(doc.data()) : undefined;
+
+      if (
+        existing &&
+        existing.contentHash === chunk.contentHash &&
+        existing.embeddingModel === service.modelName &&
+        Array.isArray(existing.embedding) &&
+        existing.embedding.length > 0
+      ) {
+        indexedChunks.push(existing);
+        continue;
+      }
+
+      const embeddingText = [
+        chunk.title,
+        chunk.summary,
+        chunk.guidance.join('\n'),
+        chunk.content ?? '',
+        `Tags: ${chunk.tags.join(', ')}`,
+      ].filter(Boolean).join('\n\n');
+      const embedding = await service.embedDocument(embeddingText, chunk.title);
+      const indexed = {
+        ...chunk,
+        embedding,
+        embeddingModel: service.modelName,
+      };
+
+      await docRef.set({
+        ...indexed,
+        updatedAt: new Date().toISOString(),
+      }, { merge: true });
+      indexedChunks.push(indexed);
+    }
+
+    return indexedChunks;
+  } catch (err) {
+    logger.warn('knowledge.embedding.index_failed', {
+      err: err instanceof Error ? err.message : String(err),
+    });
+    return parsedChunks;
+  }
+}
+
+function normalizeIndexedChunk(value: unknown): RunningKnowledgeChunk | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const record = value as Record<string, unknown>;
+  const title = stringValue(record['title']);
+  const summary = stringValue(record['summary']);
+  if (!title || !summary) return undefined;
+
+  return {
+    id: stringValue(record['id']) || '',
+    title,
+    summary,
+    guidance: arrayOfStrings(record['guidance']),
+    tags: arrayOfStrings(record['tags']),
+    sourceType: normalizeSourceType(stringValue(record['sourceType'])),
+    sourceTitle: stringValue(record['sourceTitle']) || title,
+    sourceUrl: stringValue(record['sourceUrl']) || '',
+    content: stringValue(record['content']),
+    embedding: arrayOfNumbers(record['embedding']),
+    embeddingModel: stringValue(record['embeddingModel']),
+    contentHash: stringValue(record['contentHash']),
+    storagePath: stringValue(record['storagePath']),
+    chunkIndex: typeof record['chunkIndex'] === 'number' ? record['chunkIndex'] : undefined,
+  };
+}
+
+function getEmbeddingService(): GeminiEmbeddingService {
+  embeddingService ??= new GeminiEmbeddingService();
+  return embeddingService;
+}
+
+function cosineSimilarity(a: number[], b: number[]): number {
+  if (a.length === 0 || b.length === 0 || a.length !== b.length) return 0;
+
+  let dot = 0;
+  let aMagnitude = 0;
+  let bMagnitude = 0;
+  for (let i = 0; i < a.length; i += 1) {
+    dot += a[i]! * b[i]!;
+    aMagnitude += a[i]! * a[i]!;
+    bMagnitude += b[i]! * b[i]!;
+  }
+
+  const denominator = Math.sqrt(aMagnitude) * Math.sqrt(bMagnitude);
+  return denominator > 0 ? dot / denominator : 0;
+}
+
+function hashText(value: string): string {
+  return createHash('sha256').update(value).digest('hex');
+}
+
+function stableStorageChunkId(path: string, chunkIndex: number): string {
+  return `storage_${hashText(`${path}:${chunkIndex}`).slice(0, 40)}`;
 }
 
 function extractGuidance(content: string): string[] {
@@ -379,6 +656,12 @@ function stringValue(value: unknown): string | undefined {
 function arrayOfStrings(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0);
+}
+
+function arrayOfNumbers(value: unknown): number[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const numbers = value.filter((item): item is number => typeof item === 'number' && Number.isFinite(item));
+  return numbers.length > 0 ? numbers : undefined;
 }
 
 function htmlToText(html: string): string {
