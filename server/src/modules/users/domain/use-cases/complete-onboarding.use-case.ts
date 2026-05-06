@@ -13,6 +13,7 @@ export const CompleteOnboardingSchema = z.object({
   weight: z.string().optional(),
   height: z.string().optional(),
   hasWearable: z.boolean().default(false),
+  medicalConditions: z.array(z.string()).default([]),
 });
 
 export type CompleteOnboardingInput = z.infer<typeof CompleteOnboardingSchema>;
@@ -36,6 +37,7 @@ export class CompleteOnboardingUseCase {
       weight: input.weight,
       height: input.height,
       hasWearable: input.hasWearable,
+      medicalConditions: input.medicalConditions,
       coachVoiceId: undefined,
       premium: false,
       onboarded: true,

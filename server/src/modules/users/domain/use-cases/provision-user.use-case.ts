@@ -26,6 +26,7 @@ export class ProvisionUserUseCase {
       weight: undefined,
       height: undefined,
       hasWearable: false,
+      medicalConditions: [],
       coachVoiceId: undefined,
       premium: false,
       operatorId: undefined,

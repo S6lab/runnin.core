@@ -12,6 +12,7 @@ class UserProfile {
   final String? weight;
   final String? height;
   final bool hasWearable;
+  final List<String> medicalConditions;
   final String coachVoiceId;
   final bool onboarded;
 
@@ -25,6 +26,7 @@ class UserProfile {
     required this.weight,
     required this.height,
     required this.hasWearable,
+    required this.medicalConditions,
     required this.coachVoiceId,
     required this.onboarded,
   });
@@ -39,6 +41,9 @@ class UserProfile {
     weight: j['weight'] as String?,
     height: j['height'] as String?,
     hasWearable: j['hasWearable'] as bool? ?? false,
+    medicalConditions: (j['medicalConditions'] as List<dynamic>? ?? const [])
+        .whereType<String>()
+        .toList(),
     coachVoiceId: j['coachVoiceId'] as String? ?? 'coach-bruno',
     onboarded: j['onboarded'] as bool? ?? false,
   );
@@ -82,6 +87,7 @@ class UserRemoteDatasource {
     String? weight,
     String? height,
     bool hasWearable = false,
+    List<String> medicalConditions = const [],
   }) async {
     final res = await _dio.post(
       '/users/onboarding',
@@ -94,6 +100,7 @@ class UserRemoteDatasource {
         'weight': weight,
         'height': height,
         'hasWearable': hasWearable,
+        'medicalConditions': medicalConditions,
       },
     );
     final data = res.data as Map<String, dynamic>;
@@ -109,6 +116,7 @@ class UserRemoteDatasource {
     String? weight,
     String? height,
     bool? hasWearable,
+    List<String>? medicalConditions,
     String? coachVoiceId,
     bool? onboarded,
   }) async {
@@ -121,6 +129,7 @@ class UserRemoteDatasource {
       'weight': weight,
       'height': height,
       'hasWearable': hasWearable,
+      'medicalConditions': medicalConditions,
       'coachVoiceId': coachVoiceId,
       'onboarded': onboarded,
     }..removeWhere((_, value) => value == null);

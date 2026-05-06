@@ -11,6 +11,7 @@ export const UpsertProfileSchema = z.object({
   weight: z.string().optional(),
   height: z.string().optional(),
   hasWearable: z.boolean().optional(),
+  medicalConditions: z.array(z.string()).optional(),
   coachVoiceId: z.enum(['coach-bruno', 'coach-clara', 'coach-luna']).optional(),
   onboarded: z.boolean().optional(),
 });
@@ -34,6 +35,7 @@ export class UpsertProfileUseCase {
       weight: input.weight ?? existing?.weight,
       height: input.height ?? existing?.height,
       hasWearable: input.hasWearable ?? existing?.hasWearable ?? false,
+      medicalConditions: input.medicalConditions ?? existing?.medicalConditions ?? [],
       coachVoiceId: input.coachVoiceId ?? existing?.coachVoiceId,
       premium: existing?.premium ?? false,
       operatorId: existing?.operatorId,

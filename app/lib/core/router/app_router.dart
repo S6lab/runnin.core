@@ -77,7 +77,7 @@ final appRouter = GoRouter(
     }
 
     if (!loggedIn) {
-      if (loc != '/login') return '/login';
+      if (loc != '/onboarding' && loc != '/login') return '/onboarding';
       return null;
     }
 

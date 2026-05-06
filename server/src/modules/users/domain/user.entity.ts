@@ -10,6 +10,7 @@ export interface UserProfile {
   weight?: string;
   height?: string;
   hasWearable: boolean;
+  medicalConditions: string[];
   coachVoiceId?: string;
   premium: boolean;
   operatorId?: string;
