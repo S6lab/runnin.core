@@ -8,8 +8,9 @@ import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 import 'package:runnin/features/home/domain/use_cases/get_home_data_use_case.dart';
 import 'package:runnin/features/home/presentation/cubit/home_cubit.dart';
+import 'package:runnin/features/notifications/domain/entities/app_notification.dart';
+import 'package:runnin/features/notifications/presentation/cubit/notifications_cubit.dart';
 import 'package:runnin/features/run/domain/entities/run.dart';
-import 'package:runnin/features/training/domain/entities/plan.dart';
 import 'package:runnin/shared/widgets/app_panel.dart';
 import 'package:runnin/shared/widgets/app_tag.dart';
 import 'package:runnin/shared/widgets/notification_tile.dart';
@@ -22,8 +23,11 @@ class HomePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return BlocProvider(
-      create: (_) => HomeCubit()..load(),
+    return MultiBlocProvider(
+      providers: [
+        BlocProvider(create: (_) => HomeCubit()..load()),
+        BlocProvider(create: (_) => NotificationsCubit()..load()),
+      ],
       child: const _HomeView(),
     );
   }
@@ -92,7 +96,7 @@ class _HomeViewState extends State<_HomeView> {
                   ] else if (state is HomeLoaded) ...[
                     _IniciarSessaoButton(data: state.data),
                     const SizedBox(height: 20),
-                    _CoachNotifications(data: state.data),
+                    const _CoachNotifications(),
                     const SizedBox(height: 20),
                     _SemanaSection(data: state.data),
                     const SizedBox(height: 20),
@@ -427,106 +431,32 @@ class _HomeHeroShell extends StatelessWidget {
 // ─── Coach Notificações ───────────────────────────────────────────────────────
 
 class _CoachNotifications extends StatelessWidget {
-  final HomeData data;
-  const _CoachNotifications({required this.data});
+  const _CoachNotifications();
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocBuilder<NotificationsCubit, NotificationsState>(
+      builder: (context, state) {
+        if (state is! NotificationsLoaded) return const SizedBox.shrink();
+        if (state.items.isEmpty) return const SizedBox.shrink();
+        return _CoachNotificationsList(items: state.items);
+      },
+    );
+  }
+}
+
+class _CoachNotificationsList extends StatelessWidget {
+  final List<AppNotification> items;
+  const _CoachNotificationsList({required this.items});
 
   @override
   Widget build(BuildContext context) {
     final palette = context.runninPalette;
-    final profile = data.profile;
-    final hydrationGoal = _hydrationGoalLiters(profile);
-    final hydrationLogged = _hydrationIntakeLiters();
-    final nextSession = data.todaySession ?? _nextPlannedSession(data.weekDays);
-    final hasBpmData = _hasRealBpmData(data);
-    final hasSleepData = _hasRealSleepData(data);
-    final items = <_CoachItem>[
-      _CoachItem(
-        icon: Icons.alarm_outlined,
-        label: 'MELHOR HORARIO',
-        time: nextSession == null ? 'AGORA' : _dayName(nextSession.dayOfWeek),
-        body: nextSession == null
-            ? 'Sem proxima sessao planejada. Quando houver plano, o coach sugere horario e janela de aquecimento.'
-            : 'Janela sugerida para ${nextSession.type}: escolha um horario em que voce consiga aquecer sem pressa e manter recuperacao depois.',
-        accent: palette.primary,
-        ctaLabel: nextSession == null ? 'ABRIR TREINO' : null,
-        onTap: nextSession == null ? () => context.push('/training') : null,
-      ),
-      _CoachItem(
-        icon: Icons.restaurant_outlined,
-        label: 'PREPARO NUTRICIONAL',
-        time: data.todaySession == null ? 'PENDENTE' : 'ANTES',
-        body: data.todaySession == null
-            ? 'Sem sessao marcada hoje. Para corrida livre, mantenha refeicao leve e evite testar alimentos novos.'
-            : 'Para ${data.todaySession!.type}, faca uma refeicao leve 45-60 minutos antes e evite exagerar em fibra ou gordura.',
-        accent: palette.secondary,
-      ),
-      _CoachItem(
-        icon: Icons.water_drop_outlined,
-        label: 'HIDRATACAO',
-        time: hydrationGoal == null
-            ? 'SEM META'
-            : hydrationLogged == null
-            ? '0%'
-            : '${((hydrationLogged / hydrationGoal).clamp(0.0, 1.0) * 100).round()}%',
-        body: hydrationGoal == null
-            ? 'Informe seu peso para o app calcular uma meta diaria de hidratacao.'
-            : hydrationLogged == null
-            ? 'Meta estimada: ${hydrationGoal.toStringAsFixed(1)}L hoje. Registre consumo para o coach acompanhar.'
-            : 'Voce registrou ${hydrationLogged.toStringAsFixed(1)}L de ${hydrationGoal.toStringAsFixed(1)}L hoje.',
-        accent: palette.primary,
-        ctaLabel: hydrationGoal == null ? 'INFORMAR PESO' : null,
-        onTap: hydrationGoal == null
-            ? () => context.push('/profile/edit')
-            : null,
-      ),
-      _CoachItem(
-        icon: Icons.checklist_outlined,
-        label: 'CHECKLIST PRE-EASY RUN',
-        time: data.todaySession == null ? 'LIVRE' : 'HOJE',
-        body: data.todaySession == null
-            ? 'Para corrida livre: aquecimento de 5 minutos, cadarco firme, GPS pronto e intensidade confortavel.'
-            : 'Aquecimento de 5-8 minutos, mobilidade leve e primeiros minutos controlados antes de entrar no ritmo previsto.',
-        accent: palette.secondary,
-      ),
-      _CoachItem(
-        icon: Icons.bedtime_outlined,
-        label: 'SONO → PERFORMANCE',
-        time: hasSleepData ? 'SINCRONIZADO' : 'SEM DADO',
-        body: profile?.hasWearable == true
-            ? 'Voce informou que tem ou pretende usar wearable, mas ainda nao ha dados reais de sono sincronizados no app.'
-            : 'Sem wearable ou origem de sono conectada. Este bloco fica em estado vazio ate a integracao existir.',
-        accent: hasSleepData ? palette.primary : palette.muted,
-        ctaLabel: hasSleepData ? null : 'REVISAR PERFIL',
-        onTap: hasSleepData ? null : () => context.push('/profile/edit'),
-      ),
-      _CoachItem(
-        icon: Icons.monitor_heart_outlined,
-        label: 'BPM REAL',
-        time: hasBpmData ? 'REGISTRADO' : 'SEM DADO',
-        body: hasBpmData
-            ? 'Ha BPM registrado em corrida concluida. O coach pode usar esse dado real nas leituras de carga e zonas.'
-            : 'Ainda nao existe BPM real em corridas concluídas. Nao vamos tratar preferencia de wearable como conexao ativa.',
-        accent: hasBpmData ? palette.primary : palette.muted,
-      ),
-      _CoachItem(
-        icon: Icons.medical_information_outlined,
-        label: 'FECHAMENTO MENSAL',
-        time: data.completedRuns.isEmpty ? 'SEM HISTORICO' : 'ATIVO',
-        body: data.completedRuns.isEmpty
-            ? 'Quando voce tiver corridas e exames cadastrados, este card destaca sinais relevantes para calibrar zonas e limites.'
-            : 'Com ${data.completedRuns.length} corrida(s) no historico recente, revise exames ou observacoes para melhorar as recomendacoes.',
-        accent: palette.secondary,
-        ctaLabel: data.completedRuns.isEmpty ? 'VER PERFIL' : null,
-        onTap: data.completedRuns.isEmpty
-            ? () => context.push('/profile')
-            : null,
-      ),
-    ];
+    final cubit = context.read<NotificationsCubit>();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Header: COACH.AI > NOTIFICAÇÕES N  LIMPAR
         Row(
           children: [
             Icon(Icons.remove_outlined, size: 12, color: palette.muted),
@@ -538,7 +468,13 @@ class _CoachNotifications extends StatelessWidget {
             const SizedBox(width: 8),
             AppTag(label: '${items.length}', color: palette.primary),
             const Spacer(),
-            Text('LIMPAR', style: context.runninType.labelCaps),
+            InkWell(
+              onTap: cubit.clear,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                child: Text('LIMPAR', style: context.runninType.labelCaps),
+              ),
+            ),
           ],
         ),
         const SizedBox(height: 8),
@@ -549,14 +485,17 @@ class _CoachNotifications extends StatelessWidget {
                 .map(
                   (item) => NotificationTile(
                     icon: item.icon,
-                    title: item.label,
+                    title: item.title,
                     preview: item.body.length > 80
                         ? '${item.body.substring(0, 80)}...'
                         : item.body,
                     fullText: item.body,
-                    timestamp: item.time,
+                    timestamp: item.timeLabel,
                     ctaLabel: item.ctaLabel,
-                    onCta: item.onTap,
+                    onCta: item.ctaRoute == null
+                        ? null
+                        : () => context.push(item.ctaRoute!),
+                    onDismiss: () => cubit.dismiss(item.id),
                   ),
                 )
                 .toList(),
@@ -565,26 +504,6 @@ class _CoachNotifications extends StatelessWidget {
       ],
     );
   }
-}
-
-class _CoachItem {
-  final IconData icon;
-  final String label;
-  final String time;
-  final String body;
-  final Color accent;
-  final String? ctaLabel;
-  final VoidCallback? onTap;
-
-  const _CoachItem({
-    required this.icon,
-    required this.label,
-    required this.time,
-    required this.body,
-    required this.accent,
-    this.ctaLabel,
-    this.onTap,
-  });
 }
 
 // ─── Semana ───────────────────────────────────────────────────────────────────
@@ -1839,31 +1758,6 @@ class _UltimaCorrida extends StatelessWidget {
 String _formatKm(double km) {
   final dec = km == km.truncateToDouble() ? 0 : 1;
   return '${km.toStringAsFixed(dec)} km';
-}
-
-PlanSession? _nextPlannedSession(List<WeekDayData> weekDays) {
-  final today = DateTime.now().weekday;
-  final ordered = [
-    ...weekDays.where((day) => day.dayOfWeek >= today),
-    ...weekDays.where((day) => day.dayOfWeek < today),
-  ];
-  for (final day in ordered) {
-    if (day.session != null) return day.session;
-  }
-  return null;
-}
-
-String _dayName(int dayOfWeek) {
-  const names = {
-    1: 'SEG',
-    2: 'TER',
-    3: 'QUA',
-    4: 'QUI',
-    5: 'SEX',
-    6: 'SAB',
-    7: 'DOM',
-  };
-  return names[dayOfWeek] ?? 'PLANO';
 }
 
 String? _averagePace(List<Run> runs) {

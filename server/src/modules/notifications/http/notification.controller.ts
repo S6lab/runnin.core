@@ -1,0 +1,66 @@
+import { Request, Response, NextFunction } from 'express';
+import { FirestoreNotificationRepository } from '../infra/firestore-notification.repository';
+import { FirestoreUserRepository } from '@modules/users/infra/firestore-user.repository';
+import { FirestorePlanRepository } from '@modules/plans/infra/firestore-plan.repository';
+import { FirestoreRunRepository } from '@modules/runs/infra/firestore-run.repository';
+import { ListNotificationsUseCase } from '../domain/use-cases/list-notifications.use-case';
+import { DismissNotificationUseCase } from '../domain/use-cases/dismiss-notification.use-case';
+import { ClearNotificationsUseCase } from '../domain/use-cases/clear-notifications.use-case';
+import { MarkReadUseCase } from '../domain/use-cases/mark-read.use-case';
+import { CreateNotificationUseCase } from '../domain/use-cases/create-notification.use-case';
+import { EnsureDailyInsightsUseCase } from '../domain/use-cases/ensure-daily-insights.use-case';
+import { logger } from '@shared/logger/logger';
+
+const repo = new FirestoreNotificationRepository();
+const userRepo = new FirestoreUserRepository();
+const planRepo = new FirestorePlanRepository();
+const runRepo = new FirestoreRunRepository();
+const create = new CreateNotificationUseCase(repo);
+
+const listUseCase = new ListNotificationsUseCase(repo);
+const dismissUseCase = new DismissNotificationUseCase(repo);
+const clearUseCase = new ClearNotificationsUseCase(repo);
+const markReadUseCase = new MarkReadUseCase(repo);
+const ensureDaily = new EnsureDailyInsightsUseCase(create, userRepo, planRepo, runRepo);
+
+export async function listNotifications(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    // Garante insights do dia antes de listar; falha aqui não derruba a leitura.
+    try {
+      await ensureDaily.execute(req.uid);
+    } catch (err) {
+      logger.warn('notifications.ensure_daily_failed', { uid: req.uid, err: String(err) });
+    }
+    const items = await listUseCase.execute(req.uid);
+    res.json({ items });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function dismissNotification(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    await dismissUseCase.execute(req.uid, req.params['id'] as string);
+    res.status(204).send();
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function clearNotifications(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const result = await clearUseCase.execute(req.uid);
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function markRead(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    await markReadUseCase.execute(req.uid, req.params['id'] as string);
+    res.status(204).send();
+  } catch (err) {
+    next(err);
+  }
+}

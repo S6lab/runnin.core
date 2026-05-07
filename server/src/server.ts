@@ -8,6 +8,7 @@ import { userRouter } from '@modules/users/http/user.routes';
 import { runRouter } from '@modules/runs/http/run.routes';
 import { coachRouter } from '@modules/coach/http/coach.routes';
 import { planRouter } from '@modules/plans/http/plan.routes';
+import { notificationRouter } from '@modules/notifications/http/notification.routes';
 
 export function createServer(): express.Application {
   const app = express();
@@ -28,6 +29,7 @@ export function createServer(): express.Application {
   app.use('/v1/runs', runRouter);
   app.use('/v1/coach', coachRouter);
   app.use('/v1/plans', planRouter);
+  app.use('/v1/notifications', notificationRouter);
 
   app.use(errorMiddleware);
 
