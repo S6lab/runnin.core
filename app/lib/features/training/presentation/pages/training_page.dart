@@ -289,13 +289,15 @@ class _TrainingPageState extends State<TrainingPage> {
     return Scaffold(
       backgroundColor: palette.background,
       body: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const AppPageHeader(title: 'TREINO'),
-            const SizedBox(height: 20),
-            Expanded(child: _buildBody(context)),
-          ],
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const AppPageHeader(title: 'TREINO'),
+              const SizedBox(height: 20),
+              _buildBody(context),
+            ],
+          ),
         ),
       ),
     );
@@ -671,19 +673,17 @@ class _TrainingWorkspace extends StatelessWidget {
             onChanged: onTabChanged,
           ),
           const SizedBox(height: 16),
-          Expanded(
-            child: switch (selectedTab) {
-              _TrainingTab.plan => _PlanTab(
-                plan: plan,
-                selectedWeek: selectedWeek,
-                planMode: planMode,
-                onWeekChanged: onWeekChanged,
-                onPlanModeChanged: onPlanModeChanged,
-              ),
-              _TrainingTab.reports => _ReportsTab(reports: reports),
-              _TrainingTab.adjustments => const _AdjustmentsTab(),
-            },
-          ),
+          switch (selectedTab) {
+            _TrainingTab.plan => _PlanTab(
+              plan: plan,
+              selectedWeek: selectedWeek,
+              planMode: planMode,
+              onWeekChanged: onWeekChanged,
+              onPlanModeChanged: onPlanModeChanged,
+            ),
+            _TrainingTab.reports => _ReportsTab(reports: reports),
+            _TrainingTab.adjustments => const _AdjustmentsTab(),
+          },
         ],
       ),
     );
@@ -902,16 +902,14 @@ class _PlanTab extends StatelessWidget {
           onRightTap: () => onPlanModeChanged(_PlanMode.monthly),
         ),
         const SizedBox(height: 16),
-        Expanded(
-          child: switch (planMode) {
-            _PlanMode.weekly => _WeeklyPlanView(
-              plan: plan,
-              selectedWeek: selectedWeek,
-              onWeekChanged: onWeekChanged,
-            ),
-            _PlanMode.monthly => _MonthlyPlanView(plan: plan),
-          },
-        ),
+        switch (planMode) {
+          _PlanMode.weekly => _WeeklyPlanView(
+            plan: plan,
+            selectedWeek: selectedWeek,
+            onWeekChanged: onWeekChanged,
+          ),
+          _PlanMode.monthly => _MonthlyPlanView(plan: plan),
+        },
       ],
     );
   }
@@ -1021,7 +1019,8 @@ class _WeeklyPlanView extends StatelessWidget {
       (sum, session) => sum + session.distanceKm,
     );
 
-    return ListView(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SizedBox(
           height: 40,
@@ -1100,7 +1099,8 @@ class _MonthlyPlanView extends StatelessWidget {
   Widget build(BuildContext context) {
     final stats = _buildMonthlyStats(plan);
 
-    return ListView(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _SectionTitle(
           title: 'PERIODIZAÇÃO',
@@ -1185,7 +1185,8 @@ class _ReportsTab extends StatelessWidget {
       );
     }
 
-    return ListView(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _SectionTitle(
           title: 'FEEDBACKS DA IA',
