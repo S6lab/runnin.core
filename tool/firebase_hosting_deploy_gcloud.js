@@ -10,9 +10,15 @@ const projectId = process.argv[2] || 'runnin-494520';
 const siteId = process.argv[3] || projectId;
 const publicDir = path.resolve(process.argv[4] || 'app/build/web');
 
-const token = execFileSync('gcloud', ['auth', 'print-access-token'], {
-  encoding: 'utf8',
-}).trim();
+// Permite passar o token via env var (necessário no Windows, onde
+// execFileSync não resolve `gcloud.cmd` automaticamente). Fallback chama
+// o gcloud do PATH como antes.
+const token = (process.env.GCLOUD_ACCESS_TOKEN
+  ? process.env.GCLOUD_ACCESS_TOKEN
+  : execFileSync('gcloud', ['auth', 'print-access-token'], {
+      encoding: 'utf8',
+    })
+).trim();
 
 const headers = {
   authorization: `Bearer ${token}`,
