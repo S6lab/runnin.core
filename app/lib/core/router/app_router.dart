@@ -86,7 +86,9 @@ final appRouter = GoRouter(
       return '/onboarding';
     }
 
-    if (onboardingStatus == true && loc == '/onboarding') {
+    if (onboardingStatus == true &&
+        loc == '/onboarding' &&
+        state.uri.queryParameters['redo'] != '1') {
       return '/home';
     }
 

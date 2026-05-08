@@ -5,6 +5,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:runnin/core/audio/coach_audio_player.dart';
 import 'package:runnin/core/theme/app_palette.dart';
+import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 import 'package:runnin/features/run/data/datasources/run_coach_remote_datasource.dart';
 import 'package:runnin/features/run/presentation/bloc/run_bloc.dart';
 
@@ -66,11 +67,25 @@ class _PrepViewState extends State<_PrepView> {
   String? _coachCue;
   bool _coachLoading = false;
   bool _coachMuted = false;
+  bool? _isPro;
 
   @override
   void initState() {
     super.initState();
-    _requestPreRunCue();
+    _resolvePremiumThenLoadCue();
+  }
+
+  Future<void> _resolvePremiumThenLoadCue() async {
+    try {
+      final profile = await UserRemoteDatasource().getMe();
+      if (!mounted) return;
+      final isPro = profile?.isPro ?? false;
+      setState(() => _isPro = isPro);
+      if (isPro) _requestPreRunCue();
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _isPro = false);
+    }
   }
 
   @override
@@ -261,14 +276,19 @@ class _PrepViewState extends State<_PrepView> {
                         ),
                       ),
                       const SizedBox(height: 14),
-                      _PreRunCoachCard(
-                        loading: _coachLoading,
-                        cue: _coachCue,
-                        muted: _coachMuted,
-                        onToggleMute: () =>
-                            setState(() => _coachMuted = !_coachMuted),
-                        onRefresh: _requestPreRunCue,
-                      ),
+                      if (_isPro == false)
+                        _PreRunCoachLockedCard(
+                          onTap: () => context.push('/profile'),
+                        )
+                      else
+                        _PreRunCoachCard(
+                          loading: _coachLoading,
+                          cue: _coachCue,
+                          muted: _coachMuted,
+                          onToggleMute: () =>
+                              setState(() => _coachMuted = !_coachMuted),
+                          onRefresh: _requestPreRunCue,
+                        ),
                     ],
                   ),
                 ),
@@ -380,6 +400,55 @@ class _PreRunCoachCard extends StatelessWidget {
             icon: const Icon(Icons.refresh),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _PreRunCoachLockedCard extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _PreRunCoachLockedCard({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    final type = context.runninType;
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: palette.surfaceAlt,
+          border: Border.all(color: palette.border),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(Icons.lock_outline, color: palette.muted),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('COACH', style: type.labelCaps),
+                  const SizedBox(height: 8),
+                  Text(
+                    'O Coach AI guia você antes da largada com base no seu plano e histórico. Disponível no plano Pro.',
+                    style: type.bodySm.copyWith(height: 1.45),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    'ASSINAR PRO →',
+                    style: type.labelCaps.copyWith(color: palette.primary),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -15,4 +15,13 @@ export class FirestoreUserRepository implements UserRepository {
     const { id, ...data } = profile;
     await this.col().doc(id).set({ ...data, updatedAt: new Date().toISOString() }, { merge: true });
   }
+
+  async archiveOnboarding(userId: string, snapshot: UserProfile): Promise<void> {
+    const archivedAt = new Date().toISOString();
+    const { id: _id, ...data } = snapshot;
+    await getFirestore()
+      .collection(`users/${userId}/onboarding_history`)
+      .doc(archivedAt)
+      .set({ ...data, archivedAt });
+  }
 }

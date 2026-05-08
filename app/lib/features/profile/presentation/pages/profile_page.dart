@@ -1,5 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/theme_controller.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
@@ -161,6 +162,33 @@ class _ProfilePageState extends State<ProfilePage> {
       _editing = false;
       _saveMessage = null;
     });
+  }
+
+  Future<void> _activateTrial() async {
+    setState(() {
+      _saving = true;
+      _saveMessage = null;
+      _error = null;
+    });
+    try {
+      final updated = await _userDatasource.activateTrial();
+      if (!mounted) return;
+      setState(() {
+        _profile = updated;
+        _saving = false;
+        _saveMessage = 'Trial Pro de 7 dias ativado.';
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _error = 'Não foi possível ativar o trial agora.';
+      });
+    }
+  }
+
+  void _redoOnboarding() {
+    context.push('/onboarding?redo=1');
   }
 
   @override
@@ -336,6 +364,15 @@ class _ProfilePageState extends State<ProfilePage> {
                               ],
                             ),
                           ],
+                          const SizedBox(height: 32),
+                          _SectionLabel(label: 'PLANO'),
+                          const SizedBox(height: 8),
+                          _PlanCard(
+                            profile: _profile,
+                            saving: _saving,
+                            onActivateTrial: _activateTrial,
+                            onRedoOnboarding: _redoOnboarding,
+                          ),
                           const SizedBox(height: 32),
                           _SectionLabel(label: 'SKIN'),
                           const SizedBox(height: 8),
@@ -995,6 +1032,211 @@ class _SkinCard extends StatelessWidget {
               ),
             ],
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PlanCard extends StatelessWidget {
+  final UserProfile? profile;
+  final bool saving;
+  final VoidCallback onActivateTrial;
+  final VoidCallback onRedoOnboarding;
+
+  const _PlanCard({
+    required this.profile,
+    required this.saving,
+    required this.onActivateTrial,
+    required this.onRedoOnboarding,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    final isPro = profile?.isPro ?? false;
+    return AppPanel(
+      color: isPro
+          ? palette.primary.withValues(alpha: 0.06)
+          : palette.surfaceAlt,
+      borderColor: isPro
+          ? palette.primary.withValues(alpha: 0.45)
+          : palette.border,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                isPro ? Icons.workspace_premium_outlined : Icons.lock_outline,
+                size: 16,
+                color: isPro ? palette.primary : palette.muted,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                isPro ? 'PLANO PRO' : 'PLANO FREE',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 0.12,
+                  color: isPro ? palette.primary : palette.text,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (isPro) ..._buildProBody(context, palette) else ..._buildFreeBody(context, palette),
+        ],
+      ),
+    );
+  }
+
+  List<Widget> _buildProBody(BuildContext context, RunninPalette palette) {
+    final until = profile?.premiumUntil;
+    final untilLabel = until == null
+        ? '—'
+        : '${until.day.toString().padLeft(2, '0')}/${until.month.toString().padLeft(2, '0')}/${until.year}';
+    final remaining = until?.difference(DateTime.now());
+    final remainingLabel = remaining == null
+        ? null
+        : remaining.inDays > 0
+            ? '${remaining.inDays} dia(s) restantes'
+            : remaining.inHours > 0
+                ? '${remaining.inHours} hora(s) restantes'
+                : 'Expira em breve';
+
+    return [
+      Text(
+        'Coach AI completo, plano vivo e refazer onboarding semanal.',
+        style: TextStyle(color: palette.text, height: 1.5, fontSize: 13),
+      ),
+      const SizedBox(height: 12),
+      Row(
+        children: [
+          Text(
+            'Válido até $untilLabel',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: palette.text,
+            ),
+          ),
+          if (remainingLabel != null) ...[
+            const SizedBox(width: 8),
+            Text(
+              '· $remainingLabel',
+              style: TextStyle(fontSize: 11, color: palette.muted),
+            ),
+          ],
+        ],
+      ),
+      const SizedBox(height: 12),
+      _RedoOnboardingRow(
+        profile: profile,
+        saving: saving,
+        onTap: onRedoOnboarding,
+      ),
+    ];
+  }
+
+  List<Widget> _buildFreeBody(BuildContext context, RunninPalette palette) {
+    return [
+      Text(
+        'Você está no plano gratuito. Pode usar o app normalmente, mas o Coach AI fica reservado para o plano Pro.',
+        style: TextStyle(color: palette.text, height: 1.5, fontSize: 13),
+      ),
+      const SizedBox(height: 12),
+      _PlanBenefitRow(text: 'Coach AI por voz e em chat', palette: palette),
+      _PlanBenefitRow(text: 'Plano que se ajusta a cada corrida', palette: palette),
+      _PlanBenefitRow(text: 'Refazer onboarding 1× por semana', palette: palette),
+      const SizedBox(height: 14),
+      SizedBox(
+        width: double.infinity,
+        height: 46,
+        child: ElevatedButton(
+          onPressed: saving ? null : onActivateTrial,
+          child: saving
+              ? SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: palette.background,
+                  ),
+                )
+              : const Text('ATIVAR TRIAL 7 DIAS'),
+        ),
+      ),
+    ];
+  }
+}
+
+class _PlanBenefitRow extends StatelessWidget {
+  final String text;
+  final RunninPalette palette;
+  const _PlanBenefitRow({required this.text, required this.palette});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 5),
+            child: Icon(Icons.check, size: 12, color: palette.primary),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              text,
+              style: TextStyle(fontSize: 12, color: palette.text, height: 1.4),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RedoOnboardingRow extends StatelessWidget {
+  final UserProfile? profile;
+  final bool saving;
+  final VoidCallback onTap;
+  const _RedoOnboardingRow({
+    required this.profile,
+    required this.saving,
+    required this.onTap,
+  });
+
+  static const _cooldownDays = 7;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    final last = profile?.lastOnboardingAt;
+    final next = last?.add(const Duration(days: _cooldownDays));
+    final canRedo = next == null || next.isBefore(DateTime.now());
+    final daysLeft = next == null
+        ? 0
+        : next.difference(DateTime.now()).inDays + 1;
+
+    return SizedBox(
+      width: double.infinity,
+      height: 46,
+      child: OutlinedButton(
+        onPressed: (saving || !canRedo) ? null : onTap,
+        style: OutlinedButton.styleFrom(
+          side: BorderSide(
+            color: canRedo ? palette.primary : palette.border,
+          ),
+          foregroundColor: canRedo ? palette.primary : palette.muted,
+        ),
+        child: Text(
+          canRedo
+              ? 'REFAZER ONBOARDING'
+              : 'REFAZER EM $daysLeft DIA${daysLeft == 1 ? '' : 'S'}',
         ),
       ),
     );

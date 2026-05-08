@@ -32,3 +32,17 @@ export class ValidationError extends AppError {
     super(message, 422, 'VALIDATION_ERROR');
   }
 }
+
+export class PremiumRequiredError extends AppError {
+  constructor(message = 'Premium required') {
+    super(message, 403, 'PREMIUM_REQUIRED');
+  }
+}
+
+export class CooldownError extends AppError {
+  public readonly availableAt: string;
+  constructor(availableAt: string, message = 'Cooldown active') {
+    super(message, 403, 'COOLDOWN_ACTIVE');
+    this.availableAt = availableAt;
+  }
+}

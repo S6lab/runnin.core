@@ -4,12 +4,14 @@ import { GetProfileUseCase } from '../domain/use-cases/get-profile.use-case';
 import { UpsertProfileUseCase, UpsertProfileSchema } from '../domain/use-cases/upsert-profile.use-case';
 import { CompleteOnboardingUseCase, CompleteOnboardingSchema } from '../domain/use-cases/complete-onboarding.use-case';
 import { ProvisionUserSchema, ProvisionUserUseCase } from '../domain/use-cases/provision-user.use-case';
+import { ActivateTrialUseCase } from '../domain/use-cases/activate-trial.use-case';
 
 const repo = new FirestoreUserRepository();
 const getProfile = new GetProfileUseCase(repo);
 const upsertProfile = new UpsertProfileUseCase(repo);
 const completeOnboarding = new CompleteOnboardingUseCase(repo);
 const provisionUser = new ProvisionUserUseCase(repo);
+const activateTrial = new ActivateTrialUseCase(repo);
 
 export async function getMe(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
@@ -45,6 +47,15 @@ export async function postProvision(req: Request, res: Response, next: NextFunct
     const input = ProvisionUserSchema.parse(req.body ?? {});
     const user = await provisionUser.execute(req.uid, input);
     res.status(201).json(user);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function postActivateTrial(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const user = await activateTrial.execute(req.uid);
+    res.json(user);
   } catch (err) {
     next(err);
   }

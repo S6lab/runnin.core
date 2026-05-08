@@ -13,8 +13,17 @@ export interface UserProfile {
   medicalConditions: string[];
   coachVoiceId?: string;
   premium: boolean;
+  premiumUntil?: string;
+  lastOnboardingAt?: string;
   operatorId?: string;
   onboarded: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+export function isPremium(profile: Pick<UserProfile, 'premium' | 'premiumUntil'> | null | undefined): boolean {
+  if (!profile) return false;
+  if (profile.premium) return true;
+  if (!profile.premiumUntil) return false;
+  return new Date(profile.premiumUntil).getTime() > Date.now();
 }

@@ -38,6 +38,8 @@ export class UpsertProfileUseCase {
       medicalConditions: input.medicalConditions ?? existing?.medicalConditions ?? [],
       coachVoiceId: input.coachVoiceId ?? existing?.coachVoiceId,
       premium: existing?.premium ?? false,
+      premiumUntil: existing?.premiumUntil,
+      lastOnboardingAt: existing?.lastOnboardingAt,
       operatorId: existing?.operatorId,
       onboarded: input.onboarded ?? existing?.onboarded ?? false,
       createdAt: existing?.createdAt ?? now,

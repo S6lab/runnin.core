@@ -15,6 +15,9 @@ class UserProfile {
   final List<String> medicalConditions;
   final String coachVoiceId;
   final bool onboarded;
+  final bool premium;
+  final DateTime? premiumUntil;
+  final DateTime? lastOnboardingAt;
 
   const UserProfile({
     required this.id,
@@ -29,7 +32,17 @@ class UserProfile {
     required this.medicalConditions,
     required this.coachVoiceId,
     required this.onboarded,
+    required this.premium,
+    required this.premiumUntil,
+    required this.lastOnboardingAt,
   });
+
+  bool get isPro {
+    if (premium) return true;
+    final until = premiumUntil;
+    if (until == null) return false;
+    return until.isAfter(DateTime.now());
+  }
 
   factory UserProfile.fromJson(Map<String, dynamic> j) => UserProfile(
     id: j['id'] as String,
@@ -46,6 +59,13 @@ class UserProfile {
         .toList(),
     coachVoiceId: j['coachVoiceId'] as String? ?? 'coach-bruno',
     onboarded: j['onboarded'] as bool? ?? false,
+    premium: j['premium'] as bool? ?? false,
+    premiumUntil: j['premiumUntil'] is String
+        ? DateTime.tryParse(j['premiumUntil'] as String)
+        : null,
+    lastOnboardingAt: j['lastOnboardingAt'] is String
+        ? DateTime.tryParse(j['lastOnboardingAt'] as String)
+        : null,
   );
 }
 
@@ -135,6 +155,11 @@ class UserRemoteDatasource {
     }..removeWhere((_, value) => value == null);
 
     final res = await _dio.patch('/users/me', data: data);
+    return UserProfile.fromJson(res.data as Map<String, dynamic>);
+  }
+
+  Future<UserProfile> activateTrial() async {
+    final res = await _dio.post('/users/me/trial');
     return UserProfile.fromJson(res.data as Map<String, dynamic>);
   }
 }

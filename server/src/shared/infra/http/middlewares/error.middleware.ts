@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { ZodError } from 'zod';
-import { AppError } from '@shared/errors/app-error';
+import { AppError, CooldownError } from '@shared/errors/app-error';
 import { logger } from '@shared/logger/logger';
 
 export function errorMiddleware(err: unknown, req: Request, res: Response, _next: NextFunction): void {
@@ -15,7 +15,9 @@ export function errorMiddleware(err: unknown, req: Request, res: Response, _next
     if (err.statusCode >= 500) {
       logger.error(err.message, { requestId: req.id, stack: err.stack });
     }
-    res.status(err.statusCode).json({ error: { code: err.code, message: err.message } });
+    const body: Record<string, unknown> = { code: err.code, message: err.message };
+    if (err instanceof CooldownError) body['availableAt'] = err.availableAt;
+    res.status(err.statusCode).json({ error: body });
     return;
   }
 
