@@ -9,6 +9,7 @@ import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 import 'package:runnin/shared/widgets/app_panel.dart';
 import 'package:runnin/shared/widgets/app_tag.dart';
+import 'package:runnin/shared/widgets/otp_resend_button.dart';
 
 class OnboardingPage extends StatefulWidget {
   const OnboardingPage({super.key});
@@ -41,9 +42,11 @@ class _OnboardingPageState extends State<OnboardingPage> {
   bool _authLoading = false;
   bool _submitting = false;
   String? _phoneVerificationId;
+  int? _phoneResendToken;
   ConfirmationResult? _phoneConfirmationResult;
   String? _error;
   String? _message;
+  final _resendCtrl = OtpResendController();
 
   static const _introSlides = [
     _IntroSlide(
@@ -238,7 +241,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
     }
   }
 
-  Future<void> _sendPhoneCode() async {
+  Future<void> _sendPhoneCode({bool resend = false}) async {
     final phoneNumber = _normalizePhoneNumber(_phoneCtrl.text.trim());
     if (phoneNumber == null) {
       setState(() {
@@ -252,8 +255,11 @@ class _OnboardingPageState extends State<OnboardingPage> {
       _authLoading = true;
       _error = null;
       _message = null;
-      _phoneVerificationId = null;
-      _phoneConfirmationResult = null;
+      if (!resend) {
+        _phoneVerificationId = null;
+        _phoneConfirmationResult = null;
+        _phoneResendToken = null;
+      }
     });
 
     try {
@@ -264,12 +270,14 @@ class _OnboardingPageState extends State<OnboardingPage> {
         );
         if (!mounted) return;
         setState(() {
-          _message = 'Codigo enviado por SMS.';
+          _message = resend ? 'Novo codigo enviado por SMS.' : 'Codigo enviado por SMS.';
           _authLoading = false;
         });
+        if (resend) _resendCtrl.restart();
       } else {
         await auth.verifyPhoneNumber(
           phoneNumber: phoneNumber,
+          forceResendingToken: _phoneResendToken,
           verificationCompleted: (credential) async {
             try {
               await auth.signInWithCredential(credential);
@@ -289,13 +297,15 @@ class _OnboardingPageState extends State<OnboardingPage> {
               _authLoading = false;
             });
           },
-          codeSent: (verificationId, _) {
+          codeSent: (verificationId, resendToken) {
             if (!mounted) return;
             setState(() {
               _phoneVerificationId = verificationId;
-              _message = 'Codigo enviado por SMS.';
+              _phoneResendToken = resendToken;
+              _message = resend ? 'Novo codigo enviado por SMS.' : 'Codigo enviado por SMS.';
               _authLoading = false;
             });
+            _resendCtrl.restart();
           },
           codeAutoRetrievalTimeout: (verificationId) {
             _phoneVerificationId = verificationId;
@@ -524,6 +534,8 @@ class _OnboardingPageState extends State<OnboardingPage> {
               _phoneConfirmationResult != null || _phoneVerificationId != null,
           loading: _authLoading,
           onGoogleSignIn: _signInWithGoogle,
+          resendController: _resendCtrl,
+          onResendCode: () => _sendPhoneCode(resend: true),
           error: _error,
           message: _message,
         );
@@ -849,6 +861,8 @@ class _StepLogin extends StatelessWidget {
   final bool codeRequested;
   final bool loading;
   final VoidCallback onGoogleSignIn;
+  final OtpResendController resendController;
+  final Future<void> Function() onResendCode;
   final String? error;
   final String? message;
 
@@ -858,6 +872,8 @@ class _StepLogin extends StatelessWidget {
     required this.codeRequested,
     required this.loading,
     required this.onGoogleSignIn,
+    required this.resendController,
+    required this.onResendCode,
     required this.error,
     required this.message,
   });
@@ -902,6 +918,13 @@ class _StepLogin extends StatelessWidget {
             ],
             decoration: const InputDecoration(hintText: '_  _  _  _  _  _'),
           ),
+          if (codeRequested) ...[
+            const SizedBox(height: 8),
+            OtpResendButton(
+              controller: resendController,
+              onResend: onResendCode,
+            ),
+          ],
           const SizedBox(height: 18),
           SizedBox(
             width: double.infinity,

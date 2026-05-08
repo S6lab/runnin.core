@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/shared/widgets/app_page_header.dart';
 import 'package:runnin/shared/widgets/app_panel.dart';
+import 'package:runnin/shared/widgets/otp_resend_button.dart';
 
 class AccountAccessPage extends StatefulWidget {
   const AccountAccessPage({super.key});
@@ -21,9 +22,11 @@ class _AccountAccessPageState extends State<AccountAccessPage> {
   bool _sendingPhoneCode = false;
   bool _verifyingPhoneCode = false;
   String? _phoneVerificationId;
+  int? _phoneResendToken;
   ConfirmationResult? _phoneConfirmationResult;
   String? _message;
   String? _error;
+  final _resendCtrl = OtpResendController();
 
   @override
   void dispose() {
@@ -137,7 +140,7 @@ class _AccountAccessPageState extends State<AccountAccessPage> {
     return null;
   }
 
-  Future<void> _sendPhoneCode() async {
+  Future<void> _sendPhoneCode({bool resend = false}) async {
     final phoneNumber = _normalizePhoneNumber(_phoneCtrl.text.trim());
     if (phoneNumber == null) {
       setState(() {
@@ -151,8 +154,11 @@ class _AccountAccessPageState extends State<AccountAccessPage> {
       _sendingPhoneCode = true;
       _error = null;
       _message = null;
-      _phoneVerificationId = null;
-      _phoneConfirmationResult = null;
+      if (!resend) {
+        _phoneVerificationId = null;
+        _phoneConfirmationResult = null;
+        _phoneResendToken = null;
+      }
     });
 
     try {
@@ -165,9 +171,11 @@ class _AccountAccessPageState extends State<AccountAccessPage> {
         } else {
           _phoneConfirmationResult = await auth.signInWithPhoneNumber(phoneNumber);
         }
+        if (resend && mounted) _resendCtrl.restart();
       } else {
         await auth.verifyPhoneNumber(
           phoneNumber: phoneNumber,
+          forceResendingToken: _phoneResendToken,
           verificationCompleted: (credential) async {
             try {
               if (user != null && user.isAnonymous) {
@@ -199,13 +207,15 @@ class _AccountAccessPageState extends State<AccountAccessPage> {
               _sendingPhoneCode = false;
             });
           },
-          codeSent: (verificationId, _) {
+          codeSent: (verificationId, resendToken) {
             if (!mounted) return;
             setState(() {
               _phoneVerificationId = verificationId;
-              _message = 'Código enviado por SMS.';
+              _phoneResendToken = resendToken;
+              _message = resend ? 'Novo código enviado por SMS.' : 'Código enviado por SMS.';
               _sendingPhoneCode = false;
             });
+            _resendCtrl.restart();
           },
           codeAutoRetrievalTimeout: (verificationId) {
             _phoneVerificationId = verificationId;
@@ -547,6 +557,11 @@ class _AccountAccessPageState extends State<AccountAccessPage> {
                                     )
                                   : const Text('CONFIRMAR CÓDIGO'),
                             ),
+                          ),
+                          const SizedBox(height: 8),
+                          OtpResendButton(
+                            controller: _resendCtrl,
+                            onResend: () => _sendPhoneCode(resend: true),
                           ),
                         ],
                       ],
