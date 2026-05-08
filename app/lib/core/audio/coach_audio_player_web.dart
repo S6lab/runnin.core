@@ -21,7 +21,7 @@ Future<void> playCoachAudio(
 
   final audio = html.AudioElement('data:$mimeType;base64,$audioBase64')
     ..autoplay = true
-    ..volume = volume.clamp(0.0, 1.0) as double;
+    ..volume = volume.clamp(0.0, 1.0);
 
   _currentCoachAudio = audio;
 
