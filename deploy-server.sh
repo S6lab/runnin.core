@@ -13,8 +13,17 @@ if [[ ! -f "$ENV_FILE" ]]; then
 fi
 
 echo "→ Lendo variáveis de $ENV_FILE..."
-# PORT é reservado no Cloud Run; variáveis vazias são ignoradas
-ENV_VARS=$(grep -v '^#' "$ENV_FILE" | grep -v '^$' | grep -v '^PORT=' | grep -v '=$' | tr '\n' ',' | sed 's/,$//')
+# PORT é reservado no Cloud Run; variáveis vazias são ignoradas.
+# Stripa comentários inline (`# ...`) e trailing whitespace, pra valores
+# limparem mesmo quando a linha tem comentário (ex: `FOO=bar  # default: bar`).
+ENV_VARS=$(grep -v '^#' "$ENV_FILE" \
+  | sed -E 's/[[:space:]]*#.*$//' \
+  | sed -E 's/[[:space:]]+$//' \
+  | grep -v '^$' \
+  | grep -v '^PORT=' \
+  | grep -v '=$' \
+  | tr '\n' ',' \
+  | sed 's/,$//')
 
 echo "→ Deploy no Cloud Run ($REGION)..."
 gcloud run deploy "$SERVICE_NAME" \
