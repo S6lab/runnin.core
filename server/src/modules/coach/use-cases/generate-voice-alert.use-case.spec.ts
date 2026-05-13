@@ -227,36 +227,63 @@ describe('GenerateVoiceAlertUseCase', () => {
 
   describe('Error Handling', () => {
     it('should throw error when LLM generation fails', async () => {
-      const { getAsyncLLM } = require('@shared/infra/llm/llm.factory');
-      getAsyncLLM.mockReturnValue({
-        generate: jest.fn().mockRejectedValue(new Error('LLM error')),
-      });
+      jest.resetModules();
+      jest.clearAllMocks();
 
-      useCase = new GenerateVoiceAlertUseCase();
+      jest.doMock('@shared/infra/llm/llm.factory', () => ({
+        getAsyncLLM: jest.fn(() => ({
+          generate: jest.fn().mockRejectedValue(new Error('LLM error')),
+        })),
+      }));
+
+      const { GenerateVoiceAlertUseCase: UseCase } = await import('./generate-voice-alert.use-case');
+      const failingUseCase = new UseCase();
 
       const input: GenerateVoiceAlertInput = {
         alertType: 'pace_too_fast',
         context: { currentPace: '5:00', targetPace: '6:00' },
       };
 
-      await expect(useCase.execute(userId, input)).rejects.toThrow();
+      await expect(failingUseCase.execute(userId, input)).rejects.toThrow('LLM error');
     });
   });
 
   describe('Context Handling', () => {
     it('should handle missing context gracefully', async () => {
+      // Reset to good mocks
+      jest.resetModules();
+      jest.clearAllMocks();
+
+      jest.doMock('@shared/infra/llm/llm.factory', () => ({
+        getAsyncLLM: jest.fn(() => ({
+          generate: jest.fn().mockResolvedValue('Keep going!'),
+        })),
+      }));
+
+      jest.doMock('./coach-config.service', () => ({
+        CoachConfigService: jest.fn().mockImplementation(() => ({
+          getConfig: jest.fn().mockResolvedValue({
+            ttsEnabled: false,
+          }),
+        })),
+      }));
+
+      const { GenerateVoiceAlertUseCase: UseCase } = await import('./generate-voice-alert.use-case');
+      const goodUseCase = new UseCase();
+
       const input: GenerateVoiceAlertInput = {
         alertType: 'encouragement',
         context: {},
       };
 
-      const result = await useCase.execute(userId, input);
+      const result = await goodUseCase.execute(userId, input);
 
       expect(result).toBeDefined();
       expect(result.text).toBeTruthy();
     });
 
     it('should use all available context in prompt', async () => {
+      // Use existing useCase from beforeEach (which has good mocks)
       const input: GenerateVoiceAlertInput = {
         alertType: 'pace_too_fast',
         context: {
@@ -271,7 +298,9 @@ describe('GenerateVoiceAlertUseCase', () => {
         },
       };
 
-      const result = await useCase.execute(userId, input);
+      // Create a fresh use case with initial mocks
+      const freshUseCase = new GenerateVoiceAlertUseCase();
+      const result = await freshUseCase.execute(userId, input);
 
       expect(result).toBeDefined();
     });

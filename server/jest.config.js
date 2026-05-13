@@ -7,10 +7,16 @@ module.exports = {
     '^@modules/(.*)$': '<rootDir>/src/modules/$1',
     '^@shared/(.*)$': '<rootDir>/src/shared/$1',
   },
+  transformIgnorePatterns: [
+    'node_modules/(?!(uuid)/)',
+  ],
   collectCoverageFrom: [
     'src/modules/coach/**/*.ts',
+    'src/modules/plans/**/*.ts',
     '!src/modules/coach/**/*.spec.ts',
     '!src/modules/coach/**/*.test.ts',
+    '!src/modules/plans/**/*.spec.ts',
+    '!src/modules/plans/**/*.test.ts',
   ],
   coverageThreshold: {
     global: {

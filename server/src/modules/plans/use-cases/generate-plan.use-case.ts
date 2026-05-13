@@ -136,7 +136,7 @@ export class GeneratePlanUseCase {
     if (input.maxHeartRate) {
       maxHR = input.maxHeartRate;
     } else if (input.birthDate) {
-      const age = new Date().getFullYear() - new Date(input.birthDate).getFullYear();
+      const age = new Date().getFullYear() - new Date(input.birthDate).getUTCFullYear();
       maxHR = 220 - age; // Simple formula
     }
 
@@ -798,7 +798,7 @@ ${JSON.stringify(normalizedWeeks)}`,
   }
 }
 
-export function resolvePlanWeeksCount(input: Pick<GeneratePlanInput, 'goal' | 'level' | 'frequency'>): number {
+export function resolvePlanWeeksCount(input: { goal: string; level: string; frequency?: number }): number {
   const goal = normalizeGoal(input.goal);
   const frequency = Math.min(Math.max(input.frequency ?? 3, 1), 7);
   const isBeginner = input.level === 'iniciante';
