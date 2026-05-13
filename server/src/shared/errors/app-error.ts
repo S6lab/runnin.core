@@ -42,7 +42,7 @@ export class PremiumRequiredError extends AppError {
 export class CooldownError extends AppError {
   public readonly availableAt: string;
   constructor(availableAt: string, message = 'Cooldown active') {
-    super(message, 403, 'COOLDOWN_ACTIVE');
+    super(message, 409, 'COOLDOWN_ACTIVE');
     this.availableAt = availableAt;
   }
 }

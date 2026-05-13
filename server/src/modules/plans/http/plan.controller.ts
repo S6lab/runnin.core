@@ -10,7 +10,7 @@ const generatePlan = new GeneratePlanUseCase(repo);
 export async function getCurrentPlan(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const plan = await repo.findCurrent(req.uid);
-    if (!plan) { res.status(404).json({ error: 'No active plan' }); return; }
+    if (!plan) throw new NotFoundError('Plan');
     res.json(plan);
   } catch (err) { next(err); }
 }
