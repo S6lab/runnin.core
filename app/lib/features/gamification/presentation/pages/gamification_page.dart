@@ -109,7 +109,18 @@ class _GamificationPageState extends State<GamificationPage> {
             Expanded(
               child: _loading
                   ? Center(child: CircularProgressIndicator(color: palette.primary, strokeWidth: 2))
-                  : _buildTab(),
+                  : _error != null
+                      ? Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text('Erro ao carregar dados', style: type.bodyMd.copyWith(color: palette.muted)),
+                              const SizedBox(height: 12),
+                              TextButton(onPressed: _load, child: Text('Tentar novamente', style: TextStyle(color: palette.primary))),
+                            ],
+                          ),
+                        )
+                      : _buildTab(),
             ),
           ],
         ),
@@ -120,9 +131,9 @@ class _GamificationPageState extends State<GamificationPage> {
   Widget _buildTab() {
     final runs = _runs ?? [];
     return switch (_tab) {
-      _GamTab.badges => _BadgesTab(runs: runs),
-      _GamTab.xp     => _XpTab(runs: runs),
-      _GamTab.streak => _StreakTab(runs: runs),
+      _GamTab.badges => _BadgesTab(badges: _badges ?? []),
+      _GamTab.xp     => _XpTab(gamification: _gamification, runs: runs),
+      _GamTab.streak => _StreakTab(gamification: _gamification, runs: runs),
     };
   }
 }
@@ -130,18 +141,22 @@ class _GamificationPageState extends State<GamificationPage> {
 // ── XP & Level ───────────────────────────────────────────────────────────────
 
 class _XpTab extends StatelessWidget {
+  final UserGamification? gamification;
   final List<Run> runs;
-  const _XpTab({required this.runs});
+  const _XpTab({required this.gamification, required this.runs});
 
   @override
   Widget build(BuildContext context) {
     final palette = context.runninPalette;
     final type = context.runninType;
-    final totalXp = runs.fold<int>(0, (s, r) => s + (r.xpEarned ?? 0));
-    final level = (totalXp / 500).floor() + 1;
-    final xpInLevel = totalXp - (level - 1) * 500;
-    final progress = (xpInLevel / 500).clamp(0.0, 1.0);
-    final xpToNext = 500 - xpInLevel;
+
+    final totalXp = gamification?.totalXp ?? runs.fold<int>(0, (s, r) => s + (r.xpEarned ?? 0));
+    final level = gamification?.level ?? (totalXp / 500).floor() + 1;
+    final xpInLevel = gamification?.xpInCurrentLevel ?? (totalXp - (level - 1) * 500);
+    final progress = gamification?.progressToNextLevel ?? (xpInLevel / 500).clamp(0.0, 1.0);
+    final xpToNext = gamification?.xpToNextLevel ?? (500 - xpInLevel);
+    final currentStreak = gamification?.currentStreak;
+    final longestStreak = gamification?.longestStreak;
 
     final rules = [
       ('Completar corrida', '+50–120'),
@@ -200,7 +215,7 @@ class _XpTab extends StatelessWidget {
         Row(children: [
           Expanded(child: MetricCard(label: 'XP TOTAL', value: '$totalXp')),
           const SizedBox(width: 8),
-          Expanded(child: MetricCard(label: 'CORRIDAS', value: '${runs.length}')),
+          Expanded(child: MetricCard(label: 'STREAK ATUAL', value: '${currentStreak ?? runs.length}', unit: 'dias', accentColor: (currentStreak ?? 0) > 0 ? palette.primary : null)),
           const SizedBox(width: 8),
           Expanded(child: MetricCard(label: 'NÍVEL', value: '$level', accentColor: palette.primary)),
         ]),
@@ -266,57 +281,31 @@ class _XpTab extends StatelessWidget {
   }
 }
 
-// ── 21 Badges ───────────────────────────────────────────────────────────────
+// ── Badges ───────────────────────────────────────────────────────────────────
 
 class _BadgesTab extends StatelessWidget {
-  final List<Run> runs;
-  const _BadgesTab({required this.runs});
+  final List<Badge> badges;
+  const _BadgesTab({required this.badges});
+
+  static const _badgeIcons = <String, IconData>{
+    'first_run': Icons.directions_run,
+    'week_warrior': Icons.whatshot_outlined,
+    'marathon_ready': Icons.emoji_events,
+    'speed_demon': Icons.bolt_outlined,
+  };
 
   @override
   Widget build(BuildContext context) {
     final type = context.runninType;
-    final totalKm = runs.fold<double>(0.0, (s, r) => s + r.distanceM) / 1000;
+    final unlockedCount = badges.where((b) => b.isUnlocked).length;
 
-    final badges = <_BadgeDef>[
-      // Run count badges
-      _BadgeDef(title: 'Primeira Corrida', desc: 'Complete sua primeira corrida', icon: Icons.directions_run, unlocked: runs.isNotEmpty, progress: runs.isNotEmpty ? 1.0 : 0.0),
-      _BadgeDef(title: '5 Corridas', desc: 'Complete 5 corridas', icon: Icons.star_outline, unlocked: runs.length >= 5, progress: (runs.length / 5).clamp(0.0, 1.0)),
-      _BadgeDef(title: '10 Corridas', desc: 'Complete 10 corridas', icon: Icons.military_tech_outlined, unlocked: runs.length >= 10, progress: (runs.length / 10).clamp(0.0, 1.0)),
-      _BadgeDef(title: '25 Corridas', desc: 'Complete 25 corridas', icon: Icons.emoji_events_outlined, unlocked: runs.length >= 25, progress: (runs.length / 25).clamp(0.0, 1.0)),
-      _BadgeDef(title: '50 Corridas', desc: 'Complete 50 corridas', icon: Icons.workspace_premium, unlocked: runs.length >= 50, progress: (runs.length / 50).clamp(0.0, 1.0)),
-      _BadgeDef(title: '100 Corridas', desc: 'Complete 100 corridas', icon: Icons.auto_awesome, unlocked: runs.length >= 100, progress: (runs.length / 100).clamp(0.0, 1.0)),
-
-      // Distance badges
-      _BadgeDef(title: '10 km', desc: 'Acumule 10 km', icon: Icons.route_outlined, unlocked: totalKm >= 10, progress: (totalKm / 10).clamp(0.0, 1.0)),
-      _BadgeDef(title: '25 km', desc: 'Acumule 25 km', icon: Icons.terrain_outlined, unlocked: totalKm >= 25, progress: (totalKm / 25).clamp(0.0, 1.0)),
-      _BadgeDef(title: '50 km', desc: 'Acumule 50 km', icon: Icons.landscape_outlined, unlocked: totalKm >= 50, progress: (totalKm / 50).clamp(0.0, 1.0)),
-      _BadgeDef(title: '100 km', desc: 'Acumule 100 km', icon: Icons.flight_outlined, unlocked: totalKm >= 100, progress: (totalKm / 100).clamp(0.0, 1.0)),
-      _BadgeDef(title: '250 km', desc: 'Acumule 250 km', icon: Icons.public_outlined, unlocked: totalKm >= 250, progress: (totalKm / 250).clamp(0.0, 1.0)),
-      _BadgeDef(title: '500 km', desc: 'Acumule 500 km', icon: Icons.travel_explore_outlined, unlocked: totalKm >= 500, progress: (totalKm / 500).clamp(0.0, 1.0)),
-
-      // Pace badges
-      _BadgeDef(title: 'Sub 6:00', desc: 'Pace médio abaixo de 6:00/km', icon: Icons.speed_outlined, unlocked: runs.any((r) => r.avgPace != null && _paceToSec(r.avgPace!) < 360), progress: runs.isEmpty ? 0.0 : (runs.where((r) => r.avgPace != null && _paceToSec(r.avgPace!) < 360).length / runs.length).clamp(0.0, 1.0)),
-      _BadgeDef(title: 'Sub 5:30', desc: 'Pace médio abaixo de 5:30/km', icon: Icons.flash_on_outlined, unlocked: runs.any((r) => r.avgPace != null && _paceToSec(r.avgPace!) < 330), progress: runs.isEmpty ? 0.0 : (runs.where((r) => r.avgPace != null && _paceToSec(r.avgPace!) < 330).length / runs.length).clamp(0.0, 1.0)),
-      _BadgeDef(title: 'Sub 5:00', desc: 'Pace médio abaixo de 5:00/km', icon: Icons.bolt_outlined, unlocked: runs.any((r) => r.avgPace != null && _paceToSec(r.avgPace!) < 300), progress: runs.isEmpty ? 0.0 : (runs.where((r) => r.avgPace != null && _paceToSec(r.avgPace!) < 300).length / runs.length).clamp(0.0, 1.0)),
-
-      // Streak badges
-      _BadgeDef(title: '3 dias', desc: 'Mantenha streak de 3 dias', icon: Icons.local_fire_department_outlined, unlocked: _maxStreak(runs) >= 3, progress: (_maxStreak(runs) / 3).clamp(0.0, 1.0)),
-      _BadgeDef(title: '7 dias', desc: 'Mantenha streak de 7 dias', icon: Icons.whatshot_outlined, unlocked: _maxStreak(runs) >= 7, progress: (_maxStreak(runs) / 7).clamp(0.0, 1.0)),
-      _BadgeDef(title: '14 dias', desc: 'Mantenha streak de 14 dias', icon: Icons.fireplace_outlined, unlocked: _maxStreak(runs) >= 14, progress: (_maxStreak(runs) / 14).clamp(0.0, 1.0)),
-      _BadgeDef(title: '30 dias', desc: 'Mantenha streak de 30 dias', icon: Icons.local_fire_department, unlocked: _maxStreak(runs) >= 30, progress: (_maxStreak(runs) / 30).clamp(0.0, 1.0)),
-
-      // Special badges
-      _BadgeDef(title: 'Madrugador', desc: 'Corra antes das 7h', icon: Icons.wb_twilight, unlocked: runs.any(_isEarlyMorning), progress: runs.any(_isEarlyMorning) ? 1.0 : 0.0),
-      _BadgeDef(title: 'Noturno', desc: 'Corra após as 20h', icon: Icons.nights_stay_outlined, unlocked: runs.any((r) { final d = DateTime.tryParse(r.createdAt)?.toLocal(); return d != null && d.hour >= 20; }), progress: runs.any((r) { final d = DateTime.tryParse(r.createdAt)?.toLocal(); return d != null && d.hour >= 20; }) ? 1.0 : 0.0),
-      _BadgeDef(title: 'Maratonista', desc: 'Corra mais de 21 km em uma corrida', icon: Icons.emoji_events, unlocked: runs.any((r) => r.distanceM >= 21000), progress: runs.any((r) => r.distanceM >= 21000) ? 1.0 : 0.0),
-    ];
-
-    // Split into rows of 3 for a grid
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
       children: [
-        Text('BADGES (${badges.where((b) => b.unlocked).length}/${badges.length})', style: type.displayMd),
+        Text('BADGES ($unlockedCount/${badges.length})', style: type.displayMd),
         const SizedBox(height: 16),
+        if (badges.isEmpty)
+          Center(child: Text('Nenhum badge disponível', style: type.bodyMd)),
         ...List.generate((badges.length / 3).ceil(), (row) {
           final start = row * 3;
           final rowBadges = badges.sublist(start, (start + 3).clamp(0, badges.length));
@@ -328,10 +317,10 @@ class _BadgesTab extends StatelessWidget {
                 child: Padding(
                   padding: EdgeInsets.only(left: rowBadges.indexOf(b) > 0 ? 4 : 0),
                   child: AchievementCard(
-                    title: b.title,
-                    description: b.desc,
-                    icon: b.icon,
-                    isUnlocked: b.unlocked,
+                    title: b.name,
+                    description: b.description,
+                    icon: _badgeIcons[b.id] ?? Icons.military_tech_outlined,
+                    isUnlocked: b.isUnlocked,
                     progress: b.progress,
                   ),
                 ),
@@ -342,55 +331,14 @@ class _BadgesTab extends StatelessWidget {
       ],
     );
   }
-
-  bool _isEarlyMorning(Run r) {
-    final d = DateTime.tryParse(r.createdAt)?.toLocal();
-    return d != null && d.hour < 7;
-  }
-
-  static int _maxStreak(List<Run> runs) {
-    if (runs.isEmpty) return 0;
-    final runDays = runs.map((r) {
-      final d = DateTime.tryParse(r.createdAt)?.toLocal();
-      if (d == null) return null;
-      return DateTime(d.year, d.month, d.day);
-    }).whereType<DateTime>().toSet().toList()..sort();
-
-    int best = 1, cur = 1;
-    for (int i = 1; i < runDays.length; i++) {
-      if (runDays[i].difference(runDays[i - 1]).inDays == 1) {
-        cur++;
-        best = cur > best ? cur : best;
-      } else {
-        cur = 1;
-      }
-    }
-    return best;
-  }
-
-  static int _paceToSec(String pace) {
-    final parts = pace.split(':');
-    if (parts.length != 2) return 999;
-    return (int.tryParse(parts[0]) ?? 0) * 60 + (int.tryParse(parts[1]) ?? 0);
-  }
-}
-
-class _BadgeDef {
-  final String title, desc;
-  final IconData icon;
-  final bool unlocked;
-  final double progress;
-  const _BadgeDef({
-    required this.title, required this.desc,
-    required this.icon, required this.unlocked, required this.progress,
-  });
 }
 
 // ── Streak ───────────────────────────────────────────────────────────────────
 
 class _StreakTab extends StatelessWidget {
+  final UserGamification? gamification;
   final List<Run> runs;
-  const _StreakTab({required this.runs});
+  const _StreakTab({required this.gamification, required this.runs});
 
   @override
   Widget build(BuildContext context) {
