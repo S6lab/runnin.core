@@ -278,12 +278,26 @@ describe('GenerateBriefingUseCase', () => {
 
   describe('Error Handling', () => {
     it('should throw error when LLM generation fails', async () => {
-      const { getAsyncLLM } = require('@shared/infra/llm/llm.factory');
-      getAsyncLLM.mockReturnValue({
-        generate: jest.fn().mockRejectedValue(new Error('LLM error')),
-      });
+      // Clear all mocks and remock the LLM factory
+      jest.resetModules();
+      jest.clearAllMocks();
 
-      useCase = new GenerateBriefingUseCase();
+      jest.doMock('@shared/infra/llm/llm.factory', () => ({
+        getAsyncLLM: jest.fn(() => ({
+          generate: jest.fn().mockRejectedValue(new Error('LLM error')),
+        })),
+      }));
+
+      jest.doMock('@shared/infra/firebase/firebase.client', () => ({
+        getFirestore: jest.fn(() => ({
+          collection: jest.fn().mockReturnThis(),
+          doc: jest.fn().mockReturnThis(),
+          set: jest.fn().mockResolvedValue(true),
+        })),
+      }));
+
+      const { GenerateBriefingUseCase: UseCase } = await import('./generate-briefing.use-case');
+      const failingUseCase = new UseCase();
 
       const input: GenerateBriefingInput = {
         sessionType: 'easy',
@@ -291,26 +305,36 @@ describe('GenerateBriefingUseCase', () => {
         targetPace: '6:00',
       };
 
-      await expect(useCase.execute(userId, input)).rejects.toThrow();
+      await expect(failingUseCase.execute(userId, input)).rejects.toThrow('LLM error');
     });
 
     it('should log error and throw when execution fails', async () => {
-      const { getAsyncLLM } = require('@shared/infra/llm/llm.factory');
-      getAsyncLLM.mockReturnValue({
-        generate: jest.fn().mockRejectedValue(new Error('Test error')),
-      });
+      jest.resetModules();
+      jest.clearAllMocks();
 
-      useCase = new GenerateBriefingUseCase();
+      const mockLogger = { error: jest.fn(), warn: jest.fn() };
+
+      jest.doMock('@shared/logger/logger', () => ({
+        logger: mockLogger,
+      }));
+
+      jest.doMock('@shared/infra/llm/llm.factory', () => ({
+        getAsyncLLM: jest.fn(() => ({
+          generate: jest.fn().mockRejectedValue(new Error('Test error')),
+        })),
+      }));
+
+      const { GenerateBriefingUseCase: UseCase } = await import('./generate-briefing.use-case');
+      const failingUseCase = new UseCase();
 
       const input: GenerateBriefingInput = {
         sessionType: 'easy',
         distanceKm: 5,
       };
 
-      await expect(useCase.execute(userId, input)).rejects.toThrow('Test error');
+      await expect(failingUseCase.execute(userId, input)).rejects.toThrow('Test error');
 
-      const { logger } = require('@shared/logger/logger');
-      expect(logger.error).toHaveBeenCalledWith(
+      expect(mockLogger.error).toHaveBeenCalledWith(
         'coach.briefing.failed',
         expect.objectContaining({
           userId,

@@ -43,3 +43,15 @@ export async function getPlanById(req: Request, res: Response, next: NextFunctio
     res.json(plan);
   } catch (err) { next(err); }
 }
+
+export async function patchSessionStatus(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const planId = req.params['planId'] as string;
+    const sessionId = req.params['sessionId'] as string;
+    const input = UpdateSessionStatusSchema.parse(req.body);
+
+    await updateSessionStatus.execute(req.uid, planId, sessionId, input);
+
+    res.status(204).send();
+  } catch (err) { next(err); }
+}

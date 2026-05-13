@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/features/training/domain/entities/plan.dart';
+import 'package:runnin/features/training/data/datasources/plan_remote_datasource.dart';
 import 'package:runnin/shared/widgets/app_panel.dart';
 import 'package:runnin/shared/widgets/app_tag.dart';
 import 'package:runnin/shared/widgets/coach_narrative_card.dart';
@@ -11,11 +12,13 @@ import 'package:runnin/shared/widgets/app_page_header.dart';
 class SessionDetailPage extends StatelessWidget {
   final PlanSession session;
   final PlanWeek week;
+  final String planId;
 
   const SessionDetailPage({
     super.key,
     required this.session,
     required this.week,
+    required this.planId,
   });
 
   @override
@@ -42,7 +45,7 @@ class SessionDetailPage extends StatelessWidget {
                     const SizedBox(height: 16),
                     _SessionDescription(session: session),
                     const SizedBox(height: 16),
-                    _SessionActions(session: session),
+                    _SessionActions(session: session, planId: planId),
                     const SizedBox(height: 24),
                   ],
                 ),
@@ -239,15 +242,22 @@ class _SessionDescription extends StatelessWidget {
   }
 }
 
-class _SessionActions extends StatelessWidget {
+class _SessionActions extends StatefulWidget {
   final PlanSession session;
+  final String planId;
 
-  const _SessionActions({required this.session});
+  const _SessionActions({required this.session, required this.planId});
+
+  @override
+  State<_SessionActions> createState() => _SessionActionsState();
+}
+
+class _SessionActionsState extends State<_SessionActions> {
+  final _datasource = PlanRemoteDatasource();
+  bool _loading = false;
 
   @override
   Widget build(BuildContext context) {
-    final palette = context.runninPalette;
-
     return Column(
       children: [
         SizedBox(
@@ -264,14 +274,23 @@ class _SessionActions extends StatelessWidget {
           children: [
             Expanded(
               child: OutlinedButton(
-                onPressed: () => _markComplete(context),
-                child: const Text('MARCAR CONCLUÍDA'),
+                onPressed: _loading ? null : () => _markComplete(),
+                child: _loading
+                    ? SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: context.runninPalette.primary,
+                        ),
+                      )
+                    : const Text('MARCAR CONCLUÍDA'),
               ),
             ),
             const SizedBox(width: 8),
             Expanded(
               child: OutlinedButton(
-                onPressed: () => _skipSession(context),
+                onPressed: _loading ? null : () => _skipSession(),
                 child: const Text('PULAR'),
               ),
             ),
@@ -285,40 +304,85 @@ class _SessionActions extends StatelessWidget {
     context.go('/prep');
   }
 
-  void _markComplete(BuildContext context) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Sessão marcada como concluída'),
-        duration: Duration(seconds: 2),
-      ),
-    );
+  Future<void> _markComplete() async {
+    setState(() => _loading = true);
+    try {
+      await _datasource.updateSessionStatus(
+        planId: widget.planId,
+        sessionId: widget.session.id,
+        status: 'completed',
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Sessão marcada como concluída'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+        context.pop();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erro: $e'),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
-  void _skipSession(BuildContext context) {
-    showDialog(
+  Future<void> _skipSession() async {
+    final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Pular sessão?'),
         content: const Text('Você tem certeza que quer pular esta sessão?'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(ctx),
+            onPressed: () => Navigator.pop(ctx, false),
             child: const Text('CANCELAR'),
           ),
           TextButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Sessão pulada'),
-                  duration: Duration(seconds: 2),
-                ),
-              );
-            },
+            onPressed: () => Navigator.pop(ctx, true),
             child: const Text('CONFIRMAR'),
           ),
         ],
       ),
     );
+
+    if (confirmed != true) return;
+
+    setState(() => _loading = true);
+    try {
+      await _datasource.updateSessionStatus(
+        planId: widget.planId,
+        sessionId: widget.session.id,
+        status: 'skipped',
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Sessão pulada'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+        context.pop();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erro: $e'),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
   }
 }

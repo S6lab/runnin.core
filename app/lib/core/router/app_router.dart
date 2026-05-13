@@ -154,10 +154,11 @@ final appRouter = GoRouter(
             final extra = state.extra as Map<String, dynamic>?;
             final session = extra?['session'] as PlanSession?;
             final week = extra?['week'] as PlanWeek?;
-            if (session == null || week == null) {
+            final planId = extra?['planId'] as String?;
+            if (session == null || week == null || planId == null) {
               return const Center(child: Text('Sessão não encontrada'));
             }
-            return SessionDetailPage(session: session, week: week);
+            return SessionDetailPage(session: session, week: week, planId: planId);
           },
         ),
         GoRoute(path: '/coach', builder: (_, _) => const CoachChatPage()),

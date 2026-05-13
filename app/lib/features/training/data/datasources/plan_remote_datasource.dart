@@ -39,4 +39,15 @@ class PlanRemoteDatasource {
     final res = await _dio.get('/plans/$planId');
     return Plan.fromJson(res.data as Map<String, dynamic>);
   }
+
+  Future<void> updateSessionStatus({
+    required String planId,
+    required String sessionId,
+    required String status,
+  }) async {
+    await _dio.patch(
+      '/plans/$planId/sessions/$sessionId',
+      data: {'status': status},
+    );
+  }
 }

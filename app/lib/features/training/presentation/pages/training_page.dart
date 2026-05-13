@@ -1184,6 +1184,7 @@ class _WeeklyPlanView extends StatelessWidget {
             dayOfWeek: day,
             session: sessionForDay,
             week: week,
+            planId: plan.id,
             isToday: isToday,
             isDone: isDone,
           );
@@ -1440,6 +1441,7 @@ class _WeeklySessionRow extends StatelessWidget {
   final int dayOfWeek;
   final PlanSession? session;
   final PlanWeek? week;
+  final String planId;
   final bool isToday;
   final bool isDone;
 
@@ -1447,6 +1449,7 @@ class _WeeklySessionRow extends StatelessWidget {
     required this.dayOfWeek,
     required this.session,
     this.week,
+    required this.planId,
     required this.isToday,
     required this.isDone,
   });
@@ -1553,6 +1556,7 @@ class _WeeklySessionRow extends StatelessWidget {
     context.go('/session-detail', extra: {
       'session': session,
       'week': week,
+      'planId': planId,
     });
   }
 
