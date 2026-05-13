@@ -15,10 +15,15 @@ import 'package:runnin/features/run/presentation/pages/active_run_page.dart';
 import 'package:runnin/features/run/presentation/pages/report_page.dart';
 import 'package:runnin/features/training/presentation/pages/training_page.dart';
 import 'package:runnin/features/coach/presentation/pages/coach_chat_page.dart';
+import 'package:runnin/features/history/presentation/pages/benchmark_page.dart';
+import 'package:runnin/features/history/presentation/pages/coach_conversation_page.dart';
 import 'package:runnin/features/history/presentation/pages/history_page.dart';
+import 'package:runnin/features/history/presentation/pages/run_detail_page.dart';
 import 'package:runnin/features/profile/presentation/pages/account_page.dart';
 import 'package:runnin/features/profile/presentation/pages/account_access_page.dart';
+import 'package:runnin/features/profile/presentation/pages/health_page.dart';
 import 'package:runnin/features/profile/presentation/pages/profile_page.dart';
+import 'package:runnin/features/profile/presentation/pages/settings_page.dart';
 import 'package:runnin/features/dashboard/presentation/pages/dashboard_page.dart';
 import 'package:runnin/features/gamification/presentation/pages/gamification_page.dart';
 import 'package:runnin/shared/widgets/main_layout.dart';
@@ -144,6 +149,15 @@ final appRouter = GoRouter(
         GoRoute(path: '/training', builder: (_, _) => const TrainingPage()),
         GoRoute(path: '/coach', builder: (_, _) => const CoachChatPage()),
         GoRoute(path: '/history', builder: (_, _) => const HistoryPage()),
+        GoRoute(
+          path: '/run-detail',
+          builder: (_, state) => RunDetailPage(runId: state.extra as String? ?? ''),
+        ),
+        GoRoute(
+          path: '/coach-conversation',
+          builder: (_, state) => CoachConversationPage(runId: state.extra as String? ?? ''),
+        ),
+        GoRoute(path: '/benchmark', builder: (_, _) => const BenchmarkPage()),
         GoRoute(path: '/profile', builder: (_, _) => const AccountPage()),
         GoRoute(
           path: '/profile/access',
@@ -155,6 +169,8 @@ final appRouter = GoRouter(
         ),
         GoRoute(path: '/dashboard', builder: (_, _) => const DashboardPage()),
         GoRoute(path: '/gamification', builder: (_, _) => const GamificationPage()),
+        GoRoute(path: '/health', builder: (_, _) => const HealthPage()),
+        GoRoute(path: '/settings', builder: (_, _) => const SettingsPage()),
       ],
     ),
   ],
