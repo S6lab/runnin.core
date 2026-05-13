@@ -15,6 +15,9 @@ import 'package:runnin/shared/widgets/app_panel.dart';
 import 'package:runnin/shared/widgets/app_tag.dart';
 import 'package:runnin/shared/widgets/coach_narrative_card.dart';
 import 'package:runnin/shared/widgets/metric_card.dart';
+import 'package:runnin/shared/widgets/loading_widget.dart';
+import 'package:runnin/shared/widgets/error_state_widget.dart';
+import 'package:runnin/shared/widgets/empty_state_widget.dart';
 
 enum _TrainingTab { plan, reports, adjustments }
 
@@ -304,27 +307,19 @@ class _TrainingPageState extends State<TrainingPage> {
   }
 
   Widget _buildBody(BuildContext context) {
-    final palette = context.runninPalette;
-
     if (_loading) {
-      return Center(
-        child: CircularProgressIndicator(
-          color: palette.primary,
-          strokeWidth: 2,
-        ),
+      return const LoadingWidget(
+        fullScreen: true,
+        message: 'Carregando plano de treino...',
       );
     }
 
     if (_error != null) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(_error!, style: TextStyle(color: palette.muted)),
-            const SizedBox(height: 16),
-            TextButton(onPressed: _load, child: const Text('TENTAR NOVAMENTE')),
-          ],
-        ),
+      return ErrorStateWidget(
+        message: _error!,
+        onRetry: _load,
+        fullScreen: true,
+        icon: Icons.error_outline,
       );
     }
 

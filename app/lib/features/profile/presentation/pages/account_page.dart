@@ -9,6 +9,7 @@ import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 import 'package:runnin/shared/widgets/app_page_header.dart';
 import 'package:runnin/shared/widgets/app_panel.dart';
 import 'package:runnin/shared/widgets/palette_card.dart';
+import 'package:runnin/shared/widgets/error_state_widget.dart';
 
 class AccountPage extends StatefulWidget {
   const AccountPage({super.key});
@@ -22,6 +23,7 @@ class _AccountPageState extends State<AccountPage> {
   bool _savingVoice = false;
   final _userDs = UserRemoteDatasource();
   UserProfile? _profile;
+  String? _profileLoadError;
 
   @override
   void initState() {
@@ -30,11 +32,15 @@ class _AccountPageState extends State<AccountPage> {
   }
 
   Future<void> _loadProfile() async {
+    setState(() => _profileLoadError = null);
     try {
       final profile = await _userDs.getMe();
       if (!mounted) return;
       setState(() => _profile = profile);
-    } catch (_) {}
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _profileLoadError = 'Não foi possível carregar o perfil.');
+    }
   }
 
   Future<void> _signOut() async {
@@ -95,6 +101,15 @@ class _AccountPageState extends State<AccountPage> {
           children: [
             const AppPageHeader(title: 'PERFIL'),
             const SizedBox(height: 20),
+            if (_profileLoadError != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+                child: ErrorStateWidget(
+                  message: _profileLoadError!,
+                  onRetry: _loadProfile,
+                  icon: Icons.warning_amber_outlined,
+                ),
+              ),
             Expanded(
               child: ListView(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -218,6 +233,20 @@ class _AccountPageState extends State<AccountPage> {
                   ),
                   const SizedBox(height: 10),
                   _ActionTile(
+                    icon: Icons.favorite_outline,
+                    title: 'Saúde',
+                    subtitle: 'Zonas cardíacas, tendências, exames e dispositivos.',
+                    onTap: () => context.push('/health'),
+                  ),
+                  const SizedBox(height: 10),
+                  _ActionTile(
+                    icon: Icons.tune_outlined,
+                    title: 'Ajustes',
+                    subtitle: 'Coach, alertas, unidades e notificações.',
+                    onTap: () => context.push('/settings'),
+                  ),
+                  const SizedBox(height: 10),
+                  _ActionTile(
                     icon: Icons.fact_check_outlined,
                     title: 'Refazer onboarding',
                     subtitle:
@@ -226,6 +255,16 @@ class _AccountPageState extends State<AccountPage> {
                       markOnboardingPending();
                       context.go('/onboarding');
                     },
+                  ),
+                  const SizedBox(height: 24),
+
+                  // ── Assinatura ─────────────────────────────────────────────
+                  _SectionLabel(label: 'ASSINATURA'),
+                  _PlanStatusTile(
+                    isPro: _profile?.isPro ?? false,
+                    premiumUntil: _profile?.premiumUntil,
+                    palette: palette,
+                    type: type,
                   ),
                   const SizedBox(height: 24),
 
@@ -394,6 +433,78 @@ class _CoachVoiceOption {
     required this.tone,
     required this.description,
   });
+}
+
+// ── Plan/Subscription status ──────────────────────────────────────────────────
+
+class _PlanStatusTile extends StatelessWidget {
+  final bool isPro;
+  final DateTime? premiumUntil;
+  final RunninPalette palette;
+  final RunninTypography type;
+
+  const _PlanStatusTile({
+    required this.isPro,
+    required this.premiumUntil,
+    required this.palette,
+    required this.type,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return AppPanel(
+      color: isPro
+          ? palette.primary.withValues(alpha: 0.06)
+          : palette.surfaceAlt,
+      borderColor: isPro
+          ? palette.primary.withValues(alpha: 0.45)
+          : palette.border,
+      child: Row(
+        children: [
+          Icon(
+            isPro ? Icons.workspace_premium_outlined : Icons.lock_outline,
+            size: 16,
+            color: isPro ? palette.primary : palette.muted,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  isPro ? 'PLANO PRO' : 'PLANO FREE',
+                  style: type.labelMd.copyWith(
+                    color: isPro ? palette.primary : palette.text,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  isPro
+                      ? (_planUntilLabel())
+                      : 'Ative o trial de 7 dias para testar o Coach AI completo.',
+                  style: type.bodySm.copyWith(color: palette.muted),
+                ),
+              ],
+            ),
+          ),
+          if (!isPro)
+            TextButton(
+              onPressed: () => context.push('/profile/edit'),
+              child: const Text('ATIVAR'),
+            ),
+        ],
+      ),
+    );
+  }
+
+  String _planUntilLabel() {
+    if (premiumUntil == null) return 'Plano ativo';
+    final remaining = premiumUntil!.difference(DateTime.now());
+    if (remaining.inDays > 0) {
+      return 'Válido até ${premiumUntil!.day.toString().padLeft(2, '0')}/${premiumUntil!.month.toString().padLeft(2, '0')} · ${remaining.inDays} dias restantes';
+    }
+    return 'Plano ativo';
+  }
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

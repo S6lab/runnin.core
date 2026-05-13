@@ -13,6 +13,10 @@ class UserProfile {
   final String? height;
   final bool hasWearable;
   final List<String> medicalConditions;
+  final String? paceTarget;
+  final String? preferredRunTime;
+  final String? wakeUpTime;
+  final String? sleepTime;
   final String coachVoiceId;
   final bool onboarded;
   final bool premium;
@@ -30,6 +34,10 @@ class UserProfile {
     required this.height,
     required this.hasWearable,
     required this.medicalConditions,
+    this.paceTarget,
+    this.preferredRunTime,
+    this.wakeUpTime,
+    this.sleepTime,
     required this.coachVoiceId,
     required this.onboarded,
     required this.premium,
@@ -57,6 +65,10 @@ class UserProfile {
     medicalConditions: (j['medicalConditions'] as List<dynamic>? ?? const [])
         .whereType<String>()
         .toList(),
+    paceTarget: j['paceTarget'] as String?,
+    preferredRunTime: j['preferredRunTime'] as String?,
+    wakeUpTime: j['wakeUpTime'] as String?,
+    sleepTime: j['sleepTime'] as String?,
     coachVoiceId: j['coachVoiceId'] as String? ?? 'coach-bruno',
     onboarded: j['onboarded'] as bool? ?? false,
     premium: j['premium'] as bool? ?? false,
@@ -108,6 +120,10 @@ class UserRemoteDatasource {
     String? height,
     bool hasWearable = false,
     List<String> medicalConditions = const [],
+    String? paceTarget,
+    String? preferredRunTime,
+    String? wakeUpTime,
+    String? sleepTime,
   }) async {
     final res = await _dio.post(
       '/users/onboarding',
@@ -121,6 +137,10 @@ class UserRemoteDatasource {
         'height': height,
         'hasWearable': hasWearable,
         'medicalConditions': medicalConditions,
+        'paceTarget': paceTarget,
+        'preferredRunTime': preferredRunTime,
+        'wakeUpTime': wakeUpTime,
+        'sleepTime': sleepTime,
       },
     );
     final data = res.data as Map<String, dynamic>;
@@ -137,6 +157,10 @@ class UserRemoteDatasource {
     String? height,
     bool? hasWearable,
     List<String>? medicalConditions,
+    String? paceTarget,
+    String? preferredRunTime,
+    String? wakeUpTime,
+    String? sleepTime,
     String? coachVoiceId,
     bool? onboarded,
   }) async {
@@ -150,6 +174,10 @@ class UserRemoteDatasource {
       'height': height,
       'hasWearable': hasWearable,
       'medicalConditions': medicalConditions,
+      'paceTarget': paceTarget,
+      'preferredRunTime': preferredRunTime,
+      'wakeUpTime': wakeUpTime,
+      'sleepTime': sleepTime,
       'coachVoiceId': coachVoiceId,
       'onboarded': onboarded,
     }..removeWhere((_, value) => value == null);

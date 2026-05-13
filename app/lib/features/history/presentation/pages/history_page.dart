@@ -10,6 +10,9 @@ import 'package:runnin/shared/widgets/chart_panel.dart';
 import 'package:runnin/shared/widgets/coach_narrative_card.dart';
 import 'package:runnin/shared/widgets/metric_card.dart';
 import 'package:runnin/shared/widgets/segmented_tab_bar.dart';
+import 'package:runnin/shared/widgets/loading_widget.dart';
+import 'package:runnin/shared/widgets/error_state_widget.dart';
+import 'package:runnin/shared/widgets/empty_state_widget.dart';
 
 enum _Period { week, month, threeMonths }
 
@@ -115,24 +118,29 @@ class _HistoryPageState extends State<HistoryPage> {
     final palette = context.runninPalette;
 
     if (_loading) {
-      return Center(child: CircularProgressIndicator(color: palette.primary, strokeWidth: 2));
+      return const LoadingWidget(
+        fullScreen: true,
+        message: 'Carregando histórico...',
+      );
     }
     if (_error != null) {
-      return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
-        Text(_error!, style: TextStyle(color: palette.muted)),
-        const SizedBox(height: 16),
-        TextButton(onPressed: _load, child: const Text('TENTAR NOVAMENTE')),
-      ]));
+      return ErrorStateWidget(
+        message: _error!,
+        onRetry: _load,
+        fullScreen: true,
+        icon: Icons.error_outline,
+      );
     }
 
     final runs = _filteredRuns;
 
     if (runs.isEmpty) {
-      return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
-        Icon(Icons.directions_run_outlined, size: 40, color: palette.border),
-        const SizedBox(height: 12),
-        Text('Nenhuma corrida no período.', style: TextStyle(color: palette.muted)),
-      ]));
+      return EmptyStateWidget(
+        icon: Icons.directions_run_outlined,
+        title: 'Nenhuma corrida no período',
+        subtitle: 'Comece sua primeira corrida para ver suas estatísticas e evolução aqui.',
+        fullScreen: true,
+      );
     }
 
     return RefreshIndicator(

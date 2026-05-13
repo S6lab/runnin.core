@@ -14,6 +14,10 @@ import 'package:runnin/features/run/domain/entities/run.dart';
 import 'package:runnin/shared/widgets/app_panel.dart';
 import 'package:runnin/shared/widgets/app_tag.dart';
 import 'package:runnin/shared/widgets/notification_tile.dart';
+import 'package:runnin/shared/widgets/loading_widget.dart';
+import 'package:runnin/shared/widgets/error_state_widget.dart';
+import 'package:runnin/shared/widgets/empty_state_widget.dart';
+import 'package:runnin/shared/widgets/xp_progress_widget.dart';
 
 const _homeHeroImageUrl =
     'https://images.unsplash.com/photo-1707741099794-252b0409230e?auto=format&fit=crop&w=1200&q=80';
@@ -85,18 +89,21 @@ class _HomeViewState extends State<_HomeView> {
                   const _HomeHeader(),
                   const SizedBox(height: 20),
                   if (state is HomeLoading) ...[
-                    const _LoadingCard(),
+                    const LoadingWidget(),
                     const SizedBox(height: 12),
-                    const _LoadingCard(),
+                    const LoadingWidget(),
                   ] else if (state is HomeError) ...[
-                    _ErrorCard(
+                    ErrorStateWidget(
                       message: state.message,
                       onRetry: () => context.read<HomeCubit>().load(),
+                      icon: Icons.error_outline,
                     ),
                   ] else if (state is HomeLoaded) ...[
                     _IniciarSessaoButton(data: state.data),
                     const SizedBox(height: 20),
                     const _CoachNotifications(),
+                    const SizedBox(height: 20),
+                    _GamificationQuickView(data: state.data),
                     const SizedBox(height: 20),
                     _SemanaSection(data: state.data),
                     const SizedBox(height: 20),
@@ -2074,47 +2081,31 @@ class _RunMetric extends StatelessWidget {
   }
 }
 
+// ─── Gamification Quick View ──────────────────────────────────────────────────
+
+class _GamificationQuickView extends StatelessWidget {
+  final HomeData data;
+  const _GamificationQuickView({required this.data});
+
+  @override
+  Widget build(BuildContext context) {
+    final runs = data.completedRuns;
+    final totalXp = runs.fold<int>(0, (s, r) => s + (r.xpEarned ?? 0));
+    final level = (totalXp / 500).floor() + 1;
+    final xpInLevel = totalXp - (level - 1) * 500;
+    final xpToNext = 500 - xpInLevel;
+    final progress = (xpInLevel / 500).clamp(0.0, 1.0);
+
+    return XpProgressWidget(
+      level: level,
+      totalXp: totalXp,
+      xpInLevel: xpInLevel,
+      xpToNext: xpToNext,
+      progress: progress,
+      onTap: () => context.push('/gamification'),
+    );
+  }
+}
+
 // ─── Loading / Error ──────────────────────────────────────────────────────────
 
-class _LoadingCard extends StatelessWidget {
-  const _LoadingCard();
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.runninPalette;
-    return AppPanel(
-      padding: EdgeInsets.zero,
-      child: SizedBox(
-        width: double.infinity,
-        height: 160,
-        child: Center(
-          child: CircularProgressIndicator(
-            color: palette.primary,
-            strokeWidth: 2,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ErrorCard extends StatelessWidget {
-  final String message;
-  final VoidCallback onRetry;
-  const _ErrorCard({required this.message, required this.onRetry});
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.runninPalette;
-    return AppPanel(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(message, style: TextStyle(color: palette.muted)),
-          const SizedBox(height: 12),
-          TextButton(onPressed: onRetry, child: const Text('TENTAR NOVAMENTE')),
-        ],
-      ),
-    );
-  }
-}

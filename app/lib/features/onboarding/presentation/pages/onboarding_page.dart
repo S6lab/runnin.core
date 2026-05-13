@@ -1,14 +1,12 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:runnin/core/router/app_router.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 import 'package:runnin/shared/widgets/app_panel.dart';
-import 'package:runnin/shared/widgets/app_tag.dart';
 import 'package:runnin/shared/widgets/otp_resend_button.dart';
 
 class OnboardingPage extends StatefulWidget {
@@ -20,25 +18,13 @@ class OnboardingPage extends StatefulWidget {
 
 class _OnboardingPageState extends State<OnboardingPage> {
   final _ds = UserRemoteDatasource();
-  final _nameCtrl = TextEditingController();
-  final _birthDateCtrl = TextEditingController();
-  final _weightCtrl = TextEditingController(text: '70');
-  final _heightCtrl = TextEditingController(text: '175');
   final _phoneCtrl = TextEditingController();
   final _smsCodeCtrl = TextEditingController();
-  final _medicalOtherCtrl = TextEditingController();
-  final Set<String> _medicalConditions = {};
 
-  static const _totalSteps = 12;
-  static const _loadingStep = _totalSteps - 1;
+  static const _totalSteps = 4;
   static const _loginStep = 3;
-  static const _firstAssessmentStep = 4;
 
   int _step = 0;
-  String _level = 'iniciante';
-  String _goal = 'Completar 10K';
-  int _frequency = 4;
-  bool _hasWearable = false;
   bool _authLoading = false;
   bool _submitting = false;
   String? _phoneVerificationId;
@@ -123,74 +109,21 @@ class _OnboardingPageState extends State<OnboardingPage> {
     ),
   ];
 
-  static const _levels = [
-    ('iniciante', 'Iniciante', 'Nunca corri ou estou voltando agora'),
-    ('intermediario', 'Intermediario', 'Corro regularmente'),
-    ('avancado', 'Avancado', 'Treino estruturado'),
-  ];
 
-  static const _goals = [
-    'Saude e bem-estar',
-    'Perder peso',
-    'Completar 5K',
-    'Completar 10K',
-    'Meia maratona (21K)',
-    'Maratona (42K)',
-  ];
-
-  static const _wearableOptions = [
-    (
-      true,
-      'Tenho wearable',
-      'Vamos marcar a preferencia, mas a integracao ainda precisa ser conectada',
-    ),
-    (false, 'Depois', 'Nenhum dado sera tratado como conectado por enquanto'),
-  ];
-
-  static const _medicalOptions = [
-    'Hipertensao',
-    'Diabetes tipo 2',
-    'Asma',
-    'Historico de AVC',
-    'Problemas cardiacos',
-    'Lesao no joelho',
-    'Lesao no tornozelo',
-    'Hernia de disco',
-    'Toma anticoagulante',
-    'Toma betabloqueador',
-    'Toma insulina',
-    'Artrose',
-    'Fibromialgia',
-    'Ansiedade/depressao',
-    'Cirurgia recente (<6m)',
-  ];
 
   @override
   void initState() {
     super.initState();
-    _nameCtrl.addListener(_handleFieldChange);
-    _birthDateCtrl.addListener(_handleFieldChange);
-    _weightCtrl.addListener(_handleFieldChange);
-    _heightCtrl.addListener(_handleFieldChange);
     _phoneCtrl.addListener(_handleFieldChange);
     _smsCodeCtrl.addListener(_handleFieldChange);
   }
 
   @override
   void dispose() {
-    _nameCtrl.removeListener(_handleFieldChange);
-    _birthDateCtrl.removeListener(_handleFieldChange);
-    _weightCtrl.removeListener(_handleFieldChange);
-    _heightCtrl.removeListener(_handleFieldChange);
     _phoneCtrl.removeListener(_handleFieldChange);
     _smsCodeCtrl.removeListener(_handleFieldChange);
-    _nameCtrl.dispose();
-    _birthDateCtrl.dispose();
-    _weightCtrl.dispose();
-    _heightCtrl.dispose();
     _phoneCtrl.dispose();
     _smsCodeCtrl.dispose();
-    _medicalOtherCtrl.dispose();
     super.dispose();
   }
 
@@ -389,62 +322,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
     }
 
     markOnboardingPending();
-    setState(() {
-      _step = _firstAssessmentStep;
-      _authLoading = false;
-      _message = null;
-      _error = null;
-    });
-  }
-
-  Future<void> _submit() async {
-    if (!_canProceed() || _submitting) return;
-    if (FirebaseAuth.instance.currentUser == null) {
-      setState(() {
-        _step = _loginStep;
-        _error = 'Entre para salvar seu plano.';
-      });
-      return;
-    }
-
-    setState(() {
-      _step = _loadingStep;
-      _error = null;
-      _submitting = true;
-    });
-    _doSubmit();
-  }
-
-  Future<void> _doSubmit() async {
-    try {
-      await _ds.completeOnboarding(
-        name: _nameCtrl.text.trim(),
-        level: _level,
-        goal: _goal,
-        frequency: _frequency,
-        birthDate: _birthDateCtrl.text.trim().isEmpty
-            ? null
-            : _birthDateCtrl.text.trim(),
-        weight: _weightCtrl.text.trim().isEmpty
-            ? null
-            : _weightCtrl.text.trim(),
-        height: _heightCtrl.text.trim().isEmpty
-            ? null
-            : _heightCtrl.text.trim(),
-        hasWearable: _hasWearable,
-        medicalConditions: _medicalConditions.toList()..sort(),
-      );
-      markOnboardingDone();
-      if (mounted) context.go('/home');
-    } catch (_) {
-      if (mounted) {
-        setState(() {
-          _error = 'Erro ao salvar perfil. Tente novamente.';
-          _step = _loadingStep - 1;
-          _submitting = false;
-        });
-      }
-    }
+    if (mounted) context.go('/assessment');
   }
 
   @override
@@ -465,7 +343,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
               const SizedBox(height: 18),
               _buildNav(context),
               const SizedBox(height: 12),
-              _StepDots(total: _loadingStep, current: _step),
+              _StepDots(total: _totalSteps, current: _step),
             ],
           ),
         ),
@@ -475,7 +353,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
 
   Widget _buildHeader(BuildContext context) {
     final palette = context.runninPalette;
-    final canGoBack = _step > 0 && _step != _loadingStep;
+    final canGoBack = _step > 0;
     final showSkip = _step < _loginStep;
 
     return Row(
@@ -539,49 +417,6 @@ class _OnboardingPageState extends State<OnboardingPage> {
           error: _error,
           message: _message,
         );
-      case 4:
-        return _StepLevel(
-          selected: _level,
-          levels: _levels,
-          onSelect: (value) => setState(() => _level = value),
-        );
-      case 5:
-        return _StepIdentity(
-          nameController: _nameCtrl,
-          birthDateController: _birthDateCtrl,
-        );
-      case 6:
-        return _StepBody(
-          weightController: _weightCtrl,
-          heightController: _heightCtrl,
-        );
-      case 7:
-        return _StepMedicalConditions(
-          selected: _medicalConditions,
-          options: _medicalOptions,
-          otherController: _medicalOtherCtrl,
-          onToggle: _toggleMedicalCondition,
-          onAddOther: _addOtherMedicalCondition,
-        );
-      case 8:
-        return _StepGoal(
-          goals: _goals,
-          selectedGoal: _goal,
-          onGoalSelect: (value) => setState(() => _goal = value),
-        );
-      case 9:
-        return _StepFrequency(
-          frequency: _frequency,
-          onFreqChange: (value) => setState(() => _frequency = value),
-        );
-      case 10:
-        return _StepWearable(
-          selected: _hasWearable,
-          options: _wearableOptions,
-          onSelect: (value) => setState(() => _hasWearable = value),
-        );
-      case _loadingStep:
-        return const _StepGeneratingPlan();
       default:
         return const SizedBox.shrink();
     }
@@ -589,98 +424,45 @@ class _OnboardingPageState extends State<OnboardingPage> {
 
   Widget _buildNav(BuildContext context) {
     final palette = context.runninPalette;
-    if (_step == _loadingStep) return const SizedBox.shrink();
 
-    final isLastDataStep = _step == _loadingStep - 1;
     final isLogin = _step == _loginStep;
     final label = isLogin
         ? (_phoneConfirmationResult != null || _phoneVerificationId != null
               ? 'VALIDAR CODIGO'
               : 'ENVIAR CODIGO')
-        : isLastDataStep
-        ? 'CRIAR MEU PLANO'
         : 'CONTINUAR';
 
-    return Column(
-      children: [
-        SizedBox(
-          width: double.infinity,
-          height: 52,
-          child: ElevatedButton(
-            onPressed: _canProceed()
-                ? (isLogin
-                      ? _handlePhonePrimary
-                      : isLastDataStep
-                      ? _submit
-                      : _nextStep)
-                : null,
-            child: _authLoading || _submitting
-                ? SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: palette.background,
-                    ),
-                  )
-                : Text('$label /'),
-          ),
-        ),
-        if (_step == 7)
-          Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: Text(
-              'Pode pular se preferir. Voce pode adicionar depois no Perfil.',
-              style: context.runninType.bodySm.copyWith(color: palette.muted),
-              textAlign: TextAlign.center,
-            ),
-          ),
-      ],
+    return SizedBox(
+      width: double.infinity,
+      height: 52,
+      child: ElevatedButton(
+        onPressed: _canProceed()
+            ? (isLogin ? _handlePhonePrimary : _nextStep)
+            : null,
+        child: _authLoading
+            ? SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: palette.background,
+                ),
+              )
+            : Text('$label /'),
+      ),
     );
   }
 
   bool _canProceed() {
-    if (_authLoading || _submitting) return false;
+    if (_authLoading) return false;
 
-    switch (_step) {
-      case _loginStep:
-        if (_phoneConfirmationResult != null || _phoneVerificationId != null) {
-          return _smsCodeCtrl.text.trim().length >= 6;
-        }
-        return _normalizePhoneNumber(_phoneCtrl.text.trim()) != null;
-      case 5:
-        return _nameCtrl.text.trim().isNotEmpty &&
-            _isValidBirthDate(_birthDateCtrl.text.trim());
-      case 6:
-        return _weightCtrl.text.trim().isNotEmpty &&
-            _heightCtrl.text.trim().isNotEmpty;
-      default:
-        return true;
+    if (_step == _loginStep) {
+      if (_phoneConfirmationResult != null || _phoneVerificationId != null) {
+        return _smsCodeCtrl.text.trim().length >= 6;
+      }
+      return _normalizePhoneNumber(_phoneCtrl.text.trim()) != null;
     }
-  }
-
-  bool _isValidBirthDate(String value) {
-    final match = RegExp(r'^(\d{2})/(\d{2})/(\d{4})$').firstMatch(value);
-    if (match == null) return false;
-
-    final day = int.tryParse(match.group(1)!);
-    final month = int.tryParse(match.group(2)!);
-    final year = int.tryParse(match.group(3)!);
-    if (day == null || month == null || year == null) return false;
-
-    try {
-      final date = DateTime(year, month, day);
-      final isExactDate =
-          date.year == year && date.month == month && date.day == day;
-      if (!isExactDate) return false;
-
-      final now = DateTime.now();
-      final minimumDate = DateTime(now.year - 100, now.month, now.day);
-      final maximumDate = DateTime(now.year - 8, now.month, now.day);
-      return !date.isBefore(minimumDate) && !date.isAfter(maximumDate);
-    } catch (_) {
-      return false;
-    }
+    return true;
   }
 
   String? _normalizePhoneNumber(String input) {
@@ -711,25 +493,6 @@ class _OnboardingPageState extends State<OnboardingPage> {
     }
   }
 
-  void _toggleMedicalCondition(String value) {
-    setState(() {
-      if (_medicalConditions.contains(value)) {
-        _medicalConditions.remove(value);
-      } else {
-        _medicalConditions.add(value);
-      }
-    });
-  }
-
-  void _addOtherMedicalCondition() {
-    final value = _medicalOtherCtrl.text.trim();
-    if (value.isEmpty) return;
-    setState(() {
-      _medicalConditions.add(value);
-      _medicalOtherCtrl.clear();
-    });
-  }
-
   void _handleFieldChange() {
     if (!mounted) return;
     setState(() {
@@ -738,11 +501,12 @@ class _OnboardingPageState extends State<OnboardingPage> {
   }
 
   void _skipIntro() {
-    setState(() {
-      _step = FirebaseAuth.instance.currentUser == null
-          ? _loginStep
-          : _firstAssessmentStep;
-    });
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      setState(() => _step = _loginStep);
+    } else {
+      context.go('/assessment');
+    }
   }
 
   void _nextStep() => setState(() => _step++);
@@ -970,661 +734,6 @@ class _StepLogin extends StatelessWidget {
   }
 }
 
-class _StepIdentity extends StatelessWidget {
-  final TextEditingController nameController;
-  final TextEditingController birthDateController;
-
-  const _StepIdentity({
-    required this.nameController,
-    required this.birthDateController,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.runninPalette;
-
-    return SingleChildScrollView(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _StepCode('ASSESSMENT_02'),
-          const SizedBox(height: 12),
-          Text('Como te chamo?', style: context.runninType.displayMd),
-          const SizedBox(height: 10),
-          Text(
-            'Nome e data de nascimento ajudam o Coach a personalizar comunicacao, zonas e progressao.',
-            style: TextStyle(color: palette.muted, height: 1.5),
-          ),
-          const SizedBox(height: 28),
-          _FieldLabel('SEU NOME'),
-          const SizedBox(height: 8),
-          TextField(
-            controller: nameController,
-            autofocus: true,
-            textCapitalization: TextCapitalization.words,
-            style: TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.w700,
-              color: palette.text,
-            ),
-            decoration: InputDecoration(
-              hintText: 'Ex: Lucas',
-              hintStyle: TextStyle(color: palette.border, fontSize: 22),
-            ),
-          ),
-          const SizedBox(height: 28),
-          _FieldLabel('DATA DE NASCIMENTO'),
-          const SizedBox(height: 8),
-          TextField(
-            controller: birthDateController,
-            keyboardType: TextInputType.number,
-            inputFormatters: [
-              FilteringTextInputFormatter.digitsOnly,
-              LengthLimitingTextInputFormatter(8),
-              _DateTextInputFormatter(),
-            ],
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-              color: palette.text,
-            ),
-            decoration: InputDecoration(
-              hintText: 'dd/mm/aaaa',
-              hintStyle: TextStyle(color: palette.border, fontSize: 18),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _DateTextInputFormatter extends TextInputFormatter {
-  @override
-  TextEditingValue formatEditUpdate(
-    TextEditingValue oldValue,
-    TextEditingValue newValue,
-  ) {
-    final digits = newValue.text.replaceAll(RegExp(r'[^0-9]'), '');
-    final trimmed = digits.length > 8 ? digits.substring(0, 8) : digits;
-    final buffer = StringBuffer();
-
-    for (var i = 0; i < trimmed.length; i++) {
-      buffer.write(trimmed[i]);
-      if ((i == 1 || i == 3) && i != trimmed.length - 1) {
-        buffer.write('/');
-      }
-    }
-
-    final text = buffer.toString();
-    return TextEditingValue(
-      text: text,
-      selection: TextSelection.collapsed(offset: text.length),
-    );
-  }
-}
-
-class _StepLevel extends StatelessWidget {
-  final String selected;
-  final List<(String, String, String)> levels;
-  final ValueChanged<String> onSelect;
-
-  const _StepLevel({
-    required this.selected,
-    required this.levels,
-    required this.onSelect,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.runninPalette;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _StepCode('ASSESSMENT_01'),
-        const SizedBox(height: 12),
-        Text('Qual seu nivel atual?', style: context.runninType.displayMd),
-        const SizedBox(height: 10),
-        Text(
-          'O Coach adapta intensidade, volume e progressao ao seu nivel.',
-          style: TextStyle(color: palette.muted, height: 1.5),
-        ),
-        const SizedBox(height: 32),
-        ...levels.map((level) {
-          final isSelected = selected == level.$1;
-          return GestureDetector(
-            onTap: () => onSelect(level.$1),
-            child: AppPanel(
-              margin: const EdgeInsets.only(bottom: 8),
-              color: isSelected
-                  ? palette.primary.withValues(alpha: 0.08)
-                  : null,
-              borderColor: isSelected ? palette.primary : palette.border,
-              child: Text(
-                '${level.$2} - ${level.$3}',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  color: isSelected ? palette.primary : palette.text,
-                ),
-              ),
-            ),
-          );
-        }),
-      ],
-    );
-  }
-}
-
-class _StepBody extends StatelessWidget {
-  final TextEditingController weightController;
-  final TextEditingController heightController;
-
-  const _StepBody({
-    required this.weightController,
-    required this.heightController,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.runninPalette;
-
-    return SingleChildScrollView(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _StepCode('ASSESSMENT_03'),
-          const SizedBox(height: 12),
-          Text('Peso e altura', style: context.runninType.displayMd),
-          const SizedBox(height: 10),
-          Text(
-            'Usamos isso para estimar gasto calorico, zonas e carga de impacto.',
-            style: TextStyle(color: palette.muted, height: 1.5),
-          ),
-          const SizedBox(height: 28),
-          Row(
-            children: [
-              Expanded(
-                child: _MetricInput(
-                  label: 'PESO (KG)',
-                  controller: weightController,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _MetricInput(
-                  label: 'ALTURA (CM)',
-                  controller: heightController,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _StepMedicalConditions extends StatelessWidget {
-  final Set<String> selected;
-  final List<String> options;
-  final TextEditingController otherController;
-  final ValueChanged<String> onToggle;
-  final VoidCallback onAddOther;
-
-  const _StepMedicalConditions({
-    required this.selected,
-    required this.options,
-    required this.otherController,
-    required this.onToggle,
-    required this.onAddOther,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.runninPalette;
-    final customOptions = selected.where((item) => !options.contains(item));
-
-    return SingleChildScrollView(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _StepCode('ASSESSMENT_04'),
-          const SizedBox(height: 12),
-          Text('Informacoes de saude', style: context.runninType.displayMd),
-          const SizedBox(height: 10),
-          Text(
-            'Opcional, mas importante. Selecione condicoes relevantes para que o Coach ajuste intensidade, alertas e limites de seguranca.',
-            style: TextStyle(color: palette.muted, height: 1.5),
-          ),
-          const SizedBox(height: 18),
-          AppPanel(
-            color: palette.secondary.withValues(alpha: 0.06),
-            borderColor: palette.secondary.withValues(alpha: 0.16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                AppTag(label: 'COACH.AI', color: palette.secondary),
-                const SizedBox(height: 12),
-                Text(
-                  'Vou avaliar suas informacoes para montar um programa seguro e personalizado. Se voce toma medicacao que altera frequencia cardiaca, ajusto as zonas de BPM automaticamente.',
-                  style: context.runninType.bodySm.copyWith(
-                    color: palette.text.withValues(alpha: 0.86),
-                    height: 1.55,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 18),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              ...options.map(
-                (option) => _ConditionChip(
-                  label: option,
-                  selected: selected.contains(option),
-                  onTap: () => onToggle(option),
-                ),
-              ),
-              ...customOptions.map(
-                (option) => _ConditionChip(
-                  label: option,
-                  selected: true,
-                  onTap: () => onToggle(option),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: otherController,
-                  textInputAction: TextInputAction.done,
-                  onSubmitted: (_) => onAddOther(),
-                  decoration: const InputDecoration(
-                    hintText: 'Adicionar outra condicao ou medicacao',
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              SizedBox(
-                width: 48,
-                height: 48,
-                child: OutlinedButton(
-                  onPressed: onAddOther,
-                  style: OutlinedButton.styleFrom(padding: EdgeInsets.zero),
-                  child: Icon(Icons.add, color: palette.primary),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _StepGoal extends StatelessWidget {
-  final List<String> goals;
-  final String selectedGoal;
-  final ValueChanged<String> onGoalSelect;
-
-  const _StepGoal({
-    required this.goals,
-    required this.selectedGoal,
-    required this.onGoalSelect,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.runninPalette;
-
-    return SingleChildScrollView(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _StepCode('ASSESSMENT_05'),
-          const SizedBox(height: 12),
-          Text('Qual sua meta principal?', style: context.runninType.displayMd),
-          const SizedBox(height: 10),
-          Text(
-            'A periodizacao nasce do objetivo certo.',
-            style: TextStyle(color: palette.muted, height: 1.5),
-          ),
-          const SizedBox(height: 24),
-          ...goals.map((goal) {
-            final isSelected = selectedGoal == goal;
-            return GestureDetector(
-              onTap: () => onGoalSelect(goal),
-              child: AppPanel(
-                margin: const EdgeInsets.only(bottom: 8),
-                color: isSelected
-                    ? palette.primary.withValues(alpha: 0.08)
-                    : null,
-                borderColor: isSelected ? palette.primary : palette.border,
-                child: Text(
-                  goal,
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                    color: isSelected ? palette.primary : palette.text,
-                  ),
-                ),
-              ),
-            );
-          }),
-        ],
-      ),
-    );
-  }
-}
-
-class _StepFrequency extends StatelessWidget {
-  final int frequency;
-  final ValueChanged<int> onFreqChange;
-
-  const _StepFrequency({required this.frequency, required this.onFreqChange});
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.runninPalette;
-    const options = [2, 3, 4, 5, 6];
-    const labels = <int, String>{
-      2: 'Base leve',
-      3: 'Constancia',
-      4: 'Equilibrio',
-      5: 'Performance',
-      6: 'Alta carga',
-    };
-    final coachNotes = <int, String>{
-      2: 'Otimo para comecar com constancia sem pesar a rotina. Vamos priorizar adaptacao e recuperacao.',
-      3: 'Boa frequencia para criar base com seguranca. Ja da para evoluir volume e ritmo aos poucos.',
-      4: 'Excelente equilibrio entre progresso e recuperacao. Costuma render planos bem completos.',
-      5: 'Frequencia forte. O Coach vai distribuir carga com mais precisao para evitar excesso.',
-      6: 'Rotina de alto compromisso. Vamos controlar intensidade para sustentar consistencia.',
-    };
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final itemWidth = (constraints.maxWidth - 12) / 2;
-
-        return SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _StepCode('ASSESSMENT_06'),
-              const SizedBox(height: 12),
-              Text(
-                'Quantas vezes por semana?',
-                style: context.runninType.displayMd,
-              ),
-              const SizedBox(height: 10),
-              Text(
-                'O Coach distribui estimulo e descanso com base nessa rotina.',
-                style: TextStyle(color: palette.muted, height: 1.5),
-              ),
-              const SizedBox(height: 24),
-              Wrap(
-                spacing: 12,
-                runSpacing: 12,
-                children: options.map((option) {
-                  final isSelected = frequency == option;
-                  return GestureDetector(
-                    onTap: () => onFreqChange(option),
-                    child: SizedBox(
-                      width: itemWidth,
-                      child: AppPanel(
-                        color: isSelected
-                            ? palette.primary.withValues(alpha: 0.08)
-                            : null,
-                        borderColor: isSelected
-                            ? palette.primary
-                            : palette.border,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '${option}x',
-                              style: TextStyle(
-                                fontSize: 24,
-                                fontWeight: FontWeight.w800,
-                                color: isSelected
-                                    ? palette.primary
-                                    : palette.text,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              labels[option]!,
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: isSelected
-                                    ? palette.primary.withValues(alpha: 0.85)
-                                    : palette.muted,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  );
-                }).toList(),
-              ),
-              const SizedBox(height: 16),
-              AppPanel(
-                color: palette.surfaceAlt,
-                borderColor: palette.border,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    AppTag(label: 'COACH.AI', color: palette.secondary),
-                    const SizedBox(height: 12),
-                    Text(
-                      coachNotes[frequency]!,
-                      style: TextStyle(
-                        color: palette.text.withValues(alpha: 0.82),
-                        height: 1.5,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-}
-
-class _StepWearable extends StatelessWidget {
-  final bool selected;
-  final List<(bool, String, String)> options;
-  final ValueChanged<bool> onSelect;
-
-  const _StepWearable({
-    required this.selected,
-    required this.options,
-    required this.onSelect,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.runninPalette;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _StepCode('ASSESSMENT_07'),
-        const SizedBox(height: 12),
-        Text('Conectar wearable?', style: context.runninType.displayMd),
-        const SizedBox(height: 10),
-        Text(
-          'Por enquanto isso registra apenas uma preferencia. Dados reais aparecem depois que houver integracao ou corrida com BPM.',
-          style: TextStyle(color: palette.muted, height: 1.5),
-        ),
-        const SizedBox(height: 24),
-        ...options.map((option) {
-          final isSelected = selected == option.$1;
-          return GestureDetector(
-            onTap: () => onSelect(option.$1),
-            child: AppPanel(
-              margin: const EdgeInsets.only(bottom: 8),
-              color: isSelected
-                  ? palette.primary.withValues(alpha: 0.08)
-                  : null,
-              borderColor: isSelected ? palette.primary : palette.border,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    option.$2,
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                      color: isSelected ? palette.primary : palette.text,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(option.$3, style: TextStyle(color: palette.muted)),
-                ],
-              ),
-            ),
-          );
-        }),
-      ],
-    );
-  }
-}
-
-class _MetricInput extends StatelessWidget {
-  final String label;
-  final TextEditingController controller;
-
-  const _MetricInput({required this.label, required this.controller});
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.runninPalette;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _FieldLabel(label),
-        const SizedBox(height: 8),
-        TextField(
-          controller: controller,
-          keyboardType: TextInputType.number,
-          inputFormatters: [
-            FilteringTextInputFormatter.digitsOnly,
-            LengthLimitingTextInputFormatter(3),
-          ],
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: 28,
-            fontWeight: FontWeight.w700,
-            color: palette.text,
-          ),
-          decoration: InputDecoration(
-            filled: true,
-            fillColor: palette.surface,
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.zero,
-              borderSide: BorderSide(color: palette.border),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.zero,
-              borderSide: BorderSide(color: palette.primary),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _ConditionChip extends StatelessWidget {
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  const _ConditionChip({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.runninPalette;
-
-    return InkWell(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(
-          color: selected
-              ? palette.primary.withValues(alpha: 0.1)
-              : palette.surface,
-          border: Border.all(
-            color: selected ? palette.primary : palette.border,
-          ),
-        ),
-        child: Text(
-          label,
-          style: context.runninType.bodySm.copyWith(
-            color: selected ? palette.primary : palette.text,
-            fontWeight: selected ? FontWeight.w800 : FontWeight.w500,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _StepGeneratingPlan extends StatelessWidget {
-  const _StepGeneratingPlan();
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.runninPalette;
-    final type = context.runninType;
-
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          SizedBox(
-            width: 56,
-            height: 56,
-            child: CircularProgressIndicator(
-              color: palette.primary,
-              strokeWidth: 2,
-            ),
-          ),
-          const SizedBox(height: 32),
-          Text(
-            'GERANDO SEU PLANO',
-            style: type.displaySm,
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 12),
-          Text(
-            'O Coach esta montando sua periodizacao\ncom base no seu perfil.',
-            style: type.bodyMd.copyWith(color: palette.muted, height: 1.6),
-            textAlign: TextAlign.center,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _StepDots extends StatelessWidget {
   final int total;
   final int current;
@@ -1647,22 +756,6 @@ class _StepDots extends StatelessWidget {
           color: active ? palette.primary : palette.border,
         );
       }),
-    );
-  }
-}
-
-class _StepCode extends StatelessWidget {
-  final String value;
-
-  const _StepCode(this.value);
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      '// $value',
-      style: context.runninType.labelMd.copyWith(
-        color: context.runninPalette.primary,
-      ),
     );
   }
 }

@@ -11,6 +11,10 @@ export interface UserProfile {
   height?: string;
   hasWearable: boolean;
   medicalConditions: string[];
+  paceTarget?: string;
+  preferredRunTime?: string;
+  wakeUpTime?: string;
+  sleepTime?: string;
   coachVoiceId?: string;
   premium: boolean;
   premiumUntil?: string;

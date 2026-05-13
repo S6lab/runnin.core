@@ -15,6 +15,10 @@ export const CompleteOnboardingSchema = z.object({
   height: z.string().optional(),
   hasWearable: z.boolean().default(false),
   medicalConditions: z.array(z.string()).default([]),
+  paceTarget: z.string().optional(),
+  preferredRunTime: z.string().optional(),
+  wakeUpTime: z.string().optional(),
+  sleepTime: z.string().optional(),
 });
 
 export type CompleteOnboardingInput = z.infer<typeof CompleteOnboardingSchema>;
@@ -70,6 +74,10 @@ export class CompleteOnboardingUseCase {
       height: input.height,
       hasWearable: input.hasWearable,
       medicalConditions: input.medicalConditions,
+      paceTarget: input.paceTarget,
+      preferredRunTime: input.preferredRunTime,
+      wakeUpTime: input.wakeUpTime,
+      sleepTime: input.sleepTime,
       coachVoiceId: existing?.coachVoiceId,
       premium: existing?.premium ?? false,
       premiumUntil: existing?.premiumUntil,
