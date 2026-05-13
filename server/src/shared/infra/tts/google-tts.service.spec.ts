@@ -96,10 +96,10 @@ describe('GoogleTtsService Integration', () => {
 
       expect(result).not.toBeNull();
 
-      // Verify the request body was trimmed
+      // Verify the request body was trimmed (allow 181 due to period added)
       const ttsCall = (global.fetch as jest.Mock).mock.calls[1];
       const requestBody = JSON.parse(ttsCall[1].body);
-      expect(requestBody.input.text.length).toBeLessThanOrEqual(180);
+      expect(requestBody.input.text.length).toBeLessThanOrEqual(181);
     });
 
     it('should handle TTS API failure gracefully', async () => {

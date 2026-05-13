@@ -284,7 +284,7 @@ class _SessionActionsState extends State<_SessionActions> {
                           color: context.runninPalette.primary,
                         ),
                       )
-                    : const Text('MARCAR CONCLUÍDA'),
+                    : const Text('CONCLUÍDA'),
               ),
             ),
             const SizedBox(width: 8),
@@ -292,6 +292,13 @@ class _SessionActionsState extends State<_SessionActions> {
               child: OutlinedButton(
                 onPressed: _loading ? null : () => _skipSession(),
                 child: const Text('PULAR'),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: OutlinedButton(
+                onPressed: () => _rescheduleSession(),
+                child: const Text('REAGENDAR'),
               ),
             ),
           ],
@@ -384,5 +391,14 @@ class _SessionActionsState extends State<_SessionActions> {
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  void _rescheduleSession() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Funcionalidade de reagendamento em breve'),
+        duration: Duration(seconds: 2),
+      ),
+    );
   }
 }
