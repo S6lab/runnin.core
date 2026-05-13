@@ -4,11 +4,17 @@ import { CreateRunUseCase, CreateRunSchema } from '../domain/use-cases/create-ru
 import { AddGpsBatchUseCase, AddGpsBatchSchema } from '../domain/use-cases/add-gps-batch.use-case';
 import { CompleteRunUseCase, CompleteRunSchema } from '../domain/use-cases/complete-run.use-case';
 import { NotFoundError } from '@shared/errors/app-error';
+import { FirestoreGamificationRepository } from '@modules/gamification/infra/firestore-gamification.repository';
+import { AwardXpUseCase } from '@modules/gamification/domain/use-cases/award-xp.use-case';
+import { CheckBadgeUnlockUseCase } from '@modules/gamification/domain/use-cases/check-badge-unlock.use-case';
 
 const repo = new FirestoreRunRepository();
+const gamificationRepo = new FirestoreGamificationRepository();
 const createRun = new CreateRunUseCase(repo);
 const addGpsBatch = new AddGpsBatchUseCase(repo);
 const completeRun = new CompleteRunUseCase(repo);
+const awardXp = new AwardXpUseCase(gamificationRepo);
+const checkBadgeUnlock = new CheckBadgeUnlockUseCase(gamificationRepo);
 
 export async function postRun(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
@@ -31,6 +37,21 @@ export async function patchComplete(req: Request, res: Response, next: NextFunct
     const input = CompleteRunSchema.parse(req.body);
     const run = await completeRun.execute(req.params['id'] as string, req.uid, input);
     res.json(run);
+
+    // Fire-and-forget: award XP and check badge unlocks after responding
+    (async () => {
+      try {
+        const xp = Math.min(120, Math.max(50, Math.round((run.distanceM ?? 0) / 1000) * 10));
+        await awardXp.execute(req.uid, xp);
+        const runsCount = await repo.countByUser(req.uid);
+        const unlocked = await checkBadgeUnlock.execute(req.uid, run, runsCount);
+        if (unlocked.length > 0) {
+          console.info(`[gamification] user=${req.uid} unlocked badges: ${unlocked.join(', ')}`);
+        }
+      } catch (err) {
+        console.error('[gamification] post-complete award failed', err);
+      }
+    })();
   } catch (err) { next(err); }
 }
 

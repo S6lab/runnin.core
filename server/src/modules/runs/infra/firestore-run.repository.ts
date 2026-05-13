@@ -57,4 +57,9 @@ export class FirestoreRunRepository implements RunRepository {
     const runs = docs.slice(0, limit).map(d => ({ id: d.id, userId, ...d.data() }) as Run);
     return { runs, nextCursor: hasMore ? runs[runs.length - 1].createdAt : undefined };
   }
+
+  async countByUser(userId: string): Promise<number> {
+    const snap = await this.col(userId).count().get();
+    return snap.data().count;
+  }
 }
