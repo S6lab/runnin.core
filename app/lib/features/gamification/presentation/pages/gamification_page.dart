@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:runnin/core/theme/app_palette.dart';
+import 'package:runnin/features/gamification/data/gamification_remote_datasource.dart';
+import 'package:runnin/features/gamification/data/models/badge.dart';
+import 'package:runnin/features/gamification/data/models/user_gamification.dart';
 import 'package:runnin/features/run/data/datasources/run_remote_datasource.dart';
 import 'package:runnin/features/run/domain/entities/run.dart';
 import 'package:runnin/shared/widgets/achievement_card.dart';
@@ -18,8 +21,11 @@ class GamificationPage extends StatefulWidget {
 }
 
 class _GamificationPageState extends State<GamificationPage> {
-  final _remote = RunRemoteDatasource();
+  final _gamRemote = GamificationRemoteDatasource();
+  final _runRemote = RunRemoteDatasource();
   List<Run>? _runs;
+  UserGamification? _gamification;
+  List<Badge>? _badges;
   bool _loading = true;
   String? _error;
   _GamTab _tab = _GamTab.xp;
@@ -31,14 +37,21 @@ class _GamificationPageState extends State<GamificationPage> {
   }
 
   Future<void> _load() async {
+    setState(() { _loading = true; _error = null; });
     try {
-      final runs = await _remote.listRuns(limit: 200);
+      final results = await Future.wait([
+        _gamRemote.getProfile(),
+        _gamRemote.getBadges(),
+        _runRemote.listRuns(limit: 200),
+      ]);
       if (mounted) setState(() {
-        _runs = runs.where((r) => r.status == 'completed').toList();
+        _gamification = results[0] as UserGamification;
+        _badges = results[1] as List<Badge>;
+        _runs = (results[2] as List<Run>).where((r) => r.status == 'completed').toList();
         _loading = false;
       });
-    } catch (_) {
-      if (mounted) setState(() => _loading = false);
+    } catch (e) {
+      if (mounted) setState(() { _loading = false; _error = e.toString(); });
     }
   }
 
