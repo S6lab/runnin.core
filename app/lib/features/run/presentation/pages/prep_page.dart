@@ -8,16 +8,23 @@ import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 import 'package:runnin/features/run/data/datasources/run_coach_remote_datasource.dart';
 import 'package:runnin/features/run/presentation/bloc/run_bloc.dart';
+import 'package:runnin/features/training/domain/entities/plan.dart';
+
+export 'package:runnin/features/coach/data/coach_data.dart';
 
 class PrepPage extends StatelessWidget {
-  const PrepPage({super.key});
+  final PlanSession? session;
+
+  const PrepPage({super.key, this.session});
 
   @override
-  Widget build(BuildContext context) => const _PrepView();
+  Widget build(BuildContext context) => _PrepView(session: session);
 }
 
 class _PrepView extends StatefulWidget {
-  const _PrepView();
+  final PlanSession? session;
+
+  const _PrepView({this.session});
 
   @override
   State<_PrepView> createState() => _PrepViewState();
@@ -32,7 +39,38 @@ class _PrepViewState extends State<_PrepView> {
     'Long Run',
     'Free Run',
   ];
-  String _selectedType = 'Easy Run';
+  late String _selectedType;
+
+  @override
+  void initState() {
+    super.initState();
+    final session = widget.session;
+    if (session != null) {
+      _selectedType = _mapSessionTypeToPrep(session.type);
+    } else {
+      _selectedType = 'Easy Run';
+    }
+  }
+
+  String _mapSessionTypeToPrep(String sessionType) {
+    final typeLC = sessionType.toLowerCase();
+    if (typeLC.contains('interval') || typeLC.contains('intervalado')) {
+      return 'Intervalado';
+    }
+    if (typeLC.contains('tempo') || typeLC.contains('ritmo')) {
+      return 'Tempo Run';
+    }
+    if (typeLC.contains('long') || typeLC.contains('volume')) {
+      return 'Long Run';
+    }
+    if (typeLC.contains('easy') || typeLC.contains('leve') || typeLC.contains('rodagem')) {
+      return 'Easy Run';
+    }
+    if (typeLC.contains('free') || typeLC.contains('livre')) {
+      return 'Free Run';
+    }
+    return 'Easy Run';
+  }
 
   static const _typeDetails = {
     'Easy Run': (
@@ -275,20 +313,34 @@ class _PrepViewState extends State<_PrepView> {
                           ],
                         ),
                       ),
-                      const SizedBox(height: 14),
-                      if (_isPro == false)
-                        _PreRunCoachLockedCard(
-                          onTap: () => context.push('/profile'),
-                        )
-                      else
-                        _PreRunCoachCard(
-                          loading: _coachLoading,
-                          cue: _coachCue,
-                          muted: _coachMuted,
-                          onToggleMute: () =>
-                              setState(() => _coachMuted = !_coachMuted),
-                          onRefresh: _requestPreRunCue,
-                        ),
+                       const SizedBox(height: 14),
+                       // Warmup guidance section (pending backend API from SUP-58)
+                       if (_isPro == true) ...[
+                         _WarmupGuidanceSection(
+                           sessionType: _selectedType,
+                           loading: false,
+                           briefing: null,
+                         ),
+                       ],
+                       if (_isPro == false)
+                         _PreRunCoachLockedCard(
+                           onTap: () => context.push('/profile'),
+                         )
+                       else
+                         _PreRunCoachCard(
+                           loading: _coachLoading,
+                           cue: _coachCue,
+                           muted: _coachMuted,
+                           onToggleMute: () =>
+                               setState(() => _coachMuted = !_coachMuted),
+                           onRefresh: _requestPreRunCue,
+                         ),
+                       const SizedBox(height: 14),
+                       // Alert configuration panel (pending backend API from SUP-58)
+                       _AlertConfigurationPanel(),
+                       const SizedBox(height: 14),
+                       // Music player controls (pending backend API from SUP-58)
+                       _MusicPlayerSection(),
                     ],
                   ),
                 ),
@@ -449,6 +501,135 @@ class _PreRunCoachLockedCard extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _WarmupGuidanceSection extends StatelessWidget {
+  final String sessionType;
+  final bool loading;
+  final dynamic briefing;
+
+  const _WarmupGuidanceSection({
+    required this.sessionType,
+    required this.loading,
+    required this.briefing,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    final type = context.runninType;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: palette.surface,
+        border: Border.all(color: palette.border),
+      ),
+      child: Column(
+        children: [
+          Icon(IconsDirections.walk_rounded, color: palette.primary),
+          const SizedBox(height: 8),
+          Text('AQUECIMENTO', style: type.labelCaps),
+          const SizedBox(height: 8),
+          if (loading)
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                SizedBox(
+                  width: 14,
+                  height: 14,
+                      child: CircularProgressIndicator(
+                        color: palette.muted,
+                        strokeWidth: 1.5,
+                ),
+                const SizedBox(width: 10),
+                Text('Buscando orientação...', style: type.bodySm),
+              ],
+            )
+          else if (briefing != null)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(briefing.text, style: type.bodySm),
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: palette.primary.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: const Text('PLAY AQUECIMENTO →'),
+                ),
+              ],
+            )
+          else
+            Text(
+              'Configure seu aquecimento personalizado.',
+              style: type.bodySm.copyWith(color: palette.muted),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AlertConfigurationPanel extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    final type = context.runninType;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: palette.surface,
+        border: Border.all(color: palette.border),
+      ),
+      child: Column(
+        children: [
+          Icon(Icons.warning_rounded, color: palette.primary),
+          const SizedBox(height: 8),
+          Text('CONFIGURAR ALERTAS', style: type.labelCaps),
+          const SizedBox(height: 8),
+          Text(
+            'Personalize alertas de ritmo, frequência cardíaca e marcas de distância.',
+            style: type.bodySm.copyWith(color: palette.muted),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MusicPlayerSection extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    final type = context.runninType;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: palette.surface,
+        border: Border.all(color: palette.border),
+      ),
+      child: Column(
+        children: [
+          Icon(Icons.music_note_rounded, color: palette.primary),
+          const SizedBox(height: 8),
+          Text('MÚSICA', style: type.labelCaps),
+          const SizedBox(height: 8),
+          Text(
+            'Controle sua playlist com Audio Ducking.',
+            style: type.bodySm.copyWith(color: palette.muted),
+          ),
+        ],
       ),
     );
   }
