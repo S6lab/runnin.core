@@ -75,7 +75,7 @@ class _BottomNav extends StatelessWidget {
 
               // Botão RUN central — retangular conforme protótipo
               GestureDetector(
-                onTap: () => context.push('/prep'),
+                onTap: () => context.push('/coach-intro'),
                 child: Container(
                   width: 72,
                   height: 64,

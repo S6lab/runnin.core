@@ -362,7 +362,7 @@ class _IniciarSessaoButton extends StatelessWidget {
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
-              onPressed: () => context.push('/prep'),
+              onPressed: () => context.push('/coach-intro'),
               icon: const Icon(Icons.play_arrow, size: 20),
               label: Text(
                 session != null ? 'INICIAR SESSAO' : 'INICIAR CORRIDA LIVRE',
@@ -816,7 +816,7 @@ class _CoachAiWeeklySummary extends StatelessWidget {
                         ),
                       if (!hasRuns)
                         ElevatedButton(
-                          onPressed: () => context.push('/prep'),
+                          onPressed: () => context.push('/coach-intro'),
                           child: const Text('REGISTRAR CORRIDA'),
                         ),
                     ],
@@ -954,7 +954,7 @@ class _PerformanceSection extends StatelessWidget {
                       const Spacer(),
                       if (avgPace == null)
                         TextButton(
-                          onPressed: () => context.push('/prep'),
+                          onPressed: () => context.push('/coach-intro'),
                           child: const Text('FAZER PRIMEIRA CORRIDA'),
                         )
                       else

@@ -4,10 +4,12 @@ import 'package:go_router/go_router.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:runnin/features/admin/presentation/pages/admin_page.dart';
+import 'package:runnin/features/assessment/presentation/pages/assessment_page.dart';
 import 'package:runnin/features/auth/presentation/pages/login_page.dart';
 import 'package:runnin/features/home/presentation/pages/home_page.dart';
 import 'package:runnin/features/onboarding/presentation/pages/onboarding_page.dart';
 import 'package:runnin/features/run/presentation/bloc/run_bloc.dart';
+import 'package:runnin/features/run/presentation/pages/coach_intro_page.dart';
 import 'package:runnin/features/run/presentation/pages/prep_page.dart';
 import 'package:runnin/features/run/presentation/pages/active_run_page.dart';
 import 'package:runnin/features/run/presentation/pages/report_page.dart';
@@ -102,12 +104,23 @@ final appRouter = GoRouter(
     GoRoute(path: '/onboarding', builder: (_, _) => const OnboardingPage()),
 
     // Fluxo de corrida — RunBloc compartilhado entre prep → run → report
+    GoRoute(
+      path: '/assessment',
+      builder: (_, state) => AssessmentPage(
+        redo: state.uri.queryParameters['redo'] == '1',
+      ),
+    ),
+
     ShellRoute(
       parentNavigatorKey: _rootNavigatorKey,
       navigatorKey: _runFlowNavigatorKey,
       builder: (context, state, child) =>
           BlocProvider(create: (_) => RunBloc(), child: child),
       routes: [
+        GoRoute(
+          path: '/coach-intro',
+          builder: (_, _) => const CoachIntroPage(),
+        ),
         GoRoute(path: '/prep', builder: (_, _) => const PrepPage()),
         GoRoute(
           path: '/run',
