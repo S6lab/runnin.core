@@ -2,9 +2,11 @@ import { v4 as uuid } from 'uuid';
 import { z } from 'zod';
 import { getAsyncLLM } from '@shared/infra/llm/llm.factory';
 import { PlanRepository } from '../domain/plan.repository';
-import { Plan, PlanSession, PlanWeek } from '../domain/plan.entity';
+import { Plan, PlanSession, PlanWeek, HeartRateZones, GenerationProgress } from '../domain/plan.entity';
 import { logger } from '@shared/logger/logger';
 import { formatRunningKnowledgeContext } from '@shared/knowledge/running/running-knowledge';
+import { UserRepository } from '@modules/users/domain/user.repository';
+import { NotFoundError } from '@shared/errors/app-error';
 
 const SYSTEM_PROMPT = `Você é o Coach.AI do runnin: um personal trainer de corrida experiente, presente e direto.
 Gere um plano de treino estruturado em JSON válido.
@@ -33,31 +35,64 @@ const PlanWeekSchema = z.object({
 const PlanWeeksSchema = z.array(PlanWeekSchema);
 
 export const GeneratePlanSchema = z.object({
-  goal: z.string().min(1),
-  level: z.enum(['iniciante', 'intermediario', 'avancado']),
-  frequency: z.number().int().min(2).max(7).optional(),
+  goal: z.string().min(1).optional(), // Optional: defaults to user profile goal
+  level: z.enum(['iniciante', 'intermediario', 'avancado']).optional(), // Optional: defaults to user profile level
+  frequency: z.number().int().min(2).max(7).optional(), // Optional: defaults to user profile frequency
   weeksCount: z.number().int().min(4).max(16).optional(),
+  birthDate: z.string().optional(), // For HR zone calculation (defaults to user profile)
+  maxHeartRate: z.number().int().min(100).max(220).optional(), // User-provided max HR
 });
 
 export type GeneratePlanInput = z.infer<typeof GeneratePlanSchema>;
 
+interface EnrichedPlanInput {
+  goal: string;
+  level: 'iniciante' | 'intermediario' | 'avancado';
+  frequency?: number;
+  weeksCount: number;
+  birthDate?: string;
+  maxHeartRate?: number;
+}
+
 export class GeneratePlanUseCase {
   private llm = getAsyncLLM();
 
-  constructor(private repo: PlanRepository) {}
+  constructor(
+    private repo: PlanRepository,
+    private userRepo: UserRepository,
+  ) {}
 
   async execute(userId: string, input: GeneratePlanInput): Promise<Plan> {
+    // Stage 1: Fetch user profile to enrich plan input with assessment data
+    const userProfile = await this.userRepo.findById(userId);
+    if (!userProfile) {
+      throw new NotFoundError('User profile not found. Please complete onboarding first.');
+    }
+
+    // Merge user profile data with input (input overrides profile)
+    const enrichedInput: EnrichedPlanInput = {
+      goal: input.goal ?? userProfile.goal,
+      level: input.level ?? userProfile.level,
+      frequency: input.frequency ?? userProfile.frequency,
+      birthDate: input.birthDate ?? userProfile.birthDate,
+      maxHeartRate: input.maxHeartRate,
+      weeksCount: input.weeksCount ?? resolvePlanWeeksCount({
+        goal: input.goal ?? userProfile.goal,
+        level: input.level ?? userProfile.level,
+        frequency: input.frequency ?? userProfile.frequency,
+      }),
+    };
+
     const planId = uuid();
     const now = new Date().toISOString();
-    const weeksCount = input.weeksCount ?? resolvePlanWeeksCount(input);
 
-    // Cria o plano como "generating" imediatamente
+    // Create plan as "generating" immediately
     const plan: Plan = {
       id: planId,
       userId,
-      goal: input.goal,
-      level: input.level,
-      weeksCount,
+      goal: enrichedInput.goal,
+      level: enrichedInput.level,
+      weeksCount: enrichedInput.weeksCount,
       status: 'generating',
       weeks: [],
       createdAt: now,
@@ -65,8 +100,8 @@ export class GeneratePlanUseCase {
     };
     await this.repo.create(plan);
 
-    // Gera o plano em background
-    this._generateAsync(plan, { ...input, weeksCount }).catch(err =>
+    // Generate plan in background
+    this._generateAsync(plan, enrichedInput).catch(err =>
       logger.error('plan.generate.background_failed', {
         planId,
         err: err instanceof Error ? err.message : String(err),
@@ -76,25 +111,167 @@ export class GeneratePlanUseCase {
     return plan;
   }
 
+  private async _updateProgress(
+    planId: string,
+    userId: string,
+    stage: number,
+    stageName: string,
+    stageDescription: string,
+  ): Promise<void> {
+    const progress: GenerationProgress = {
+      currentStage: stage,
+      totalStages: 8,
+      stageName,
+      stageDescription,
+    };
+    await this.repo.update(planId, userId, {
+      generationProgress: progress,
+      updatedAt: new Date().toISOString(),
+    });
+  }
+
+  private _calculateHeartRateZones(input: EnrichedPlanInput): HeartRateZones | undefined {
+    let maxHR: number | undefined;
+
+    if (input.maxHeartRate) {
+      maxHR = input.maxHeartRate;
+    } else if (input.birthDate) {
+      const age = new Date().getFullYear() - new Date(input.birthDate).getFullYear();
+      maxHR = 220 - age; // Simple formula
+    }
+
+    if (!maxHR) return undefined;
+
+    // Scientific HR zones per requirements:
+    // Zone 1 (Easy): 60-70% max HR
+    // Zone 2 (Aerobic): 70-80%
+    // Zone 3 (Tempo): 80-87%
+    // Zone 4 (Threshold): 87-93%
+    // Zone 5 (VO2 Max): 93-100%
+    return {
+      zone1: { min: Math.round(maxHR * 0.6), max: Math.round(maxHR * 0.7) },
+      zone2: { min: Math.round(maxHR * 0.7), max: Math.round(maxHR * 0.8) },
+      zone3: { min: Math.round(maxHR * 0.8), max: Math.round(maxHR * 0.87) },
+      zone4: { min: Math.round(maxHR * 0.87), max: Math.round(maxHR * 0.93) },
+      zone5: { min: Math.round(maxHR * 0.93), max: Math.round(maxHR * 1.0) },
+      maxHeartRate: maxHR,
+    };
+  }
+
+  private _applyMesocyclePattern(weeks: PlanWeek[]): PlanWeek[] {
+    return weeks.map((week) => {
+      const isRecoveryWeek = week.weekNumber % 4 === 0;
+      if (!isRecoveryWeek) return week;
+
+      // Recovery week: reduce volume by 30-40% and keep only easy/recovery sessions
+      const recoveryFactor = 0.65;
+      return {
+        ...week,
+        sessions: week.sessions.map((session) => {
+          const adjustedDistance = Number((session.distanceKm * recoveryFactor).toFixed(1));
+          const isHighIntensity = session.type.toLowerCase().includes('interval') ||
+            session.type.toLowerCase().includes('tempo') ||
+            session.type.toLowerCase().includes('threshold');
+
+          return {
+            ...session,
+            distanceKm: adjustedDistance,
+            type: isHighIntensity ? 'Easy Run' : session.type,
+            notes: `[Semana de recuperação] ${session.notes || 'Treino leve para consolidar adaptações.'}`,
+          };
+        }),
+      };
+    });
+  }
+
   private async _generateAsync(
     plan: Plan,
-    input: GeneratePlanInput & { weeksCount: number },
+    input: EnrichedPlanInput,
   ): Promise<void> {
-    const freq =
+    try {
+      // Stage 1: Analyze user profile and assessment data
+      await this._updateProgress(
+        plan.id,
+        plan.userId,
+        1,
+        'Analisando perfil',
+        'Compreendendo seu nível, objetivo e histórico'
+      );
+      const freq =
         input.frequency ??
         (input.level === 'iniciante' ? 3 : input.level === 'intermediario' ? 4 : 5);
-    const knowledgeContext = await formatRunningKnowledgeContext(
-      `${input.goal} ${input.level} ${input.weeksCount} semanas corrida`,
-      5,
-    );
-    const prompt = `Gere um plano de corrida de ${input.weeksCount} semanas.
+
+      // Stage 2: Calculate heart rate zones (if available)
+      await this._updateProgress(
+        plan.id,
+        plan.userId,
+        2,
+        'Calculando zonas de frequência cardíaca',
+        'Definindo zonas de treino personalizadas'
+      );
+      const heartRateZones = this._calculateHeartRateZones(input);
+
+      // Stage 3: Determine weekly volume and frequency
+      await this._updateProgress(
+        plan.id,
+        plan.userId,
+        3,
+        'Determinando volume semanal',
+        'Calculando quilometragem e frequência ideal'
+      );
+      // Volume calculation happens in the LLM prompt
+
+      // Stage 4: Generate mesocycle structure (4 weeks with 3:1 pattern)
+      await this._updateProgress(
+        plan.id,
+        plan.userId,
+        4,
+        'Gerando estrutura do mesociclo',
+        'Criando ciclo de 4 semanas com periodização 3:1'
+      );
+
+      const knowledgeContext = await formatRunningKnowledgeContext(
+        `${input.goal} ${input.level} ${input.weeksCount} semanas corrida`,
+        5,
+      );
+
+      // Stage 5: Create individual sessions with targets
+      await this._updateProgress(
+        plan.id,
+        plan.userId,
+        5,
+        'Criando sessões individuais',
+        'Gerando treinos específicos com objetivos'
+      );
+
+      const hrZoneContext = heartRateZones
+        ? `\n\nZonas de frequência cardíaca do atleta:
+- Zona 1 (Recuperação): ${heartRateZones.zone1.min}-${heartRateZones.zone1.max} bpm
+- Zona 2 (Fácil): ${heartRateZones.zone2.min}-${heartRateZones.zone2.max} bpm
+- Zona 3 (Tempo): ${heartRateZones.zone3.min}-${heartRateZones.zone3.max} bpm
+- Zona 4 (Limiar): ${heartRateZones.zone4.min}-${heartRateZones.zone4.max} bpm
+- Zona 5 (VO2max): ${heartRateZones.zone5.min}-${heartRateZones.zone5.max} bpm
+Use essas zonas para orientar a intensidade dos treinos.`
+        : '';
+
+      const prompt = `Gere um plano de corrida de ${input.weeksCount} semanas com periodização 3:1 (3 semanas de carga + 1 semana de recuperação).
 Objetivo: ${input.goal}
 Nível: ${input.level}
 Frequência: ${freq} dias por semana
+
+**PERIODIZAÇÃO 3:1 OBRIGATÓRIA:**
+- A cada 4 semanas, aplique o padrão 3:1: 3 semanas de carga progressiva + 1 semana de recuperação
+- Semanas 1-3: aumente volume/intensidade gradualmente
+- Semana 4: reduza volume em 30-40% para recuperação ativa
+- Semanas 5-7: retome carga progressiva (começando acima da semana 3)
+- Semana 8: nova semana de recuperação
+- Continue esse padrão até completar ${input.weeksCount} semanas
+- A semana de recuperação mantém a frequência mas reduz distância e intensidade
+
 Estruture o plano com predominio de baixa intensidade e distribuicao coerente de carga.
 Evite regras fixas nao sustentadas por evidencia, como aumento automatico de 10% toda semana.
-Inclua semanas de consolidacao ou alivio quando a carga estiver subindo.
 Se houver prova-alvo nas ultimas semanas, reduza volume e preserve especificidade.
+${hrZoneContext}
 
 Base de conhecimento baseada em evidencia:
 ${knowledgeContext}
@@ -102,25 +279,63 @@ ${knowledgeContext}
 Requisitos:
 - Retorne um array JSON com ${input.weeksCount} objetos de semana.
 - O array deve conter weekNumber de 1 ate ${input.weeksCount}, sem agrupar varias semanas em um unico objeto.
-- Cada semana deve ter exatamente ${freq} sessoes, salvo necessidade muito clara de uma semana de alivio.
+- Cada semana deve ter exatamente ${freq} sessoes, salvo semanas de recuperacao que podem ter ${Math.max(freq - 1, 3)}.
 - Distribua os dias para evitar sessoes duras em dias consecutivos.
 - Em iniciantes, use no maximo 1 sessao de intensidade por semana.
 - Em intermediarios e avancados, use no maximo 2 sessoes de qualidade por semana.
+- Nas semanas de recuperação (4, 8, 12, 16), reduza distâncias e priorize treinos Easy/Recuperação.
 - Notes deve explicar o objetivo da sessao em portugues brasileiro, de forma curta.
 - Notes deve soar como uma orientacao de personal trainer para o corredor: direta, motivadora, pratica e natural.
 - Fale com o corredor em segunda pessoa ou primeira pessoa do plural ("voce", "vamos", "mantem", "fecha").
 - Se nao houver dados suficientes para pace exato, deixe targetPace ausente.
 - Nao inclua sessoes de fortalecimento dentro do JSON; mencione isso em notes quando relevante.`;
 
-    try {
       const raw = await this.llm.generate(prompt, {
         systemPrompt: SYSTEM_PROMPT,
         maxTokens: 6000,
       });
-      const weeks = await this._parseWeeks(raw, input.weeksCount);
+
+      // Stage 6: Apply periodization rules
+      await this._updateProgress(
+        plan.id,
+        plan.userId,
+        6,
+        'Aplicando regras de periodização',
+        'Ajustando carga e recuperação'
+      );
+      let weeks = await this._parseWeeks(raw, input.weeksCount);
+
+      // Apply 3:1 mesocycle pattern explicitly
+      weeks = this._applyMesocyclePattern(weeks);
+
+      // Stage 7: Add coach briefings per session
+      await this._updateProgress(
+        plan.id,
+        plan.userId,
+        7,
+        'Adicionando briefings do coach',
+        'Personalizando orientações para cada treino'
+      );
+      // Notes are already included from LLM, but we mark the week type
+      weeks = weeks.map(week => ({
+        ...week,
+        weekType: week.weekNumber % 4 === 0 ? 'recovery' : 'load',
+      }));
+
+      // Stage 8: Persist plan to database
+      await this._updateProgress(
+        plan.id,
+        plan.userId,
+        8,
+        'Salvando plano',
+        'Finalizando seu plano personalizado'
+      );
+
       await this.repo.update(plan.id, plan.userId, {
         status: 'ready',
         weeks,
+        heartRateZones,
+        generationProgress: undefined, // Clear progress when done
         updatedAt: new Date().toISOString(),
       });
     } catch (err) {
@@ -130,6 +345,7 @@ Requisitos:
       });
       await this.repo.update(plan.id, plan.userId, {
         status: 'failed',
+        generationProgress: undefined,
         updatedAt: new Date().toISOString(),
       });
       throw err;

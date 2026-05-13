@@ -1,15 +1,19 @@
 import { Request, Response, NextFunction } from 'express';
 import { FirestorePlanRepository } from '../infra/firestore-plan.repository';
 import { GeneratePlanUseCase, GeneratePlanSchema } from '../use-cases/generate-plan.use-case';
+import { UpdateSessionStatusUseCase, UpdateSessionStatusSchema } from '../use-cases/update-session-status.use-case';
 import { NotFoundError } from '@shared/errors/app-error';
 import { getRunningKnowledgeCorpusWithStorage } from '@shared/knowledge/running/running-knowledge';
+import { FirestoreUserRepository } from '@modules/users/infra/firestore-user.repository';
 
-const repo = new FirestorePlanRepository();
-const generatePlan = new GeneratePlanUseCase(repo);
+const planRepo = new FirestorePlanRepository();
+const userRepo = new FirestoreUserRepository();
+const generatePlan = new GeneratePlanUseCase(planRepo, userRepo);
+const updateSessionStatus = new UpdateSessionStatusUseCase(planRepo);
 
 export async function getCurrentPlan(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const plan = await repo.findCurrent(req.uid);
+    const plan = await planRepo.findCurrent(req.uid);
     if (!plan) throw new NotFoundError('Plan');
     res.json(plan);
   } catch (err) { next(err); }
@@ -34,7 +38,7 @@ export async function postGeneratePlan(req: Request, res: Response, next: NextFu
 
 export async function getPlanById(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const plan = await repo.findById(req.params['id'] as string, req.uid);
+    const plan = await planRepo.findById(req.params['id'] as string, req.uid);
     if (!plan) throw new NotFoundError('Plan');
     res.json(plan);
   } catch (err) { next(err); }

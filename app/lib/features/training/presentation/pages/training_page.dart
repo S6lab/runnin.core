@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:runnin/features/coach/data/datasources/coach_report_remote_datasource.dart';
@@ -333,6 +334,7 @@ class _TrainingPageState extends State<TrainingPage> {
         checking: _checkingPlan,
         lastCheckedAt: _lastPlanCheckAt,
         error: _planCheckError,
+        progress: _plan!.generationProgress,
         onCheck: _checkPendingPlan,
       );
     }
@@ -469,6 +471,7 @@ class _PlanGeneratingState extends StatelessWidget {
   final bool checking;
   final DateTime? lastCheckedAt;
   final String? error;
+  final GenerationProgress? progress;
   final VoidCallback onCheck;
 
   const _PlanGeneratingState({
@@ -476,6 +479,7 @@ class _PlanGeneratingState extends StatelessWidget {
     required this.checking,
     required this.lastCheckedAt,
     required this.error,
+    this.progress,
     required this.onCheck,
   });
 
@@ -496,30 +500,50 @@ class _PlanGeneratingState extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              SizedBox(
-                width: 48,
-                height: 48,
-                child: CircularProgressIndicator(
-                  color: palette.primary,
-                  strokeWidth: 2,
+              if (progress != null) ...[
+                _EightStageProgress(progress: progress!),
+                const SizedBox(height: 20),
+                Text(
+                  progress!.stageName,
+                  style: context.runninType.displaySm,
+                  textAlign: TextAlign.center,
                 ),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Criando seu plano',
-                style: context.runninType.displaySm,
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'A criacao esta em progresso e pode levar alguns minutos.',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: palette.muted,
-                  fontSize: 13,
-                  height: 1.5,
+                const SizedBox(height: 8),
+                Text(
+                  progress!.stageDescription,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: palette.muted,
+                    fontSize: 13,
+                    height: 1.5,
+                  ),
                 ),
-              ),
+              ] else ...[
+                SizedBox(
+                  width: 48,
+                  height: 48,
+                  child: CircularProgressIndicator(
+                    color: palette.primary,
+                    strokeWidth: 2,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Iniciando geração',
+                  style: context.runninType.displaySm,
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Preparando motor de IA para criar seu plano personalizado...',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: palette.muted,
+                    fontSize: 13,
+                    height: 1.5,
+                  ),
+                ),
+              ],
               const SizedBox(height: 14),
               AppTag(label: 'ID $shortPlanId', color: palette.primary),
               const SizedBox(height: 12),
@@ -561,6 +585,89 @@ class _PlanGeneratingState extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _EightStageProgress extends StatelessWidget {
+  final GenerationProgress progress;
+
+  const _EightStageProgress({required this.progress});
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+
+    return Column(
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: List.generate(8, (index) {
+            final stageNum = index + 1;
+            final isCompleted = stageNum < progress.currentStage;
+            final isCurrent = stageNum == progress.currentStage;
+            final isUpcoming = stageNum > progress.currentStage;
+
+            return Row(
+              children: [
+                Container(
+                  width: 28,
+                  height: 28,
+                  decoration: BoxDecoration(
+                    color: isCompleted
+                        ? palette.primary
+                        : isCurrent
+                            ? palette.primary.withValues(alpha: 0.2)
+                            : palette.surfaceAlt,
+                    border: Border.all(
+                      color: isCompleted || isCurrent
+                          ? palette.primary
+                          : palette.border,
+                      width: 2,
+                    ),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Center(
+                    child: isCompleted
+                        ? Icon(
+                            Icons.check,
+                            size: 16,
+                            color: palette.background,
+                          )
+                        : Text(
+                            '$stageNum',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w800,
+                              color: isCurrent
+                                  ? palette.primary
+                                  : isUpcoming
+                                      ? palette.muted
+                                      : palette.background,
+                            ),
+                          ),
+                  ),
+                ),
+                if (index < 7)
+                  Container(
+                    width: 12,
+                    height: 2,
+                    color: isCompleted ? palette.primary : palette.border,
+                  ),
+              ],
+            );
+          }),
+        ),
+        const SizedBox(height: 12),
+        Text(
+          'Etapa ${progress.currentStage} de ${progress.totalStages}',
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            color: palette.primary,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -1076,6 +1183,7 @@ class _WeeklyPlanView extends StatelessWidget {
           return _WeeklySessionRow(
             dayOfWeek: day,
             session: sessionForDay,
+            week: week,
             isToday: isToday,
             isDone: isDone,
           );
@@ -1153,6 +1261,7 @@ class _MonthlyPlanView extends StatelessWidget {
             summary: _buildMonthSummary(week),
             totalDistance: weekDistance,
             status: status,
+            isRecoveryWeek: week.isRecoveryWeek,
             statusColor: isCompleted
                 ? context.runninPalette.primary
                 : isCurrent
@@ -1330,12 +1439,14 @@ class _TabEmptyState extends StatelessWidget {
 class _WeeklySessionRow extends StatelessWidget {
   final int dayOfWeek;
   final PlanSession? session;
+  final PlanWeek? week;
   final bool isToday;
   final bool isDone;
 
   const _WeeklySessionRow({
     required this.dayOfWeek,
     required this.session,
+    this.week,
     required this.isToday,
     required this.isDone,
   });
@@ -1356,82 +1467,93 @@ class _WeeklySessionRow extends StatelessWidget {
     final palette = context.runninPalette;
     final isRest = session == null;
 
-    return AppPanel(
-      margin: const EdgeInsets.only(bottom: 8),
-      color: isToday ? palette.surfaceAlt : palette.surface,
-      borderColor: isToday
-          ? palette.primary.withValues(alpha: 0.4)
-          : palette.border,
-      child: Row(
-        children: [
-          Container(
-            width: 42,
-            height: 42,
-            alignment: Alignment.center,
-            color: isDone
-                ? palette.primary
-                : isToday
-                ? palette.primary.withValues(alpha: 0.15)
-                : palette.surfaceAlt,
-            child: Text(
-              isDone
-                  ? 'OK'
-                  : (isToday
-                        ? 'HOJE'
-                        : _dayNames[dayOfWeek].substring(0, 3).toUpperCase()),
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 9,
-                fontWeight: FontWeight.w900,
-                color: isDone
-                    ? palette.background
-                    : (isToday ? palette.primary : palette.muted),
+    return GestureDetector(
+      onTap: isRest || week == null ? null : () => _openSessionDetail(context),
+      child: AppPanel(
+        margin: const EdgeInsets.only(bottom: 8),
+        color: isToday ? palette.surfaceAlt : palette.surface,
+        borderColor: isToday
+            ? palette.primary.withValues(alpha: 0.4)
+            : palette.border,
+        child: Row(
+          children: [
+            Container(
+              width: 42,
+              height: 42,
+              alignment: Alignment.center,
+              color: isDone
+                  ? palette.primary
+                  : isToday
+                  ? palette.primary.withValues(alpha: 0.15)
+                  : palette.surfaceAlt,
+              child: Text(
+                isDone
+                    ? 'OK'
+                    : (isToday
+                          ? 'HOJE'
+                          : _dayNames[dayOfWeek].substring(0, 3).toUpperCase()),
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 9,
+                  fontWeight: FontWeight.w900,
+                  color: isDone
+                      ? palette.background
+                      : (isToday ? palette.primary : palette.muted),
+                ),
               ),
             ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  _dayNames[dayOfWeek],
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w800,
-                    color: palette.text,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  isRest ? 'Descanso' : session!.type,
-                  style: TextStyle(color: palette.muted),
-                ),
-              ],
-            ),
-          ),
-          if (!isRest)
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  _distanceLabel(session!),
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.w900,
-                    color: palette.secondary,
-                  ),
-                ),
-                if (session!.targetPace != null)
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
                   Text(
-                    session!.targetPace!,
+                    _dayNames[dayOfWeek],
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w800,
+                      color: palette.text,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    isRest ? 'Descanso' : session!.type,
                     style: TextStyle(color: palette.muted),
                   ),
-              ],
+                ],
+              ),
             ),
-        ],
+            if (!isRest)
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    _distanceLabel(session!),
+                    style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.w900,
+                      color: palette.secondary,
+                    ),
+                  ),
+                  if (session!.targetPace != null)
+                    Text(
+                      session!.targetPace!,
+                      style: TextStyle(color: palette.muted),
+                    ),
+                ],
+              ),
+          ],
+        ),
       ),
     );
+  }
+
+  void _openSessionDetail(BuildContext context) {
+    if (session == null || week == null) return;
+    context.go('/session-detail', extra: {
+      'session': session,
+      'week': week,
+    });
   }
 
   String _distanceLabel(PlanSession session) {
@@ -1451,6 +1573,7 @@ class _MonthlyWeekCard extends StatelessWidget {
   final String summary;
   final double totalDistance;
   final String status;
+  final bool isRecoveryWeek;
   final Color statusColor;
 
   const _MonthlyWeekCard({
@@ -1459,6 +1582,7 @@ class _MonthlyWeekCard extends StatelessWidget {
     required this.summary,
     required this.totalDistance,
     required this.status,
+    required this.isRecoveryWeek,
     required this.statusColor,
   });
 
@@ -1468,51 +1592,67 @@ class _MonthlyWeekCard extends StatelessWidget {
 
     return AppPanel(
       margin: const EdgeInsets.only(bottom: 8),
+      color: isRecoveryWeek ? palette.surfaceAlt : null,
       borderColor: status == 'ATUAL'
           ? palette.primary.withValues(alpha: 0.45)
-          : palette.border,
-      child: Row(
+          : isRecoveryWeek
+              ? palette.secondary.withValues(alpha: 0.3)
+              : palette.border,
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Sem $weekNumber  Foco: $focus',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800,
-                    color: palette.text,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  summary,
-                  style: TextStyle(color: palette.muted, height: 1.5),
-                ),
-              ],
+          if (isRecoveryWeek)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: AppTag(
+                label: 'SEMANA DE RECUPERAÇÃO (3:1)',
+                color: palette.secondary.withValues(alpha: 0.7),
+              ),
             ),
-          ),
-          const SizedBox(width: 16),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                '${totalDistance.toStringAsFixed(0)}K',
-                style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.w900,
-                  color: palette.secondary,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Sem $weekNumber  Foco: $focus',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                        color: palette.text,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      summary,
+                      style: TextStyle(color: palette.muted, height: 1.5),
+                    ),
+                  ],
                 ),
               ),
-              Text(
-                status,
-                style: TextStyle(
-                  color: statusColor,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 0.08,
-                ),
+              const SizedBox(width: 16),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    '${totalDistance.toStringAsFixed(0)}K',
+                    style: TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.w900,
+                      color: palette.secondary,
+                    ),
+                  ),
+                  Text(
+                    status,
+                    style: TextStyle(
+                      color: statusColor,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.08,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),

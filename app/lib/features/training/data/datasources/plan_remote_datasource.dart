@@ -28,8 +28,8 @@ class PlanRemoteDatasource {
       data: {
         'goal': goal,
         'level': level,
-        'weeksCount': ?weeksCount,
-        'frequency': ?frequency,
+        if (weeksCount != null) 'weeksCount': weeksCount,
+        if (frequency != null) 'frequency': frequency,
       },
     );
     return (res.data as Map<String, dynamic>)['planId'] as String;

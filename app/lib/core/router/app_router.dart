@@ -14,6 +14,7 @@ import 'package:runnin/features/run/presentation/pages/prep_page.dart';
 import 'package:runnin/features/run/presentation/pages/active_run_page.dart';
 import 'package:runnin/features/run/presentation/pages/report_page.dart';
 import 'package:runnin/features/training/presentation/pages/training_page.dart';
+import 'package:runnin/features/training/presentation/pages/session_detail_page.dart';
 import 'package:runnin/features/coach/presentation/pages/coach_chat_page.dart';
 import 'package:runnin/features/history/presentation/pages/benchmark_page.dart';
 import 'package:runnin/features/history/presentation/pages/coach_conversation_page.dart';
@@ -147,6 +148,18 @@ final appRouter = GoRouter(
       routes: [
         GoRoute(path: '/home', builder: (_, _) => const HomePage()),
         GoRoute(path: '/training', builder: (_, _) => const TrainingPage()),
+        GoRoute(
+          path: '/session-detail',
+          builder: (_, state) {
+            final extra = state.extra as Map<String, dynamic>?;
+            final session = extra?['session'] as PlanSession?;
+            final week = extra?['week'] as PlanWeek?;
+            if (session == null || week == null) {
+              return const Center(child: Text('Sessão não encontrada'));
+            }
+            return SessionDetailPage(session: session, week: week);
+          },
+        ),
         GoRoute(path: '/coach', builder: (_, _) => const CoachChatPage()),
         GoRoute(path: '/history', builder: (_, _) => const HistoryPage()),
         GoRoute(
