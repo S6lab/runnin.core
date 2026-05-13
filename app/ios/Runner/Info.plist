@@ -66,5 +66,9 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSHealthShareUsageDescription</key>
+	<string>O Runnin precisa acessar seus dados de saúde para monitorar sua frequência cardíaca, sono e atividades durante os treinos.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>O Runnin precisa atualizar seus dados de saúde para registrar treinos e atividades.</string>
 </dict>
 </plist>
