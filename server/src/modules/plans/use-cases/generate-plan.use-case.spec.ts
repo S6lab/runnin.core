@@ -4,6 +4,11 @@ import { UserRepository } from '@modules/users/domain/user.repository';
 import { Plan, PlanWeek } from '../domain/plan.entity';
 import { UserProfile } from '@modules/users/domain/user.entity';
 
+// Mock uuid
+jest.mock('uuid', () => ({
+  v4: jest.fn(() => 'mock-uuid'),
+}));
+
 // Mock repositories
 const mockPlanRepo: jest.Mocked<PlanRepository> = {
   findById: jest.fn(),

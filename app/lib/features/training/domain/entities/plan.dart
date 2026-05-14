@@ -5,6 +5,11 @@ class PlanSession {
   final double distanceKm;
   final String? targetPace;
   final String notes;
+  final String warmupDuration;
+  final String cooldownDuration;
+  final List<String> instructions;
+  final int? targetHeartRateMin;
+  final int? targetHeartRateMax;
 
   const PlanSession({
     required this.id,
@@ -13,6 +18,11 @@ class PlanSession {
     required this.distanceKm,
     this.targetPace,
     required this.notes,
+    this.warmupDuration = '10 min',
+    this.cooldownDuration = '5 min',
+    this.instructions = const [],
+    this.targetHeartRateMin,
+    this.targetHeartRateMax,
   });
 
   factory PlanSession.fromJson(Map<String, dynamic> j) => PlanSession(
@@ -22,6 +32,11 @@ class PlanSession {
     distanceKm: (j['distanceKm'] as num).toDouble(),
     targetPace: j['targetPace'] as String?,
     notes: j['notes'] as String? ?? '',
+    warmupDuration: j['warmupDuration'] as String? ?? '10 min',
+    cooldownDuration: j['cooldownDuration'] as String? ?? '5 min',
+    instructions: List<String>.from(j['instructions'] ?? []),
+    targetHeartRateMin: j['targetHeartRateMin'] as int?,
+    targetHeartRateMax: j['targetHeartRateMax'] as int?,
   );
 }
 

@@ -34,7 +34,7 @@ This document outlines the steps needed to complete the production configuration
 3. Find "Google" in the providers list
 4. Click "Enable"
 5. Configure:
-   - **Public-facing name**: "Runnin"
+   - **Public-facing name**: "runnin.ai"
    - **Support email**: (select project support email)
 6. Click "Save"
 

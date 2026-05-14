@@ -1,5 +1,21 @@
 export type RunnerLevel = 'iniciante' | 'intermediario' | 'avancado';
 
+export interface RunAlertPreferences {
+  paceAlertsEnabled: boolean;
+  paceAlertFrequency: 'every_km' | 'every_500m' | 'off';
+  hrZoneAlertsEnabled: boolean;
+  distanceMilestonesEnabled: boolean;
+  distanceMilestones: number[];
+  timeMilestonesEnabled: boolean;
+  timeMilestones: number[];
+}
+
+export interface MusicPreferences {
+  serviceEnabled: boolean;
+  lastService?: 'device' | 'spotify' | 'youtube_music' | 'apple_music';
+  lastVolume: number;
+}
+
 export interface UserProfile {
   id: string;
   name: string;
@@ -21,6 +37,8 @@ export interface UserProfile {
   lastOnboardingAt?: string;
   operatorId?: string;
   onboarded: boolean;
+  runAlertPreferences?: RunAlertPreferences;
+  musicPreferences?: MusicPreferences;
   createdAt: string;
   updatedAt: string;
 }

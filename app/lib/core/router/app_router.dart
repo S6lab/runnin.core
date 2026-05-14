@@ -127,7 +127,14 @@ final appRouter = GoRouter(
           path: '/coach-intro',
           builder: (_, _) => const CoachIntroPage(),
         ),
-        GoRoute(path: '/prep', builder: (_, _) => const PrepPage()),
+        GoRoute(
+          path: '/prep',
+          builder: (_, state) {
+            final extra = state.extra as Map<String, dynamic>?;
+            final session = extra?['session'] as PlanSession?;
+            return PrepPage(session: session);
+          },
+        ),
         GoRoute(
           path: '/run',
           builder: (_, state) =>

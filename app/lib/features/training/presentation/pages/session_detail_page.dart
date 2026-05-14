@@ -45,7 +45,7 @@ class SessionDetailPage extends StatelessWidget {
                     const SizedBox(height: 16),
                     _SessionDescription(session: session),
                     const SizedBox(height: 16),
-                    _SessionActions(session: session, planId: planId),
+                    _SessionActions(session: session, week: week, planId: planId),
                     const SizedBox(height: 24),
                   ],
                 ),
@@ -244,9 +244,10 @@ class _SessionDescription extends StatelessWidget {
 
 class _SessionActions extends StatefulWidget {
   final PlanSession session;
+  final PlanWeek week;
   final String planId;
 
-  const _SessionActions({required this.session, required this.planId});
+  const _SessionActions({required this.session, required this.week, required this.planId});
 
   @override
   State<_SessionActions> createState() => _SessionActionsState();
@@ -308,7 +309,21 @@ class _SessionActionsState extends State<_SessionActions> {
   }
 
   void _startRun(BuildContext context) {
-    context.go('/prep');
+    if (widget.session == null || widget.week == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Não foi possível iniciar a corrida'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+    
+    context.push('/prep', extra: {
+      'session': widget.session,
+      'week': widget.week,
+      'planId': widget.planId,
+    });
   }
 
   Future<void> _markComplete() async {

@@ -30,15 +30,15 @@ class RunCoachRemoteDatasource {
     final res = await _dio.post<Object>(
       '/coach/message',
       data: {
-        'runId': ?runId,
+        'runId': runId,
         'event': event,
-        'runType': ?runType,
+        'runType': runType,
         'currentPaceMinKm': currentPaceMinKm,
         'distanceM': distanceM,
         'elapsedS': elapsedS,
-        'targetPaceMinKm': ?targetPaceMinKm,
-        'targetDistance': ?targetDistance,
-        'kmReached': ?kmReached,
+        'targetPaceMinKm': targetPaceMinKm,
+        'targetDistance': targetDistance,
+        'kmReached': kmReached,
       },
       options: Options(
         responseType: ResponseType.stream,
@@ -48,7 +48,7 @@ class RunCoachRemoteDatasource {
 
     final body = res.data;
     if (body is! ResponseBody) {
-      throw Exception('Resposta invalida do coach em tempo real.');
+      throw Exception('Resposta inválida do coach em tempo real.');
     }
 
     await for (final line

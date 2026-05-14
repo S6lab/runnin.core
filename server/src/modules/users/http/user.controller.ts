@@ -5,6 +5,10 @@ import { UpsertProfileUseCase, UpsertProfileSchema } from '../domain/use-cases/u
 import { CompleteOnboardingUseCase, CompleteOnboardingSchema } from '../domain/use-cases/complete-onboarding.use-case';
 import { ProvisionUserSchema, ProvisionUserUseCase } from '../domain/use-cases/provision-user.use-case';
 import { ActivateTrialUseCase } from '../domain/use-cases/activate-trial.use-case';
+import { GetRunPreferencesUseCase } from '../domain/use-cases/get-run-preferences.use-case';
+import { UpdateRunPreferencesUseCase, UpdateRunPreferencesSchema } from '../domain/use-cases/update-run-preferences.use-case';
+import { GetMusicPreferencesUseCase } from '../domain/use-cases/get-music-preferences.use-case';
+import { UpdateMusicPreferencesUseCase, UpdateMusicPreferencesSchema } from '../domain/use-cases/update-music-preferences.use-case';
 
 const repo = new FirestoreUserRepository();
 const getProfile = new GetProfileUseCase(repo);
@@ -12,6 +16,10 @@ const upsertProfile = new UpsertProfileUseCase(repo);
 const completeOnboarding = new CompleteOnboardingUseCase(repo);
 const provisionUser = new ProvisionUserUseCase(repo);
 const activateTrial = new ActivateTrialUseCase(repo);
+const getRunPreferences = new GetRunPreferencesUseCase(repo);
+const updateRunPreferences = new UpdateRunPreferencesUseCase(repo);
+const getMusicPreferences = new GetMusicPreferencesUseCase(repo);
+const updateMusicPreferences = new UpdateMusicPreferencesUseCase(repo);
 
 export async function getMe(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
@@ -56,6 +64,44 @@ export async function postActivateTrial(req: Request, res: Response, next: NextF
   try {
     const user = await activateTrial.execute(req.uid);
     res.json(user);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function getRunPreferencesEndpoint(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const preferences = await getRunPreferences.execute(req.uid);
+    res.json(preferences);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function patchRunPreferences(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const input = UpdateRunPreferencesSchema.parse(req.body);
+    const user = await updateRunPreferences.execute(req.uid, input);
+    res.json(user.runAlertPreferences);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function getMusicPreferencesEndpoint(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const preferences = await getMusicPreferences.execute(req.uid);
+    res.json(preferences);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function patchMusicPreferences(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const input = UpdateMusicPreferencesSchema.parse(req.body);
+    const user = await updateMusicPreferences.execute(req.uid, input);
+    res.json(user.musicPreferences);
   } catch (err) {
     next(err);
   }
