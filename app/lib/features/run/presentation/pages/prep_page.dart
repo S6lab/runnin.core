@@ -1,13 +1,18 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_bloc/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:dio/dio.dart';
+import 'package:runnin/core/alerts/alert_settings_service.dart';
 import 'package:runnin/core/audio/coach_audio_player.dart';
+import 'package:runnin/core/network/api_client.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 import 'package:runnin/features/run/data/datasources/run_coach_remote_datasource.dart';
 import 'package:runnin/features/run/presentation/bloc/run_bloc.dart';
+import 'package:runnin/shared/widgets/music_player_widget.dart';
 import 'package:runnin/features/training/domain/entities/plan.dart';
 
 export 'package:runnin/features/coach/data/coach_data.dart';
@@ -344,7 +349,7 @@ class _PrepViewState extends State<_PrepView> {
                         _AlertConfigurationPanel(),
                         const SizedBox(height: 14),
                         // Music player controls
-                        _MusicPlayerSection(),
+                        const MusicPlayerWidget(),
                     ],
                   ),
                 ),
@@ -529,14 +534,16 @@ class _WarmupGuidanceSection extends StatefulWidget {
 class _WarmupGuidanceSectionState extends State<_WarmupGuidanceSection> {
   String? _briefingText;
   bool _loading = false;
+  late final Dio _dio;
 
   @override
   void initState() {
     super.initState();
+    _dio = apiClient;
+    
     if (widget.briefing != null) {
       _briefingText = widget.briefing.text ?? '';
     } else if (!widget.loading) {
-      // Simulate fetching briefing for demo purposes
       _fetchBriefing();
     }
   }
@@ -544,21 +551,33 @@ class _WarmupGuidanceSectionState extends State<_WarmupGuidanceSection> {
   Future<void> _fetchBriefing() async {
     setState(() => _loading = true);
     
-    await Future.delayed(const Duration(milliseconds: 500));
-    
-    final briefingMap = {
-      'Interval Run': 'Complete 3-5 min de aquecimento progressivo. Inclua 2x30s de acelerações para preparar o corpo para os intervalos.',
-      'Tempo Run': '10-15 min de aquecimento leve. Foco em mobilidade e postura para manter o ritmo constante durante a sessão.',
-      'Long Run': '15-20 min de aquecimento suave. Atenção a hidratação e preparação mental para a longa distância.',
-      'Free Run': 'Aquecimento livre de 5-10 min. Ajuste conforme sua disposição no momento.',
-      'Race': '8-12 min de aquecimento dinâmico. Prepare o corpo para a intensidade da corrida.',
-    };
-    
-    setState(() {
+    try {
+      final response = await _dio.post('/warmup/guidance', data: {
+        'sessionType': widget.sessionType,
+      });
+      
+      if (!mounted) return;
+      
+      final data = response.data as Map<String, dynamic>;
+      _briefingText = data['guidance'] as String?;
+      
+      setState(() => _loading = false);
+    } catch (e) {
+      if (!mounted) return;
+      
+      final briefingMap = {
+        'Intervalado': 'Complete 3-5 min de aquecimento progressivo. Inclua 2x30s de acelerações para preparar o corpo para os intervalos.',
+        'Tempo Run': '10-15 min de aquecimento leve. Foco em mobilidade e postura para manter o ritmo constante durante a sessão.',
+        'Long Run': '15-20 min de aquecimento suave. Atenção a hidratação e preparação mental para a longa distância.',
+        'Free Run': 'Aquecimento livre de 5-10 min. Ajuste conforme sua disposição no momento.',
+        'Corrida': '8-12 min de aquecimento dinâmico. Prepare o corpo para a intensidade da corrida.',
+      };
+      
       _briefingText = briefingMap[widget.sessionType] ??
           'Configure seu aquecimento personalizado.';
-      _loading = false;
-    });
+      
+      setState(() => _loading = false);
+    }
   }
 
   @override
@@ -637,9 +656,75 @@ class _AlertConfigurationPanel extends StatefulWidget {
 
 class _AlertConfigurationPanelState
     extends State<_AlertConfigurationPanel> {
+  late final AlertSettingsService _alertService;
   bool _paceAlertEnabled = false;
   bool _heartRateAlertEnabled = false;
   bool _distanceMarkAlertEnabled = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _alertService = AlertSettingsService();
+    _loadAlerts();
+  }
+
+  Future<void> _loadAlerts() async {
+    try {
+      final settings = _alertService.settings;
+      if (!mounted) return;
+      setState(() {
+        _paceAlertEnabled = settings.paceAlertEnabled;
+        _heartRateAlertEnabled = settings.heartRateAlertEnabled;
+        _distanceMarkAlertEnabled = settings.distanceMarkAlertEnabled;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _paceAlertEnabled = false;
+        _heartRateAlertEnabled = false;
+        _distanceMarkAlertEnabled = true;
+      });
+    }
+  }
+
+  Future<void> _updatePaceAlert(bool value) async {
+    try {
+      await _alertService.updatePaceAlert(value);
+      if (!mounted) return;
+      setState(() => _paceAlertEnabled = value);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Erro ao atualizar alerta de ritmo')),
+      );
+    }
+  }
+
+  Future<void> _updateHeartRateAlert(bool value) async {
+    try {
+      await _alertService.updateHeartRateAlert(value);
+      if (!mounted) return;
+      setState(() => _heartRateAlertEnabled = value);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Erro ao atualizar alerta de frequência cardíaca')),
+      );
+    }
+  }
+
+  Future<void> _updateDistanceMarkAlert(bool value) async {
+    try {
+      await _alertService.updateDistanceMarkAlert(value);
+      if (!mounted) return;
+      setState(() => _distanceMarkAlertEnabled = value);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Erro ao atualizar alerta de marcas de distância')),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -669,23 +754,21 @@ class _AlertConfigurationPanelState
             label: 'Ritmo (kms)',
             subLabel: 'Alerta quando o ritmo sair da faixa',
             enabled: _paceAlertEnabled,
-            onChanged: (value) => setState(() => _paceAlertEnabled = value),
+            onChanged: (value) => _updatePaceAlert(value),
           ),
           const SizedBox(height: 12),
           _AlertToggle(
             label: 'Frequência cardíaca',
             subLabel: 'Monitora zonas de FCemax e alerta se sair delas',
             enabled: _heartRateAlertEnabled,
-            onChanged: (value) =>
-                setState(() => _heartRateAlertEnabled = value),
+            onChanged: (value) => _updateHeartRateAlert(value),
           ),
           const SizedBox(height: 12),
           _AlertToggle(
             label: 'Marcas de distância',
             subLabel: 'Notificações em marcas como 5km, 10km, meia maratona',
             enabled: _distanceMarkAlertEnabled,
-            onChanged: (value) =>
-                setState(() => _distanceMarkAlertEnabled = value),
+            onChanged: (value) => _updateDistanceMarkAlert(value),
           ),
         ],
       ),
@@ -762,197 +845,6 @@ class _AlertToggle extends StatelessWidget {
           activeColor: palette.primary,
         ),
       ],
-    );
-  }
-}
-
-class _MusicPlayerSection extends StatefulWidget {
-  @override
-  State<_MusicPlayerSection> createState() => _MusicPlayerSectionState();
-}
-
-class _MusicPlayerSectionState extends State<_MusicPlayerSection> {
-  bool _musicPlaying = false;
-  bool _audioDuckingEnabled = true;
-  double _volume = 0.7;
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.runninPalette;
-    final type = context.runninType;
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: palette.surface,
-        border: Border.all(color: palette.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(Icons.music_note_rounded, color: palette.primary),
-          const SizedBox(height: 8),
-          Text('MÚSICA', style: type.labelCaps),
-          const SizedBox(height: 12),
-          Text(
-            'Controle sua playlist com Audio Ducking.',
-            style: type.bodySm.copyWith(color: palette.muted),
-          ),
-          const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                _MusicIconButton(
-                  icon: Icons.skip_previous_rounded,
-                  onTap: () {},
-                ),
-                _MusicPlayButton(
-                  playing: _musicPlaying,
-                  onTap: () => setState(() => _musicPlaying = !_musicPlaying),
-                ),
-                _MusicIconButton(
-                  icon: Icons.skip_next_rounded,
-                  onTap: () {},
-                ),
-              ],
-            ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(
-                          Icons.volume_up_rounded,
-                          size: 18,
-                          color: palette.primary,
-                        ),
-                        const SizedBox(width: 8),
-                        Text('Volume', style: type.bodySm),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    Slider(
-                      value: _volume,
-                      onChanged: (value) => setState(() => _volume = value),
-                      activeColor: palette.primary,
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Text('Audio Ducking',
-                            style: type.bodySm.copyWith(
-                                color: palette.muted)),
-                        const SizedBox(width: 8),
-                        if (_audioDuckingEnabled)
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: palette.primary
-                                  .withValues(alpha: 0.15),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text('Auto',
-                                style: type.labelSmall
-                                    .copyWith(color: palette.primary)),
-                          )
-                        else
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: palette.muted
-                                  .withValues(alpha: 0.15),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                                'Manual', style: type.labelSmall
-                                    .copyWith(color: palette.muted)),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Reduce volume de música durante compassos do Coach',
-                      style: type.bodySm.copyWith(color: palette.muted),
-                    ),
-                  ],
-                ),
-              ),
-              Switch(
-                value: _audioDuckingEnabled,
-                onChanged: (value) =>
-                    setState(() => _audioDuckingEnabled = value),
-                activeColor: palette.primary,
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _MusicIconButton extends StatelessWidget {
-  final IconData icon;
-  final VoidCallback onTap;
-
-  const _MusicIconButton({
-    required this.icon,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.runninPalette;
-
-    return IconButton(
-      onPressed: onTap,
-      icon: Icon(icon, color: palette.muted),
-      splashColor: Colors.transparent,
-      highlightColor: Colors.transparent,
-    );
-  }
-}
-
-class _MusicPlayButton extends StatelessWidget {
-  final bool playing;
-  final VoidCallback onTap;
-
-  const _MusicPlayButton({
-    required this.playing,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.runninPalette;
-
-    return IconButton(
-      onPressed: onTap,
-      icon: Icon(
-        playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
-        color: palette.primary,
-        size: 36,
-      ),
-      splashColor: Colors.transparent,
-      highlightColor: Colors.transparent,
     );
   }
 }

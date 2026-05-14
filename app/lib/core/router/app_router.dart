@@ -15,6 +15,7 @@ import 'package:runnin/features/run/presentation/pages/active_run_page.dart';
 import 'package:runnin/features/run/presentation/pages/report_page.dart';
 import 'package:runnin/features/training/presentation/pages/training_page.dart';
 import 'package:runnin/features/training/presentation/pages/session_detail_page.dart';
+import 'package:runnin/features/training/presentation/pages/week_detail_page.dart';
 import 'package:runnin/features/coach/presentation/pages/coach_chat_page.dart';
 import 'package:runnin/features/history/presentation/pages/benchmark_page.dart';
 import 'package:runnin/features/history/presentation/pages/coach_conversation_page.dart';
@@ -132,7 +133,9 @@ final appRouter = GoRouter(
           builder: (_, state) {
             final extra = state.extra as Map<String, dynamic>?;
             final session = extra?['session'] as PlanSession?;
-            return PrepPage(session: session);
+            final week = extra?['week'] as PlanWeek?;
+            final planId = extra?['planId'] as String?;
+            return PrepPage(session: session, week: week, planId: planId);
           },
         ),
         GoRoute(
@@ -155,6 +158,19 @@ final appRouter = GoRouter(
       routes: [
         GoRoute(path: '/home', builder: (_, _) => const HomePage()),
         GoRoute(path: '/training', builder: (_, _) => const TrainingPage()),
+        GoRoute(
+          path: '/week-detail',
+          builder: (_, state) {
+            final extra = state.extra as Map<String, dynamic>?;
+            final week = extra?['week'] as PlanWeek?;
+            final sessions = extra?['sessions'] as List<PlanSession>?;
+            final planId = extra?['planId'] as String?;
+            if (week == null || sessions == null || planId == null) {
+              return const Center(child: Text('Semana não encontrada'));
+            }
+            return WeekDetailPage(week: week, sessions: sessions, planId: planId);
+          },
+        ),
         GoRoute(
           path: '/session-detail',
           builder: (_, state) {

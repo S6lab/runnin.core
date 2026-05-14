@@ -55,6 +55,10 @@ dependencies:
   firebase_storage: ^12.4.10
   file_picker: ^11.0.2
 
+  # Audio
+  just_audio: ^0.9.36
+  audio_session: ^0.1.18
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
