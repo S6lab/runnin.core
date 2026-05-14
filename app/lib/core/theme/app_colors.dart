@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 class AppColors {
   AppColors._();
 
-  static const background = Color(0xFF0A0A0A);
+  static const background = Color(0xFF050510);
   static const surface = Color(0xFF111111);
   static const border = Color(0xFF1E1E1E);
 
