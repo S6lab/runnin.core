@@ -168,7 +168,8 @@ enum RunninSkin {
   artico,
   magenta,
   sangue,
-  volt;
+  volt,
+  cyber;
 
   RunninPalette get palette {
     switch (this) {
@@ -239,6 +240,23 @@ enum RunninSkin {
           success: Color(0xFF32D17C),
           warning: Color(0xFFFFC93C),
           error: Color(0xFFFF5B66),
+        );
+      case RunninSkin.cyber:
+        return const RunninPalette(
+          id: 'cyber',
+          label: 'Cyber',
+          background: Color(0xFF050510),
+          surface: Color(0xFF0A0A1A),
+          surfaceAlt: Color(0xFF0F0F20),
+          border: Color(0xFF1A1A30),
+          text: Color(0xFFFFFFFF),
+          muted: Color(0xFF8C8CA0),
+          primary: Color(0xFF00D4FF),
+          secondary: Color(0xFFFF6B35),
+          tertiary: Color(0xFF4D7DFF),
+          success: Color(0xFF25C56B),
+          warning: Color(0xFFF3BF31),
+          error: Color(0xFFFF4D5A),
         );
     }
   }

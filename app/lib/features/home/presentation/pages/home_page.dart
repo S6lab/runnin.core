@@ -2,6 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:runnin/core/router/app_router.dart';
 import 'package:runnin/core/theme/app_palette.dart';
@@ -14,9 +15,6 @@ import 'package:runnin/features/run/domain/entities/run.dart';
 import 'package:runnin/shared/widgets/app_panel.dart';
 import 'package:runnin/shared/widgets/app_tag.dart';
 import 'package:runnin/shared/widgets/notification_tile.dart';
-
-const _homeHeroImageUrl =
-    'https://images.unsplash.com/photo-1707741099794-252b0409230e?auto=format&fit=crop&w=1200&q=80';
 
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
@@ -94,18 +92,20 @@ class _HomeViewState extends State<_HomeView> {
                       onRetry: () => context.read<HomeCubit>().load(),
                     ),
                   ] else if (state is HomeLoaded) ...[
+                    _CyberStatusBar(data: state.data),
+                    const SizedBox(height: 20),
                     _IniciarSessaoButton(data: state.data),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 24),
                     const _CoachNotifications(),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 24),
                     _SemanaSection(data: state.data),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 24),
                     _CoachAiWeeklySummary(data: state.data),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 24),
                     _PerformanceSection(data: state.data),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 24),
                     _StatusCorporalSection(data: state.data),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 24),
                     _UltimaCorrida(run: state.data.latestRun),
                   ] else ...[
                     const _LoadingCard(),
@@ -130,26 +130,31 @@ class _HomeHeader extends StatelessWidget {
     final palette = context.runninPalette;
     final user = FirebaseAuth.instance.currentUser;
 
+    // Cyber theme: Use JetBrains Mono for header
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Row(
           children: [
             Text(
-              'RUNIN',
-              style: context.runninType.displaySm.copyWith(fontSize: 16),
+              'RUNNIN',
+              style: GoogleFonts.jetBrainsMono(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 1.4,
+                color: palette.text,
+              ),
             ),
-            const SizedBox(width: 6),
+            const SizedBox(width: 4),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
               decoration: BoxDecoration(color: palette.primary),
               child: Text(
                 '.AI',
-                style: TextStyle(
+                style: GoogleFonts.jetBrainsMono(
                   color: palette.background,
                   fontSize: 9,
                   fontWeight: FontWeight.w900,
-                  letterSpacing: 0.05,
                 ),
               ),
             ),
@@ -208,169 +213,150 @@ class _HomeHeader extends StatelessWidget {
   }
 }
 
-// ─── Iniciar Sessão ───────────────────────────────────────────────────────────
+// ─── Cyber Status Bar ─────────────────────────────────────────────────────────
 
-class _IniciarSessaoButton extends StatelessWidget {
+class _CyberStatusBar extends StatelessWidget {
   final HomeData data;
-  const _IniciarSessaoButton({required this.data});
+  const _CyberStatusBar({required this.data});
 
   @override
   Widget build(BuildContext context) {
-    if (data.plan == null) {
-      return _HomeHeroShell(
-        borderColor: context.runninPalette.primary.withValues(alpha: 0.35),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            AppTag(label: 'PLANO', color: context.runninPalette.primary),
-            const SizedBox(height: 14),
-            Text(
-              'Seu app ja esta pronto para gerar o primeiro bloco de treino.',
-              style: context.runninType.displaySm,
-            ),
-            const SizedBox(height: 10),
-            Text(
-              'Complete o setup no modulo de treino para liberar a sessao do dia.',
-              style: TextStyle(
-                color: context.runninPalette.text.withValues(alpha: 0.8),
-                height: 1.5,
-              ),
-            ),
-            const SizedBox(height: 18),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () => context.push('/training'),
-                child: const Text('GERAR MEU PLANO'),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    if (data.plan!.isGenerating) {
-      return AppPanel(
-        child: Column(
-          children: [
-            CircularProgressIndicator(
-              color: context.runninPalette.primary,
-              strokeWidth: 2,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Gerando seu plano...',
-              style: TextStyle(color: context.runninPalette.muted),
-            ),
-          ],
-        ),
-      );
-    }
-
     final palette = context.runninPalette;
-    final session = data.todaySession;
-    final isFreeRun = session == null;
+    final user = FirebaseAuth.instance.currentUser;
+    final now = DateTime.now();
+    final greeting = _greeting(now.hour);
+    final firstName = user?.displayName?.split(' ').firstOrNull ?? 'ATLETA';
+    final dateLabel = _formatDate(now);
 
-    return _HomeHeroShell(
-      borderColor: isFreeRun
-          ? palette.border
-          : palette.primary.withValues(alpha: 0.45),
+    return Container(
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(
+            color: palette.text.withValues(alpha: 0.06),
+            width: 1,
+          ),
+        ),
+      ),
+      padding: const EdgeInsets.fromLTRB(0, 0, 0, 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Text('HOJE', style: context.runninType.displaySm),
-              const SizedBox(width: 8),
-              AppTag(
-                label: isFreeRun ? 'LIVRE' : session.type.toUpperCase(),
-                color: isFreeRun ? palette.muted : palette.primary,
-              ),
-              const Spacer(),
               Text(
-                isFreeRun ? 'SEM SESSAO' : 'PLANO',
-                style: context.runninType.labelCaps,
+                '● ',
+                style: GoogleFonts.jetBrainsMono(
+                  color: palette.primary,
+                  fontSize: 12,
+                  letterSpacing: 0.96,
+                ),
+              ),
+              Text(
+                '$dateLabel — $greeting, ${firstName.toUpperCase()}',
+                style: GoogleFonts.jetBrainsMono(
+                  color: palette.text.withValues(alpha: 0.6),
+                  fontSize: 12,
+                  letterSpacing: 0.96,
+                ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          if (session == null) ...[
-            Text(
-              'Nenhuma sessao planejada para hoje.',
-              style: context.runninType.displaySm.copyWith(fontSize: 18),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              data.plan == null
-                  ? 'Gere um plano para o coach montar a agenda da semana. Enquanto isso, voce pode registrar uma corrida livre.'
-                  : 'Use uma corrida livre ou revise a distribuicao da semana no modulo de treino.',
-              style: TextStyle(
-                color: palette.text.withValues(alpha: 0.78),
-                height: 1.5,
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              _DeviceChip(
+                label: 'WATCH',
+                icon: Icons.watch_outlined,
+                active: data.profile?.hasWearable == true,
+                palette: palette,
               ),
-            ),
-          ] else ...[
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  _formatKm(session.distanceKm).replaceAll(' km', 'K'),
-                  style: context.runninType.dataMd.copyWith(
-                    color: palette.text,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      session.targetPace ?? 'PACE LIVRE',
-                      style: TextStyle(
-                        color: palette.secondary,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                    Text(
-                      session.targetPace == null ? 'sem alvo definido' : '/km',
-                      style: TextStyle(color: palette.muted, fontSize: 11),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.only(left: 12),
-              decoration: BoxDecoration(
-                border: Border(
-                  left: BorderSide(color: palette.secondary, width: 3),
-                ),
+              const SizedBox(width: 8),
+              _DeviceChip(
+                label: 'AUDIO',
+                icon: Icons.headphones_outlined,
+                active: false,
+                palette: palette,
               ),
-              child: Text(
-                session.notes.trim().isNotEmpty
-                    ? session.notes
-                    : 'Mantenha o treino controlado e priorize consistencia. Ajuste o ritmo se sinais de fadiga aparecerem.',
-                style: TextStyle(
-                  color: palette.text.withValues(alpha: 0.82),
-                  height: 1.5,
-                ),
-              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _greeting(int hour) {
+    if (hour < 12) return 'BOM DIA';
+    if (hour < 18) return 'BOA TARDE';
+    return 'BOA NOITE';
+  }
+
+  String _formatDate(DateTime d) {
+    const months = [
+      '',
+      'JAN',
+      'FEV',
+      'MAR',
+      'ABR',
+      'MAI',
+      'JUN',
+      'JUL',
+      'AGO',
+      'SET',
+      'OUT',
+      'NOV',
+      'DEZ',
+    ];
+    final day = d.day.toString().padLeft(2, '0');
+    return '$day.${months[d.month]}.${d.year}';
+  }
+}
+
+class _DeviceChip extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final bool active;
+  final RunninPalette palette;
+
+  const _DeviceChip({
+    required this.label,
+    required this.icon,
+    required this.active,
+    required this.palette,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: palette.text.withValues(alpha: 0.06),
+        border: Border.all(
+          color: palette.text.withValues(alpha: 0.08),
+          width: 1.5,
+        ),
+        borderRadius: BorderRadius.circular(2),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(
+              color: active
+                  ? palette.primary
+                  : palette.text.withValues(alpha: 0.15),
+              shape: BoxShape.circle,
             ),
-          ],
-          const SizedBox(height: 18),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              onPressed: () => context.push('/prep'),
-              icon: const Icon(Icons.play_arrow, size: 20),
-              label: Text(
-                session != null ? 'INICIAR SESSAO' : 'INICIAR CORRIDA LIVRE',
-                style: const TextStyle(
-                  letterSpacing: 0.1,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
+          ),
+          const SizedBox(width: 6),
+          Icon(icon, size: 12, color: palette.text.withValues(alpha: 0.5)),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: GoogleFonts.jetBrainsMono(
+              color: palette.text.withValues(alpha: 0.5),
+              fontSize: 10,
+              letterSpacing: 0.8,
             ),
           ),
         ],
@@ -379,52 +365,345 @@ class _IniciarSessaoButton extends StatelessWidget {
   }
 }
 
-class _HomeHeroShell extends StatelessWidget {
-  final Widget child;
-  final Color borderColor;
+// ─── Iniciar Sessão ───────────────────────────────────────────────────────────
 
-  const _HomeHeroShell({required this.child, required this.borderColor});
+class _IniciarSessaoButton extends StatelessWidget {
+  final HomeData data;
+  const _IniciarSessaoButton({required this.data});
 
   @override
   Widget build(BuildContext context) {
     final palette = context.runninPalette;
 
-    return Container(
-      clipBehavior: Clip.hardEdge,
-      decoration: BoxDecoration(
-        color: palette.surfaceAlt,
-        border: Border.all(color: borderColor),
-      ),
-      child: Stack(
-        children: [
-          Positioned.fill(
-            child: Image.network(
-              _homeHeroImageUrl,
-              fit: BoxFit.cover,
-              alignment: Alignment.center,
-              errorBuilder: (_, _, _) => Container(color: palette.surfaceAlt),
+    if (data.plan == null) {
+      return _CoachMessageCard(
+        palette: palette,
+        message:
+            'Seu app esta pronto para gerar o primeiro bloco de treino. Complete o setup no modulo de treino para liberar a sessao do dia.',
+        ctaLabel: 'GERAR MEU PLANO ↗',
+        onCta: () => context.push('/training'),
+      );
+    }
+
+    if (data.plan!.isGenerating) {
+      return Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: palette.surface,
+          border: Border.all(color: palette.border),
+        ),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(
+                color: palette.primary,
+                strokeWidth: 1.5,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Text(
+              'Gerando seu plano...',
+              style: GoogleFonts.jetBrainsMono(
+                color: palette.muted,
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final session = data.todaySession;
+
+    // Coach AI message block from Figma
+    final coachMessage = session == null
+        ? 'Nenhuma sessao planejada para hoje. Use uma corrida livre ou revise a distribuicao da semana no modulo de treino.'
+        : 'Easy Run hoje — pace controlado entre ${session.targetPace ?? "livre"} e foco em cadencia e respiracao. Nao acelere nos ultimos 2km.';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _CyberTodayCard(data: data),
+        const SizedBox(height: 16),
+        _CoachMessageCard(
+          palette: palette,
+          message: coachMessage,
+          ctaLabel:
+              session != null ? 'INICIAR SESSAO ↗' : 'INICIAR CORRIDA LIVRE ↗',
+          onCta: () => context.push('/prep'),
+        ),
+      ],
+    );
+  }
+}
+
+class _CoachMessageCard extends StatelessWidget {
+  final RunninPalette palette;
+  final String message;
+  final String ctaLabel;
+  final VoidCallback onCta;
+
+  const _CoachMessageCard({
+    required this.palette,
+    required this.message,
+    required this.ctaLabel,
+    required this.onCta,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: const EdgeInsets.fromLTRB(18, 16, 16, 16),
+          decoration: BoxDecoration(
+            color: palette.secondary.withValues(alpha: 0.02),
+            border: Border(
+              left: BorderSide(color: palette.secondary, width: 2),
             ),
           ),
-          Positioned.fill(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    palette.background.withValues(alpha: 0.70),
-                    palette.background.withValues(alpha: 0.42),
-                    palette.background.withValues(alpha: 0.94),
-                  ],
-                  stops: const [0, 0.42, 1],
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'COACH.AI',
+                style: GoogleFonts.jetBrainsMono(
+                  color: palette.secondary,
+                  fontSize: 11,
+                  letterSpacing: 1.1,
                 ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                message,
+                style: GoogleFonts.jetBrainsMono(
+                  color: palette.text.withValues(alpha: 0.7),
+                  fontSize: 13,
+                  height: 1.65,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        GestureDetector(
+          onTap: onCta,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+            color: palette.primary,
+            child: Text(
+              ctaLabel,
+              style: GoogleFonts.jetBrainsMono(
+                color: palette.background,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 1.2,
               ),
             ),
           ),
-          Padding(padding: const EdgeInsets.all(16), child: child),
+        ),
+      ],
+    );
+  }
+}
+
+class _CyberTodayCard extends StatelessWidget {
+  final HomeData data;
+  const _CyberTodayCard({required this.data});
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    final session = data.todaySession;
+    final now = DateTime.now();
+    final weekNum = _isoWeekNumber(now);
+    final dayName = _dayName(now.weekday);
+    final sessionNum = data.completedSessions + 1;
+
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+          colors: [
+            palette.background,
+            Colors.transparent,
+            Colors.transparent,
+            palette.background,
+          ],
+          stops: const [0, 0.25, 0.5, 1],
+        ),
+      ),
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                'HOJE',
+                style: GoogleFonts.jetBrainsMono(
+                  color: palette.text,
+                  fontSize: 40,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: -2,
+                  height: 0.88,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Text(
+                  '0$sessionNum',
+                  style: GoogleFonts.jetBrainsMono(
+                    color: palette.primary,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.7,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
+                color: palette.primary,
+                child: Text(
+                  session?.type.toUpperCase() ?? 'LIVRE',
+                  style: GoogleFonts.jetBrainsMono(
+                    color: palette.background,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.65,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                '$dayName · SEM $weekNum',
+                style: GoogleFonts.jetBrainsMono(
+                  color: palette.text.withValues(alpha: 0.5),
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ),
+          if (session != null) ...[
+            const SizedBox(height: 16),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  '${_formatKm(session.distanceKm).replaceAll(' km', '')}K',
+                  style: GoogleFonts.jetBrainsMono(
+                    color: palette.text,
+                    fontSize: 64,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -2.5,
+                    height: 0.85,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                if (session.targetPace != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        RichText(
+                          text: TextSpan(
+                            children: [
+                              TextSpan(
+                                text: session.targetPace!,
+                                style: GoogleFonts.jetBrainsMono(
+                                  color: palette.secondary,
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: -0.5,
+                                ),
+                              ),
+                              TextSpan(
+                                text: '/km',
+                                style: GoogleFonts.jetBrainsMono(
+                                  color: palette.text.withValues(alpha: 0.55),
+                                  fontSize: 9,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        RichText(
+                          text: TextSpan(
+                            children: [
+                              TextSpan(
+                                text: '~${_estMin(session.distanceKm, session.targetPace)}',
+                                style: GoogleFonts.jetBrainsMono(
+                                  color: palette.text.withValues(alpha: 0.55),
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: -0.26,
+                                ),
+                              ),
+                              TextSpan(
+                                text: 'min',
+                                style: GoogleFonts.jetBrainsMono(
+                                  color: palette.text.withValues(alpha: 0.55),
+                                  fontSize: 7,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ],
         ],
       ),
     );
+  }
+
+  int _isoWeekNumber(DateTime date) {
+    final doy = date.difference(DateTime(date.year, 1, 1)).inDays + 1;
+    final dow = date.weekday;
+    return ((doy - dow + 10) / 7).floor();
+  }
+
+  String _dayName(int weekday) {
+    const days = [
+      '',
+      'SEGUNDA',
+      'TERCA',
+      'QUARTA',
+      'QUINTA',
+      'SEXTA',
+      'SABADO',
+      'DOMINGO',
+    ];
+    return days[weekday];
+  }
+
+  String _estMin(double km, String? pace) {
+    if (pace == null) return '--';
+    final parts = pace.split(':');
+    if (parts.length != 2) return '--';
+    final min = int.tryParse(parts[0]) ?? 0;
+    final sec = int.tryParse(parts[1]) ?? 0;
+    final totalSec = (min * 60 + sec) * km;
+    return (totalSec / 60).round().toString();
   }
 }
 
