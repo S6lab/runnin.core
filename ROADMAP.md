@@ -1,4 +1,4 @@
-# runrun.ai — Roadmap e Status Atual
+# runnin.ai — Roadmap e Status Atual
 
 > Status em 2026-04-12: app Flutter e backend Node.js publicados, com auth Firebase, onboarding, home, treino, corrida, histórico, coach, dashboard e conta já implementados em diferentes níveis de maturidade.
 > Stack: Flutter (mobile/web) + Node.js TypeScript (Cloud Run) + Firebase.
@@ -9,7 +9,7 @@
 ## Snapshot Atual
 
 - Backend publicado no Cloud Run:
-  - Serviço: `runrun-api`
+  - Serviço: `runrun-api` (legacy technical name; product is runnin.ai)
   - Região: `southamerica-east1`
   - URL: `https://runnin-api-rogiz7losq-rj.a.run.app`
   - Revisão atual: `runrun-api-00003-gvc`

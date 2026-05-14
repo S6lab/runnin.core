@@ -1,8 +1,8 @@
-# Runnin
+# runnin.ai
 
 **AI Running Coach** — Your personal running coach powered by artificial intelligence.
 
-Runnin combines guided onboarding, AI-generated training plans, real-time coaching during runs, and detailed post-run reports to help runners train with more consistency and intelligence.
+runnin.ai combines guided onboarding, AI-generated training plans, real-time coaching during runs, and detailed post-run reports to help runners train with more consistency and intelligence.
 
 ---
 
@@ -245,4 +245,4 @@ Full API contracts and types are documented in [ROADMAP.md](./ROADMAP.md).
 
 ---
 
-*Runnin — AI Running Coach. Built with Flutter, Node.js, Firebase, and LLMs.*
+*runnin.ai — AI Running Coach. Built with Flutter, Node.js, Firebase, and LLMs.*

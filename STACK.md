@@ -1,23 +1,24 @@
-# RunCoach AI — Stack Técnica & Decisões de Arquitetura
+# runnin.ai — Stack Técnica & Decisões de Arquitetura
 
 > Documento de referência técnica consolidado.
 > Baseado em: protótipo Figma Make + Think Tank técnico (março 2026).
+> **Canonical product name: runnin.ai** (decidido maio 2026)
 
 ---
 
-## 1. Sugestões de Nome
+## 1. Nomes Considerados (Decisão Final: runnin.ai)
 
-O domínio `runrun.ai` é descritivo demais e tem repetição. Sugestões com maior potencial de marca:
+Anteriormente, o projeto considerou alternativas ao domínio `runrun.ai`:
 
-| Nome | Conceito | Tagline natural | Por quê funciona |
-|------|---------|----------------|-----------------|
-| **Rumo** | "Rumo/direção" em PT-BR | "Rumo aos 10K" | Curto, memorável, único, duplo sentido (rota física + objetivo de vida) |
-| **Ritmo** | "Rhythm" — core do coaching de corrida | "No seu ritmo, no seu nível" | Palavra-chave de qualquer corredor, coaching implícito |
-| **Impulso** | Impulso/push — energia de arranque | "O impulso que você precisava" | Remete a motivação + física da corrida |
-| **Pulso** | Pulso cardíaco + wearables | "Escuta o seu pulso" | Conecta coach, BPM e wearables numa só palavra |
-| **Volta** | Volta (lap) + "volta a correr" | "Sua próxima volta começa aqui" | Retenção embutida no nome |
+| Nome | Conceito | Tagline natural | Notas |
+|------|---------|----------------|-------|
+| **Rumo** | "Rumo/direção" em PT-BR | "Rumo aos 10K" | Descartado — falta ligação óbvia com running |
+| **Ritmo** | "Rhythm" — core do coaching de corrida | "No seu ritmo, no seu nível" | Descartado — genérico para português |
+| **Impulso** | Impulso/push — energia de arranque | "O impulso que você precisava" | Descartado — sem conexão clara |
+| **Pulso** | Pulso cardíaco + wearables | "Escuta o seu pulso" | Descartado — longa demais |
+| **Volta** | Volta (lap) + "volta a correr" | "Sua próxima volta começa aqui" | Descartado — muito específica |
 
-**Recomendação: `Rumo`** — curto (5 letras), sem ambiguidade em inglês ou português, domínio `.app` provavelmente disponível, tagline natural "Rumo aos 10K" alinha diretamente com o produto.
+**Decisão Final (Maio 2026): `runnin.ai`** — domínio escolhido pela marca, claro e direto, conecta "running" com ".ai" para indicar IA. Implementação a partir de agora usa este nome canonicamente.
 
 ---
 

@@ -44,10 +44,10 @@ void main() async {
     FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
   }
 
-  runApp(const ProviderScope(child: RunrunApp()));
+  runApp(const ProviderScope(child: RunninApp()));
 }
 
-class RunrunApp extends StatelessWidget {
+class RunninApp extends StatelessWidget {
   const RunrunApp({super.key});
 
   @override

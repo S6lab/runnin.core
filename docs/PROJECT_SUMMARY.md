@@ -1,8 +1,8 @@
-# runrun — Project Summary
+# runnin.ai — Project Summary
 
 ## O que é
 
-`runrun` é um app de corrida com coach em IA. O produto combina onboarding guiado, autenticação com Firebase, geração de plano de treino, acompanhamento de corridas, histórico, área de conta e recursos de coaching para ajudar o corredor a treinar com mais consistência.
+**runnin.ai** é um app de corrida com coach em IA. O produto combina onboarding guiado, autenticação com Firebase, geração de plano de treino, acompanhamento de corridas, histórico, área de conta e recursos de coaching para ajudar o corredor a treinar com mais consistência.
 
 O foco atual é fechar um MVP funcional com dados reais de ponta a ponta:
 - login
@@ -139,4 +139,4 @@ Para o fluxo real funcionar bem, o projeto depende de:
 
 ## Resumo executivo
 
-`runrun` já deixou de ser apenas estrutura e protótipo. O projeto hoje tem app e backend publicados, autenticação, onboarding, plano, telas principais e uma arquitetura preparada para usar IA com flexibilidade. O trabalho agora é menos “construir do zero” e mais “estabilizar produção, validar dados reais e fechar os módulos que ainda faltam para retenção e monetização”.
+**runnin.ai** já deixou de ser apenas estrutura e protótipo. O projeto hoje tem app e backend publicados, autenticação, onboarding, plano, telas principais e uma arquitetura preparada para usar IA com flexibilidade. O trabalho agora é menos “construir do zero” e mais “estabilizar produção, validar dados reais e fechar os módulos que ainda faltam para retenção e monetização”.

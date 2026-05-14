@@ -3,7 +3,7 @@
 ## Concluído ✅
 
 - [x] Criar estrutura do projeto Flutter + Node.js
-- [x] Backend Node.js + TypeScript no Cloud Run (`runrun-api`) — **online e respondendo**
+- [x] Backend Node.js + TypeScript no Cloud Run (`runrun-api` legacy service name) — **online e respondendo**
 - [x] Clean Architecture no server: modules/runs, modules/coach, shared/infra
 - [x] Firebase Admin inicializado no server (ADC)
 - [x] Providers de LLM desacoplados por interface
