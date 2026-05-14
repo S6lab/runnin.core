@@ -6,7 +6,16 @@ User profile, settings, and historical data analysis.
 
 ## Profile Screen
 
-**File**: `PERFIL.pdf`
+**File**: `PERFIL.pdf`  
+**Visual References**:
+- ![Profile Main](37-profile-main.png)
+- ![Badges](38-profile-badges.png)
+- ![XP Level](39-profile-xp-level.png)
+- ![Streak Calendar](40-profile-streak-calendar.png)
+- ![Health Trends](41-health-trends.png)
+- ![Heart Zones](42-health-zones.png)
+- ![Connected Devices](43-health-devices.png)
+- ![Medical Exams](44-health-exams.png)
 
 **Purpose**: User account hub with stats, preferences, and settings.
 
@@ -118,7 +127,13 @@ User profile, settings, and historical data analysis.
 
 ## Run History & Statistics
 
-**File**: `HISTÓRICO.pdf`
+**File**: `HISTÓRICO.pdf`  
+**Visual References**:
+- ![History Overview](45-history-overview.png)
+- ![Runs List](46-history-runs-list.png)
+- ![Run Detail](47-history-run-detail.png)
+- ![Coach Conversation](48-history-coach-conversation.png)
+- ![Benchmark](49-history-benchmark.png)
 
 **Purpose**: Detailed analysis of past runs with timeline and performance trends.
 

@@ -10,7 +10,8 @@ These screens form the main application hub after successful authentication.
 
 ## Home Screen
 
-**File**: `HOME.pdf`
+**File**: `HOME.pdf`  
+**Visual Reference**: ![Home Dashboard](06-home-dashboard.png)
 
 **Purpose**: Main dashboard showing recent activity, upcoming training, and quick access to key features.
 
@@ -121,7 +122,17 @@ These screens form the main application hub after successful authentication.
 
 ## Assessment Screen
 
-**File**: `ASSESSMENT.pdf`
+**File**: `ASSESSMENT.pdf`  
+**Visual References**: 
+- ![Assessment Level](07-assessment-01-level.png)
+- ![Assessment Name](08-assessment-02-name.png)
+- ![Assessment Metrics](09-assessment-03-weight-height.png)
+- ![Assessment Health](10-assessment-04-health.png)
+- ![Assessment Frequency](11-assessment-05-frequency.png)
+- ![Assessment Goal](12-assessment-06-goal.png)
+- ![Assessment Pace](13-assessment-07-pace.png)
+- ![Assessment Schedule](14-assessment-08-schedule.png)
+- ![Assessment Wearable](15-assessment-09-wearable.png)
 
 **Purpose**: Running level assessment quiz to determine initial coach settings and training plan difficulty.
 

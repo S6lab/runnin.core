@@ -6,7 +6,8 @@ Interim screens and feedback during data processing.
 
 ## Splash/Loading Screen
 
-**File**: `SPLASH.pdf`
+**File**: `SPLASH.pdf`  
+**Visual Reference**: ![Splash Screen](../01-onboarding/01-splash-screen.png)
 
 **Purpose**: App initialization and brand presentation during startup.
 
@@ -62,7 +63,8 @@ Interim screens and feedback during data processing.
 
 ## Plan Generation Loading
 
-**File**: `PLAN_LOADING.pdf`
+**File**: `PLAN_LOADING.pdf`  
+**Visual Reference**: ![Plan Loading](../03-training-flow/50-plan-loading.png)
 
 **Purpose**: User feedback while Coach AI generates training plan.
 
