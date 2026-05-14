@@ -14,6 +14,7 @@ import 'package:runnin/features/run/presentation/bloc/run_bloc.dart';
 import 'package:runnin/shared/widgets/music_player_widget.dart';
 import 'package:runnin/features/training/domain/entities/plan.dart';
 import 'package:runnin/features/onboarding/presentation/pages/initial_briefing_page.dart';
+import 'package:runnin/features/run/presentation/pages/briefing_page.dart';
 
 export 'package:runnin/features/coach/data/coach_data.dart';
 
@@ -75,6 +76,22 @@ class _PrepViewState extends State<_PrepView> {
         _showBriefing = true;
       }
     });
+    
+    if (_showBriefing && mounted) {
+      Future.delayed(const Duration(milliseconds: 100), () {
+        if (mounted) {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (context) => BriefingPage(
+                session: widget.session,
+                onSkip: _handleBriefingSkip,
+                onComplete: _handleBriefingComplete,
+              ),
+            ),
+          );
+        }
+      });
+    }
   }
 
   String _mapSessionTypeToPrep(String sessionType) {
