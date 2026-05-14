@@ -8,6 +8,7 @@ import 'package:runnin/features/run/data/datasources/run_remote_datasource.dart'
 import 'package:runnin/features/run/domain/entities/run.dart';
 import 'package:runnin/shared/widgets/app_page_header.dart';
 import 'package:runnin/shared/widgets/app_panel.dart';
+import 'package:runnin/shared/widgets/user_profile_header.dart';
 
 class ProfilePage extends StatefulWidget {
   final bool initialEditing;
@@ -248,11 +249,12 @@ class _ProfilePageState extends State<ProfilePage> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _ProfileHero(
-                            firebaseUser: firebaseUser,
-                            profile: _profile,
-                            isAnonymous: firebaseUser?.isAnonymous ?? true,
+                          UserProfileHeader(
+                            userName: _profile?.name.isNotEmpty == true
+                                ? _profile!.name
+                                : (firebaseUser?.displayName ?? 'Corredor'),
                             levelNumber: levelNumber,
+                            isPremium: !(firebaseUser?.isAnonymous ?? true),
                             totalRuns: totalRuns,
                             totalDistanceKm: totalDistKm,
                           ),
