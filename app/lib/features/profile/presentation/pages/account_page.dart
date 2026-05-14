@@ -47,6 +47,32 @@ class _AccountPageState extends State<AccountPage> {
     context.go('/login');
   }
 
+  Future<void> _showLogoutConfirmation() async {
+    final palette = context.runninPalette;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: palette.surface,
+        title: Text('Sair da conta?', style: TextStyle(color: palette.text)),
+        content: Text(
+          'Você será desconectado e redirecionado para a tela de login.',
+          style: TextStyle(color: palette.muted),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('CANCELAR'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text('SAIR', style: TextStyle(color: palette.error)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) await _signOut();
+  }
+
   Future<void> _selectCoachVoice(String voiceId) async {
     if (_savingVoice || _profile?.coachVoiceId == voiceId) return;
     setState(() => _savingVoice = true);
@@ -229,23 +255,11 @@ class _AccountPageState extends State<AccountPage> {
                   ),
                   const SizedBox(height: 24),
 
-                  // ── Sessão ────────────────────────────────────────────────
-                  _SectionLabel(label: 'SESSÃO'),
-                  SizedBox(
-                    height: 50,
-                    child: OutlinedButton(
-                      onPressed: _signingOut ? null : _signOut,
-                      child: _signingOut
-                          ? SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: palette.primary,
-                              ),
-                            )
-                          : const Text('SAIR'),
-                    ),
+                  // ── Ações ─────────────────────────────────────────────────
+                  _ProfileActionButtons(
+                    signingOut: _signingOut,
+                    onEditProfile: () => context.push('/profile/edit'),
+                    onLogout: _showLogoutConfirmation,
                   ),
                   const SizedBox(height: 32),
                 ],
@@ -407,6 +421,97 @@ class _SectionLabel extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Text(label, style: context.runninType.labelCaps),
+    );
+  }
+}
+
+class _ProfileActionButtons extends StatelessWidget {
+  final bool signingOut;
+  final VoidCallback onEditProfile;
+  final VoidCallback onLogout;
+
+  const _ProfileActionButtons({
+    required this.signingOut,
+    required this.onEditProfile,
+    required this.onLogout,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: Column(
+        children: [
+          // Editar perfil button
+          SizedBox(
+            height: 47,
+            width: double.infinity,
+            child: Material(
+              color: Colors.white.withValues(alpha: 0.03),
+              child: InkWell(
+                onTap: onEditProfile,
+                child: Container(
+                  decoration: BoxDecoration(
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.08),
+                      width: 1.735,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.edit_outlined,
+                        size: 16,
+                        color: palette.text.withValues(alpha: 0.6),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Editar perfil ↗',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          color: palette.text.withValues(alpha: 0.6),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          // Logout button
+          SizedBox(
+            height: 43,
+            width: double.infinity,
+            child: GestureDetector(
+              onTap: signingOut ? null : onLogout,
+              child: Center(
+                child: signingOut
+                    ? SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: palette.text.withValues(alpha: 0.2),
+                        ),
+                      )
+                    : Text(
+                        'Logout',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          color: palette.text.withValues(alpha: 0.2),
+                        ),
+                      ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
