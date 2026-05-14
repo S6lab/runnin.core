@@ -379,7 +379,7 @@ class _ProfilePageState extends State<ProfilePage> {
                           _SectionLabel(label: 'SKIN'),
                           const SizedBox(height: 8),
                           Text(
-                            'Escolha a paleta principal inspirada no protótipo.',
+                            'Escolha a paleta de cores do app',
                             style: TextStyle(
                               fontSize: 12,
                               color: palette.muted,
