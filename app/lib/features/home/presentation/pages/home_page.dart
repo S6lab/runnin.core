@@ -71,12 +71,12 @@ class _HomeViewState extends State<_HomeView> {
     final palette = context.runninPalette;
 
     return Scaffold(
-      backgroundColor: palette.background,
+      backgroundColor: const Color(0xFF050510),
       body: SafeArea(
         child: BlocBuilder<HomeCubit, HomeState>(
           builder: (context, state) {
             return SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
+              padding: const EdgeInsets.fromLTRB(17.7, 17.7, 17.7, 32),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -84,7 +84,7 @@ class _HomeViewState extends State<_HomeView> {
                   const SizedBox(height: 20),
                   if (state is HomeLoading) ...[
                     const _LoadingCard(),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 17.7),
                     const _LoadingCard(),
                   ] else if (state is HomeError) ...[
                     _ErrorCard(
@@ -95,18 +95,17 @@ class _HomeViewState extends State<_HomeView> {
                     _CyberStatusBar(data: state.data),
                     const SizedBox(height: 20),
                     _IniciarSessaoButton(data: state.data),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 20),
                     const _CoachNotifications(),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 20),
                     _SemanaSection(data: state.data),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 20),
                     _CoachAiWeeklySummary(data: state.data),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 20),
                     _PerformanceSection(data: state.data),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 20),
                     _StatusCorporalSection(data: state.data),
-                    const SizedBox(height: 24),
-                    _UltimaCorrida(run: state.data.latestRun),
+                    const SizedBox(height: 20),
                   ] else ...[
                     const _LoadingCard(),
                   ],
@@ -261,7 +260,7 @@ class _CyberStatusBar extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 20),
           Row(
             children: [
               _DeviceChip(
@@ -387,7 +386,7 @@ class _IniciarSessaoButton extends StatelessWidget {
 
     if (data.plan!.isGenerating) {
       return Container(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(17.7),
         decoration: BoxDecoration(
           color: palette.surface,
           border: Border.all(color: palette.border),
@@ -426,7 +425,7 @@ class _IniciarSessaoButton extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _CyberTodayCard(data: data),
-        const SizedBox(height: 16),
+        const SizedBox(height: 20),
         _CoachMessageCard(
           palette: palette,
           message: coachMessage,
@@ -459,12 +458,12 @@ class _CoachMessageCard extends StatelessWidget {
       children: [
         Container(
           padding: const EdgeInsets.fromLTRB(18, 16, 16, 16),
-          decoration: BoxDecoration(
-            color: palette.secondary.withValues(alpha: 0.02),
-            border: Border(
-              left: BorderSide(color: palette.secondary, width: 2),
-            ),
-          ),
+           decoration: BoxDecoration(
+             color: palette.secondary.withValues(alpha: 0.02),
+             border: Border(
+               left: BorderSide(color: palette.secondary, width: 1),
+             ),
+           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -476,7 +475,7 @@ class _CoachMessageCard extends StatelessWidget {
                   letterSpacing: 1.1,
                 ),
               ),
-              const SizedBox(height: 4),
+              const SizedBox(height: 20),
               Text(
                 message,
                 style: GoogleFonts.jetBrainsMono(
@@ -488,7 +487,7 @@ class _CoachMessageCard extends StatelessWidget {
             ],
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 20),
         GestureDetector(
           onTap: onCta,
           child: Container(
@@ -569,7 +568,7 @@ class _CyberTodayCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 20),
           Row(
             children: [
               Container(
@@ -599,7 +598,7 @@ class _CyberTodayCard extends StatelessWidget {
             ],
           ),
           if (session != null) ...[
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
             Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
@@ -642,7 +641,7 @@ class _CyberTodayCard extends StatelessWidget {
                             ],
                           ),
                         ),
-                        const SizedBox(height: 4),
+                        const SizedBox(height: 20),
                         RichText(
                           text: TextSpan(
                             children: [
@@ -738,7 +737,7 @@ class _CoachNotificationsList extends StatelessWidget {
       children: [
         Row(
           children: [
-            Icon(Icons.remove_outlined, size: 12, color: palette.muted),
+            Icon(Icons.notifications_outlined, size: 22, color: palette.muted),
             const SizedBox(width: 6),
             Text(
               'COACH.AI > NOTIFICAÇÕES',
@@ -756,7 +755,7 @@ class _CoachNotificationsList extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 20),
         Container(
           decoration: BoxDecoration(border: Border.all(color: palette.border)),
           child: Column(
@@ -818,7 +817,7 @@ class _SemanaSection extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 20),
         Text(
           'Sem $weekNum · $monthAbbr ${monday.day}-${sunday.day} · ${data.completedSessions}/${data.plannedSessions} sessoes · ${(volumePct * 100).round()}% volume',
           style: TextStyle(
@@ -827,9 +826,9 @@ class _SemanaSection extends StatelessWidget {
             fontWeight: FontWeight.w600,
           ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 20),
         _WeekGrid(weekDays: data.weekDays),
-        const SizedBox(height: 10),
+        const SizedBox(height: 20),
         Row(
           children: [
             Text(
@@ -852,12 +851,12 @@ class _SemanaSection extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 20),
         _MiniProgressBar(value: volumePct, color: palette.primary),
         if (data.plannedSessions == 0) ...[
-          const SizedBox(height: 10),
+          const SizedBox(height: 20),
           AppPanel(
-            padding: const EdgeInsets.all(14),
+            padding: const EdgeInsets.all(17.7),
             color: palette.surfaceAlt,
             child: Text(
               data.plan == null
@@ -916,7 +915,7 @@ class _WeekGrid extends StatelessWidget {
 
         return Expanded(
           child: Container(
-            height: 102,
+             height: 100,
             margin: EdgeInsets.only(right: day.dayOfWeek == 7 ? 0 : 4),
             decoration: BoxDecoration(
               color: day.isToday ? palette.surfaceAlt : palette.surface,
@@ -942,12 +941,12 @@ class _WeekGrid extends StatelessWidget {
                     letterSpacing: 0.06,
                   ),
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 20),
                 if (day.isDone)
-                  Icon(Icons.check, size: 14, color: palette.primary)
+                  Icon(Icons.check, size: 18, color: palette.primary)
                 else if (isRest)
                   Text(
-                    'OFF',
+                    'DESC',
                     style: TextStyle(
                       color: palette.border,
                       fontSize: 9,
@@ -963,7 +962,7 @@ class _WeekGrid extends StatelessWidget {
                       fontWeight: FontWeight.w800,
                     ),
                   ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 20),
                 Text(
                   distLabel,
                   style: TextStyle(
@@ -973,7 +972,7 @@ class _WeekGrid extends StatelessWidget {
                   ),
                 ),
                 if (day.session?.targetPace != null) ...[
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 20),
                   Text(
                     day.session!.targetPace!,
                     style: TextStyle(
@@ -984,7 +983,7 @@ class _WeekGrid extends StatelessWidget {
                   ),
                 ],
                 if (day.isToday) ...[
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 20),
                   Text(
                     'HOJE',
                     style: TextStyle(
@@ -1041,7 +1040,7 @@ class _CoachAiWeeklySummary extends StatelessWidget {
             ],
           ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 20),
         AppPanel(
           color: palette.surfaceAlt,
           borderColor: palette.secondary.withValues(alpha: 0.45),
@@ -1049,7 +1048,7 @@ class _CoachAiWeeklySummary extends StatelessWidget {
             padding: const EdgeInsets.only(left: 12),
             decoration: BoxDecoration(
               border: Border(
-                left: BorderSide(color: palette.secondary, width: 3),
+                left: BorderSide(color: palette.secondary, width: 1),
               ),
             ),
             child: Column(
@@ -1061,29 +1060,29 @@ class _CoachAiWeeklySummary extends StatelessWidget {
                     color: palette.secondary,
                   ),
                 ),
-                const SizedBox(height: 14),
+                const SizedBox(height: 20),
                 _CoachSummaryBlock(
                   title: 'PROGRESSO',
                   body: hasPlan
                       ? '${data.completedSessions} de ${data.plannedSessions} sessoes concluidas. Volume registrado: ${data.weeklyDistanceKm.toStringAsFixed(1)} de ${planKm.toStringAsFixed(1)} km planejados.'
                       : 'Sem plano semanal ativo. Gere um plano para o coach acompanhar sessoes, descanso e volume.',
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 20),
                 _MiniProgressBar(value: completion, color: palette.primary),
-                const SizedBox(height: 14),
+                const SizedBox(height: 20),
                 _CoachSummaryBlock(
                   title: 'PERFORMANCE',
                   body: hasRuns
                       ? 'Ultima corrida: ${(data.latestRun!.distanceM / 1000).toStringAsFixed(1)} km${data.latestRun!.avgPace == null ? '' : ' em ${data.latestRun!.avgPace}/km'}. O historico ja alimenta pace, streak e carga muscular.'
                       : 'Ainda nao ha corrida concluida. Depois da primeira sessao, este bloco mostra tendencia de pace, BPM e resposta ao treino.',
                 ),
-                const SizedBox(height: 14),
+                const SizedBox(height: 20),
                 _CoachSummaryBlock(
                   title: 'RECOMENDACAO',
                   body: _weeklyRecommendation(data),
                 ),
                 if (!hasPlan || !hasRuns) ...[
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 20),
                   Wrap(
                     spacing: 8,
                     runSpacing: 8,
@@ -1126,7 +1125,7 @@ class _CoachSummaryBlock extends StatelessWidget {
           title,
           style: context.runninType.labelCaps.copyWith(color: palette.primary),
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 20),
         Text(
           body,
           style: TextStyle(
@@ -1194,14 +1193,14 @@ class _PerformanceSection extends StatelessWidget {
             ],
           ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 20),
         IntrinsicHeight(
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Expanded(
                 child: AppPanel(
-                  padding: const EdgeInsets.all(14),
+                  padding: const EdgeInsets.all(17.7),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -1214,7 +1213,7 @@ class _PerformanceSection extends StatelessWidget {
                           letterSpacing: 0.08,
                         ),
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 20),
                       Text(
                         avgPace ?? '--',
                         style: TextStyle(
@@ -1245,7 +1244,7 @@ class _PerformanceSection extends StatelessWidget {
               const SizedBox(width: 8),
               Expanded(
                 child: AppPanel(
-                  padding: const EdgeInsets.all(14),
+                  padding: const EdgeInsets.all(17.7),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -1258,7 +1257,7 @@ class _PerformanceSection extends StatelessWidget {
                           letterSpacing: 0.08,
                         ),
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 20),
                       Text(
                         run?.avgBpm != null ? '${run!.avgBpm}' : '--',
                         style: TextStyle(
@@ -1283,7 +1282,7 @@ class _PerformanceSection extends StatelessWidget {
                             fontWeight: FontWeight.w700,
                           ),
                         ),
-                        const SizedBox(height: 4),
+                        const SizedBox(height: 20),
                         Text(
                           '${run!.avgBpm}',
                           style: TextStyle(
@@ -1292,7 +1291,7 @@ class _PerformanceSection extends StatelessWidget {
                             fontWeight: FontWeight.w900,
                           ),
                         ),
-                        const SizedBox(height: 4),
+                        const SizedBox(height: 20),
                         _ZoneBars(avgBpm: run.avgBpm!),
                       ],
                       if (run?.avgBpm == null)
@@ -1307,7 +1306,7 @@ class _PerformanceSection extends StatelessWidget {
             ],
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 20),
         IntrinsicHeight(
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1315,7 +1314,7 @@ class _PerformanceSection extends StatelessWidget {
               Expanded(
                 child: AppPanel(
                   color: palette.primary,
-                  padding: const EdgeInsets.all(14),
+                  padding: const EdgeInsets.all(17.7),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -1328,7 +1327,7 @@ class _PerformanceSection extends StatelessWidget {
                           letterSpacing: 0.08,
                         ),
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 20),
                       Text(
                         weeklyCompletion == null
                             ? 'SEM BASE'
@@ -1362,7 +1361,7 @@ class _PerformanceSection extends StatelessWidget {
               const SizedBox(width: 8),
               Expanded(
                 child: AppPanel(
-                  padding: const EdgeInsets.all(14),
+                  padding: const EdgeInsets.all(17.7),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -1375,7 +1374,7 @@ class _PerformanceSection extends StatelessWidget {
                           letterSpacing: 0.08,
                         ),
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 20),
                       Text(
                         '${data.streakDays}',
                         style: TextStyle(
@@ -1476,7 +1475,7 @@ class _MonthStats extends StatelessWidget {
             letterSpacing: 0.06,
           ),
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: 20),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
@@ -1573,14 +1572,14 @@ class _StatusCorporalSectionState extends State<_StatusCorporalSection> {
             ],
           ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 20),
         IntrinsicHeight(
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Expanded(
                 child: AppPanel(
-                  padding: const EdgeInsets.all(14),
+                  padding: const EdgeInsets.all(17.7),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -1593,7 +1592,7 @@ class _StatusCorporalSectionState extends State<_StatusCorporalSection> {
                           letterSpacing: 0.08,
                         ),
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 20),
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
@@ -1638,7 +1637,7 @@ class _StatusCorporalSectionState extends State<_StatusCorporalSection> {
               const SizedBox(width: 8),
               Expanded(
                 child: AppPanel(
-                  padding: const EdgeInsets.all(14),
+                  padding: const EdgeInsets.all(17.7),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -1651,7 +1650,7 @@ class _StatusCorporalSectionState extends State<_StatusCorporalSection> {
                           letterSpacing: 0.08,
                         ),
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 20),
                       Text(
                         hasSleepData ? 'OK' : '--',
                         style: TextStyle(
@@ -1680,14 +1679,14 @@ class _StatusCorporalSectionState extends State<_StatusCorporalSection> {
             ],
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 20),
         IntrinsicHeight(
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Expanded(
                 child: AppPanel(
-                  padding: const EdgeInsets.all(14),
+                  padding: const EdgeInsets.all(17.7),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -1700,7 +1699,7 @@ class _StatusCorporalSectionState extends State<_StatusCorporalSection> {
                           letterSpacing: 0.08,
                         ),
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 20),
                       Text(
                         _muscleLoadLabel(widget.data),
                         style: TextStyle(
@@ -1741,7 +1740,7 @@ class _StatusCorporalSectionState extends State<_StatusCorporalSection> {
               const SizedBox(width: 8),
               Expanded(
                 child: AppPanel(
-                  padding: const EdgeInsets.all(14),
+                  padding: const EdgeInsets.all(17.7),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -1754,7 +1753,7 @@ class _StatusCorporalSectionState extends State<_StatusCorporalSection> {
                           letterSpacing: 0.08,
                         ),
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 20),
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
@@ -1793,7 +1792,7 @@ class _StatusCorporalSectionState extends State<_StatusCorporalSection> {
                           value: hydrationPct,
                           color: palette.primary,
                         ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 20),
                       TextButton(
                         onPressed: hydrationGoalL == null
                             ? () => context.push('/profile/edit')
@@ -1862,7 +1861,7 @@ class _HydrationUpdateSheetState extends State<_HydrationUpdateSheet> {
       child: Padding(
         padding: EdgeInsets.fromLTRB(12, 0, 12, bottomInset + 12),
         child: Container(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(17.7),
           decoration: BoxDecoration(
             color: palette.background,
             border: Border.all(color: palette.border),
@@ -1882,19 +1881,19 @@ class _HydrationUpdateSheetState extends State<_HydrationUpdateSheet> {
                   ),
                 ),
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 20),
               Text(
                 'HIDRATACAO DO DIA',
                 style: Theme.of(
                   context,
                 ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
               ),
-              const SizedBox(height: 4),
+              const SizedBox(height: 20),
               Text(
                 '${_currentLiters.toStringAsFixed(1)}L de ${widget.goalLiters.toStringAsFixed(1)}L',
                 style: TextStyle(color: palette.muted, fontSize: 12),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 20),
               ClipRRect(
                 borderRadius: BorderRadius.circular(999),
                 child: LinearProgressIndicator(
@@ -1906,7 +1905,7 @@ class _HydrationUpdateSheetState extends State<_HydrationUpdateSheet> {
                   ),
                 ),
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 20),
               Row(
                 children: [
                   Expanded(
@@ -1926,7 +1925,7 @@ class _HydrationUpdateSheetState extends State<_HydrationUpdateSheet> {
                   ),
                 ],
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 20),
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
@@ -1939,7 +1938,7 @@ class _HydrationUpdateSheetState extends State<_HydrationUpdateSheet> {
                     )
                     .toList(),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 20),
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
@@ -2019,7 +2018,7 @@ class _UltimaCorrida extends StatelessWidget {
             ],
           ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 20),
         if (run == null)
           AppPanel(
             child: Text(
@@ -2215,7 +2214,7 @@ class _RunCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 20),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             crossAxisAlignment: CrossAxisAlignment.end,
@@ -2231,7 +2230,7 @@ class _RunCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 20),
           Row(
             children: [
               _RunMetric(
@@ -2263,9 +2262,9 @@ class _RunCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 20),
           Container(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(17.7),
             decoration: BoxDecoration(
               border: Border(
                 left: BorderSide(color: palette.primary, width: 3),
@@ -2280,7 +2279,7 @@ class _RunCard extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 20),
           Row(
             children: [
               Expanded(
@@ -2337,7 +2336,7 @@ class _RunMetric extends StatelessWidget {
               letterSpacing: 0.06,
             ),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 20),
           Text(
             value,
             style: TextStyle(
@@ -2390,7 +2389,7 @@ class _ErrorCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(message, style: TextStyle(color: palette.muted)),
-          const SizedBox(height: 12),
+          const SizedBox(height: 20),
           TextButton(onPressed: onRetry, child: const Text('TENTAR NOVAMENTE')),
         ],
       ),

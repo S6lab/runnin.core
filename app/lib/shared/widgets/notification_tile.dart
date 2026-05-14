@@ -48,21 +48,21 @@ class _NotificationTileState extends State<NotificationTile> {
     return Container(
       decoration: BoxDecoration(
         color: palette.surface,
-        border: Border(bottom: BorderSide(color: palette.border)),
+        border: Border.all(color: palette.border, width: 1.5),
       ),
       child: InkWell(
         onTap: widget.fullText != null
             ? () => setState(() => _expanded = !_expanded)
             : null,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+           padding: const EdgeInsets.all(17.7),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  Icon(widget.icon, size: 16, color: palette.primary),
-                  const SizedBox(width: 10),
+               Row(
+                 children: [
+                   Icon(widget.icon, size: 22, color: palette.primary),
+                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
                       widget.title.toUpperCase(),
@@ -72,14 +72,14 @@ class _NotificationTileState extends State<NotificationTile> {
                   if (widget.timestamp != null)
                     Text(widget.timestamp!, style: type.labelCaps),
                   const SizedBox(width: 8),
-                  if (widget.fullText != null)
-                    Icon(
-                      _expanded
-                          ? Icons.keyboard_arrow_up
-                          : Icons.keyboard_arrow_down,
-                      size: 14,
-                      color: palette.muted,
-                    ),
+                   if (widget.fullText != null)
+                     Icon(
+                       _expanded
+                           ? Icons.keyboard_arrow_up
+                           : Icons.keyboard_arrow_down,
+                       size: 18,
+                       color: palette.muted,
+                     ),
                 ],
               ),
               const SizedBox(height: 6),
