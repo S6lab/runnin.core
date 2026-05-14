@@ -106,6 +106,8 @@ class _HomeViewState extends State<_HomeView> {
                     const SizedBox(height: 20),
                     _StatusCorporalSection(data: state.data),
                     const SizedBox(height: 20),
+                    const _MenuSection(),
+                    const SizedBox(height: 20),
                   ] else ...[
                     const _LoadingCard(),
                   ],
@@ -2347,6 +2349,139 @@ class _RunMetric extends StatelessWidget {
           ),
           Text(sub, style: TextStyle(color: palette.muted, fontSize: 9)),
         ],
+      ),
+    );
+  }
+}
+
+// ─── Menu ─────────────────────────────────────────────────────────────────────
+
+class _MenuSection extends StatelessWidget {
+  const _MenuSection();
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        RichText(
+          text: TextSpan(
+            children: [
+              TextSpan(
+                text: 'MENU',
+                style: context.runninType.displaySm,
+              ),
+              TextSpan(
+                text: ' 02',
+                style: TextStyle(
+                  color: context.runninPalette.primary,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        _MenuItem(
+          icon: Icons.emoji_events_outlined,
+          title: 'GAMIFICAÇÃO',
+          subtitle: 'Badges, XP, Streak',
+          route: '/gamification',
+        ),
+        const SizedBox(height: 4),
+        _MenuItem(
+          icon: Icons.favorite_border,
+          title: 'SAÚDE',
+          subtitle: 'BPM, Zonas, Wearable',
+          route: '/health',
+        ),
+        const SizedBox(height: 4),
+        _MenuItem(
+          icon: Icons.settings_outlined,
+          title: 'AJUSTES',
+          subtitle: 'Coach, Alertas, Unidades',
+          route: '/settings',
+        ),
+        const SizedBox(height: 4),
+        _MenuItem(
+          icon: Icons.diamond_outlined,
+          title: 'ASSINATURA',
+          subtitle: 'Premium',
+          route: '/subscription',
+        ),
+      ],
+    );
+  }
+}
+
+class _MenuItem extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final String route;
+
+  const _MenuItem({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.route,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+
+    return InkWell(
+      onTap: () => context.push(route),
+      child: Container(
+        height: 76,
+        padding: const EdgeInsets.symmetric(horizontal: 18),
+        decoration: BoxDecoration(
+          color: palette.text.withValues(alpha: 0.03),
+          border: Border.all(
+            color: palette.text.withValues(alpha: 0.08),
+            width: 1.735,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, size: 20, color: palette.text.withValues(alpha: 0.7)),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: palette.text,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    subtitle,
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: palette.text.withValues(alpha: 0.5),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Text(
+              '↗',
+              style: GoogleFonts.jetBrainsMono(
+                fontSize: 13,
+                color: palette.text.withValues(alpha: 0.5),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
