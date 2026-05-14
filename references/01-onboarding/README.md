@@ -5,7 +5,8 @@ User entry point and setup experience.
 ## Screen Overview
 
 ### 1. Splash Screen
-**File**: `SPLASH.pdf`
+**File**: `SPLASH.pdf`  
+**Visual Reference**: ![Splash Screen](01-splash-screen.png)
 
 **Purpose**: App launch screen shown while coach initializes.
 
