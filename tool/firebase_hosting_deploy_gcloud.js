@@ -8,7 +8,8 @@ const zlib = require('node:zlib');
 
 const projectId = process.argv[2] || 'runnin-494520';
 const siteId = process.argv[3] || projectId;
-const publicDir = path.resolve(process.argv[4] || 'app/build/web');
+const channel = process.argv[4];
+const publicDir = path.resolve(process.argv[5] || 'app/build/web');
 
 // Permite passar o token via env var (necessário no Windows, onde
 // execFileSync não resolve `gcloud.cmd` automaticamente). Fallback chama
@@ -113,14 +114,14 @@ async function main() {
   );
 
   await request(
-    `https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/${siteId}/channels/live/releases?versionName=${encodeURIComponent(version.name)}`,
+    `https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/${siteId}/channels/${channel || 'live'}/releases?versionName=${encodeURIComponent(version.name)}`,
     {
       method: 'POST',
       body: JSON.stringify({}),
     },
   );
 
-  console.log(`Hosting deployed: https://${siteId}.web.app`);
+  console.log(`Hosting deployed to channel '${channel || 'live'}': https://${siteId}.web.app`);
 }
 
 main().catch((error) => {
