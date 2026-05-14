@@ -31,7 +31,7 @@ class AlertSettingsService {
     final newSettings = current.copyWith(paceAlertEnabled: enabled);
     await _box.put('default', newSettings);
     try {
-      await _dio.patch('/alerts/pace', data: {'enabled': enabled});
+      await _dio.patch('/users/run-preferences', data: {'paceAlertsEnabled': enabled});
     } catch (_) {
       // Persist locally even if backend fails
     }
@@ -42,7 +42,7 @@ class AlertSettingsService {
     final newSettings = current.copyWith(heartRateAlertEnabled: enabled);
     await _box.put('default', newSettings);
     try {
-      await _dio.patch('/alerts/heart_rate', data: {'enabled': enabled});
+      await _dio.patch('/users/run-preferences', data: {'hrZoneAlertsEnabled': enabled});
     } catch (_) {
       // Persist locally even if backend fails
     }
@@ -53,7 +53,7 @@ class AlertSettingsService {
     final newSettings = current.copyWith(distanceMarkAlertEnabled: enabled);
     await _box.put('default', newSettings);
     try {
-      await _dio.patch('/alerts/distance', data: {'enabled': enabled});
+      await _dio.patch('/users/run-preferences', data: {'distanceMilestonesEnabled': enabled});
     } catch (_) {
       // Persist locally even if backend fails
     }

@@ -37,6 +37,7 @@ export interface UserProfile {
   lastOnboardingAt?: string;
   operatorId?: string;
   onboarded: boolean;
+  hasCompletedFirstRun: boolean;
   runAlertPreferences?: RunAlertPreferences;
   musicPreferences?: MusicPreferences;
   createdAt: string;

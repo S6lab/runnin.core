@@ -8,12 +8,12 @@ import 'package:dio/dio.dart';
 import 'package:runnin/core/alerts/alert_settings_service.dart';
 import 'package:runnin/core/audio/coach_audio_player.dart';
 import 'package:runnin/core/network/api_client.dart';
-import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 import 'package:runnin/features/run/data/datasources/run_coach_remote_datasource.dart';
 import 'package:runnin/features/run/presentation/bloc/run_bloc.dart';
 import 'package:runnin/shared/widgets/music_player_widget.dart';
 import 'package:runnin/features/training/domain/entities/plan.dart';
+import 'package:runnin/features/onboarding/presentation/pages/initial_briefing_page.dart';
 
 export 'package:runnin/features/coach/data/coach_data.dart';
 
@@ -49,6 +49,8 @@ class _PrepViewState extends State<_PrepView> {
     'Free Run',
   ];
   late String _selectedType;
+  bool _showBriefing = false;
+  bool _hasCompletedFirstRun = false;
 
   @override
   void initState() {
@@ -59,6 +61,20 @@ class _PrepViewState extends State<_PrepView> {
     } else {
       _selectedType = 'Easy Run';
     }
+    _checkBriefingStatus();
+  }
+
+  Future<void> _checkBriefingStatus() async {
+    final profile = await UserRemoteDatasource().getMe();
+    if (!mounted) return;
+    setState(() {
+      _hasCompletedFirstRun = profile?.onboarded ?? false;
+      if (_hasCompletedFirstRun) {
+        _showBriefing = false;
+      } else {
+        _showBriefing = true;
+      }
+    });
   }
 
   String _mapSessionTypeToPrep(String sessionType) {
@@ -324,13 +340,14 @@ class _PrepViewState extends State<_PrepView> {
                       ),
                        const SizedBox(height: 14),
                         // Warmup guidance section
-                        if (_isPro == true) ...[
-                          _WarmupGuidanceSection(
-                            sessionType: _selectedType,
-                            loading: false,
-                            briefing: null, // will be populated when backend API is ready (SUP-58)
-                          ),
-                        ],
+                         if (_isPro == true) ...[
+                           _WarmupGuidanceSection(
+                             sessionType: _selectedType,
+                             loading: false,
+                             briefing: null, // will be populated when backend API is ready (SUP-58)
+                             session: widget.session,
+                           ),
+                         ],
                         if (_isPro == false)
                           _PreRunCoachLockedCard(
                             onTap: () => context.push('/profile'),
@@ -383,7 +400,22 @@ class _PrepViewState extends State<_PrepView> {
       ),
     );
   }
-}
+
+  void _handleBriefingComplete() {
+    UserRemoteDatasource().patchMe(onboarded: true).then((_) {
+      if (mounted) {
+        context.go('/home');
+      }
+    });
+  }
+
+  void _handleBriefingSkip() {
+    UserRemoteDatasource().patchMe(onboarded: true).then((_) {
+      if (mounted) {
+        context.go('/home');
+      }
+    });
+  }
 
 class _PreRunCoachCard extends StatelessWidget {
   final bool loading;
@@ -519,11 +551,13 @@ class _WarmupGuidanceSection extends StatefulWidget {
   final String sessionType;
   final bool loading;
   final dynamic briefing;
+  final PlanSession? session;
 
   const _WarmupGuidanceSection({
     required this.sessionType,
     required this.loading,
     required this.briefing,
+    this.session,
   });
 
   @override
@@ -552,14 +586,15 @@ class _WarmupGuidanceSectionState extends State<_WarmupGuidanceSection> {
     setState(() => _loading = true);
     
     try {
-      final response = await _dio.post('/warmup/guidance', data: {
+      final response = await _dio.post('/coach/briefing', data: {
         'sessionType': widget.sessionType,
+        'distanceKm': widget.session?.distanceKm ?? 5.0,
       });
       
       if (!mounted) return;
       
       final data = response.data as Map<String, dynamic>;
-      _briefingText = data['guidance'] as String?;
+      _briefingText = data['text'] as String?;
       
       setState(() => _loading = false);
     } catch (e) {

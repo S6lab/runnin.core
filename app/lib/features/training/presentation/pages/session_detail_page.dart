@@ -408,12 +408,46 @@ class _SessionActionsState extends State<_SessionActions> {
     }
   }
 
-  void _rescheduleSession() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Funcionalidade de reagendamento em breve'),
-        duration: Duration(seconds: 2),
-      ),
+  void _rescheduleSession() async {
+    final today = DateTime.now();
+    final date = await showDatePicker(
+      context: context,
+      initialDate: today,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2030),
     );
+    
+    if (date == null) return;
+
+    setState(() => _loading = true);
+    try {
+      final newDateStr = '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+      await _datasource.rescheduleSession(
+        planId: widget.planId,
+        sessionId: widget.session.id,
+        newDate: newDateStr,
+      );
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Sessão reagendada com sucesso'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+        context.pop();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erro ao reagendar: $e'),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
   }
 }

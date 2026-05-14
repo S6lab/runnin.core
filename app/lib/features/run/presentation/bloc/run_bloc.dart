@@ -14,7 +14,8 @@ class StartRun extends RunEvent {
   final String type;
   final String? targetPace;
   final String? targetDistance;
-  StartRun({required this.type, this.targetPace, this.targetDistance});
+  final dynamic session;
+  StartRun({required this.type, this.targetPace, this.targetDistance, this.session});
 }
 
 class _GpsUpdate extends RunEvent {
@@ -46,6 +47,7 @@ class RunState {
   final String? runType;
   final String? targetPace;
   final String? targetDistance;
+  final dynamic session;
   final String? coachLiveMessage;
   final String? coachAudioBase64;
   final String? coachAudioMimeType;
@@ -62,6 +64,7 @@ class RunState {
     this.runType,
     this.targetPace,
     this.targetDistance,
+    this.session,
     this.coachLiveMessage,
     this.coachAudioBase64,
     this.coachAudioMimeType,
@@ -79,6 +82,7 @@ class RunState {
     String? runType,
     String? targetPace,
     String? targetDistance,
+    dynamic session,
     String? coachLiveMessage,
     String? coachAudioBase64,
     String? coachAudioMimeType,
@@ -94,6 +98,7 @@ class RunState {
     runType: runType ?? this.runType,
     targetPace: targetPace ?? this.targetPace,
     targetDistance: targetDistance ?? this.targetDistance,
+    session: session ?? this.session,
     coachLiveMessage: coachLiveMessage ?? this.coachLiveMessage,
     coachAudioBase64: coachAudioBase64 ?? this.coachAudioBase64,
     coachAudioMimeType: coachAudioMimeType ?? this.coachAudioMimeType,
@@ -183,6 +188,7 @@ class RunBloc extends Bloc<RunEvent, RunState> {
           type: event.type,
           targetPace: event.targetPace,
           targetDistance: event.targetDistance,
+          session: event.session,
         );
         runId = run.id;
       } catch (_) {
@@ -197,6 +203,7 @@ class RunBloc extends Bloc<RunEvent, RunState> {
           points: [],
           distanceM: 0,
           elapsedS: 0,
+          session: event.session,
           coachLiveMessage: null,
           coachAudioBase64: '',
           coachAudioMimeType: '',

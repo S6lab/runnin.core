@@ -84,6 +84,7 @@ export class CompleteOnboardingUseCase {
       lastOnboardingAt: now,
       operatorId: existing?.operatorId,
       onboarded: true,
+      hasCompletedFirstRun: false,
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
     };

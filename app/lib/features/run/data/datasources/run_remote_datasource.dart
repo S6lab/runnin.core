@@ -10,15 +10,14 @@ class RunRemoteDatasource {
     required String type,
     String? targetPace,
     String? targetDistance,
+    dynamic session,
   }) async {
-    final res = await _dio.post(
-      '/runs',
-      data: {
-        'type': type,
-        'targetPace': ?targetPace,
-        'targetDistance': ?targetDistance,
-      },
-    );
+    final data = <String, dynamic> {'type': type};
+    if (targetPace != null) data['targetPace'] = targetPace;
+    if (targetDistance != null) data['targetDistance'] = targetDistance;
+    if (session != null) data['session'] = session;
+    
+    final res = await _dio.post('/runs', data: data);
     return Run.fromJson(res.data as Map<String, dynamic>);
   }
 
@@ -37,15 +36,15 @@ class RunRemoteDatasource {
     int? avgBpm,
     int? maxBpm,
   }) async {
-    final res = await _dio.patch(
-      '/runs/$runId/complete',
-      data: {
-        'distanceM': distanceM,
-        'durationS': durationS,
-        'avgBpm': ?avgBpm,
-        'maxBpm': ?maxBpm,
-      },
-    );
+     final res = await _dio.patch(
+       '/runs/$runId/complete',
+       data: {
+         'distanceM': distanceM,
+         'durationS': durationS,
+         if (avgBpm != null) 'avgBpm': avgBpm,
+         if (maxBpm != null) 'maxBpm': maxBpm,
+       },
+     );
     return Run.fromJson(res.data as Map<String, dynamic>);
   }
 

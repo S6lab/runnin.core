@@ -18,6 +18,7 @@ export const UpsertProfileSchema = z.object({
   sleepTime: z.string().optional(),
   coachVoiceId: z.enum(['coach-bruno', 'coach-clara', 'coach-luna']).optional(),
   onboarded: z.boolean().optional(),
+  hasCompletedFirstRun: z.boolean().optional(),
 });
 
 export type UpsertProfileInput = z.infer<typeof UpsertProfileSchema>;
@@ -50,6 +51,7 @@ export class UpsertProfileUseCase {
       lastOnboardingAt: existing?.lastOnboardingAt,
       operatorId: existing?.operatorId,
       onboarded: input.onboarded ?? existing?.onboarded ?? false,
+      hasCompletedFirstRun: input.hasCompletedFirstRun ?? existing?.hasCompletedFirstRun ?? false,
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
     };

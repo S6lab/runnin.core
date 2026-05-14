@@ -9,6 +9,7 @@ import { GetRunPreferencesUseCase } from '../domain/use-cases/get-run-preference
 import { UpdateRunPreferencesUseCase, UpdateRunPreferencesSchema } from '../domain/use-cases/update-run-preferences.use-case';
 import { GetMusicPreferencesUseCase } from '../domain/use-cases/get-music-preferences.use-case';
 import { UpdateMusicPreferencesUseCase, UpdateMusicPreferencesSchema } from '../domain/use-cases/update-music-preferences.use-case';
+import { CompleteFirstRunUseCase } from '../domain/use-cases/complete-first-run.use-case';
 
 const repo = new FirestoreUserRepository();
 const getProfile = new GetProfileUseCase(repo);
@@ -20,6 +21,7 @@ const getRunPreferences = new GetRunPreferencesUseCase(repo);
 const updateRunPreferences = new UpdateRunPreferencesUseCase(repo);
 const getMusicPreferences = new GetMusicPreferencesUseCase(repo);
 const updateMusicPreferences = new UpdateMusicPreferencesUseCase(repo);
+const completeFirstRun = new CompleteFirstRunUseCase(repo);
 
 export async function getMe(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
@@ -102,6 +104,15 @@ export async function patchMusicPreferences(req: Request, res: Response, next: N
     const input = UpdateMusicPreferencesSchema.parse(req.body);
     const user = await updateMusicPreferences.execute(req.uid, input);
     res.json(user.musicPreferences);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function postCompleteFirstRun(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const result = await completeFirstRun.execute(req.uid);
+    res.json(result);
   } catch (err) {
     next(err);
   }

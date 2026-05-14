@@ -29,8 +29,10 @@ export class ProvisionUserUseCase {
       medicalConditions: [],
       coachVoiceId: undefined,
       premium: false,
+      premiumUntil: undefined,
       operatorId: undefined,
       onboarded: false,
+      hasCompletedFirstRun: false,
       createdAt: now,
       updatedAt: now,
     };

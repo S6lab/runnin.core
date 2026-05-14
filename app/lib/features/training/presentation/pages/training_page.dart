@@ -49,6 +49,7 @@ class _TrainingPageState extends State<TrainingPage> {
   String? _pendingPlanId;
   String? _planCheckError;
   String? _error;
+  bool _offline = false;
   DateTime? _lastPlanCheckAt;
   Timer? _planPollTimer;
   int _selectedWeek = 0;
@@ -72,6 +73,7 @@ class _TrainingPageState extends State<TrainingPage> {
       _loading = true;
       _error = null;
       _planCheckError = null;
+      _offline = false;
     });
     try {
       final savedPendingPlanId = await _readPendingPlanId();
@@ -89,6 +91,13 @@ class _TrainingPageState extends State<TrainingPage> {
           plan = await _ds.getPlanById(savedPendingPlanId);
         } catch (_) {
           await _clearPendingPlanId();
+        }
+      }
+
+      if (plan == null) {
+        plan = await _ds.getCachedPlan();
+        if (plan != null) {
+          setState(() => _offline = true);
         }
       }
 
@@ -315,7 +324,7 @@ class _TrainingPageState extends State<TrainingPage> {
       );
     }
 
-    if (_error != null) {
+    if (_error != null && !_offline) {
       return ErrorStateWidget(
         message: _error!,
         onRetry: _load,
@@ -355,6 +364,7 @@ class _TrainingPageState extends State<TrainingPage> {
       onWeekChanged: (week) => setState(() => _selectedWeek = week),
       onTabChanged: (tab) => setState(() => _selectedTab = tab),
       onPlanModeChanged: (mode) => setState(() => _planMode = mode),
+      offline: _offline,
     );
   }
 }
@@ -659,6 +669,7 @@ class _TrainingWorkspace extends StatelessWidget {
   final ValueChanged<int> onWeekChanged;
   final ValueChanged<_TrainingTab> onTabChanged;
   final ValueChanged<_PlanMode> onPlanModeChanged;
+  final bool offline;
 
   const _TrainingWorkspace({
     required this.plan,
@@ -672,6 +683,7 @@ class _TrainingWorkspace extends StatelessWidget {
     required this.onWeekChanged,
     required this.onTabChanged,
     required this.onPlanModeChanged,
+    this.offline = false,
   });
 
   @override
@@ -685,6 +697,7 @@ class _TrainingWorkspace extends StatelessWidget {
             profile: profile,
             generating: generating,
             onRegenerate: onRegenerate,
+            offline: offline,
           ),
           const SizedBox(height: 12),
           _TopTabs(
@@ -716,12 +729,14 @@ class _PlanContextCard extends StatelessWidget {
   final UserProfile? profile;
   final bool generating;
   final VoidCallback onRegenerate;
+  final bool offline;
 
   const _PlanContextCard({
     required this.plan,
     required this.profile,
     required this.generating,
     required this.onRegenerate,
+    this.offline = false,
   });
 
   @override
@@ -745,10 +760,10 @@ class _PlanContextCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              AppTag(label: 'PLANO REAL', color: palette.primary),
+              AppTag(label: offline ? 'PLANO OFFLINE' : 'PLANO REAL', color: palette.primary),
               const SizedBox(width: 8),
               Text(
-                'Gerado em $planDateLabel',
+                'Gerado em $planDateLabel${offline ? ' (cache)' : ''}',
                 style: TextStyle(color: palette.muted, fontSize: 11),
               ),
             ],
@@ -1261,6 +1276,8 @@ class _MonthlyPlanView extends StatelessWidget {
                 : isCurrent
                 ? context.runninPalette.secondary
                 : context.runninPalette.muted,
+            sessions: week.sessions,
+            planId: plan.id,
           );
         }),
       ],
@@ -1928,6 +1945,8 @@ class _MonthlyWeekCard extends StatelessWidget {
   final String status;
   final bool isRecoveryWeek;
   final Color statusColor;
+  final List<PlanSession> sessions;
+  final String planId;
 
   const _MonthlyWeekCard({
     required this.weekNumber,
@@ -1937,13 +1956,17 @@ class _MonthlyWeekCard extends StatelessWidget {
     required this.status,
     required this.isRecoveryWeek,
     required this.statusColor,
+    required this.sessions,
+    required this.planId,
   });
 
   @override
   Widget build(BuildContext context) {
     final palette = context.runninPalette;
 
-    return AppPanel(
+    return InkWell(
+      onTap: () => _openWeekDetail(context),
+      child: AppPanel(
       margin: const EdgeInsets.only(bottom: 8),
       color: isRecoveryWeek ? palette.surfaceAlt : null,
       borderColor: status == 'ATUAL'
@@ -2013,6 +2036,15 @@ class _MonthlyWeekCard extends StatelessWidget {
       ),
     );
   }
+
+  void _openWeekDetail(BuildContext context) {
+    if (sessions.isEmpty) return;
+    context.go('/week-detail', extra: {
+      'week': this,
+      'sessions': sessions,
+      'planId': planId,
+    });
+  }
 }
 
 class _ReportCard extends StatelessWidget {
@@ -2024,7 +2056,9 @@ class _ReportCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final palette = context.runninPalette;
 
-    return AppPanel(
+    return InkWell(
+      onTap: () => _openWeekDetail(context),
+      child: AppPanel(
       margin: const EdgeInsets.only(bottom: 8),
       color: report.isLatest ? palette.surfaceAlt : null,
       borderColor: report.isLatest

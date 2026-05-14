@@ -10,6 +10,7 @@ class PlanSession {
   final List<String> instructions;
   final int? targetHeartRateMin;
   final int? targetHeartRateMax;
+  final String? scheduledDate;
 
   const PlanSession({
     required this.id,
@@ -23,6 +24,7 @@ class PlanSession {
     this.instructions = const [],
     this.targetHeartRateMin,
     this.targetHeartRateMax,
+    this.scheduledDate,
   });
 
   factory PlanSession.fromJson(Map<String, dynamic> j) => PlanSession(
@@ -37,7 +39,23 @@ class PlanSession {
     instructions: List<String>.from(j['instructions'] ?? []),
     targetHeartRateMin: j['targetHeartRateMin'] as int?,
     targetHeartRateMax: j['targetHeartRateMax'] as int?,
+    scheduledDate: j['scheduledDate'] as String?,
   );
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'dayOfWeek': dayOfWeek,
+    'type': type,
+    'distanceKm': distanceKm,
+    if (targetPace != null) 'targetPace': targetPace,
+    'notes': notes,
+    'warmupDuration': warmupDuration,
+    'cooldownDuration': cooldownDuration,
+    'instructions': instructions,
+    if (targetHeartRateMin != null) 'targetHeartRateMin': targetHeartRateMin,
+    if (targetHeartRateMax != null) 'targetHeartRateMax': targetHeartRateMax,
+    if (scheduledDate != null) 'scheduledDate': scheduledDate,
+  };
 }
 
 class PlanWeek {
@@ -59,6 +77,12 @@ class PlanWeek {
     weekType: j['weekType'] as String?,
   );
 
+  Map<String, dynamic> toJson() => {
+    'weekNumber': weekNumber,
+    'sessions': sessions.map((s) => s.toJson()).toList(),
+    if (weekType != null) 'weekType': weekType,
+  };
+
   bool get isRecoveryWeek => weekType == 'recovery';
 }
 
@@ -72,6 +96,11 @@ class HeartRateZone {
     min: j['min'] as int,
     max: j['max'] as int,
   );
+
+  Map<String, dynamic> toJson() => {
+    'min': min,
+    'max': max,
+  };
 }
 
 class HeartRateZones {
@@ -99,6 +128,15 @@ class HeartRateZones {
     zone5: HeartRateZone.fromJson(j['zone5'] as Map<String, dynamic>),
     maxHeartRate: j['maxHeartRate'] as int,
   );
+
+  Map<String, dynamic> toJson() => {
+    'zone1': zone1.toJson(),
+    'zone2': zone2.toJson(),
+    'zone3': zone3.toJson(),
+    'zone4': zone4.toJson(),
+    'zone5': zone5.toJson(),
+    'maxHeartRate': maxHeartRate,
+  };
 }
 
 class GenerationProgress {
@@ -122,7 +160,12 @@ class GenerationProgress {
         stageDescription: j['stageDescription'] as String,
       );
 
-  double get progress => currentStage / totalStages;
+  Map<String, dynamic> toJson() => {
+    'currentStage': currentStage,
+    'totalStages': totalStages,
+    'stageName': stageName,
+    'stageDescription': stageDescription,
+  };
 }
 
 class Plan {
@@ -167,6 +210,18 @@ class Plan {
                 j['generationProgress'] as Map<String, dynamic>)
             : null,
       );
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'goal': goal,
+    'level': level,
+    'weeksCount': weeksCount,
+    'status': status,
+    'weeks': weeks.map((w) => w.toJson()).toList(),
+    'createdAt': createdAt,
+    if (heartRateZones != null) 'heartRateZones': heartRateZones!.toJson(),
+    if (generationProgress != null) 'generationProgress': generationProgress!.toJson(),
+  };
 
   bool get isReady => status == 'ready';
   bool get isGenerating => status == 'generating';
