@@ -94,6 +94,7 @@ describe('GeneratePlanUseCase', () => {
       medicalConditions: [],
       premium: false,
       onboarded: true,
+      hasCompletedFirstRun: false,
       createdAt: '2025-01-01T00:00:00Z',
       updatedAt: '2025-01-01T00:00:00Z',
     };

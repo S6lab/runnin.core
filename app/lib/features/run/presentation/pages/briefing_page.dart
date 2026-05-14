@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router_delegate.dart';
 import 'package:runnin/app/presentation/utils/runnin_palette.g.dart';
+import 'package:runnin/features/onboarding/presentation/pages/initial_briefing_page.dart';
 import 'package:runnin/features/run/domain/entities/session.dart';
 
 class BriefingPage extends StatefulWidget {
-  final Session session;
-  final Function(String type) onSkip;
-  final Function(String type, String? briefingText) onComplete;
+  final Session? session;
+  final VoidCallback onSkip;
+  final VoidCallback onComplete;
 
   const BriefingPage({
     super.key,
-    required this.session,
+    this.session,
     required this.onSkip,
     required this.onComplete,
   });
@@ -22,20 +22,18 @@ class BriefingPage extends StatefulWidget {
 class _BriefingPageState extends State<BriefingPage>
     with TickerProviderStateMixin {
   late int _currentPage;
-  late AnimationController _controller;
+  late PageController _pageController;
+  late AnimationController _fadeController;
 
-  static const List<String> _briefingSlides = [
-    'Bem-vindo à sua corrida!',
-    'Vamos analisar seu objetivo.',
-    'Verificando seu histórico.',
-    'Pronto para largar?',
-  ];
+  static const List<BriefingSlide> _briefingSlides =
+      BriefingSlides.coachBriefing;
 
   @override
   void initState() {
     super.initState();
     _currentPage = 0;
-    _controller = AnimationController(
+    _pageController = PageController(initialPage: 0);
+    _fadeController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 300),
     );
@@ -43,22 +41,30 @@ class _BriefingPageState extends State<BriefingPage>
 
   @override
   void dispose() {
-    _controller.dispose();
+    _pageController.dispose();
+    _fadeController.dispose();
     super.dispose();
   }
 
   void _nextPage() {
     if (_currentPage < _briefingSlides.length - 1) {
-      setState(() {
-        _currentPage++;
-      });
+      _pageController.nextPage(
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+      );
     } else {
-      widget.onComplete(widget.session.type, null);
+      widget.onComplete();
     }
   }
 
   void _skipBriefing() {
-    widget.onSkip(widget.session.type);
+    widget.onSkip();
+  }
+
+  void _handlePageChange(int page) {
+    setState(() {
+      _currentPage = page;
+    });
   }
 
   @override
@@ -87,11 +93,13 @@ class _BriefingPageState extends State<BriefingPage>
               ),
             ),
             Expanded(
-              child: Center(
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 300),
-                  child: Center(
-                    key: ValueKey(_currentPage),
+              child: PageView.builder(
+                controller: _pageController,
+                itemCount: _briefingSlides.length,
+                onPageChanged: _handlePageChange,
+                itemBuilder: (context, index) {
+                  return FadeTransition(
+                    opacity: _fadeController,
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 24),
                       child: Column(
@@ -106,13 +114,7 @@ class _BriefingPageState extends State<BriefingPage>
                             ),
                             child: Center(
                               child: Icon(
-                                _currentPage == 0
-                                    ? Icons.person_add_outlined
-                                    : _currentPage == 1
-                                        ? Icons.target_rounded
-                                        : _currentPage == 2
-                                            ? Icons.history
-                                            : Icons.play_arrow,
+                                _briefingSlides[index].icon,
                                 size: 48,
                                 color: palette.primary,
                               ),
@@ -120,15 +122,24 @@ class _BriefingPageState extends State<BriefingPage>
                           ),
                           const SizedBox(height: 32),
                           Text(
-                            _briefingSlides[_currentPage],
+                            _briefingSlides[index].title,
                             style: Theme.of(context).textTheme.headlineSmall,
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            _briefingSlides[index].body,
+                            style: context.runninType.bodyMd.copyWith(
+                              color: palette.muted,
+                              height: 1.6,
+                            ),
                             textAlign: TextAlign.center,
                           ),
                         ],
                       ),
                     ),
-                  ),
-                ),
+                  );
+                },
               ),
             ),
             Padding(

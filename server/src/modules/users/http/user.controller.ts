@@ -10,6 +10,7 @@ import { UpdateRunPreferencesUseCase, UpdateRunPreferencesSchema } from '../doma
 import { GetMusicPreferencesUseCase } from '../domain/use-cases/get-music-preferences.use-case';
 import { UpdateMusicPreferencesUseCase, UpdateMusicPreferencesSchema } from '../domain/use-cases/update-music-preferences.use-case';
 import { CompleteFirstRunUseCase } from '../domain/use-cases/complete-first-run.use-case';
+import { GetHasCompletedFirstRunUseCase } from '../domain/use-cases/get-has-completed-first-run.use-case';
 
 const repo = new FirestoreUserRepository();
 const getProfile = new GetProfileUseCase(repo);
@@ -22,6 +23,7 @@ const updateRunPreferences = new UpdateRunPreferencesUseCase(repo);
 const getMusicPreferences = new GetMusicPreferencesUseCase(repo);
 const updateMusicPreferences = new UpdateMusicPreferencesUseCase(repo);
 const completeFirstRun = new CompleteFirstRunUseCase(repo);
+const getHasCompletedFirstRun = new GetHasCompletedFirstRunUseCase(repo);
 
 export async function getMe(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
@@ -109,6 +111,25 @@ export async function patchMusicPreferences(req: Request, res: Response, next: N
   }
 }
 
+export async function getHasCompletedFirstRunEndpoint(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const result = await getHasCompletedFirstRun.execute(req.uid);
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * API Endpoint: POST /api/users/complete-first-run
+ * Description: Marks that the user has completed their first run
+ * Access: Authenticated - only the user can update their own flag
+ *
+ * Response:
+ *   200 OK - Successfully updated the user's hasCompletedFirstRun status
+ *   401 Unauthorized - No valid authentication token provided
+ *   404 Not Found - User not found
+ */
 export async function postCompleteFirstRun(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const result = await completeFirstRun.execute(req.uid);

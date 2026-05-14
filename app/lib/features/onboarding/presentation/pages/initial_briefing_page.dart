@@ -18,6 +18,47 @@ class InitialBriefingSlide {
   });
 }
 
+class BriefingSlide {
+  final String title;
+  final String body;
+  final IconData icon;
+
+  const BriefingSlide({
+    required this.title,
+    required this.body,
+    required this.icon,
+  });
+}
+
+class BriefingSlides {
+  static const List<BriefingSlide> coachBriefing = [
+    BriefingSlide(
+      title: 'Seu Coach de IA',
+      body:
+          'Um personal trainer digital que te conhece, planeja seu treino e acompanha cada metro. Antes, durante e depois da corrida.',
+      icon: Icons.psychology_alt_outlined,
+    ),
+    BriefingSlide(
+      title: 'Orientação em Tempo Real',
+      body:
+          'Pace, motivação e dicas. O Coach fala com você durante a corrida sem tirar o celular do bolso.',
+      icon: Icons.mic_none_outlined,
+    ),
+    BriefingSlide(
+      title: 'Análise Completa',
+      body:
+          'Métricas, zonas cardíacas, benchmark e tendências. Evolua com dados que importam.',
+      icon: Icons.analytics_outlined,
+    ),
+    BriefingSlide(
+      title: 'Pronto para largar?',
+      body:
+          'Configure seus alertas, escolha seu ritmo e vamos lá! O Coach estará com você do começo ao fim.',
+      icon: Icons.directions_run_outlined,
+    ),
+  ];
+}
+
 class InitialBriefingPage extends StatefulWidget {
   final int currentIndex;
   final List<InitialBriefingSlide> slides;
