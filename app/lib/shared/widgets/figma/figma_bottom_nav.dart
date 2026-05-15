@@ -111,7 +111,7 @@ class _RunFAB extends StatelessWidget {
           gradient: RadialGradient(
             colors: [
               palette.primary,
-              palette.primary.withValues(alpha: 0.4),
+              palette.primary.withValues(alpha: 0.31),
             ],
           ),
           boxShadow: [
