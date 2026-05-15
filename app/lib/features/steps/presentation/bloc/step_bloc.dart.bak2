@@ -1,0 +1,253 @@
+import 'package:equatable/equatable.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:runnin/features/steps/domain/entities/step.dart';
+
+abstract class StepEvent extends Equatable {}
+
+class StepInitialized extends StepEvent {
+  final List<AppStep> steps;
+
+  StepInitialized({required this.steps});
+
+  @override
+  List<Object?> get props => [steps];
+}
+
+class NavigateToNextStep extends StepEvent {
+  @override
+  List<Object?> get props => [];
+}
+
+class NavigateToPreviousStep extends StepEvent {
+  @override
+  List<Object?> get props => [];
+}
+
+class JumpToStep extends StepEvent {
+  final int index;
+
+  JumpToStep({required this.index});
+
+  @override
+  List<Object?> get props => [index];
+}
+
+class CompleteStep extends StepEvent {
+  final String stepId;
+
+  CompleteStep({required this.stepId});
+
+  @override
+  List<Object?> get props => [stepId];
+}
+
+class SkipStep extends StepEvent {
+  final String stepId;
+
+  SkipStep({required this.stepId});
+
+  @override
+  List<Object?> get props => [stepId];
+}
+
+class CompleteFlow extends StepEvent {
+  @override
+  List<Object?> get props => [];
+}
+}
+
+class ValidateStep extends StepEvent {
+  final String stepId;
+
+  ValidateStep({required this.stepId});
+
+  @override
+  List<Object?> get props => [stepId];
+}
+
+class StepValidationFailed extends StepEvent {
+  final String stepId;
+  final List<StepValidationResult> errors;
+
+  StepValidationFailed({required this.stepId, required this.errors});
+
+  @override
+  List<Object?> get props => [stepId, errors];
+}
+
+class StepState extends Equatable {
+  final StepsState stepsState;
+  final bool isLoading;
+  final String? errorMessage;
+  final bool isCompleted;
+
+  const StepState({
+    this.stepsState = const StepsState(),
+    this.isLoading = false,
+    this.errorMessage,
+    this.isCompleted = false,
+  });
+
+  StepState copyWith({
+    StepsState? stepsState,
+    bool? isLoading,
+    String? errorMessage,
+    bool? isCompleted,
+  }) {
+    return StepState(
+      stepsState: stepsState ?? this.stepsState,
+      isLoading: isLoading ?? this.isLoading,
+      errorMessage: errorMessage ?? this.errorMessage,
+      isCompleted: isCompleted ?? this.isCompleted,
+    );
+  }
+
+  StepState initializeWithSteps(List<AppStep> steps) {
+    return copyWith(
+      stepsState: StepsState(steps: steps),
+    );
+  }
+
+  StepState navigateToNext() {
+    final nextIndex = stepsState.currentIndex + 1;
+    return copyWith(
+      stepsState: stepsState.copyWith(currentIndex: nextIndex),
+    );
+  }
+
+  StepState navigateToPrevious() {
+    final prevIndex = stepsState.currentIndex - 1;
+    return copyWith(
+      stepsState: stepsState.copyWith(currentIndex: prevIndex),
+    );
+  }
+
+  StepState jumpToStep(int index) {
+    return copyWith(
+      stepsState: stepsState.copyWith(currentIndex: index),
+    );
+  }
+
+  StepState completeStep(String stepId) {
+    final newSteps = stepsState.steps.map((step) {
+      if (step.id == stepId) {
+        return step.copyWith(status: StepStatus.completed);
+      }
+      return step;
+    }).toList();
+
+    final newCurrentIndex = stepsState.currentIndex + 1 <= newSteps.length - 1
+        ? stepsState.currentIndex + 1
+        : newSteps.length - 1;
+
+    return copyWith(
+      stepsState: StepsState(steps: newSteps, currentIndex: newCurrentIndex),
+    );
+  }
+
+  StepState completeCurrentAndMarkFlowAsDone(String stepId) {
+    final newSteps = stepsState.steps.map((step) {
+      if (step.id == stepId) {
+        return step.copyWith(status: StepStatus.completed);
+      }
+      return step;
+    }).toList();
+
+    return copyWith(
+      stepsState: StepsState(steps: newSteps, currentIndex: stepsState.currentIndex),
+    );
+  }
+
+  StepState skipStep(String stepId) {
+    final newSteps = stepsState.steps.map((step) {
+      if (step.id == stepId) {
+        return step.copyWith(status: StepStatus.skipped);
+      }
+      return step;
+    }).toList();
+
+    final newCurrentIndex = stepsState.currentIndex + 1 <= newSteps.length - 1
+        ? stepsState.currentIndex + 1
+        : newSteps.length - 1;
+
+    return copyWith(
+      stepsState: StepsState(steps: newSteps, currentIndex: newCurrentIndex),
+    );
+  }
+
+  StepState markValidationError(String stepId, List<StepValidationResult> errors) {
+    final newSteps = stepsState.steps.map((step) {
+      if (step.id == stepId) {
+        return step.copyWith(status: StepStatus.error);
+      }
+      return step;
+    }).toList();
+
+    return copyWith(
+      stepsState: StepsState(steps: newSteps),
+      errorMessage: errors.isNotEmpty ? errors[0].message : null,
+    );
+  }
+
+  StepState clearError() {
+    return copyWith(errorMessage: null);
+  }
+
+  @override
+  List<Object?> get props => [stepsState, isLoading, errorMessage, isCompleted];
+}
+
+class StepBloc extends Bloc<StepEvent, StepState> {
+  StepBloc() : super(const StepState()) {
+    on<StepInitialized>((event, emit) {
+      emit(state.initializeWithSteps(event.steps));
+    });
+
+    on<NavigateToNextStep>((event, emit) {
+      if (state.stepsState.canGoNext && state.errorMessage == null) {
+        emit(state.navigateToNext());
+      }
+    });
+
+    on<NavigateToPreviousStep>((event, emit) {
+      if (state.stepsState.canGoPrevious && state.errorMessage == null) {
+        emit(state.navigateToPrevious());
+      }
+    });
+
+    on<JumpToStep>((event, emit) {
+      if (event.index >= 0 && event.index < state.stepsState.steps.length) {
+        emit(state.jumpToStep(event.index));
+      }
+    });
+
+    on<CompleteStep>((event, emit) {
+      emit(state.completeStep(event.stepId));
+    });
+
+    on<SkipStep>((event, emit) {
+      if (state.stepsState.canGoNext || state.stepsState.currentIndex < state.stepsState.steps.length - 1) {
+        emit(state.skipStep(event.stepId));
+      }
+    });
+
+    on<CompleteFlow>((event, emit) {
+      if (state.stepsState.currentIndex < state.stepsState.steps.length - 1) {
+        emit(state.completeStep(
+          state.stepsState.steps[state.stepsState.currentIndex].id,
+        ));
+      } else {
+        final currentStep = state.stepsState.getCurrentStep();
+        emit(state.completeCurrentAndMarkFlowAsDone(currentStep.id));
+      }
+    });
+
+    on<ValidateStep>((event, emit) {
+      emit(state.clearError());
+    });
+
+    on<StepValidationFailed>((event, emit) {
+      emit(state.markValidationError(event.stepId, event.errors));
+    });
+  }
+}
