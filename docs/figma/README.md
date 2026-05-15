@@ -21,6 +21,7 @@
 | Coach Intro 01–04 | [screens/COACH_INTRO.md](screens/COACH_INTRO.md)     | 1:5770–1:5922 | app     | ✅ Extraído |
 | Run Journey       | [screens/RUN_JOURNEY.md](screens/RUN_JOURNEY.md)     | 1:5974–1:7105 | app     | ✅ Extraído |
 | Treino (10 telas) | [screens/TREINO.md](screens/TREINO.md)               | 1:7230–1:8498 | app     | ✅ Extraído |
+| HIST (5 telas)    | [screens/HIST.md](screens/HIST.md)                   | 1:9956–1:11403 | app    | ✅ Extraído |
 
 ---
 
