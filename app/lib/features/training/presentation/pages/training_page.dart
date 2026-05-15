@@ -836,6 +836,7 @@ class _TabButton extends StatelessWidget {
           color: selected ? palette.primary : palette.surface,
           border: Border.all(
             color: selected ? palette.primary : palette.border,
+            width: 1.735,
           ),
         ),
         child: Row(
@@ -979,6 +980,7 @@ class _ModeButton extends StatelessWidget {
             color: selected
                 ? palette.primary.withValues(alpha: 0.5)
                 : palette.border,
+            width: 1.735,
           ),
         ),
         alignment: Alignment.center,
@@ -1238,6 +1240,7 @@ class _WeekChip extends StatelessWidget {
           color: selected ? palette.primary : palette.surface,
           border: Border.all(
             color: selected ? palette.primary : palette.border,
+            width: 1.735,
           ),
         ),
         child: Text(

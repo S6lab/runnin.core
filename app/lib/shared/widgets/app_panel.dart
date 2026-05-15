@@ -26,7 +26,7 @@ class AppPanel extends StatelessWidget {
       padding: padding,
       decoration: BoxDecoration(
         color: color ?? palette.surface,
-        border: Border.all(color: borderColor ?? palette.border),
+        border: Border.all(color: borderColor ?? palette.border, width: 1.735),
       ),
       child: child,
     );

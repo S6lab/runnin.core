@@ -595,7 +595,7 @@ class _CoachMessageCard extends StatelessWidget {
            decoration: BoxDecoration(
              color: palette.secondary.withValues(alpha: 0.02),
              border: Border(
-               left: BorderSide(color: palette.secondary, width: 1),
+               left: BorderSide(color: palette.secondary, width: 1.735),
              ),
            ),
           child: Column(
@@ -1182,7 +1182,7 @@ class _CoachAiWeeklySummary extends StatelessWidget {
             padding: const EdgeInsets.only(left: 12),
             decoration: BoxDecoration(
               border: Border(
-                left: BorderSide(color: palette.secondary, width: 1),
+                left: BorderSide(color: palette.secondary, width: 1.735),
               ),
             ),
             child: Column(
@@ -1999,7 +1999,7 @@ class _HydrationUpdateSheetState extends State<_HydrationUpdateSheet> {
           decoration: BoxDecoration(
             color: palette.background,
             border: Border.all(color: palette.border),
-            borderRadius: BorderRadius.circular(18),
+            borderRadius: BorderRadius.zero,
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,

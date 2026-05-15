@@ -24,7 +24,7 @@ class ValidationErrorCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: palette.error.withValues(alpha: 0.1),
         border: Border.all(color: palette.error),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.zero,
       ),
       child: Row(
         children: [
@@ -69,7 +69,7 @@ class ValidationSuccessCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: palette.success.withValues(alpha: 0.1),
         border: Border.all(color: palette.success),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.zero,
       ),
       child: Row(
         children: [

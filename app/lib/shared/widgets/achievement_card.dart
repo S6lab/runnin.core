@@ -35,6 +35,7 @@ class AchievementCard extends StatelessWidget {
           color: isUnlocked
               ? palette.primary.withValues(alpha: 0.4)
               : palette.border,
+          width: 1.735,
         ),
       ),
       child: Column(
@@ -42,7 +43,7 @@ class AchievementCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(icon, size: 24, color: color),
+              Icon(icon, size: 20, color: color),
               const Spacer(),
               if (isUnlocked)
                 Icon(Icons.verified, size: 14, color: palette.primary)
@@ -60,11 +61,11 @@ class AchievementCard extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(description, style: type.bodySm),
-          if (!isUnlocked && progress > 0) ...[
-            const SizedBox(height: 10),
-            ClipRect(
-              child: Container(
-                height: 3,
+             if (!isUnlocked && progress != null) ...[
+               const SizedBox(height: 10),
+               ClipRect(
+                 child: Container(
+                   height: 4,
                 color: palette.border,
                 child: FractionallySizedBox(
                   alignment: Alignment.centerLeft,

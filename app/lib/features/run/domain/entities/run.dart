@@ -36,6 +36,9 @@ class Run {
   final int? xpEarned;
   final String? coachReportId;
   final String createdAt;
+  final int? elapsedSeconds;
+  final double? elevationGain;
+  final String? deviceInfo;
 
   const Run({
     required this.id,
@@ -50,6 +53,9 @@ class Run {
     this.xpEarned,
     this.coachReportId,
     required this.createdAt,
+    this.elapsedSeconds,
+    this.elevationGain,
+    this.deviceInfo,
   });
 
   factory Run.fromJson(Map<String, dynamic> j) => Run(
@@ -65,5 +71,8 @@ class Run {
     xpEarned: j['xpEarned'] as int?,
     coachReportId: j['coachReportId'] as String?,
     createdAt: j['createdAt'] as String,
+    elapsedSeconds: j['elapsedSeconds'] as int?,
+    elevationGain: (j['elevationGain'] as num?)?.toDouble(),
+    deviceInfo: j['deviceInfo'] as String?,
   );
 }

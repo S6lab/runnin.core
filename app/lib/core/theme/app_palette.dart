@@ -53,21 +53,21 @@ class RunninTypography {
 
   static RunninTypography build(Color textColor, Color mutedColor) {
     return RunninTypography(
-      displayLg: GoogleFonts.barlow(
+      displayLg: GoogleFonts.jetBrainsMono(
         fontSize: 52,
         fontWeight: FontWeight.w800,
         letterSpacing: -0.5,
         height: 1.0,
         color: textColor,
       ),
-      displayMd: GoogleFonts.barlow(
+      displayMd: GoogleFonts.jetBrainsMono(
         fontSize: 32,
         fontWeight: FontWeight.w700,
         letterSpacing: -0.2,
         height: 1.1,
         color: textColor,
       ),
-      displaySm: GoogleFonts.barlow(
+      displaySm: GoogleFonts.jetBrainsMono(
         fontSize: 20,
         fontWeight: FontWeight.w700,
         letterSpacing: 0.0,
@@ -95,28 +95,28 @@ class RunninTypography {
         height: 1.2,
         color: textColor,
       ),
-      bodyMd: GoogleFonts.inter(
+      bodyMd: GoogleFonts.jetBrainsMono(
         fontSize: 14,
         fontWeight: FontWeight.w400,
         letterSpacing: 0.0,
         height: 1.5,
         color: textColor,
       ),
-      bodySm: GoogleFonts.inter(
+      bodySm: GoogleFonts.jetBrainsMono(
         fontSize: 12,
         fontWeight: FontWeight.w400,
         letterSpacing: 0.0,
         height: 1.4,
         color: mutedColor,
       ),
-      labelCaps: GoogleFonts.inter(
+      labelCaps: GoogleFonts.jetBrainsMono(
         fontSize: 10,
         fontWeight: FontWeight.w700,
         letterSpacing: 0.12,
         height: 1.2,
         color: mutedColor,
       ),
-      labelMd: GoogleFonts.inter(
+      labelMd: GoogleFonts.jetBrainsMono(
         fontSize: 12,
         fontWeight: FontWeight.w600,
         letterSpacing: 0.04,
@@ -294,15 +294,15 @@ class RunninThemeTokens extends ThemeExtension<RunninThemeTokens> {
 extension RunninThemeContext on BuildContext {
   RunninPalette get runninPalette {
     final tokens = Theme.of(this).extension<RunninThemeTokens>();
-    return tokens?.palette ?? RunninSkin.artico.palette;
+    return tokens?.palette ?? RunninSkin.cyber.palette;
   }
 
   RunninTypography get runninType {
     final tokens = Theme.of(this).extension<RunninThemeTokens>();
     return tokens?.typography ??
         RunninTypography.build(
-          RunninSkin.artico.palette.text,
-          RunninSkin.artico.palette.muted,
+          RunninSkin.cyber.palette.text,
+          RunninSkin.cyber.palette.muted,
         );
   }
 }

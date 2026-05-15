@@ -1,5 +1,6 @@
 {
   "projects": {
-    "default": "runnin-494520"
+    "default": "runnin-494520",
+    "staging": "runnin-staging"
   }
 }

@@ -22,7 +22,7 @@ class SegmentedTabBar extends StatelessWidget {
 
     return Container(
       decoration: BoxDecoration(
-        border: Border.all(color: palette.border),
+        border: Border.all(color: palette.border, width: 1.735),
       ),
       child: Row(
         children: List.generate(tabs.length, (i) {

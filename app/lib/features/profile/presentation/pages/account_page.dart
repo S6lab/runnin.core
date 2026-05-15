@@ -514,7 +514,7 @@ class _ThemeCard extends StatelessWidget {
                       const SizedBox(height: 8),
                       // Progress bar
                       ClipRRect(
-                        borderRadius: BorderRadius.circular(999),
+                        borderRadius: BorderRadius.zero,
                         child: Row(
                           children: [
                             Expanded(

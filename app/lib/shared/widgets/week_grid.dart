@@ -49,6 +49,7 @@ class WeekGrid extends StatelessWidget {
                       color: _bgColor(day.status, palette),
                       border: Border.all(
                         color: _borderColor(day.status, palette),
+                        width: 1.735,
                       ),
                     ),
                     alignment: Alignment.center,

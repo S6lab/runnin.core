@@ -30,7 +30,7 @@ class StepContentLayout extends StatelessWidget {
             decoration: BoxDecoration(
               color: palette.background,
               border: Border.all(color: palette.border),
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.zero,
             ),
             child: stepDescription!,
           ),

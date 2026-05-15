@@ -8,6 +8,7 @@ import 'package:runnin/features/run/data/datasources/run_remote_datasource.dart'
 import 'package:runnin/features/run/domain/entities/run.dart';
 import 'package:runnin/shared/widgets/app_page_header.dart';
 import 'package:runnin/shared/widgets/app_panel.dart';
+import 'package:runnin/shared/widgets/gamification_stats_row.dart';
 import 'package:runnin/shared/widgets/user_profile_header.dart';
 
 class ProfilePage extends StatefulWidget {
@@ -204,6 +205,44 @@ class _ProfilePageState extends State<ProfilePage> {
         _runs?.fold(0, (sum, run) => sum + (run.xpEarned ?? 0)) ?? 0;
     final levelNumber = (totalXp / 500).floor() + 1;
 
+    int calculateStreak(List<Run> runs) {
+      if (runs.isEmpty) return 0;
+
+      final sortedRuns = runs..sort((a, b) {
+        final dateA = DateTime.parse(a.createdAt);
+        final dateB = DateTime.parse(b.createdAt);
+        return dateB.compareTo(dateA);
+      });
+
+      if (sortedRuns.isEmpty) return 0;
+
+      final lastRunDate = DateTime.parse(sortedRuns.first.createdAt);
+      int streak = 1;
+      var currentCheckDate =
+          DateTime(lastRunDate.year, lastRunDate.month, lastRunDate.day - 1);
+
+      for (int i = 1; i < sortedRuns.length; i++) {
+        final runDate =
+            DateTime.parse(sortedRuns[i].createdAt).toLocal();
+        currentCheckDate = currentCheckDate.toLocal();
+
+        if (runDate.year == currentCheckDate.year &&
+            runDate.month == currentCheckDate.month &&
+            runDate.day == currentCheckDate.day) {
+          streak++;
+          currentCheckDate = DateTime(
+              currentCheckDate.year, currentCheckDate.month, currentCheckDate.day - 1);
+        } else if (runDate.isBefore(currentCheckDate)) {
+          break;
+        }
+      }
+
+      return streak;
+    }
+
+    final streak = calculateStreak(_runs ?? []);
+    final badges = (totalXp / 100).floor();
+
     return Scaffold(
       backgroundColor: palette.background,
       body: SafeArea(
@@ -281,13 +320,29 @@ class _ProfilePageState extends State<ProfilePage> {
                                 child: _StatCard(
                                   label: 'NÍVEL',
                                   value: '$levelNumber',
-                                  accent: true,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 24),
-                          _SectionLabel(label: 'PERFIL'),
+                                   accent: true,
+                                 ),
+                               ),
+                             ],
+                           ),
+                           const SizedBox(height: 12),
+                           GamificationStatsRow(
+                             streak: StatData(
+                               label: 'STREAK',
+                               value: '$streak',
+                             ),
+                             xp: StatData(
+                               label: 'XP',
+                               value: '$totalXp',
+                               accent: true,
+                             ),
+                             badges: StatData(
+                               label: 'BADGES',
+                               value: '$badges',
+                             ),
+                           ),
+                           const SizedBox(height: 24),
+                           _SectionLabel(label: 'PERFIL'),
                           const SizedBox(height: 8),
                           _ProfileEditor(
                             nameController: _nameCtrl,
@@ -853,6 +908,7 @@ class _SelectChip extends StatelessWidget {
               : palette.surface,
           border: Border.all(
             color: selected ? palette.primary : palette.border,
+            width: 1.735,
           ),
         ),
         child: Text(
@@ -981,6 +1037,7 @@ class _SkinCard extends StatelessWidget {
           color: palette.surface,
           border: Border.all(
             color: isActive ? palette.primary : palette.border,
+            width: 1.735,
           ),
         ),
         child: Column(
@@ -1232,6 +1289,7 @@ class _RedoOnboardingRow extends StatelessWidget {
         style: OutlinedButton.styleFrom(
           side: BorderSide(
             color: canRedo ? palette.primary : palette.border,
+            width: 1.735,
           ),
           foregroundColor: canRedo ? palette.primary : palette.muted,
         ),

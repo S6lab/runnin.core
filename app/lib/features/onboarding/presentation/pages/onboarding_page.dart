@@ -451,24 +451,46 @@ class _OnboardingPageState extends State<OnboardingPage> {
   Widget build(BuildContext context) {
     final palette = context.runninPalette;
 
+    final progressValue = _step == _loadingStep
+        ? 1.0
+        : (_step / (_totalSteps - 1)).clamp(0.0, 1.0);
+
     return Scaffold(
       backgroundColor: palette.background,
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(24, 18, 24, 20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildHeader(context),
-              const SizedBox(height: 24),
-              Expanded(child: _buildStep(context)),
-              const SizedBox(height: 18),
-              _buildNav(context),
-              const SizedBox(height: 12),
-              _StepDots(total: _loadingStep, current: _step),
-            ],
+      body: Column(
+        children: [
+          // Figma: 2px top progress bar, fill ciano proporcional
+          Container(
+            width: double.infinity,
+            height: 2,
+            color: palette.border,
+            child: FractionallySizedBox(
+              alignment: Alignment.centerLeft,
+              widthFactor: progressValue,
+              child: Container(color: palette.primary),
+            ),
           ),
-        ),
+          Expanded(
+            child: SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(24, 18, 24, 20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildHeader(context),
+                    const SizedBox(height: 24),
+                    Expanded(child: _buildStep(context)),
+                    const SizedBox(height: 18),
+                    _buildNav(context),
+                    const SizedBox(height: 12),
+                    _StepDots(total: _loadingStep, current: _step),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1634,17 +1656,28 @@ class _StepDots extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final palette = context.runninPalette;
+    final clamped = current.clamp(0, total - 1);
 
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: List.generate(total, (index) {
-        final active = index == current.clamp(0, total - 1);
+        final isDone = index < clamped;
+        final isActive = index == clamped;
         return AnimatedContainer(
           duration: const Duration(milliseconds: 180),
-          width: active ? 14 : 4,
+          width: isActive ? 14 : 4,
           height: 4,
           margin: const EdgeInsets.symmetric(horizontal: 3),
-          color: active ? palette.primary : palette.border,
+          decoration: BoxDecoration(
+            color: isActive
+                ? palette.primary
+                : isDone
+                    ? palette.primary.withValues(alpha: 0.5)
+                    : Colors.transparent,
+            border: isDone || isActive
+                ? null
+                : Border.all(color: palette.border, width: 1),
+          ),
         );
       }),
     );

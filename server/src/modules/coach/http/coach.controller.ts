@@ -1,18 +1,19 @@
 import { Request, Response, NextFunction } from 'express';
 import { CoachMessageUseCase, CoachContextSchema } from '../use-cases/coach-message.use-case';
 import { CoachChatSchema, CoachChatUseCase } from '../use-cases/coach-chat.use-case';
-import { getFirestore } from '@shared/infra/firebase/firebase.client';
-import { logger } from '@shared/logger/logger';
+import { GetCoachReportUseCase } from '../use-cases/get-coach-report.use-case';
+import { FirestoreCoachReportRepository } from '../infra/firestore-coach-report.repository';
 
+const reportRepo = new FirestoreCoachReportRepository();
 const coachMessage = new CoachMessageUseCase();
 const coachChat = new CoachChatUseCase();
+const getReport = new GetCoachReportUseCase(reportRepo);
 
 export async function postCoachMessage(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const ctx = CoachContextSchema.parse(req.body);
     const cue = await coachMessage.generate(ctx, req.uid);
 
-    // SSE headers
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
@@ -39,17 +40,17 @@ export async function postCoachChat(req: Request, res: Response, next: NextFunct
 export async function getCoachReport(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const runId = req.params['runId'] as string;
-    const doc = await getFirestore()
-      .collection(`users/${req.uid}/runs/${runId}/reports`)
-      .doc(runId)
-      .get();
-
-    if (!doc.exists) {
+    const result = await getReport.execute(req.uid, runId);
+    if (result.status === 'pending') {
       res.json({ status: 'pending' });
       return;
     }
-
-    res.json({ status: 'ready', ...doc.data() });
+    const { report } = result;
+    res.json({
+      status: 'ready',
+      summary: report.summary,
+      generatedAt: report.generatedAt,
+    });
   } catch (err) {
     next(err);
   }

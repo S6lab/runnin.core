@@ -23,7 +23,7 @@ class UserProfileHeader extends StatelessWidget {
     final palette = context.runninPalette;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+      padding: const EdgeInsets.fromLTRB(17.7, 20, 17.7, 20),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -36,10 +36,11 @@ class UserProfileHeader extends StatelessWidget {
                 Row(
                   children: [
                     Text(
-                      userName,
+                      userName.toUpperCase(),
                       style: GoogleFonts.jetBrainsMono(
                         fontSize: 20,
                         fontWeight: FontWeight.w700,
+                        letterSpacing: 0.48,
                         color: palette.text,
                       ),
                     ),
@@ -51,20 +52,22 @@ class UserProfileHeader extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Nível $levelNumber',
+                  'Nível $levelNumber · · ',
                   style: GoogleFonts.jetBrainsMono(
                     fontSize: 13,
-                    fontWeight: FontWeight.w400,
-                    color: palette.text.withValues(alpha: 0.55),
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.48,
+                    color: palette.muted,
                   ),
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '$totalRuns corridas · ${totalDistanceKm.toStringAsFixed(1)}km total',
+                  '${totalRuns.toString().toUpperCase()} CORRIDAS · ${totalDistanceKm.toStringAsFixed(1)}km total',
                   style: GoogleFonts.jetBrainsMono(
                     fontSize: 13,
-                    fontWeight: FontWeight.w400,
-                    color: palette.text.withValues(alpha: 0.55),
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.48,
+                    color: palette.muted,
                   ),
                 ),
               ],
@@ -87,18 +90,18 @@ class _Avatar extends StatelessWidget {
     final initial = userName.isNotEmpty ? userName.characters.first.toUpperCase() : 'R';
 
     return Container(
-      width: 64,
-      height: 64,
+      width: 56,
+      height: 56,
       decoration: BoxDecoration(
         color: palette.primary,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(14),
       ),
       alignment: Alignment.center,
       child: Text(
         initial,
         style: GoogleFonts.jetBrainsMono(
-          fontSize: 28,
-          fontWeight: FontWeight.w700,
+          fontSize: 22,
+          fontWeight: FontWeight.w900,
           color: palette.background,
         ),
       ),

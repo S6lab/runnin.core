@@ -9,7 +9,7 @@ const _skinPreferenceKey = 'selected_skin';
 final themeController = ThemeController();
 
 class ThemeController extends ChangeNotifier {
-  RunninSkin _skin = RunninSkin.artico;
+  RunninSkin _skin = RunninSkin.cyber;
   Box<dynamic>? _box;
 
   RunninSkin get skin => _skin;
@@ -20,7 +20,7 @@ class ThemeController extends ChangeNotifier {
     final savedId = _box?.get(_skinPreferenceKey) as String?;
     _skin = RunninSkin.values.firstWhere(
       (candidate) => candidate.palette.id == savedId,
-      orElse: () => RunninSkin.artico,
+      orElse: () => RunninSkin.cyber,
     );
     notifyListeners();
   }

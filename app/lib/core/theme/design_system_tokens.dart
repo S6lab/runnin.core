@@ -18,15 +18,12 @@ abstract final class AppSpacing {
 }
 
 abstract final class AppDimensions {
-  static const double borderRadiusSm = 4;
-  static const double borderRadiusMd = 8;
-  static const double borderRadiusLg = 12;
-  static const double borderRadiusXl = 16;
-  static const double borderRadiusPill = 999;
+  // Figma design system: zero border-radius everywhere (except toggle pill)
+  static const double borderRadius = 0;
+  static const double borderRadiusPill = 999; // toggle pill only
 
-  static const double borderWidthSm = 1;
-  static const double borderWidthMd = 1.5;
-  static const double borderWidthLg = 2;
+  // Figma universal border width: 1.735px on all cards/rows/inputs
+  static const double borderUniversal = 1.735;
 
   static const double shadowBlur = 10;
   static const double shadowOffset = 2;

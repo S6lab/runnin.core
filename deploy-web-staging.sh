@@ -1,21 +1,25 @@
-#!/usr/bin/env bash
-set -euo pipefail
+#!/bin/bash
+set -e
 
-PROJECT_ID="runnin-494520"
-CHANNEL="staging"
+echo "Deploying Flutter web to Firebase Hosting staging..."
 
-echo "→ Build Flutter web..."
-cd app
-flutter build web --release --dart-define=API_URL=https://runnin-api-staging-rogiz7losq-rj.a.run.app
-cd ..
+if ! command -v firebase &> /dev/null; then
+    echo "Error: Firebase CLI not found"
+    exit 1
+fi
 
-echo "→ Deploy Firebase Hosting preview channel: $CHANNEL..."
-node tool/firebase_hosting_deploy_gcloud.js "$PROJECT_ID" "$PROJECT_ID" "$CHANNEL" app/build/web
+echo "Building Flutter web..."
+flutter build web --release
 
-echo "✓ Deploy web staging concluído!"
-echo ""
-echo "🔗 URL do frontend staging:"
-echo "https://runnin-494520--${CHANNEL}-5sd5wkho.web.app"
-echo ""
-echo "🔗 URL principal (live):"
-echo "https://runnin-494520.web.app"
+if [ -z "$GCLOUD_SERVICE_ACCOUNT_KEY" ]; then
+    echo "Error: GCLOUD_SERVICE_ACCOUNT_KEY not set"
+    exit 1
+fi
+
+echo "Authenticating with Firebase..."
+echo "$GCLOUD_SERVICE_ACCOUNT_KEY" | base64 -d > /tmp/service-account-key.json
+gcloud auth activate-service-account --key-file=/tmp/service-account-key.json
+firebase use staging
+firebase deploy --only hosting:staging
+
+echo "✓ Deployment complete!"

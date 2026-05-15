@@ -1,8 +1,8 @@
 # runrun.ai — Roadmap e Status Atual
 
-> Status em 2026-04-12: app Flutter e backend Node.js publicados, com auth Firebase, onboarding, home, treino, corrida, histórico, coach, dashboard e conta já implementados em diferentes níveis de maturidade.
-> Stack: Flutter (mobile/web) + Node.js TypeScript (Cloud Run) + Firebase.
-> Foco atual: estabilizar fluxos reais, alinhar deploys e fechar gaps para dados de produção.
+> Status em 2026-05-15: app Flutter e backend Node.js publicados, com auth Firebase, onboarding, home, treino, corrida, histórico, coach, dashboard e conta já implementados em diferentes níveis de maturidade.
+> Stack: Flutter (mobile/web) + Node.js TypeScript (Cloud Run) + Firebase. **Não há frontend web separado** (React/Vite/HTML) — Flutter web cobre o canal web.
+> Foco atual: alinhar app com design system Figma (migração HOME/TREINO/HIST/GAMIFICAÇÃO/PERFIL em andamento), fechar ambiente de staging e estabilizar fluxos reais.
 
 ---
 
@@ -26,6 +26,12 @@
   - `users`, `runs`, `plans`, `coach`
 - Módulos ainda não fechados:
   - `gamification`, `notifications`, `health`, `exams`, `wearables`, `billing/premium`
+- Ambiente de **staging** configurado:
+  - Backend: [deploy-server-staging.sh](deploy-server-staging.sh), Cloud Run service separado
+  - Flutter web: [app/main_staging.dart](app/main_staging.dart) (usa `StagingFirebaseOptions` de [app/lib/firebase_options.dart](app/lib/firebase_options.dart)) + [app/web/staging_index.html](app/web/staging_index.html)
+  - Deploy web: [deploy-web-staging.sh](deploy-web-staging.sh) + [firebase.staging.json](firebase.staging.json)
+  - Documentação: [app/DEPLOY_STAGING.md](app/DEPLOY_STAGING.md)
+- **Design system Flutter** alinhado parcialmente ao Figma (cores, tipografia, tokens) — [app/lib/core/theme/](app/lib/core/theme/), [app/lib/core/widgets/](app/lib/core/widgets/), [app/lib/shared/widgets/figma/](app/lib/shared/widgets/figma/). Migração de telas em andamento (ver seção "Design System Migration" abaixo)
 
 ---
 
@@ -43,6 +49,32 @@
 
 ---
 
+## Staging Environment
+
+Ambiente paralelo para validar mudanças antes de promoção a produção.
+
+**Backend (Cloud Run):**
+- Deploy via [deploy-server-staging.sh](deploy-server-staging.sh)
+- Service distinto em `southamerica-east1`, mesma região de prod
+- Variáveis de ambiente em `server/.env.staging` (não versionado)
+
+**Flutter Web:**
+- Entry-point: [app/main_staging.dart](app/main_staging.dart) (variante de `main.dart`)
+- Firebase options: classe `StagingFirebaseOptions` em [app/lib/firebase_options.dart](app/lib/firebase_options.dart) (gerada pela FlutterFire CLI, ao lado de `DefaultFirebaseOptions`)
+- HTML shell: [app/web/staging_index.html](app/web/staging_index.html)
+- Deploy: [deploy-web-staging.sh](deploy-web-staging.sh)
+- Firebase Hosting config: [firebase.staging.json](firebase.staging.json)
+
+**CI/CD:**
+- [app/.github/workflows/deploy-staging.yml](app/.github/workflows/deploy-staging.yml)
+- [app/.github/workflows/deploy-production.yml](app/.github/workflows/deploy-production.yml)
+
+**Documentação operacional:** [app/DEPLOY_STAGING.md](app/DEPLOY_STAGING.md)
+
+> Débito conhecido: bug pré-existente em `StagingFirebaseOptions.ios.storageBucket` ([firebase_options.dart:133](app/lib/firebase_options.dart#L133)) — string `'run nin-staging-494520.firebasestorage.app'` com espaço. Os `appId` de staging também estão como placeholders (`STAGING_APP_ID`); regenerar via FlutterFire CLI contra o projeto Firebase de staging real antes do primeiro deploy.
+
+---
+
 ## Estrutura de Repositórios
 
 ```
@@ -52,10 +84,11 @@ renius-lab/runrun.app      → App Flutter
 
 Local de trabalho:
 ```
-/home/nalin/Projects/runrun.app/
-├── server/   → API
-├── app/      → Flutter
-└── docs/     → STACK.md, ROADMAP.md, etc.
+/Users/eduardovasqueskaizer/Projects/runnin.core/
+├── app/          → Flutter (mobile + web)
+├── docs/         → STACK.md, ROADMAP.md, PRODUCT_BLUEPRINT.md, FIGMA_IMPLEMENTATION_PLAN.md, GCP_SETUP.md
+├── docs/figma/   → telas extraídas via MCP, DESIGN_SYSTEM.md, JOURNEYS.md
+└── (server em repo separado)
 ```
 
 ---
@@ -135,14 +168,23 @@ server/
 │       │       └── plan.routes.ts
 │       │
 │       ├── coach/
+│       │   ├── domain/
+│       │   │   ├── coach-report.entity.ts
+│       │   │   └── coach-report.repository.ts    ← interface
+│       │   ├── infra/
+│       │   │   └── firestore-coach-report.repository.ts
 │       │   ├── use-cases/
-│       │   │   ├── coach-message.use-case.ts   ← LLM rápido (stream)
-│       │   │   └── generate-report.use-case.ts ← LLM grande (async)
+│       │   │   ├── coach-message.use-case.ts     ← LLM rápido (stream)
+│       │   │   ├── coach-chat.use-case.ts
+│       │   │   ├── get-coach-report.use-case.ts
+│       │   │   └── generate-report.use-case.ts   ← LLM grande (async)
 │       │   └── http/
 │       │       ├── coach.controller.ts
 │       │       └── coach.routes.ts
 │       │
-│       └── gamification/             ← previsto no desenho, ainda não implementado no código atual
+│       ├── notifications/                        ← Firestore-backed, idempotente por dia
+│       │
+│       └── gamification/                         ← previsto no desenho, ainda não implementado no código atual
 │
 ├── Dockerfile
 ├── .env.example
@@ -159,22 +201,19 @@ app/
 └── lib/
     ├── main.dart
     ├── core/
-    │   ├── theme/
-    │   │   ├── app_theme.dart          ← dark theme, cores, fontes
-    │   │   └── app_colors.dart
+    │   ├── theme/                      ← dark theme, paleta, tipografia, tokens Figma
     │   ├── router/
     │   │   └── app_router.dart         ← go_router, rotas, guards auth
     │   ├── network/
     │   │   └── api_client.dart         ← Dio + interceptors (auth JWT, retry)
+    │   ├── widgets/                    ← biblioteca de componentes base (progress_bar, toggle, card, tab_bar)
     │   └── errors/
     │       ├── app_exception.dart
     │       └── failure.dart
     │
     ├── shared/
-    │   ├── widgets/
-    │   │   ├── accent_button.dart
-    │   │   ├── section_head.dart
-    │   │   └── loading_overlay.dart
+    │   ├── widgets/                    ← componentes consolidados de UI (cards, panels, layouts, navs)
+    │   │   └── figma/                  ← componentes derivados das specs Figma (top_nav, bottom_nav, tab_bar, run_fab, zone_distribution)
     │   └── extensions/
     │       └── date_extensions.dart
     │
@@ -184,6 +223,8 @@ app/
         │   │   └── user_remote_datasource.dart
         │   └── presentation/
         │       └── pages/login_page.dart
+        │
+        ├── steps/                      ← entidades, BLoC e UI de progresso/etapas (Run Journey, onboarding)
         │
         ├── onboarding/
         │   └── presentation/
@@ -237,6 +278,32 @@ Observações do estado real:
 - O app atual inicializa e autentica diretamente a partir de `main.dart` e `login_page.dart`.
 - O onboarding é persistido localmente na box Hive `runrun_settings` com a chave `onboarding_completed`.
 - A rota `/profile` hoje representa o menu `Conta`, e a edição do perfil fica em `/profile/edit`.
+
+---
+
+## Design System Migration (Figma → Flutter)
+
+Migração incremental para alinhar a UI Flutter ao design system canônico do Figma. **Não há frontend web em outra stack** — toda a UI é Flutter.
+
+**Documentos de referência:**
+- [docs/FIGMA_IMPLEMENTATION_PLAN.md](docs/FIGMA_IMPLEMENTATION_PLAN.md) — plano em 5 fases (30-44 dias)
+- [docs/figma/DESIGN_SYSTEM.md](docs/figma/DESIGN_SYSTEM.md) — 69 tokens de cor, 32 estilos tipográficos, 60+ componentes
+- [docs/figma/JOURNEYS.md](docs/figma/JOURNEYS.md) — 7 jornadas (onboarding, home, training, run, history, profile, coach)
+
+**Estado por tela:**
+
+| Tela           | Status         | Task Paperclip |
+|----------------|----------------|----------------|
+| HOME           | em fila (todo) | SUP-303        |
+| TREINO         | em fila (todo) | SUP-306        |
+| HISTÓRICO      | em fila (todo) | SUP-305        |
+| GAMIFICAÇÃO    | em fila (todo) | SUP-304        |
+| PERFIL         | em fila (todo) | SUP-222        |
+| Step UI        | em fila (todo) | SUP-193        |
+| Badge system   | em fila (todo) | SUP-152        |
+| RUN / COACH / ONBOARDING | a planejar | —    |
+
+**Débito conhecido (DRY):** possível duplicação entre `app/lib/shared/widgets/*.dart` e `app/lib/shared/widgets/figma/*.dart` (exemplo: `app_top_nav.dart` vs `figma/figma_top_nav.dart`). Consolidar quando a migração das telas listadas acima estabilizar — qual conjunto vira fonte de verdade é decisão a tomar ao fim do ciclo.
 
 ---
 
@@ -501,7 +568,7 @@ CMD ["node", "dist/main.js"]
 - [ ] Validar contratos de erro e estados vazios em produção
 - [ ] Criar módulos ausentes: `history` dedicado, `notifications`, `health`, `exams`, `gamification`
 - [ ] Introduzir fila/eventos para tarefas assíncronas de IA e notificações
-- [ ] Estruturar ambientes `dev`, `staging` e `prod`
+- [x] Estruturar ambientes `dev`, `staging` e `prod` — staging configurado (Cloud Run + Firebase Hosting + workflows), pendente primeiro deploy real
 
 ---
 
@@ -528,7 +595,18 @@ CMD ["node", "dist/main.js"]
 - [ ] Fechar estados vazios e mensagens de erro mais amigáveis em todas as telas
 - [ ] Validar tracking real de GPS em device físico
 - [ ] Testar build release Android
-- [ ] Revisar paridade visual com o protótipo em telas-chave
+- [/] Revisar paridade visual com o protótipo em telas-chave — em andamento via Design System Migration (ver seção dedicada acima)
+
+#### Design System Migration (Flutter ← Figma)
+- [ ] HOME — migrar para tokens/componentes Figma (SUP-303)
+- [ ] TREINO — migrar para tokens/componentes Figma (SUP-306)
+- [ ] HISTÓRICO — migrar para tokens/componentes Figma (SUP-305)
+- [ ] GAMIFICAÇÃO — migrar para tokens/componentes Figma (SUP-304)
+- [ ] PERFIL — ajustes Figma (SUP-222) + GamificationStatsRow (SUP-317) + Body Metrics Grid (SUP-136) + Action Buttons (SUP-140)
+- [ ] Step UI — componentes de progresso de etapas (SUP-193)
+- [ ] BADGES — 21-badge system (SUP-152) + Badge card (SUP-144)
+- [ ] Bottom Nav compartilhada (SUP-141) + revisão (SUP-282)
+- [ ] Consolidar `shared/widgets/*` vs `shared/widgets/figma/*` (DRY) ao fim do ciclo
 
 ---
 
@@ -603,4 +681,4 @@ cd app && flutter build apk --release --flavor prod
 
 ---
 
-*Atualizado em 2026-04-12 após deploy da revisão `runrun-api-00003-gvc`.*
+*Atualizado em 2026-05-15 após cleanup de artefatos fora-de-stack e re-baseline do Paperclip (cancelamento das tasks "step front-end"/Vite+React e desbloqueio das tasks de Design System Migration). Server: refactor do módulo `coach` para Clean Architecture (CoachReportRepository), remoção do diretório vazio `wearable/`, server/.gitignore criado.*

@@ -9,7 +9,7 @@ class AppTheme {
   static ThemeData build(RunninPalette palette) {
     final base = ThemeData.dark();
 
-    final textTheme = GoogleFonts.interTextTheme(base.textTheme).apply(
+    final textTheme = GoogleFonts.jetBrainsMonoTextTheme(base.textTheme).apply(
       bodyColor: palette.text,
       displayColor: palette.text,
     );
@@ -28,14 +28,14 @@ class AppTheme {
       appBarTheme: AppBarTheme(
         backgroundColor: palette.background,
         elevation: 0,
-        titleTextStyle: GoogleFonts.barlow(
+        titleTextStyle: GoogleFonts.jetBrainsMono(
           fontSize: 14,
           fontWeight: FontWeight.w700,
           letterSpacing: 0.1,
           color: palette.text,
         ),
       ),
-      dividerTheme: DividerThemeData(color: palette.border, thickness: 1),
+      dividerTheme: DividerThemeData(color: palette.border, thickness: 1.735),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: palette.surface,
@@ -59,11 +59,11 @@ class AppTheme {
           backgroundColor: palette.primary,
           foregroundColor: palette.background,
           shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-          textStyle: GoogleFonts.barlow(
-            fontWeight: FontWeight.w800,
-            letterSpacing: 0.08,
-            fontSize: 14,
-          ),
+            textStyle: GoogleFonts.jetBrainsMono(
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.08,
+              fontSize: 14,
+            ),
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
         ),
       ),
@@ -72,16 +72,16 @@ class AppTheme {
           foregroundColor: palette.text,
           side: BorderSide(color: palette.border),
           shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-          textStyle: GoogleFonts.barlow(
-            fontWeight: FontWeight.w700,
-            letterSpacing: 0.08,
-            fontSize: 14,
-          ),
+            textStyle: GoogleFonts.jetBrainsMono(
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.08,
+              fontSize: 14,
+            ),
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
         ),
       ),
     );
   }
 
-  static ThemeData get dark => build(RunninSkin.artico.palette);
+  static ThemeData get dark => build(RunninSkin.cyber.palette);
 }

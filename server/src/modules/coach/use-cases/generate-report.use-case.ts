@@ -1,8 +1,9 @@
 import { getAsyncLLM } from '@shared/infra/llm/llm.factory';
-import { getFirestore } from '@shared/infra/firebase/firebase.client';
 import { Run } from '@modules/runs/domain/run.entity';
+import { RunRepository } from '@modules/runs/domain/run.repository';
 import { logger } from '@shared/logger/logger';
 import { formatRunningKnowledgeContext } from '@shared/knowledge/running/running-knowledge';
+import { CoachReportRepository } from '../domain/coach-report.repository';
 
 const SYSTEM_PROMPT = `Você é o Coach.AI do runnin: um personal trainer de corrida experiente.
 Gere análises técnicas de corrida em português brasileiro, falando diretamente com o corredor.
@@ -11,6 +12,11 @@ Tom humano, firme e motivador, como feedback pós-treino. Máximo 3 parágrafos 
 
 export class GenerateReportUseCase {
   private llm = getAsyncLLM();
+
+  constructor(
+    private readonly reports: CoachReportRepository,
+    private readonly runs: RunRepository,
+  ) {}
 
   async execute(run: Run, userId: string): Promise<string> {
     const dist = (run.distanceM / 1000).toFixed(2);
@@ -36,19 +42,17 @@ ${knowledgeContext}`;
 
     try {
       const summary = await this.llm.generate(prompt, { systemPrompt: SYSTEM_PROMPT, maxTokens: 400 });
-
-      // Salva o relatório no Firestore
       const reportId = run.id;
-      await getFirestore()
-        .collection(`users/${userId}/runs/${run.id}/reports`)
-        .doc(reportId)
-        .set({ summary, generatedAt: new Date().toISOString(), status: 'ready' });
 
-      // Atualiza a run com o reportId
-      await getFirestore()
-        .collection(`users/${userId}/runs`)
-        .doc(run.id)
-        .update({ coachReportId: reportId });
+      await this.reports.save({
+        runId: reportId,
+        userId,
+        summary,
+        status: 'ready',
+        generatedAt: new Date().toISOString(),
+      });
+
+      await this.runs.update(run.id, userId, { coachReportId: reportId });
 
       return reportId;
     } catch (err) {

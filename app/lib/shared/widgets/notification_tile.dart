@@ -48,7 +48,7 @@ class _NotificationTileState extends State<NotificationTile> {
     return Container(
       decoration: BoxDecoration(
         color: palette.surface,
-        border: Border.all(color: palette.border, width: 1.5),
+        border: Border.all(color: palette.border, width: 1.735),
       ),
       child: InkWell(
         onTap: widget.fullText != null
