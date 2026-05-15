@@ -1,8 +1,17 @@
 # Documentação Figma — Runnin.AI
 
 > Extração MCP das telas do Figma para especificação de implementação Flutter.  
-> Arquivo Figma: `gmfDCcbt5mQ4Yc6wa0PAye` (telas-runnin)  
-> Estratégia: cada bloco de telas extraído é documentado aqui com tokens, layout, tipografia e lacunas de produto.
+> Arquivo Figma: `gmfDCcbt5mQ4Yc6wa0PAye` (telas-runnin)
+
+---
+
+## Documentos principais
+
+| Documento | Descrição |
+|---|---|
+| [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md) | Tokens completos, tipografia, componentes, estados, padrões de layout |
+| [JOURNEYS.md](JOURNEYS.md) | Jornadas de usuário, fluxos, funcionalidades e telas pendentes |
+| README.md (este arquivo) | Índice de telas extraídas + tokens globais consolidados |
 
 ---
 
