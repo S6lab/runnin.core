@@ -1,16 +1,13 @@
 import 'package:flutter/material.dart';
 
 abstract final class AppSpacing {
-  static const double _base = 4;
-
-  static double get xs => _base * 0.5;
-  dynamic get sm => _base * 1;
-  dynamic get md => _base * 1.5;
-  dynamic get lg => _base * 2;
-  dynamic get xl => _base * 3;
-  dynamic get xxl => _base * 4;
-  dynamic get xxxl => _base * 6;
-  dynamic get huge => _base * 8;
+  // Figma gap values (px)
+  static const double xs = 3.985;   // gap-xs: ~4px
+  static const double sm = 5.991;   // gap-sm: ~6px
+  static const double md = 7.997;   // gap-md: ~8px
+  static const double lg = 11.983;  // gap-lg: ~12px
+  static const double xl = 15.995;  // gap-xl: ~16px
+  static const double xxl = 23.992; // gap-section: ~24px
 
   static const double zero = 0;
   static const double px177 = 17.7;
@@ -38,16 +35,74 @@ abstract final class AppDimensions {
   static const double avatarLg = 56;
   static const double avatarXl = 80;
 
-  static const double buttonHeightSm = 36;
-  static const double buttonHeightMd = 48;
-  static const double buttonHeightLg = 56;
-  static const double buttonHeightXl = 79;
+  // Button heights (Figma px values)
+  static const double buttonHeightSm = 32.94;
+  static const double buttonHeightMd = 38.71;
+  static const double buttonHeightLg = 54.71;
 
-  static const double inputHeightSm = 40;
-  static const double inputHeightMd = 48;
-  static const double inputHeightLg = 56;
+  // Input heights (Figma px values)
+  static const double inputHeightSm = 38.71;
+  static const double inputHeightMd = 44.69;
+  static const double inputHeightLg = 58.73;
 
+  // Navigation heights
   static const double navbarHeight = 79;
+}
+
+/// Figma-canonical pixel dimensions. Use these for any new code targeting
+/// the Figma design system (`docs/figma/DESIGN_SYSTEM.md`). Existing code
+/// keeps using [AppDimensions] until migrated.
+abstract final class FigmaDimensions {
+  // Screen
+  static const double screenPaddingH = 23.992;
+  static const double contentWidth368 = 319.841;
+
+  // Border
+  static const double borderUniversal = 1.735;
+
+  // Top nav (DESIGN_SYSTEM.md §4.4)
+  static const double topNavNoBack = 54.708;
+  static const double topNavWithBack = 73.712;
+
+  // Bottom nav + RUN FAB
+  static const double bottomNav = 78.591;
+  static const double runFab = 55.982;
+  static const double runFabRingOuter = 65.05;
+
+  // Buttons
+  static const double backButton = 39.987; // square
+  static const double tabSelector3 = 41.424;
+  static const double tabSelector4 = 39.933;
+  static const double ctaFullwidthMin = 46.954;
+  static const double ctaFullwidthMax = 56.5;
+
+  // Cards
+  static const double metricCard = 85.45;
+  static const double zoneCard = 58.937;
+  static const double badgeCardOneLine = 91.848;
+  static const double deviceCardConnect = 223.303;
+
+  // Toggle pill
+  static const double togglePillW = 35.975;
+  static const double togglePillH = 19.98;
+  static const double togglePillThumb = 15.995;
+
+  // Progress bar heights
+  static const double progressBarOnboarding = 2;
+  static const double progressBarPlan = 4;
+  static const double progressBarThin = 3.985;
+  static const double progressBarMed = 5.991;
+  static const double progressBarThick = 7.997;
+}
+
+/// Figma border-radius policy.
+///
+/// DESIGN_SYSTEM.md §1: "Zero border-radius em todos os elementos (exceto
+/// toggle pill)". Use these constants instead of inline `BorderRadius.zero`
+/// or `BorderRadius.circular(...)` so the policy stays grep-able.
+abstract final class FigmaBorderRadius {
+  static const BorderRadius zero = BorderRadius.zero;
+  static const BorderRadius togglePill = BorderRadius.all(Radius.circular(100));
 }
 
 abstract final class AppShadow {
