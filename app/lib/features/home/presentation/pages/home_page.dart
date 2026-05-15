@@ -1282,7 +1282,7 @@ class _MiniProgressBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final palette = context.runninPalette;
     return ClipRRect(
-      borderRadius: BorderRadius.circular(999),
+      borderRadius: BorderRadius.zero,
       child: LinearProgressIndicator(
         minHeight: 3,
         value: value.clamp(0.0, 1.0),
