@@ -239,7 +239,7 @@ class _CyberStatusBar extends StatelessWidget {
         border: Border(
           bottom: BorderSide(
             color: palette.text.withValues(alpha: 0.06),
-            width: 1,
+            width: 1.735,
           ),
         ),
       ),
