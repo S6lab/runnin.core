@@ -22,6 +22,7 @@
 | Run Journey       | [screens/RUN_JOURNEY.md](screens/RUN_JOURNEY.md)     | 1:5974–1:7105 | app     | ✅ Extraído |
 | Treino (10 telas) | [screens/TREINO.md](screens/TREINO.md)               | 1:7230–1:8498 | app     | ✅ Extraído |
 | HIST (5 telas)    | [screens/HIST.md](screens/HIST.md)                   | 1:9956–1:11403 | app    | ✅ Extraído |
+| PERFIL (8 telas)  | [screens/PERFIL.md](screens/PERFIL.md)               | 1:11209–1:12759 | app   | ✅ Extraído |
 
 ---
 
