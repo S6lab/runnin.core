@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:runnin/shared/widgets/coach_ai_breadcrumb.dart';
-import 'package:runnin/core/theme/_theme.dart';
 import 'package:runnin/shared/widgets/plan_task_row.dart';
 
 class PlanLoadingPage extends StatefulWidget {
@@ -13,22 +12,20 @@ class PlanLoadingPage extends StatefulWidget {
 class _PlanLoadingPageState extends State<PlanLoadingPage> {
   @override
   Widget build(BuildContext context) {
-    final palette = context.runninPalette;
-
-    return Container(
-      color: const Color(0xFF050510),
-      child: Center(
-        child: Container(
+    return Scaffold(
+      backgroundColor: const Color(0xFF050510),
+      body: Center(
+        child: SizedBox(
           width: 329.55,
           height: 613.716,
           child: Column(
             children: [
               const SizedBox(height: 118.901),
-              CoachAIBreadcrumb(action: 'GERANDO PLANO'),
+              const CoachAIBreadcrumb(action: 'GERANDO PLANO'),
               const SizedBox(height: 37.98),
-              Text(
+              const Text(
                 'Criando seu plano',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 24,
                   fontWeight: FontWeight.w800,
                   letterSpacing: -0.48,
@@ -37,9 +34,9 @@ class _PlanLoadingPageState extends State<PlanLoadingPage> {
                 ),
               ),
               const SizedBox(height: 34.37),
-              Text(
+              const Text(
                 'Analisando nível , objetivo: 10K',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w400,
                   letterSpacing: 0,
@@ -48,9 +45,7 @@ class _PlanLoadingPageState extends State<PlanLoadingPage> {
                 ),
               ),
               const SizedBox(height: 51.51),
-              ..._getTasks().asMap().entries.map((entry) {
-                final index = entry.key;
-                final task = entry.value;
+              ..._getTasks().map((task) {
                 return PlanTaskRow(
                   status: task.status,
                   label: task.label,
@@ -59,13 +54,8 @@ class _PlanLoadingPageState extends State<PlanLoadingPage> {
                 );
               }),
               const Spacer(),
-              Padding(
-                padding: EdgeInsets.only(bottom: 3.284),
-                child: Container(
-                  width: 329.55,
-                  height: 4,
-                ),
-              ),
+              const SizedBox(width: 329.55, height: 4),
+              const SizedBox(height: 3.284),
             ],
           ),
         ),

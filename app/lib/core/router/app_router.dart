@@ -11,6 +11,7 @@ import 'package:runnin/features/run/presentation/bloc/run_bloc.dart';
 import 'package:runnin/features/run/presentation/pages/prep_page.dart';
 import 'package:runnin/features/run/presentation/pages/active_run_page.dart';
 import 'package:runnin/features/run/presentation/pages/report_page.dart';
+import 'package:runnin/features/run/presentation/pages/plan_loading_page.dart';
 import 'package:runnin/features/training/presentation/pages/training_page.dart';
 import 'package:runnin/features/coach/presentation/pages/coach_chat_page.dart';
 import 'package:runnin/features/history/presentation/pages/history_page.dart';
@@ -19,6 +20,7 @@ import 'package:runnin/features/profile/presentation/pages/account_access_page.d
 import 'package:runnin/features/profile/presentation/pages/profile_page.dart';
 import 'package:runnin/features/dashboard/presentation/pages/dashboard_page.dart';
 import 'package:runnin/features/gamification/presentation/pages/gamification_page.dart';
+import 'package:runnin/features/splash/presentation/pages/splash_page.dart';
 import 'package:runnin/shared/widgets/main_layout.dart';
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
@@ -76,6 +78,9 @@ final appRouter = GoRouter(
       return null;
     }
 
+    // Allow splash to render briefly on cold start; SplashPage advances itself.
+    if (loc == '/splash') return null;
+
     if (!loggedIn) {
       if (loc != '/onboarding' && loc != '/login') return '/onboarding';
       return null;
@@ -97,9 +102,11 @@ final appRouter = GoRouter(
   },
   refreshListenable: _AuthChangeNotifier(),
   routes: [
+    GoRoute(path: '/splash', builder: (_, _) => const SplashPage()),
     GoRoute(path: '/admin', builder: (_, _) => const AdminPage()),
     GoRoute(path: '/login', builder: (_, _) => const LoginPage()),
     GoRoute(path: '/onboarding', builder: (_, _) => const OnboardingPage()),
+    GoRoute(path: '/plan-loading', builder: (_, _) => const PlanLoadingPage()),
 
     // Fluxo de corrida — RunBloc compartilhado entre prep → run → report
     ShellRoute(
@@ -150,7 +157,9 @@ final appRouter = GoRouter(
 String _initialLocation() {
   final path = Uri.base.path;
   if (path == '/admin' || path.startsWith('/admin/')) return '/admin';
-  return '/home';
+  // Deep links (anything beyond '/') skip the splash and go to that path.
+  if (path.length > 1) return path;
+  return '/splash';
 }
 
 class _AuthChangeNotifier extends ChangeNotifier {
