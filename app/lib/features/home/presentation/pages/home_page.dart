@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:runnin/core/router/app_router.dart';
 import 'package:runnin/core/theme/app_palette.dart';
+import 'package:runnin/core/theme/theme_controller.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 import 'package:runnin/features/home/domain/use_cases/get_home_data_use_case.dart';
 import 'package:runnin/features/home/presentation/cubit/home_cubit.dart';
@@ -93,6 +94,10 @@ class _HomeViewState extends State<_HomeView> {
                     ),
                   ] else if (state is HomeLoaded) ...[
                     _CyberStatusBar(data: state.data),
+                    const SizedBox(height: 20),
+                    _UserInfoCards(data: state.data),
+                    const SizedBox(height: 20),
+                    const _SkinSection(),
                     const SizedBox(height: 20),
                     _IniciarSessaoButton(data: state.data),
                     const SizedBox(height: 20),
@@ -360,6 +365,133 @@ class _DeviceChip extends StatelessWidget {
               letterSpacing: 0.8,
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── User Info Cards ─────────────────────────────────────────────────────────
+
+class _UserInfoCards extends StatelessWidget {
+  final HomeData data;
+  const _UserInfoCards({required this.data});
+
+  @override
+  Widget build(BuildContext context) {
+    final weight = data.profile?.weight ?? '—';
+    final height = data.profile?.height ?? '—';
+    final age = _calculateAge(data.profile?.birthDate);
+    final frequency = data.profile?.frequency?.toString() ?? '—';
+
+    return Row(
+      children: [
+        Expanded(
+          child: _InfoCard(
+            label: 'PESO',
+            value: weight,
+            unit: weight == '—' ? '' : 'kg',
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: _InfoCard(
+            label: 'ALTURA',
+            value: height,
+            unit: height == '—' ? '' : 'cm',
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: _InfoCard(
+            label: 'IDADE',
+            value: age,
+            unit: age == '—' ? '' : 'anos',
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: _InfoCard(
+            label: 'FREQ',
+            value: '${frequency}x',
+            unit: '/sem',
+          ),
+        ),
+      ],
+    );
+  }
+
+  String _calculateAge(String? birthDate) {
+    if (birthDate == null) return '—';
+    final birth = DateTime.tryParse(birthDate);
+    if (birth == null) return '—';
+    final now = DateTime.now();
+    int age = now.year - birth.year;
+    if (now.month < birth.month ||
+        (now.month == birth.month && now.day < birth.day)) {
+      age--;
+    }
+    return age.toString();
+  }
+}
+
+class _InfoCard extends StatelessWidget {
+  final String label;
+  final String value;
+  final String unit;
+
+  const _InfoCard({
+    required this.label,
+    required this.value,
+    required this.unit,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+
+    return Container(
+      height: 64,
+      decoration: BoxDecoration(
+        color: palette.text.withValues(alpha: 0.03),
+        border: Border.all(
+          color: palette.text.withValues(alpha: 0.08),
+          width: 1.735,
+        ),
+        borderRadius: BorderRadius.circular(2),
+      ),
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            label,
+            style: GoogleFonts.jetBrainsMono(
+              fontSize: 9,
+              letterSpacing: 0.9,
+              color: palette.text.withValues(alpha: 0.5),
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: GoogleFonts.jetBrainsMono(
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+              color: palette.text,
+            ),
+          ),
+          if (unit.isNotEmpty) ...[
+            const SizedBox(height: 2),
+            Text(
+              unit,
+              style: GoogleFonts.jetBrainsMono(
+                fontSize: 9,
+                color: palette.text.withValues(alpha: 0.5),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -2349,6 +2481,188 @@ class _RunMetric extends StatelessWidget {
           ),
           Text(sub, style: TextStyle(color: palette.muted, fontSize: 9)),
         ],
+      ),
+    );
+  }
+}
+
+// ─── Skin Section ────────────────────────────────────────────────────────────
+
+class _SkinSection extends StatelessWidget {
+  const _SkinSection();
+
+  static const _skins = [
+    RunninSkin.sangue,
+    RunninSkin.magenta,
+    RunninSkin.volt,
+    RunninSkin.artico,
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        RichText(
+          text: TextSpan(
+            children: [
+              TextSpan(
+                text: 'SKIN',
+                style: context.runninType.displaySm,
+              ),
+              TextSpan(
+                text: ' 01',
+                style: TextStyle(
+                  color: palette.primary,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Escolha a paleta de cores do app',
+          style: TextStyle(color: palette.muted, fontSize: 12),
+        ),
+        const SizedBox(height: 16),
+        ListenableBuilder(
+          listenable: themeController,
+          builder: (context, child) {
+            final currentSkin = themeController.skin;
+            return Column(
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: _PaletteCard(
+                        skin: _skins[0],
+                        isActive: currentSkin == _skins[0],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _PaletteCard(
+                        skin: _skins[1],
+                        isActive: currentSkin == _skins[1],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _PaletteCard(
+                        skin: _skins[2],
+                        isActive: currentSkin == _skins[2],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _PaletteCard(
+                        skin: _skins[3],
+                        isActive: currentSkin == _skins[3],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            );
+          },
+        ),
+      ],
+    );
+  }
+}
+
+class _PaletteCard extends StatelessWidget {
+  final RunninSkin skin;
+  final bool isActive;
+
+  const _PaletteCard({required this.skin, required this.isActive});
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    final skinPalette = skin.palette;
+    final textAlpha = isActive ? 1.0 : 0.6;
+
+    return GestureDetector(
+      onTap: () => themeController.setSkin(skin),
+      child: Container(
+        height: 103,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: palette.text.withValues(alpha: 0.03),
+          border: Border.all(
+            color: isActive ? palette.primary : palette.border,
+            width: isActive ? 1.5 : 1,
+          ),
+          borderRadius: BorderRadius.circular(2),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 16,
+                  height: 16,
+                  decoration: BoxDecoration(
+                    color: skinPalette.primary,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Container(
+                  width: 16,
+                  height: 16,
+                  decoration: BoxDecoration(
+                    color: skinPalette.secondary,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const Spacer(),
+                if (isActive)
+                  Text(
+                    'ATIVA',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w700,
+                      color: palette.primary,
+                      letterSpacing: 0.9,
+                    ),
+                  ),
+              ],
+            ),
+            const Spacer(),
+            Text(
+              skinPalette.label.toUpperCase(),
+              style: GoogleFonts.jetBrainsMono(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: palette.text.withValues(alpha: textAlpha),
+              ),
+            ),
+            const SizedBox(height: 8),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(1),
+              child: Row(
+                children: skinPalette.previewBars
+                    .map(
+                      (color) => Expanded(
+                        child: Container(height: 4, color: color),
+                      ),
+                    )
+                    .toList(),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

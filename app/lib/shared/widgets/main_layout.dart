@@ -42,7 +42,7 @@ class _BottomNav extends StatelessWidget {
       ),
       child: SafeArea(
         child: SizedBox(
-          height: 64,
+          height: 79,
           child: Row(
             children: [
               // Itens esquerda
@@ -56,7 +56,7 @@ class _BottomNav extends StatelessWidget {
                       children: [
                         Icon(
                           item.icon,
-                          size: 20,
+                          size: 18,
                           color: isActive ? palette.primary : palette.muted,
                         ),
                         const SizedBox(height: 3),
@@ -64,28 +64,47 @@ class _BottomNav extends StatelessWidget {
                           item.label,
                           style: type.labelCaps.copyWith(
                             color: isActive ? palette.primary : palette.muted,
-                            fontSize: 9,
+                            fontSize: 15,
                           ),
                         ),
+                        if (isActive)
+                          SizedBox(
+                            height: 2,
+                            child: Divider(color: palette.primary, thickness: 2),
+                          ),
                       ],
                     ),
                   ),
                 );
               }),
 
-              // Botão RUN central — retangular conforme protótipo
+              // Botão RUN central — 56×56px com glow
               GestureDetector(
                 onTap: () => context.push('/prep'),
                 child: Container(
-                  width: 72,
-                  height: 64,
-                  color: palette.primary,
+                  width: 56,
+                  height: 56,
+                  decoration: BoxDecoration(
+                    gradient: RadialGradient(
+                      colors: [
+                        palette.primary,
+                        palette.primary.withAlpha(102),
+                      ],
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: palette.primary.withAlpha(102),
+                        blurRadius: 8,
+                        spreadRadius: 2,
+                      ),
+                    ],
+                  ),
                   alignment: Alignment.center,
                   child: Text(
                     'RUN',
                     style: type.labelCaps.copyWith(
                       color: palette.background,
-                      fontSize: 11,
+                      fontSize: 15,
                       fontWeight: FontWeight.w900,
                       letterSpacing: 0.15,
                     ),
@@ -104,7 +123,7 @@ class _BottomNav extends StatelessWidget {
                       children: [
                         Icon(
                           item.icon,
-                          size: 20,
+                          size: 18,
                           color: isActive ? palette.primary : palette.muted,
                         ),
                         const SizedBox(height: 3),
@@ -112,9 +131,14 @@ class _BottomNav extends StatelessWidget {
                           item.label,
                           style: type.labelCaps.copyWith(
                             color: isActive ? palette.primary : palette.muted,
-                            fontSize: 9,
+                            fontSize: 15,
                           ),
                         ),
+                        if (isActive)
+                          SizedBox(
+                            height: 2,
+                            child: Divider(color: palette.primary, thickness: 2),
+                          ),
                       ],
                     ),
                   ),
