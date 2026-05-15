@@ -11,6 +11,7 @@ Thumbs.db
 server-sa-key.json
 backend-service-account.json
 server/backend-service-account.json
+runnin-494520-*.json
 *.pem
 *.p12
 *.jks
