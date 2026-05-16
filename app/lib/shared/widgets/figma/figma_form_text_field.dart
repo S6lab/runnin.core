@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 
@@ -9,6 +10,11 @@ class FigmaFormTextField extends StatefulWidget {
   final TextStyle? placeholderStyle;
   final double height;
   final int? maxLength;
+  final List<TextInputFormatter>? inputFormatters;
+  final bool autofocus;
+  final TextCapitalization textCapitalization;
+  final bool readOnly;
+  final VoidCallback? onTap;
 
   const FigmaFormTextField({
     super.key,
@@ -18,6 +24,11 @@ class FigmaFormTextField extends StatefulWidget {
     this.placeholderStyle,
     this.height = 48.5,
     this.maxLength,
+    this.inputFormatters,
+    this.autofocus = false,
+    this.textCapitalization = TextCapitalization.none,
+    this.readOnly = false,
+    this.onTap,
   });
 
   @override
@@ -61,6 +72,11 @@ class _FigmaFormTextFieldState extends State<FigmaFormTextField> {
         focusNode: _focusNode,
         keyboardType: widget.keyboardType,
         maxLength: widget.maxLength,
+        inputFormatters: widget.inputFormatters,
+        autofocus: widget.autofocus,
+        textCapitalization: widget.textCapitalization,
+        readOnly: widget.readOnly,
+        onTap: widget.onTap,
         style: context.runninType.bodyMd.copyWith(
           color: context.runninPalette.text,
         ),

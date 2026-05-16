@@ -587,7 +587,10 @@ void main() {
       
       final container = tester.widget<Container>(containerFinder);
       final decoration = container.decoration as BoxDecoration;
-      expect(decoration.borderRadius, BorderRadius.circular(12));
+      // Per Figma DESIGN_SYSTEM.md §1: zero border-radius universal
+      // (only exception is the toggle pill). Test updated alongside
+      // SUP-399 which enforced this policy across all widgets.
+      expect(decoration.borderRadius, BorderRadius.zero);
       await tester.pumpWidget(Container());
     });
 
