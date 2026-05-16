@@ -3,9 +3,11 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:runnin/core/router/app_router.dart';
 import 'package:runnin/core/theme/app_palette.dart';
+import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 import 'package:runnin/shared/widgets/app_panel.dart';
 import 'package:runnin/shared/widgets/app_tag.dart';
@@ -30,7 +32,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
   final _medicalOtherCtrl = TextEditingController();
   final Set<String> _medicalConditions = {};
 
-  static const _totalSteps = 13;
+  static const _totalSteps = 14;
   static const _loadingStep = _totalSteps - 1;
   static const _loginStep = 3;
   static const _firstAssessmentStep = 4;
@@ -604,6 +606,11 @@ class _OnboardingPageState extends State<OnboardingPage> {
         return _StepWearable(
           selected: _hasWearable,
           options: _wearableOptions,
+          onSelect: (value) => setState(() => _hasWearable = value),
+        );
+      case 12:
+        return _StepWearableV2(
+          selected: _hasWearable,
           onSelect: (value) => setState(() => _hasWearable = value),
         );
       case _loadingStep:
@@ -1274,95 +1281,43 @@ class _StepFrequency extends StatelessWidget {
       6: 'Rotina de alto compromisso. Vamos controlar intensidade para sustentar consistencia.',
     };
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final itemWidth = (constraints.maxWidth - 12) / 2;
-
-        return SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _StepCode('ASSESSMENT_06'),
-              const SizedBox(height: 12),
-              Text(
-                'Quantas vezes por semana?',
-                style: context.runninType.displayMd,
-              ),
-              const SizedBox(height: 10),
-              Text(
-                'O Coach distribui estimulo e descanso com base nessa rotina.',
-                style: TextStyle(color: palette.muted, height: 1.5),
-              ),
-              const SizedBox(height: 24),
-              Wrap(
-                spacing: 12,
-                runSpacing: 12,
-                children: options.map((option) {
-                  final isSelected = frequency == option;
-                  return GestureDetector(
-                    onTap: () => onFreqChange(option),
-                    child: SizedBox(
-                      width: itemWidth,
-                      child: AppPanel(
-                        color: isSelected
-                            ? palette.primary.withValues(alpha: 0.08)
-                            : null,
-                        borderColor: isSelected
-                            ? palette.primary
-                            : palette.border,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '${option}x',
-                              style: TextStyle(
-                                fontSize: 24,
-                                fontWeight: FontWeight.w800,
-                                color: isSelected
-                                    ? palette.primary
-                                    : palette.text,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              labels[option]!,
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: isSelected
-                                    ? palette.primary.withValues(alpha: 0.85)
-                                    : palette.muted,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  );
-                }).toList(),
-              ),
-              const SizedBox(height: 16),
-              AppPanel(
-                color: palette.surfaceAlt,
-                borderColor: palette.border,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    AppTag(label: 'COACH.AI', color: palette.secondary),
-                    const SizedBox(height: 12),
-                    Text(
-                      coachNotes[frequency]!,
-                      style: TextStyle(
-                        color: palette.text.withValues(alpha: 0.82),
-                        height: 1.5,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const FigmaAssessmentLabel(text: '// ASSESSMENT_05'),
+          const SizedBox(height: 12),
+          const FigmaAssessmentHeading(text: 'Quantas vezes por semana?'),
+          const SizedBox(height: 10),
+          const FigmaAssessmentDescription(
+            text:
+                'O Coach distribui sessões com descanso adequado entre cada corrida.',
           ),
-        );
-      },
+          const SizedBox(height: 24),
+          ...options.entries.map(
+            (e) => Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: FigmaSelectionButton(
+                label: e.value,
+                selected: frequency == e.key,
+                onTap: () => onFreqChange(e.key),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          FigmaCoachAIBlock(
+            variant: CoachAIBlockVariant.assessment,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const FigmaCoachAIBreadcrumb(action: 'NOTA'),
+                const SizedBox(height: 12),
+                FigmaAssessmentDescription(text: coachNotes[frequency]!),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -1467,40 +1422,204 @@ class _StepWearable extends StatelessWidget {
   }
 }
 
-class _ConditionChip extends StatelessWidget {
+class _DashedAddButton extends StatelessWidget {
   final String label;
-  final bool selected;
-  final VoidCallback onTap;
+  final TextEditingController controller;
+  final VoidCallback onAdd;
 
-  const _ConditionChip({
+  const _DashedAddButton({
     required this.label,
-    required this.selected,
-    required this.onTap,
+    required this.controller,
+    required this.onAdd,
   });
 
   @override
   Widget build(BuildContext context) {
-    final palette = context.runninPalette;
+    return GestureDetector(
+      onTap: () {
+        if (controller.text.trim().isNotEmpty) {
+          onAdd();
+        }
+      },
+      child: CustomPaint(
+        painter: _DashedBorderPainter(
+          color: FigmaColors.borderDefault,
+          strokeWidth: FigmaDimensions.borderUniversal,
+        ),
+        child: SizedBox(
+          width: double.infinity,
+          height: 54.5,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                '+',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w500,
+                  color: FigmaColors.brandCyan,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Adicionar outra condição ou medicação',
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  color: FigmaColors.textSecondary,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
 
-    return InkWell(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(
-          color: selected
-              ? palette.primary.withValues(alpha: 0.1)
-              : palette.surface,
-          border: Border.all(
-            color: selected ? palette.primary : palette.border,
+class _DashedBorderPainter extends CustomPainter {
+  final Color color;
+  final double strokeWidth;
+
+  _DashedBorderPainter({required this.color, required this.strokeWidth});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = strokeWidth
+      ..style = PaintingStyle.stroke;
+
+    const dashWidth = 6.0;
+    const dashSpace = 4.0;
+    final path = Path()..addRect(Rect.fromLTWH(0, 0, size.width, size.height));
+
+    for (final metric in path.computeMetrics()) {
+      var distance = 0.0;
+      while (distance < metric.length) {
+        final end = (distance + dashWidth).clamp(0.0, metric.length);
+        canvas.drawPath(
+          metric.extractPath(distance, end),
+          paint,
+        );
+        distance += dashWidth + dashSpace;
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _DashedBorderPainter oldDelegate) =>
+      color != oldDelegate.color || strokeWidth != oldDelegate.strokeWidth;
+}
+
+class _StepWearableV2 extends StatelessWidget {
+  final bool selected;
+  final ValueChanged<bool> onSelect;
+
+  const _StepWearableV2({
+    required this.selected,
+    required this.onSelect,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const FigmaAssessmentLabel(text: '// ASSESSMENT_09'),
+          const SizedBox(height: 12),
+          const FigmaAssessmentHeading(text: 'Conectar wearable?'),
+          const SizedBox(height: 10),
+          const FigmaAssessmentDescription(
+            text:
+                'Dados de BPM, sono e atividade permitem que o Coach personalize com mais precisão.',
           ),
-        ),
-        child: Text(
-          label,
-          style: context.runninType.bodySm.copyWith(
-            color: selected ? palette.primary : palette.text,
-            fontWeight: selected ? FontWeight.w800 : FontWeight.w500,
+          const SizedBox(height: 24),
+          FigmaSelectionButton(
+            label: 'Sim (recomendado)',
+            selected: selected == true,
+            onTap: () => onSelect(true),
           ),
-        ),
+          const SizedBox(height: 8),
+          FigmaSelectionButton(
+            label: 'Depois',
+            selected: selected == false,
+            onTap: () => onSelect(false),
+          ),
+          const SizedBox(height: 24),
+          FigmaCoachAIBlock(
+            variant: CoachAIBlockVariant.assessment,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 8,
+                      height: 8,
+                      color: FigmaColors.brandOrange.withValues(alpha: 0.50),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      '> COACH.AI',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w400,
+                        letterSpacing: 1.65,
+                        color: FigmaColors.brandOrange,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'Tenho tudo que preciso — incluindo sua rotina de sono e horário preferido. Vou calcular a janela metabólica ideal para cada tipo de treino, enviar lembretes de hidratação e preparo nutricional, e sugerir o melhor horário com base no seu padrão de sono.',
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w400,
+                    height: 23.1 / 14,
+                    color: const Color(0xCCFFFFFF),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          FigmaCyanInfoBlock(
+            icon: Icons.description_outlined,
+            title: 'Tem exames médicos recentes?',
+            bodyWidget: Text.rich(
+              TextSpan(
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w400,
+                  height: 19.2 / 12,
+                  color: FigmaColors.textSecondary,
+                ),
+                children: [
+                  const TextSpan(
+                    text:
+                        'Testes ergométricos, exames de sangue e laudos médicos permitem que eu calibre zonas cardíacas com FC máx real, monitore ferritina e identifique restrições. Após criar seu plano, acesse ',
+                  ),
+                  TextSpan(
+                    text: 'Perfil → Saúde → Exames',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      height: 19.2 / 12,
+                      color: FigmaColors.brandCyan,
+                    ),
+                  ),
+                  const TextSpan(
+                    text:
+                        ' para enviar até 5 arquivos por mês (PDF ou foto, máx 10MB).',
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
