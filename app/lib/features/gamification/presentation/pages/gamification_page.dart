@@ -60,7 +60,7 @@ class _GamificationPageState extends State<GamificationPage> {
                   const SizedBox(width: 12),
                   RichText(
                     text: TextSpan(children: [
-                      TextSpan(text: 'RUNIN', style: type.displaySm),
+                      TextSpan(text: 'RUNNIN', style: type.displaySm),
                       TextSpan(
                         text: ' .AI',
                         style: type.labelMd.copyWith(

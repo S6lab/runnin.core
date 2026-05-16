@@ -4,9 +4,9 @@ import 'package:go_router/go_router.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/features/coach/domain/entities/chat_message.dart';
 import 'package:runnin/features/coach/presentation/cubit/coach_chat_cubit.dart';
-import 'package:runnin/shared/widgets/app_page_header.dart';
 import 'package:runnin/shared/widgets/app_panel.dart';
 import 'package:runnin/shared/widgets/app_tag.dart';
+import 'package:runnin/shared/widgets/figma/figma_top_nav.dart';
 
 class CoachChatPage extends StatelessWidget {
   const CoachChatPage({super.key});
@@ -92,9 +92,9 @@ class _CoachChatViewState extends State<_CoachChatView> {
       body: SafeArea(
         child: Column(
           children: [
-            AppPageHeader(
-              title: 'COACH',
-              trailing: AppTag(label: 'IA', color: palette.secondary),
+            const FigmaTopNav(
+              breadcrumb: 'Coach',
+              showBackButton: true,
             ),
             const SizedBox(height: 20),
             Expanded(

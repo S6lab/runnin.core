@@ -17,11 +17,11 @@ class FigmaBottomNav extends StatelessWidget {
     const double navHeight = 78.591;
 
     final items = [
-      _NavItem(icon: Icons.home_outlined, label: 'HOME', path: 0),
-      _NavItem(icon: Icons.calendar_today_outlined, label: 'TREINO', path: 1),
-      _NavItem(icon: Icons.play_arrow_outlined, label: 'RUN', path: 2),
-      _NavItem(icon: Icons.history_outlined, label: 'HIST', path: 3),
-      _NavItem(icon: Icons.person_outline, label: 'PERFIL', path: 4),
+      _NavItem(icon: Icons.home, label: 'HOME', path: 0),
+      _NavItem(icon: Icons.directions_run, label: 'TREINO', path: 1),
+      _NavItem(icon: Icons.play_arrow, label: 'RUN', path: 2),
+      _NavItem(icon: Icons.history, label: 'HIST', path: 3),
+      _NavItem(icon: Icons.person, label: 'PERFIL', path: 4),
     ];
 
     return Container(

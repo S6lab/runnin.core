@@ -602,7 +602,7 @@ class _CyberTodayCard extends StatelessWidget {
                 style: GoogleFonts.jetBrainsMono(
                   color: palette.text,
                   fontSize: 40,
-                  fontWeight: FontWeight.w700,
+                  fontWeight: FontWeight.w500,
                   letterSpacing: -2,
                   height: 0.88,
                 ),
@@ -2877,7 +2877,7 @@ class _HeroSection extends StatelessWidget {
                       'HOJE',
                       style: GoogleFonts.jetBrainsMono(
                         fontSize: 64,
-                        fontWeight: FontWeight.w900,
+                        fontWeight: FontWeight.w500,
                         color: Colors.white,
                         letterSpacing: -1.5,
                         height: 1.0,
