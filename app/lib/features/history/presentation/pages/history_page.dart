@@ -442,6 +442,7 @@ class _DataView extends StatelessWidget {
       count: runs.length,
       runningCount: runningCount,
       totalKm: totalDistM / 1000,
+      totalS: totalS,
       totalTimeLabel: totalTimeLabel,
       avgPaceLabel: avgPaceLabel,
       streakDays: streak,
