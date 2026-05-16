@@ -1,8 +1,9 @@
 import { ExamRepository } from '../domain/exam.repository';
 import { ExamExtractedData, RAGChunk } from '../domain/exam-extracted-data.entity';
 import { GeminiMultimodalService } from '@shared/infra/llm/gemini-multimodal.service';
+import { GeminiEmbeddingService } from '@shared/infra/embedding/gemini-embedding.service';
 import { FirestoreExamRepository } from '../infra/firestore-exam.repository';
-import { getStorageBucket } from '@shared/infra/firebase/firebase.client';
+import { getStorageBucket, getFirestore } from '@shared/infra/firebase/firebase.client';
 import { buildExamAnalysisPrompt } from '@shared/infra/llm/prompts';
 import { CoachRuntimeContextService } from '@modules/coach/use-cases/coach-runtime-context.service';
 import { logger } from '@shared/logger/logger';
@@ -52,6 +53,7 @@ export class AnalyzeExamUseCase {
   constructor(
     private readonly examRepo: ExamRepository = new FirestoreExamRepository(),
     private readonly geminiMultimodal: GeminiMultimodalService = new GeminiMultimodalService(),
+    private readonly geminiEmbedding: GeminiEmbeddingService = new GeminiEmbeddingService('text-embedding-004'),
   ) {}
 
   async execute(examId: string, userId: string): Promise<void> {
@@ -75,10 +77,15 @@ export class AnalyzeExamUseCase {
       const extractedData = await this.analyzeExamContent(examData.buffer, examData.mimeType, userId);
       await this.examRepo.updateExtractedData(examId, userId, extractedData);
 
+      if (extractedData.embeddedRagChunks && extractedData.embeddedRagChunks.length > 0) {
+        await this.saveRAGChunks(extractedData.embeddedRagChunks, userId);
+      }
+
       logger.info('analyze_exam.completed', {
         examId,
         userId,
         summaryLength: extractedData.summary.length,
+        ragChunksCount: extractedData.embeddedRagChunks?.length ?? 0,
       });
     } catch (err) {
       logger.error('analyze_exam.failed', {
@@ -109,14 +116,15 @@ export class AnalyzeExamUseCase {
     }
   }
 
-  private async analyzeExamContent(buffer: Buffer, _mimeType: string, userId: string): Promise<ExamExtractedData> {
+  private async analyzeExamContent(buffer: Buffer, mimeType: string, userId: string): Promise<ExamExtractedData> {
     const runtime = await this.runtime.getContext(userId);
     const built = await buildExamAnalysisPrompt({ profile: runtime.profile, schema: EXAM_SCHEMA });
 
     logger.info('exam.analyze.prompt', { userId, version: built.version, source: built.source });
 
+    // Gemini multimodal recebe um único prompt — sistema + user concatenados
     const prompt = `${built.systemPrompt}\n\n${built.userPrompt}`;
-    const responseText = await this.geminiMultimodal.analyzeExamDocument(prompt, buffer, _mimeType);
+    const responseText = await this.geminiMultimodal.analyzeExamDocument(prompt, buffer, mimeType);
 
     const ocrResponse = this.parseOCRResponse(responseText);
 
@@ -137,7 +145,7 @@ export class AnalyzeExamUseCase {
       colesterolLDL: ocrResponse.colesterolLDL,
     };
 
-    const ragChunks = await this.createRAGChunks(extractedData);
+    const ragChunks = await this.createRAGChunks(extractedData, userId);
     if (ragChunks.length > 0) {
       extractedData.embeddedRagChunks = ragChunks;
     }
@@ -188,7 +196,7 @@ export class AnalyzeExamUseCase {
     };
   }
 
-  private async createRAGChunks(extractedData: ExamExtractedData): Promise<RAGChunk[]> {
+  private async createRAGChunks(extractedData: ExamExtractedData, userId: string): Promise<RAGChunk[]> {
     const chunks: RAGChunk[] = [];
     const timestamp = new Date().toISOString();
 
@@ -222,12 +230,49 @@ export class AnalyzeExamUseCase {
       .filter(Boolean)
       .join(' ');
 
+    let embedding: number[] = [];
+    try {
+      embedding = await this.geminiEmbedding.embedDocument(summaryText);
+    } catch (err) {
+      logger.warn('analyze_exam.embedding_failed', {
+        userId,
+        err: err instanceof Error ? err.message : String(err),
+      });
+    }
+
     chunks.push({
       text: summaryText,
-      embedding: [],
+      embedding,
       updatedAt: timestamp,
     });
 
     return chunks;
+  }
+
+  private async saveRAGChunks(chunks: RAGChunk[], userId: string): Promise<void> {
+    try {
+      const db = getFirestore();
+      const batch = db.batch();
+
+      for (const chunk of chunks) {
+        const docRef = db.collection(`users/${userId}/rag_chunks`).doc();
+        batch.set(docRef, {
+          text: chunk.text,
+          embedding: chunk.embedding,
+          updatedAt: chunk.updatedAt,
+        });
+      }
+
+      await batch.commit();
+      logger.info('analyze_exam.rag_chunks_saved', {
+        userId,
+        count: chunks.length,
+      });
+    } catch (err) {
+      logger.error('analyze_exam.rag_chunks_save_failed', {
+        userId,
+        err: err instanceof Error ? err.message : String(err),
+      });
+    }
   }
 }

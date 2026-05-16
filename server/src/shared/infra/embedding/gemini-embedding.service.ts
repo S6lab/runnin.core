@@ -1,7 +1,7 @@
 import { logger } from '@shared/logger/logger';
 
 const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
-const DEFAULT_MODEL = 'gemini-embedding-001';
+const DEFAULT_MODEL = 'text-embedding-004';
 
 type GeminiEmbeddingTaskType = 'RETRIEVAL_DOCUMENT' | 'RETRIEVAL_QUERY';
 
