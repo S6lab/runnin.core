@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 
 /// Streak calendar 7×4 grid per `docs/figma/screens/PERFIL.md` §GAMIFICAÇÃO
@@ -18,12 +19,36 @@ class FigmaStreakCalendarGrid extends StatelessWidget {
   final double cellSize;
   final double gap;
 
+  static const _weekdayLabels = ['S', 'T', 'Q', 'Q', 'S', 'S', 'D'];
+
   @override
   Widget build(BuildContext context) {
     final activeSet = activeDays.toSet();
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            for (int col = 0; col < 7; col++) ...[
+              if (col > 0) SizedBox(width: gap),
+              SizedBox(
+                width: cellSize,
+                child: Text(
+                  _weekdayLabels[col],
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: FigmaColors.textMuted,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+        SizedBox(height: gap * 2),
         for (int row = 0; row < 4; row++) ...[
           if (row > 0) SizedBox(height: gap),
           Row(

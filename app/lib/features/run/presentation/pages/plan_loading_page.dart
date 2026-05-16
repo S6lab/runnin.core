@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:runnin/core/router/app_router.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
+import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 import 'package:runnin/shared/widgets/coach_ai_breadcrumb.dart';
 import 'package:runnin/shared/widgets/plan_task_row.dart';
 
@@ -28,6 +29,7 @@ class _PlanLoadingPageState extends State<PlanLoadingPage> {
 
   int _completedCount = 0;
   late final Timer _timer;
+  final _ds = UserRemoteDatasource();
 
   @override
   void initState() {
@@ -35,11 +37,21 @@ class _PlanLoadingPageState extends State<PlanLoadingPage> {
     _timer = Timer.periodic(const Duration(milliseconds: 750), _tick);
   }
 
-  void _tick(Timer timer) {
+  Future<void> _tick(Timer timer) async {
     if (_completedCount >= _taskEntries.length) {
       timer.cancel();
       markOnboardingDone();
-      if (mounted) context.go('/home');
+      if (!mounted) return;
+      // Route Coach Intro on first plan (intro only on first time)
+      bool introSeen = false;
+      try {
+        final profile = await _ds.getMe();
+        introSeen = profile?.coachIntroSeen ?? false;
+      } catch (_) {
+        introSeen = false;
+      }
+      if (!mounted) return;
+      context.go(introSeen ? '/home' : '/coach-intro');
       return;
     }
     setState(() => _completedCount++);
@@ -76,7 +88,7 @@ class _PlanLoadingPageState extends State<PlanLoadingPage> {
               ),
               const SizedBox(height: 34.37),
               const Text(
-                'Analisando nível , objetivo: 10K',
+                'Analisando perfil para criar seu plano',
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w400,

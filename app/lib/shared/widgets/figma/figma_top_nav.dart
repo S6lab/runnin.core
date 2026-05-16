@@ -41,9 +41,14 @@ class FigmaTopNav extends StatelessWidget {
           const SizedBox(width: 4),
           const _Separator(),
           const SizedBox(width: 4),
-          Text(
-            breadcrumb,
-            style: _getBreadcrumbStyle(context, palette),
+          Flexible(
+            child: Text(
+              breadcrumb,
+              style: _getBreadcrumbStyle(context, palette),
+              overflow: TextOverflow.fade,
+              softWrap: false,
+              maxLines: 1,
+            ),
           ),
         ],
       ),

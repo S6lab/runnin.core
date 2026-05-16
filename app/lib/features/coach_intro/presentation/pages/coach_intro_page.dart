@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
+import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 
 /// 4-slide Coach.AI briefing per `docs/figma/screens/COACH_INTRO.md`
 /// (Figma nodes 1:5770, 1:5818, 1:5870, 1:5922).
@@ -82,20 +83,32 @@ class _CoachIntroPageState extends State<CoachIntroPage> {
 
   void _onPageChanged(int i) => setState(() => _index = i);
 
-  void _next() {
+  Future<void> _markIntroSeen() async {
+    try {
+      await UserRemoteDatasource().patchMe(coachIntroSeen: true);
+    } catch (_) {
+      // best-effort; user can revisit from PERFIL menu if needed
+    }
+  }
+
+  Future<void> _next() async {
     if (_index < _slides.length - 1) {
       _controller.nextPage(
         duration: const Duration(milliseconds: 280),
         curve: Curves.easeOut,
       );
     } else {
-      // Final CTA "VAMOS CORRER ↗" — into pre-run flow.
-      context.go('/prep');
+      // Final CTA "VAMOS CORRER ↗" — mark seen + go to home (user can start run from there).
+      await _markIntroSeen();
+      if (!mounted) return;
+      context.go('/home');
     }
   }
 
-  void _skip() {
-    // PULAR — fall back to home; user can start a run from there anytime.
+  Future<void> _skip() async {
+    // PULAR — also marks seen (user opted out actively).
+    await _markIntroSeen();
+    if (!mounted) return;
     context.go('/home');
   }
 

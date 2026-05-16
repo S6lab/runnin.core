@@ -8,6 +8,7 @@ import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 import 'package:runnin/features/onboarding/presentation/steps/onboarding_step_body.dart';
 import 'package:runnin/features/onboarding/presentation/steps/onboarding_step_frequency.dart';
+import 'package:runnin/features/onboarding/presentation/steps/onboarding_step_gender.dart';
 import 'package:runnin/features/onboarding/presentation/steps/onboarding_step_goal.dart';
 import 'package:runnin/features/onboarding/presentation/steps/onboarding_step_identity.dart';
 import 'package:runnin/features/onboarding/presentation/steps/onboarding_step_intro.dart';
@@ -38,7 +39,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
   final _medicalOtherCtrl = TextEditingController();
   final Set<String> _medicalConditions = {};
 
-  static const _totalSteps = 13;
+  static const _totalSteps = 14; // 3 intro + login + 10 assessment (incl. gender)
   static const _loginStep = 3;
   static const _firstAssessmentStep = 4;
 
@@ -50,6 +51,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
   String? _runPeriod;
   String? _wakeTime;
   String? _sleepTime;
+  String? _gender; // 'male' | 'female' | 'other' | 'na'
   bool _hasWearable = false;
   bool _authLoading = false;
   bool _submitting = false;
@@ -329,6 +331,10 @@ class _OnboardingPageState extends State<OnboardingPage> {
         targetPace: _pace,
         hasWearable: _hasWearable,
         medicalConditions: _medicalConditions.toList()..sort(),
+        gender: _gender,
+        runPeriod: _runPeriod,
+        wakeTime: _wakeTime,
+        sleepTime: _sleepTime,
       );
       markOnboardingDone();
     } catch (_) {
@@ -453,33 +459,38 @@ class _OnboardingPageState extends State<OnboardingPage> {
           birthDateController: _birthDateCtrl,
         );
       case 6:
+        return OnboardingStepGender(
+          selected: _gender,
+          onSelect: (value) => setState(() => _gender = value),
+        );
+      case 7:
         return OnboardingStepBody(
           weightController: _weightCtrl,
           heightController: _heightCtrl,
         );
-      case 7:
+      case 8:
         return OnboardingStepMedical(
           selected: _medicalConditions,
           otherController: _medicalOtherCtrl,
           onToggle: _toggleMedicalCondition,
           onAddOther: _addOtherMedicalCondition,
         );
-      case 8:
+      case 9:
         return OnboardingStepGoal(
           selectedGoal: _goal,
           onGoalSelect: (value) => setState(() => _goal = value),
         );
-      case 9:
+      case 10:
         return OnboardingStepFrequency(
           frequency: _frequency,
           onFreqChange: (value) => setState(() => _frequency = value),
         );
-      case 10:
+      case 11:
         return OnboardingStepPace(
           selected: _pace,
           onSelect: (value) => setState(() => _pace = value),
         );
-      case 11:
+      case 12:
         return OnboardingStepRoutine(
           selectedPeriod: _runPeriod,
           selectedWakeTime: _wakeTime,
@@ -488,7 +499,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
           onWakeTimeSelect: (v) => setState(() => _wakeTime = v),
           onSleepTimeSelect: (v) => setState(() => _sleepTime = v),
         );
-      case 12:
+      case 13:
         return OnboardingStepWearable(
           selected: _hasWearable,
           onSelect: (value) => setState(() => _hasWearable = value),
@@ -535,7 +546,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
                 : Text('$label /'),
           ),
         ),
-        if (_step == 7)
+        if (_step == 8)
           Padding(
             padding: const EdgeInsets.only(top: 8),
             child: Text(
@@ -561,6 +572,8 @@ class _OnboardingPageState extends State<OnboardingPage> {
         return _nameCtrl.text.trim().isNotEmpty &&
             _isValidBirthDate(_birthDateCtrl.text.trim());
       case 6:
+        return _gender != null;
+      case 7:
         return _weightCtrl.text.trim().isNotEmpty &&
             _heightCtrl.text.trim().isNotEmpty;
       default:

@@ -18,6 +18,14 @@ class UserProfile {
   final bool premium;
   final DateTime? premiumUntil;
   final DateTime? lastOnboardingAt;
+  // Phase 4 foundation new fields
+  final String? gender;        // 'male' | 'female' | 'other' | 'na'
+  final String? runPeriod;     // 'manha' | 'tarde' | 'noite'
+  final String? wakeTime;
+  final String? sleepTime;
+  final bool? coachIntroSeen;
+  final int? restingBpm;
+  final int? maxBpm;
 
   const UserProfile({
     required this.id,
@@ -35,6 +43,13 @@ class UserProfile {
     required this.premium,
     required this.premiumUntil,
     required this.lastOnboardingAt,
+    this.gender,
+    this.runPeriod,
+    this.wakeTime,
+    this.sleepTime,
+    this.coachIntroSeen,
+    this.restingBpm,
+    this.maxBpm,
   });
 
   bool get isPro {
@@ -66,6 +81,13 @@ class UserProfile {
     lastOnboardingAt: j['lastOnboardingAt'] is String
         ? DateTime.tryParse(j['lastOnboardingAt'] as String)
         : null,
+    gender: j['gender'] as String?,
+    runPeriod: j['runPeriod'] as String?,
+    wakeTime: j['wakeTime'] as String?,
+    sleepTime: j['sleepTime'] as String?,
+    coachIntroSeen: j['coachIntroSeen'] as bool?,
+    restingBpm: j['restingBpm'] as int?,
+    maxBpm: j['maxBpm'] as int?,
   );
 }
 
@@ -109,6 +131,10 @@ class UserRemoteDatasource {
     String? targetPace,
     bool hasWearable = false,
     List<String> medicalConditions = const [],
+    String? gender,        // 'male' | 'female' | 'other' | 'na'
+    String? runPeriod,     // 'manha' | 'tarde' | 'noite'
+    String? wakeTime,      // "HH:MM"
+    String? sleepTime,     // "HH:MM"
   }) async {
     final res = await _dio.post(
       '/users/onboarding',
@@ -123,6 +149,10 @@ class UserRemoteDatasource {
         'targetPace': targetPace,
         'hasWearable': hasWearable,
         'medicalConditions': medicalConditions,
+        if (gender != null) 'gender': gender,
+        if (runPeriod != null) 'runPeriod': runPeriod,
+        if (wakeTime != null) 'wakeTime': wakeTime,
+        if (sleepTime != null) 'sleepTime': sleepTime,
       },
     );
     final data = res.data as Map<String, dynamic>;
@@ -141,6 +171,12 @@ class UserRemoteDatasource {
     List<String>? medicalConditions,
     String? coachVoiceId,
     bool? onboarded,
+    bool? coachIntroSeen,
+    String? gender,
+    String? runPeriod,
+    String? wakeTime,
+    String? sleepTime,
+    Map<String, bool>? preRunAlerts,
   }) async {
     final data = <String, dynamic>{
       'name': name,
@@ -154,6 +190,12 @@ class UserRemoteDatasource {
       'medicalConditions': medicalConditions,
       'coachVoiceId': coachVoiceId,
       'onboarded': onboarded,
+      'coachIntroSeen': coachIntroSeen,
+      'gender': gender,
+      'runPeriod': runPeriod,
+      'wakeTime': wakeTime,
+      'sleepTime': sleepTime,
+      'preRunAlerts': preRunAlerts,
     }..removeWhere((_, value) => value == null);
 
     final res = await _dio.patch('/users/me', data: data);
