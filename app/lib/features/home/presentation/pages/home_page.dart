@@ -18,6 +18,7 @@ import 'package:runnin/shared/widgets/app_panel.dart';
 import 'package:runnin/shared/widgets/app_tag.dart';
 import 'package:runnin/shared/widgets/notification_card.dart';
 import 'package:runnin/shared/widgets/section_heading.dart';
+import 'package:runnin/shared/widgets/week_grid.dart' as wg;
 
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
@@ -960,7 +961,33 @@ class _SemanaSection extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 20),
-        _WeekGrid(weekDays: data.weekDays),
+        // SUP-404 [HOME-A6]: shared WeekGrid component renders the 7-day
+        // grid per Figma spec (header 37.7, body 110.4, with status icon +
+        // type + distance + pace). Domain WeekDayData maps to widget cells.
+        wg.WeekGrid(
+          cells: [
+            for (final d in data.weekDays)
+              wg.WeekDayCellData(
+                label: d.shortName,
+                status: d.session == null
+                    ? wg.WeekDayCellStatus.rest
+                    : d.isToday
+                        ? wg.WeekDayCellStatus.today
+                        : d.isDone
+                            ? wg.WeekDayCellStatus.done
+                            : wg.WeekDayCellStatus.planned,
+                type: d.session == null
+                    ? null
+                    : d.session!.type.length >= 3
+                        ? d.session!.type.substring(0, 3).toUpperCase()
+                        : d.session!.type.toUpperCase(),
+                distance: d.session == null
+                    ? null
+                    : '${d.session!.distanceKm.toStringAsFixed(d.session!.distanceKm == d.session!.distanceKm.truncateToDouble() ? 0 : 1)}K',
+                paceOrDuration: d.session?.targetPace,
+              ),
+          ],
+        ),
         const SizedBox(height: 20),
         Row(
           children: [
