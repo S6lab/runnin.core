@@ -687,16 +687,6 @@ class _ThemeCard extends StatelessWidget {
 
 // ── Menu Section ────────────────────────────────────────────────────────────
 
-void _showComingSoon(BuildContext context, String featureLabel) {
-  ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(
-      content: Text('$featureLabel — em breve.'),
-      duration: const Duration(seconds: 2),
-      behavior: SnackBarBehavior.floating,
-    ),
-  );
-}
-
 class _MenuSection extends StatelessWidget {
   const _MenuSection();
 
@@ -766,7 +756,7 @@ class _MenuSection extends StatelessWidget {
           icon: Icons.star_outline,
           title: 'ASSINATURA',
           subtitle: 'Premium',
-          onTap: () => _showComingSoon(context, 'Assinatura Premium'),
+          onTap: () => context.push('/paywall?next=/profile'),
         ),
       ],
     );

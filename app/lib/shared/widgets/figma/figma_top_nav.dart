@@ -26,7 +26,7 @@ class FigmaTopNav extends StatelessWidget {
         color: palette.background,
         border: Border(
           bottom: BorderSide(
-            color: palette.text,
+            color: palette.border,
             width: 1.735,
           ),
         ),
@@ -34,12 +34,15 @@ class FigmaTopNav extends StatelessWidget {
       child: Row(
         children: [
           if (showBackButton) ...[
-            _BackButton(onPressed: onBack),
+            _BackButton(
+              color: palette.text,
+              onPressed: onBack ?? () => Navigator.maybePop(context),
+            ),
             const SizedBox(width: 10.97),
           ],
           _LogoLockup(palette),
           const SizedBox(width: 4),
-          const _Separator(),
+          _Separator(color: palette.muted),
           const SizedBox(width: 4),
           Flexible(
             child: Text(
@@ -67,16 +70,17 @@ class FigmaTopNav extends StatelessWidget {
 }
 
 class _BackButton extends StatelessWidget {
-  final VoidCallback? onPressed;
+  final VoidCallback onPressed;
+  final Color color;
 
-  const _BackButton({required this.onPressed});
+  const _BackButton({required this.onPressed, required this.color});
 
   @override
   Widget build(BuildContext context) {
     return InkWell(
       onTap: onPressed,
       borderRadius: BorderRadius.zero,
-      child: const Icon(Icons.arrow_back_ios_new_outlined),
+      child: Icon(Icons.arrow_back_ios_new_outlined, color: color, size: 22),
     );
   }
 }
@@ -91,14 +95,23 @@ class _LogoLockup extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        const Text('RUNNIN'),
+        Text(
+          'RUNNIN',
+          style: TextStyle(
+            color: palette.text,
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.5,
+          ),
+        ),
         const SizedBox(width: 4),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
           color: palette.primary,
-          child: const Text(
+          child: Text(
             '.AI',
             style: TextStyle(
+              color: palette.background,
               fontSize: 9,
               fontWeight: FontWeight.w700,
               letterSpacing: 1.4,
@@ -111,7 +124,9 @@ class _LogoLockup extends StatelessWidget {
 }
 
 class _Separator extends StatelessWidget {
-  const _Separator();
+  final Color color;
+
+  const _Separator({required this.color});
 
   @override
   Widget build(BuildContext context) {
@@ -121,7 +136,7 @@ class _Separator extends StatelessWidget {
         fontSize: 12,
         fontWeight: FontWeight.w400,
         letterSpacing: 0,
-        color: Colors.white.withValues(alpha: 0.2),
+        color: color,
       ),
     );
   }

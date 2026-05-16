@@ -34,13 +34,8 @@ class SettingsIndexPage extends StatelessWidget {
                     icon: Icons.notifications_outlined,
                     title: 'ALERTAS',
                     subtitle: 'Push, in-app, janela de silêncio',
-                    onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Alertas — em breve.'),
-                        duration: Duration(seconds: 2),
-                        behavior: SnackBarBehavior.floating,
-                      ),
-                    ),
+                    onTap: () =>
+                        context.push('/profile/settings/notifications'),
                   ),
                   const SizedBox(height: AppSpacing.sm),
                   _SettingsCard(

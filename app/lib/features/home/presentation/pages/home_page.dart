@@ -2767,7 +2767,6 @@ class _HeroSection extends StatelessWidget {
         ? 'Nenhuma sessao planejada para hoje'
         : '${session.type.toUpperCase()} • ${session.targetPace ?? 'livre'}';
 
-    final photoUrl = user?.photoURL;
     final dayOfYear = now.difference(DateTime(now.year, 1, 1)).inDays;
     final heroAsset = dayOfYear.isEven
         ? 'assets/img/hero/runner_1.png'
@@ -2792,9 +2791,7 @@ class _HeroSection extends StatelessWidget {
       decoration: BoxDecoration(
         color: const Color(0xFF0A0A1A),
         image: DecorationImage(
-          image: photoUrl != null
-              ? NetworkImage(photoUrl) as ImageProvider
-              : AssetImage(heroAsset),
+          image: AssetImage(heroAsset),
           fit: BoxFit.cover,
           onError: (e, _) {
             debugPrint('HERO image error: $e');
@@ -3123,7 +3120,7 @@ class _PremiumUpsellBanner extends StatelessWidget {
                   Text(
                     'COACH AI PREMIUM',
                     style: GoogleFonts.jetBrainsMono(
-                      fontSize: 11, fontWeight: FontWeight.w800,
+                      fontSize: 11, fontWeight: FontWeight.w700,
                       color: FigmaColors.brandCyan, letterSpacing: 1.0,
                     ),
                   ),

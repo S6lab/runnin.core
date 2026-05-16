@@ -37,13 +37,14 @@ export class GetBenchmarkUseCase {
     }
 
     const userValues = await this.calculateUserValues(userId);
-    const userPace = this.parsePaceToMinutes(userValues.pace);
-    const userPercentile = this.calculatePercentile(aggregate.paceAvgs, userPace);
+    const cohortValues = this.calculateCohortValues(aggregate);
+
+    const userPercentile = this.calculatePercentile(userValues, cohortValues, aggregate.cohortSize);
 
     return {
       userPercentile,
       userValues,
-      cohortValues: this.calculateCohortValues(aggregate),
+      cohortValues,
       cohortSize: aggregate.cohortSize,
     };
   }

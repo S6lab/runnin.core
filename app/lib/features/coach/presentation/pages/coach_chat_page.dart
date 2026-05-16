@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/features/coach/domain/entities/chat_message.dart';
 import 'package:runnin/features/coach/presentation/cubit/coach_chat_cubit.dart';
@@ -150,6 +151,64 @@ class _CoachChatViewState extends State<_CoachChatView> {
                   );
                 },
               ),
+            ),
+            BlocBuilder<CoachChatCubit, CoachChatState>(
+              buildWhen: (prev, curr) =>
+                  prev.premiumRequired != curr.premiumRequired,
+              builder: (context, state) {
+                if (!state.premiumRequired) return const SizedBox.shrink();
+                return Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+                  child: AppPanel(
+                    color: palette.primary.withValues(alpha: 0.08),
+                    borderColor: palette.primary.withValues(alpha: 0.35),
+                    padding: const EdgeInsets.all(14),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'COACH AI É PREMIUM',
+                          style: TextStyle(
+                            color: palette.primary,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 1.0,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Conversar com o coach AI faz parte do plano Pro. Faça o upgrade pra ter chat, plano personalizado e voz ao vivo.',
+                          style: TextStyle(
+                            color: palette.text.withValues(alpha: 0.85),
+                            fontSize: 12,
+                            height: 1.5,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        InkWell(
+                          onTap: () => context.push('/paywall?next=/coach'),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 10,
+                            ),
+                            color: palette.primary,
+                            child: Text(
+                              'VER PLANOS  ↗',
+                              style: TextStyle(
+                                color: palette.background,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 1.0,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
             ),
             BlocBuilder<CoachChatCubit, CoachChatState>(
               buildWhen: (prev, curr) => prev.error != curr.error,

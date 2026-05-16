@@ -57,7 +57,8 @@ class _UnitsSettingsPageState extends State<UnitsSettingsPage> {
     try {
       await apiClient.patch('/users/me', data: {
         'unitsSystem': _unitsSystem.name,
-        'paceFormat': _paceFormat.name,
+        'paceFormat':
+            _paceFormat == PaceFormat.minPerKm ? 'min_per_km' : 'min_per_mi',
         'timeFormat': _timeFormat,
       });
       await _saveToHive();

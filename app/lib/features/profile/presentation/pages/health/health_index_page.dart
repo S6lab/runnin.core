@@ -20,13 +20,13 @@ class HealthIndexPage extends StatelessWidget {
             ),
             Expanded(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.all(23.99),
+                padding: const EdgeInsets.all(AppSpacing.xxl),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const SizedBox(height: 8),
+                    const SizedBox(height: AppSpacing.md),
                     _SectionHeader(label: 'SAÚDE', index: '01'),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: AppSpacing.xs),
                     Text(
                       'BPM, Zonas, Wearable, Exames',
                       style: GoogleFonts.jetBrainsMono(
@@ -36,33 +36,33 @@ class HealthIndexPage extends StatelessWidget {
                         height: 19.5 / 13,
                       ),
                     ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: AppSpacing.xl),
                     _HealthCard(
                       title: 'TENDÊNCIAS',
                       subtitle: 'BPM médio, Pace, Distância semanal',
                       onTap: () => context.push('/profile/health/trends'),
                       available: true,
                     ),
-                    const SizedBox(height: 7.997),
+                    const SizedBox(height: AppSpacing.md),
                     _HealthCard(
                       title: 'ZONAS',
                       subtitle: 'Distribuição de frequência cardíaca',
                       onTap: () => context.push('/profile/health/zones'),
                       available: true,
                     ),
-                    const SizedBox(height: 7.997),
-                      _HealthCard(
-                        title: 'DISPOSITIVOS',
-                        subtitle: 'Wearables conectados',
-                        onTap: () => context.push('/profile/health/devices'),
-                        available: true,
-                      ),
-                    const SizedBox(height: 7.997),
+                    const SizedBox(height: AppSpacing.md),
+                    _HealthCard(
+                      title: 'DISPOSITIVOS',
+                      subtitle: 'Wearables conectados',
+                      onTap: () => context.push('/profile/health/devices'),
+                      available: true,
+                    ),
+                    const SizedBox(height: AppSpacing.md),
                     _HealthCard(
                       title: 'EXAMES',
                       subtitle: 'Histórico de exames físicos',
-                      onTap: null,
-                      available: false,
+                      onTap: () => context.push('/profile/health/exams'),
+                      available: true,
                     ),
                   ],
                 ),
@@ -94,7 +94,7 @@ class _HealthCard extends StatelessWidget {
       onTap: onTap,
       child: Container(
         width: double.infinity,
-        padding: const EdgeInsets.all(17.73),
+        padding: const EdgeInsets.all(AppSpacing.xl),
         decoration: BoxDecoration(
           color: FigmaColors.surfaceCard,
           border: Border.all(color: FigmaColors.borderDefault, width: 1.735),

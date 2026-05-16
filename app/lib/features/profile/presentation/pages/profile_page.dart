@@ -114,7 +114,7 @@ class _ProfileCoachAICardState extends State<_ProfileCoachAICard> {
                       child: FigmaSelectionButton(
                         label: 'VER RESUMO',
                         selected: true,
-                        onTap: () {},
+                        onTap: () => context.push('/training'),
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -151,6 +151,8 @@ class _ProfilePageState extends State<ProfilePage> {
   final _birthDateCtrl = TextEditingController();
   final _weightCtrl = TextEditingController();
   final _heightCtrl = TextEditingController();
+  final _restingBpmCtrl = TextEditingController();
+  final _maxBpmCtrl = TextEditingController();
 
   List<Run>? _runs;
   UserProfile? _profile;
@@ -161,6 +163,10 @@ class _ProfilePageState extends State<ProfilePage> {
   String _goal = 'Completar 10K';
   int _frequency = 4;
   bool _hasWearable = false;
+  String _gender = 'na';
+  String _runPeriod = 'manha';
+  String? _wakeTime;
+  String? _sleepTime;
   String? _error;
   String? _saveMessage;
 
@@ -194,6 +200,8 @@ class _ProfilePageState extends State<ProfilePage> {
     _birthDateCtrl.dispose();
     _weightCtrl.dispose();
     _heightCtrl.dispose();
+    _restingBpmCtrl.dispose();
+    _maxBpmCtrl.dispose();
     super.dispose();
   }
 
@@ -236,10 +244,16 @@ class _ProfilePageState extends State<ProfilePage> {
     _birthDateCtrl.text = profile?.birthDate ?? '';
     _weightCtrl.text = profile?.weight ?? '';
     _heightCtrl.text = profile?.height ?? '';
+    _restingBpmCtrl.text = profile?.restingBpm?.toString() ?? '';
+    _maxBpmCtrl.text = profile?.maxBpm?.toString() ?? '';
     _level = profile?.level ?? 'iniciante';
     _goal = profile?.goal ?? 'Completar 10K';
     _frequency = profile?.frequency ?? 4;
     _hasWearable = profile?.hasWearable ?? false;
+    _gender = profile?.gender ?? 'na';
+    _runPeriod = profile?.runPeriod ?? 'manha';
+    _wakeTime = profile?.wakeTime;
+    _sleepTime = profile?.sleepTime;
   }
 
   Future<void> _saveProfile() async {
@@ -248,6 +262,23 @@ class _ProfilePageState extends State<ProfilePage> {
       _saveMessage = null;
       _error = null;
     });
+
+    final resting = int.tryParse(_restingBpmCtrl.text.trim());
+    final maxBpm = int.tryParse(_maxBpmCtrl.text.trim());
+    if (resting != null && maxBpm != null && maxBpm <= resting) {
+      setState(() {
+        _saving = false;
+        _error = 'FC máxima deve ser maior que FC repouso.';
+      });
+      return;
+    }
+    if (_wakeTime != null && _wakeTime == _sleepTime) {
+      setState(() {
+        _saving = false;
+        _error = 'Horário de acordar e dormir não podem ser iguais.';
+      });
+      return;
+    }
 
     try {
       final updated = await _userDatasource.patchMe(
@@ -261,6 +292,12 @@ class _ProfilePageState extends State<ProfilePage> {
         goal: _goal,
         frequency: _frequency,
         hasWearable: _hasWearable,
+        gender: _gender,
+        runPeriod: _runPeriod,
+        wakeTime: _wakeTime,
+        sleepTime: _sleepTime,
+        restingBpm: resting,
+        maxBpm: maxBpm,
         onboarded: true,
       );
 
@@ -412,7 +449,7 @@ class _ProfilePageState extends State<ProfilePage> {
                           ),
                           if (firebaseUser?.isAnonymous ?? false) ...[
                             const SizedBox(height: 12),
-                            _AnonPromoBanner(onTap: () => context.push('/account-access')),
+                            _AnonPromoBanner(onTap: () => context.push('/profile/access')),
                           ],
                           const SizedBox(height: 8),
                           Row(
@@ -466,10 +503,16 @@ class _ProfilePageState extends State<ProfilePage> {
                             birthDateController: _birthDateCtrl,
                             weightController: _weightCtrl,
                             heightController: _heightCtrl,
+                            restingBpmController: _restingBpmCtrl,
+                            maxBpmController: _maxBpmCtrl,
                             selectedLevel: _level,
                             selectedGoal: _goal,
                             frequency: _frequency,
                             hasWearable: _hasWearable,
+                            gender: _gender,
+                            runPeriod: _runPeriod,
+                            wakeTime: _wakeTime,
+                            sleepTime: _sleepTime,
                             levels: _levels,
                             goals: _goals,
                             frequencyOptions: _frequencyOptions,
@@ -482,6 +525,14 @@ class _ProfilePageState extends State<ProfilePage> {
                                 setState(() => _frequency = value),
                             onWearableChanged: (value) =>
                                 setState(() => _hasWearable = value),
+                            onGenderChanged: (value) =>
+                                setState(() => _gender = value),
+                            onRunPeriodChanged: (value) =>
+                                setState(() => _runPeriod = value),
+                            onWakeTimeChanged: (value) =>
+                                setState(() => _wakeTime = value),
+                            onSleepTimeChanged: (value) =>
+                                setState(() => _sleepTime = value),
                           ),
                           if (_saveMessage != null ||
                               (_error != null && _profile != null)) ...[
@@ -668,10 +719,16 @@ class _ProfileEditor extends StatelessWidget {
   final TextEditingController birthDateController;
   final TextEditingController weightController;
   final TextEditingController heightController;
+  final TextEditingController restingBpmController;
+  final TextEditingController maxBpmController;
   final String selectedLevel;
   final String selectedGoal;
   final int frequency;
   final bool hasWearable;
+  final String gender;
+  final String runPeriod;
+  final String? wakeTime;
+  final String? sleepTime;
   final List<(String, String)> levels;
   final List<String> goals;
   final List<int> frequencyOptions;
@@ -680,16 +737,26 @@ class _ProfileEditor extends StatelessWidget {
   final ValueChanged<String> onGoalChanged;
   final ValueChanged<int> onFrequencyChanged;
   final ValueChanged<bool> onWearableChanged;
+  final ValueChanged<String> onGenderChanged;
+  final ValueChanged<String> onRunPeriodChanged;
+  final ValueChanged<String?> onWakeTimeChanged;
+  final ValueChanged<String?> onSleepTimeChanged;
 
   const _ProfileEditor({
     required this.nameController,
     required this.birthDateController,
     required this.weightController,
     required this.heightController,
+    required this.restingBpmController,
+    required this.maxBpmController,
     required this.selectedLevel,
     required this.selectedGoal,
     required this.frequency,
     required this.hasWearable,
+    required this.gender,
+    required this.runPeriod,
+    required this.wakeTime,
+    required this.sleepTime,
     required this.levels,
     required this.goals,
     required this.frequencyOptions,
@@ -698,6 +765,10 @@ class _ProfileEditor extends StatelessWidget {
     required this.onGoalChanged,
     required this.onFrequencyChanged,
     required this.onWearableChanged,
+    required this.onGenderChanged,
+    required this.onRunPeriodChanged,
+    required this.onWakeTimeChanged,
+    required this.onSleepTimeChanged,
   });
 
   @override
@@ -814,6 +885,115 @@ class _ProfileEditor extends StatelessWidget {
               .toList(),
         ),
         const SizedBox(height: 16),
+        FigmaFormFieldLabel(text: 'Gênero'),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: const [
+            ('male', 'Masculino'),
+            ('female', 'Feminino'),
+            ('other', 'Outro'),
+            ('na', 'Prefiro não dizer'),
+          ]
+              .map(
+                (g) => FigmaSelectionButton(
+                  label: g.$2,
+                  selected: gender == g.$1,
+                  onTap: () => onGenderChanged(g.$1),
+                ),
+              )
+              .toList(),
+        ),
+        const SizedBox(height: 16),
+        FigmaFormFieldLabel(text: 'Período preferido'),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: const [
+            ('manha', 'Manhã'),
+            ('tarde', 'Tarde'),
+            ('noite', 'Noite'),
+          ]
+              .map(
+                (p) => FigmaSelectionButton(
+                  label: p.$2,
+                  selected: runPeriod == p.$1,
+                  onTap: () => onRunPeriodChanged(p.$1),
+                ),
+              )
+              .toList(),
+        ),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  FigmaFormFieldLabel(text: 'Acordar'),
+                  const SizedBox(height: 8),
+                  _TimePickerField(
+                    value: wakeTime,
+                    enabled: enabled,
+                    onChanged: onWakeTimeChanged,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  FigmaFormFieldLabel(text: 'Dormir'),
+                  const SizedBox(height: 8),
+                  _TimePickerField(
+                    value: sleepTime,
+                    enabled: enabled,
+                    onChanged: onSleepTimeChanged,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  FigmaFormFieldLabel(text: 'FC Repouso'),
+                  const SizedBox(height: 8),
+                  FigmaFormTextField(
+                    controller: restingBpmController,
+                    enabled: enabled,
+                    keyboardType: TextInputType.number,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  FigmaFormFieldLabel(text: 'FC Máxima'),
+                  const SizedBox(height: 8),
+                  FigmaFormTextField(
+                    controller: maxBpmController,
+                    enabled: enabled,
+                    keyboardType: TextInputType.number,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
         FigmaFormFieldLabel(text: 'Wearable'),
         const SizedBox(height: 8),
         SwitchListTile(
@@ -833,6 +1013,66 @@ class _ProfileEditor extends StatelessWidget {
         ),
       ],
     );
+  }
+}
+
+class _TimePickerField extends StatelessWidget {
+  final String? value;
+  final bool enabled;
+  final ValueChanged<String?> onChanged;
+
+  const _TimePickerField({
+    required this.value,
+    required this.enabled,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    final display = value ?? '--:--';
+
+    return GestureDetector(
+      onTap: enabled
+          ? () async {
+              final initial = _parseHHmm(value) ?? TimeOfDay.now();
+              final picked = await showTimePicker(
+                context: context,
+                initialTime: initial,
+              );
+              if (picked != null) {
+                final hh = picked.hour.toString().padLeft(2, '0');
+                final mm = picked.minute.toString().padLeft(2, '0');
+                onChanged('$hh:$mm');
+              }
+            }
+          : null,
+      child: Container(
+        height: 44,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        alignment: Alignment.centerLeft,
+        decoration: BoxDecoration(
+          color: palette.surface,
+          border: Border.all(color: palette.border, width: 1.0),
+        ),
+        child: Text(
+          display,
+          style: TextStyle(
+            color: enabled ? palette.text : palette.muted,
+            fontSize: 14,
+          ),
+        ),
+      ),
+    );
+  }
+
+  static TimeOfDay? _parseHHmm(String? raw) {
+    if (raw == null || !raw.contains(':')) return null;
+    final parts = raw.split(':');
+    final h = int.tryParse(parts[0]);
+    final m = int.tryParse(parts[1]);
+    if (h == null || m == null) return null;
+    return TimeOfDay(hour: h, minute: m);
   }
 }
 
@@ -1221,7 +1461,7 @@ class _AnonPromoBanner extends StatelessWidget {
                   Text(
                     'CRIE SUA CONTA',
                     style: GoogleFonts.jetBrainsMono(
-                      fontSize: 11, fontWeight: FontWeight.w800,
+                      fontSize: 11, fontWeight: FontWeight.w700,
                       color: FigmaColors.brandCyan, letterSpacing: 1.0,
                     ),
                   ),

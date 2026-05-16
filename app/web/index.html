@@ -43,12 +43,6 @@
         .then((registrations) => registrations.forEach((registration) => registration.unregister()))
         .catch(() => {});
     }
-
-    if ('caches' in window) {
-      caches.keys()
-        .then((keys) => keys.forEach((key) => caches.delete(key)))
-        .catch(() => {});
-    }
   </script>
   <!--
     You can customize the "flutter_bootstrap.js" script.

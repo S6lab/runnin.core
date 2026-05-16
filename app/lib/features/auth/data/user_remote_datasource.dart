@@ -180,6 +180,8 @@ class UserRemoteDatasource {
     String? runPeriod,
     String? wakeTime,
     String? sleepTime,
+    int? restingBpm,
+    int? maxBpm,
     Map<String, bool>? preRunAlerts,
   }) async {
     final data = <String, dynamic>{
@@ -199,6 +201,8 @@ class UserRemoteDatasource {
       'runPeriod': runPeriod,
       'wakeTime': wakeTime,
       'sleepTime': sleepTime,
+      'restingBpm': restingBpm,
+      'maxBpm': maxBpm,
       'preRunAlerts': preRunAlerts,
     }..removeWhere((_, value) => value == null);
 

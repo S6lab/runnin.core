@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
+import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 import 'package:runnin/features/run/data/datasources/run_remote_datasource.dart';
 import 'package:runnin/features/run/domain/entities/run.dart';
 import 'package:runnin/shared/widgets/figma/figma_chart_line_spark.dart';
@@ -15,8 +16,10 @@ class HealthTrendsPage extends StatefulWidget {
 }
 
 class _HealthTrendsPageState extends State<HealthTrendsPage> {
-  final _remote = RunRemoteDatasource();
+  final _remoteRuns = RunRemoteDatasource();
+  final _remoteUser = UserRemoteDatasource();
   List<Run>? _runs;
+  UserProfile? _userProfile;
   bool _loading = true;
 
   @override
@@ -27,10 +30,13 @@ class _HealthTrendsPageState extends State<HealthTrendsPage> {
 
   Future<void> _load() async {
     try {
-      final runs = await _remote.listRuns(limit: 90);
+      final runs = await _remoteRuns.listRuns(limit: 90);
+      final userProfile = await _remoteUser.getMe();
+      
       if (mounted) {
         setState(() {
           _runs = runs.where((r) => r.status == 'completed').toList();
+          _userProfile = userProfile;
           _loading = false;
         });
       }
@@ -58,137 +64,20 @@ class _HealthTrendsPageState extends State<HealthTrendsPage> {
                         strokeWidth: 1.5,
                       ),
                     )
-                  : _Body(runs: _runs ?? []),
+                  : _Body(
+                      runs: _runs ?? [],
+                      userProfile: _userProfile,
+                    ),
             ),
           ],
         ),
       ),
     );
   }
+
 }
 
-class _Body extends StatelessWidget {
-  const _Body({required this.runs});
-  final List<Run> runs;
-
-  @override
-  Widget build(BuildContext context) {
-    final stats = _computeStats(runs);
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(23.99),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const SizedBox(height: 8),
-          _SectionHeader(label: 'TENDÊNCIAS', index: '01'),
-          const SizedBox(height: 16),
-          GridView.count(
-            crossAxisCount: 2,
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            crossAxisSpacing: 7.997,
-            mainAxisSpacing: 7.997,
-            childAspectRatio: 1.35,
-            children: [
-              FigmaHistStatCard(
-                label: 'BPM MÉDIO',
-                value: stats.avgBpm > 0 ? stats.avgBpm.toString() : '—',
-                unit: 'bpm',
-                delta: stats.bpmDelta,
-                deltaIsPositive: stats.bpmDeltaPositive,
-                valueColor: FigmaColors.brandCyan,
-              ),
-              FigmaHistStatCard(
-                label: 'PACE MÉDIO',
-                value: stats.avgPace.isNotEmpty ? stats.avgPace : '—',
-                unit: '/km',
-                delta: stats.paceDelta,
-                deltaIsPositive: stats.paceDeltaPositive,
-                valueColor: FigmaColors.brandCyan,
-              ),
-              FigmaHistStatCard(
-                label: 'DIST. SEMANAL',
-                value: stats.weeklyDistKm > 0
-                    ? stats.weeklyDistKm.toStringAsFixed(1)
-                    : '—',
-                unit: 'km',
-                delta: stats.distDelta,
-                deltaIsPositive: stats.distDeltaPositive,
-                valueColor: FigmaColors.brandOrange,
-              ),
-              FigmaHistStatCard(
-                label: 'TEMPO TOTAL',
-                value: stats.totalTimeLabel.isNotEmpty
-                    ? stats.totalTimeLabel
-                    : '—',
-                delta: stats.timeDelta,
-                deltaIsPositive: stats.timeDeltaPositive,
-                valueColor: FigmaColors.brandOrange,
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-          _SectionHeader(label: 'BPM — 30 DIAS', index: '02'),
-          const SizedBox(height: 12),
-          Container(
-            decoration: BoxDecoration(
-              color: FigmaColors.surfaceCard,
-              border: Border.all(color: FigmaColors.borderDefault, width: 1.735),
-            ),
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (stats.bpmSeries.length < 2)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 24),
-                    child: Center(
-                      child: Text(
-                        'Dados insuficientes',
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: 11,
-                          color: FigmaColors.textMuted,
-                        ),
-                      ),
-                    ),
-                  )
-                else
-                  FigmaChartLineSpark(
-                    values: stats.bpmSeries,
-                    height: 100,
-                    lineColor: FigmaColors.brandCyan,
-                  ),
-                const SizedBox(height: 8),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      stats.bpmSeriesStart,
-                      style: GoogleFonts.jetBrainsMono(
-                        fontSize: 10,
-                        color: FigmaColors.textMuted,
-                      ),
-                    ),
-                    Text(
-                      stats.bpmSeriesEnd,
-                      style: GoogleFonts.jetBrainsMono(
-                        fontSize: 10,
-                        color: FigmaColors.textMuted,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 32),
-        ],
-      ),
-    );
-  }
-
-  _Stats _computeStats(List<Run> runs) {
+_Stats _buildStats(List<Run> runs) {
     final now = DateTime.now();
     final cutoff30 = now.subtract(const Duration(days: 30));
     final cutoff7 = now.subtract(const Duration(days: 7));
@@ -218,6 +107,8 @@ class _Body extends StatelessWidget {
         return false;
       }
     }).toList();
+
+    final hasRunData = recent7.isNotEmpty;
 
     // BPM
     final bpmRuns = recent30.where((r) => r.avgBpm != null).toList();
@@ -332,6 +223,95 @@ class _Body extends StatelessWidget {
       bpmSeries: bpmSeries,
       bpmSeriesStart: bpmSeriesStart,
       bpmSeriesEnd: bpmSeriesEnd,
+      hasRunData: hasRunData,
+      runCount: recent7.length,
+    );
+}
+
+class _Body extends StatelessWidget {
+  const _Body({required this.runs, required this.userProfile});
+  final List<Run> runs;
+  final UserProfile? userProfile;
+
+  @override
+  Widget build(BuildContext context) {
+    final stats = _buildStats(runs);
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(23.99),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 8),
+          _SectionHeader(label: 'TENDÊNCIAS', index: '01'),
+          const SizedBox(height: 16),
+          GridView.count(
+            crossAxisCount: 2,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            crossAxisSpacing: 7.997,
+            mainAxisSpacing: 7.997,
+            childAspectRatio: 1.35,
+            children: [
+              _HealthCard(
+                label: 'BPM repouso',
+                value: userProfile?.restingBpm?.toString() ?? '—',
+                unit: 'bpm',
+                valueColor: FigmaColors.brandCyan,
+              ),
+              _HealthCard(
+                label: 'BPM corrida',
+                value: stats.avgBpm > 0 ? stats.avgBpm.toString() : '—',
+                unit: 'bpm',
+                valueColor: FigmaColors.brandCyan,
+              ),
+              _HealthCard(
+                label: 'Pace médio',
+                value: stats.avgPace.isNotEmpty ? stats.avgPace : '—',
+                unit: '/km',
+                valueColor: FigmaColors.brandOrange,
+              ),
+              _HealthCard(
+                label: 'Dist. semanal',
+                value: stats.weeklyDistKm > 0
+                    ? stats.weeklyDistKm.toStringAsFixed(1)
+                    : '—',
+                unit: 'km',
+                valueColor: FigmaColors.brandOrange,
+              ),
+            ],
+          ),
+          const SizedBox(height: 32),
+        ],
+      ),
+    );
+  }
+}
+
+class _HealthCard extends StatelessWidget {
+  const _HealthCard({
+    required this.label,
+    required this.value,
+    required this.unit,
+    this.secondaryLabel,
+    this.valueColor = FigmaColors.brandCyan,
+  });
+
+  final String label;
+  final String value;
+  final String unit;
+  final String? secondaryLabel;
+  final Color valueColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return FigmaHistStatCard(
+      label: label,
+      value: value,
+      unit: unit,
+      delta: null,
+      deltaIsPositive: true,
+      valueColor: valueColor,
     );
   }
 }
@@ -353,6 +333,8 @@ class _Stats {
     required this.bpmSeries,
     required this.bpmSeriesStart,
     required this.bpmSeriesEnd,
+    required this.hasRunData,
+    required this.runCount,
   });
 
   final int avgBpm;
@@ -370,6 +352,10 @@ class _Stats {
   final List<double> bpmSeries;
   final String bpmSeriesStart;
   final String bpmSeriesEnd;
+  final bool hasRunData;
+  final int runCount;
+
+  bool get hasBpmData => avgBpm > 0;
 }
 
 class _SectionHeader extends StatelessWidget {

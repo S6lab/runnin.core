@@ -146,7 +146,13 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
     setState(() => _saving = true);
     try {
       await apiClient.patch('/users/me', data: {
-        'notificationPreferences': _notificationPreferences,
+        'notificationsEnabled': {
+          'push': _pushEnabled,
+          'in_app_banner': _inAppBannerEnabled,
+          ..._dailyNotificationTypes,
+        },
+        if (_dndEnabled)
+          'dndWindow': {'start': _dndStart, 'end': _dndEnd},
       });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

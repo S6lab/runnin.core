@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
-import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 import 'package:runnin/shared/widgets/figma/figma_device_card.dart';
 import 'package:runnin/shared/widgets/figma/figma_top_nav.dart';
 
@@ -13,53 +12,40 @@ class HealthDevicesPage extends StatefulWidget {
 }
 
 class _HealthDevicesPageState extends State<HealthDevicesPage> {
-  final _remote = UserRemoteDatasource();
-  UserProfile? _profile;
-  bool _loading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadProfile();
-  }
-
-  Future<void> _loadProfile() async {
-    try {
-      final profile = await _remote.getMe();
-      if (mounted) {
-        setState(() {
-          _profile = profile;
-          _loading = false;
-        });
-      }
-    } catch (_) {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: FigmaColors.bgBase,
       body: Column(
         children: [
-          const _TopNav(),
+          const FigmaTopNav(
+            breadcrumb: 'Perfil / Saúde / Dispositivos',
+            showBackButton: true,
+          ),
           Expanded(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const SizedBox(height: 24),
-                  _FieldLabel(label: 'DISPOSITIVOS'),
-                  const SizedBox(height: 8),
-                  if (_loading)
-                    const _LoadingState()
-                  else if (_profile?.hasWearable == true)
-                    _ConnectedDevice(userProfile: _profile!)
-                  else
-                    const _CompatibleDevices(),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: AppSpacing.xxl),
+                  _FieldLabel(label: 'CONECTADOS'),
+                  const SizedBox(height: AppSpacing.md),
+                  const _EmptyConnectedState(),
+                  const SizedBox(height: AppSpacing.xxl),
+                  _FieldLabel(label: 'COMPATÍVEIS'),
+                  const SizedBox(height: AppSpacing.md),
+                  ..._kCompatibleProviders.map(
+                    (p) => Padding(
+                      padding: const EdgeInsets.only(bottom: AppSpacing.md),
+                      child: FigmaCompatibleDeviceCard(
+                        icon: p.icon,
+                        deviceName: p.name,
+                        dataLabel: p.metrics,
+                        onConnect: () => _showProviderDialog(context, p),
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -68,16 +54,43 @@ class _HealthDevicesPageState extends State<HealthDevicesPage> {
       ),
     );
   }
-}
 
-class _TopNav extends StatelessWidget {
-  const _TopNav();
-
-  @override
-  Widget build(BuildContext context) {
-    return FigmaTopNav(
-      breadcrumb: 'Perfil / Saúde / Dispositivos',
-      showBackButton: true,
+  void _showProviderDialog(BuildContext context, _ProviderSpec p) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: FigmaColors.surfaceCard,
+        title: Text(
+          'Em breve: ${p.name}',
+          style: GoogleFonts.jetBrainsMono(
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+            color: FigmaColors.textPrimary,
+          ),
+        ),
+        content: Text(
+          'Integração com ${p.name} está em desenvolvimento. '
+          'Em breve você poderá sincronizar BPM, sono, HRV e passos automaticamente.',
+          style: GoogleFonts.jetBrainsMono(
+            fontSize: 12,
+            height: 1.5,
+            color: FigmaColors.textSecondary,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: Text(
+              'OK',
+              style: GoogleFonts.jetBrainsMono(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: FigmaColors.brandCyan,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -101,97 +114,54 @@ class _FieldLabel extends StatelessWidget {
   }
 }
 
-class _LoadingState extends StatelessWidget {
-  const _LoadingState();
+class _EmptyConnectedState extends StatelessWidget {
+  const _EmptyConnectedState();
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: CircularProgressIndicator(
-        color: FigmaColors.brandCyan,
-        strokeWidth: 1.5,
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppSpacing.xl),
+      decoration: BoxDecoration(
+        color: FigmaColors.surfaceCard,
+        border: Border.all(
+          color: FigmaColors.borderDefault,
+          width: 1.735,
+        ),
       ),
-    );
-  }
-}
-
-class _ConnectedDevice extends StatelessWidget {
-  final UserProfile userProfile;
-
-  const _ConnectedDevice({required this.userProfile});
-
-  @override
-  Widget build(BuildContext context) {
-    return FigmaDeviceConnectedCard(
-      deviceName: 'Garmin Forerunner 255',
-      platformLabel: 'Android / iOS',
-      dataChips: ['BPM', 'STEPS', 'SLEEP', 'HRV'],
-      onSync: () => _showSyncToast(context),
-    );
-  }
-
-  void _showSyncToast(BuildContext context) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Text('Sincronizando com Garmin...'),
-        duration: const Duration(seconds: 2),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-  }
-}
-
-class _CompatibleDevices extends StatelessWidget {
-  const _CompatibleDevices();
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _SectionHeader(label: 'COMPATÍVEIS'),
-        const SizedBox(height: 12),
-        FigmaCompatibleDeviceCard(
-          icon: Icons.watch_later_outlined,
-          deviceName: 'Apple Watch',
-          dataLabel: 'BPM · Sono · Passos',
-          onConnect: () => _showComingSoon(context),
-        ),
-        const SizedBox(height: 12),
-        FigmaCompatibleDeviceCard(
-          icon: Icons.track_changes_outlined,
-          deviceName: 'Garmin Forerunner',
-          dataLabel: 'BPM · Sono · Passos',
-          onConnect: () => _showComingSoon(context),
-        ),
-        const SizedBox(height: 12),
-        FigmaCompatibleDeviceCard(
-          icon: Icons.health_and_safety_outlined,
-          deviceName: 'Fitbit Sense',
-          dataLabel: 'BPM · Sono · ECG',
-          onConnect: () => _showComingSoon(context),
-        ),
-        const SizedBox(height: 12),
-        FigmaCompatibleDeviceCard(
-          icon: Icons.fitness_center_outlined,
-          deviceName: 'Polar H10',
-          dataLabel: 'BPM · ECG · Sono',
-          onConnect: () => _showComingSoon(context),
-        ),
-      ],
-    );
-  }
-
-  void _showComingSoon(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Em breve'),
-        content: const Text('Integração OAuth pendente.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('OK'),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.watch_outlined,
+                size: 22,
+                color: FigmaColors.textMuted,
+              ),
+              const SizedBox(width: AppSpacing.lg),
+              Expanded(
+                child: Text(
+                  'NENHUM DISPOSITIVO',
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 12,
+                    letterSpacing: 1.0,
+                    fontWeight: FontWeight.w700,
+                    color: FigmaColors.textPrimary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Text(
+            'Conecte um wearable abaixo para sincronizar BPM, sono e passos.',
+            style: GoogleFonts.jetBrainsMono(
+              fontSize: 11,
+              height: 1.5,
+              fontWeight: FontWeight.w400,
+              color: FigmaColors.textMuted,
+            ),
           ),
         ],
       ),
@@ -199,20 +169,57 @@ class _CompatibleDevices extends StatelessWidget {
   }
 }
 
-class _SectionHeader extends StatelessWidget {
-  final String label;
+class _ProviderSpec {
+  final String name;
+  final String metrics;
+  final IconData icon;
 
-  const _SectionHeader({required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      label,
-      style: GoogleFonts.jetBrainsMono(
-        fontSize: 12,
-        fontWeight: FontWeight.w700,
-        color: FigmaColors.textPrimary,
-      ),
-    );
-  }
+  const _ProviderSpec({
+    required this.name,
+    required this.metrics,
+    required this.icon,
+  });
 }
+
+const _kCompatibleProviders = <_ProviderSpec>[
+  _ProviderSpec(
+    name: 'Apple Watch',
+    metrics: 'BPM · Sono · Passos · HRV',
+    icon: Icons.watch_outlined,
+  ),
+  _ProviderSpec(
+    name: 'Garmin',
+    metrics: 'BPM · Sono · Passos · HRV',
+    icon: Icons.track_changes_outlined,
+  ),
+  _ProviderSpec(
+    name: 'Fitbit',
+    metrics: 'BPM · Sono · ECG · SpO2',
+    icon: Icons.health_and_safety_outlined,
+  ),
+  _ProviderSpec(
+    name: 'Samsung Galaxy Watch',
+    metrics: 'BPM · Sono · Passos',
+    icon: Icons.watch_later_outlined,
+  ),
+  _ProviderSpec(
+    name: 'Xiaomi Mi Band',
+    metrics: 'BPM · Sono · Passos',
+    icon: Icons.fitness_center_outlined,
+  ),
+  _ProviderSpec(
+    name: 'Polar',
+    metrics: 'BPM · ECG · Sono',
+    icon: Icons.favorite_outline,
+  ),
+  _ProviderSpec(
+    name: 'COROS',
+    metrics: 'BPM · Sono · HRV',
+    icon: Icons.directions_run_outlined,
+  ),
+  _ProviderSpec(
+    name: 'Whoop',
+    metrics: 'BPM · HRV · Recovery',
+    icon: Icons.bolt_outlined,
+  ),
+];

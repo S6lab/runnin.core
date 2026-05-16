@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:runnin/features/coach/data/datasources/coach_remote_datasource.dart';
 import 'package:runnin/features/coach/domain/entities/chat_message.dart';
@@ -6,21 +7,25 @@ class CoachChatState {
   final List<ChatMessage> messages;
   final bool sending;
   final String? error;
+  final bool premiumRequired;
 
   const CoachChatState({
     this.messages = const [],
     this.sending = false,
     this.error,
+    this.premiumRequired = false,
   });
 
   CoachChatState copyWith({
     List<ChatMessage>? messages,
     bool? sending,
     String? error,
+    bool? premiumRequired,
   }) => CoachChatState(
     messages: messages ?? this.messages,
     sending: sending ?? this.sending,
     error: error,
+    premiumRequired: premiumRequired ?? this.premiumRequired,
   );
 }
 
@@ -62,6 +67,17 @@ class CoachChatCubit extends Cubit<CoachChatState> {
       emit(
         state.copyWith(messages: [...state.messages, coachMsg], sending: false),
       );
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 403) {
+        emit(state.copyWith(sending: false, premiumRequired: true));
+      } else {
+        emit(
+          state.copyWith(
+            sending: false,
+            error: 'Falha ao enviar mensagem. Tente novamente.',
+          ),
+        );
+      }
     } catch (_) {
       emit(
         state.copyWith(
