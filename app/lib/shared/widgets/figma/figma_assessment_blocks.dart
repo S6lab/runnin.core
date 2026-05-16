@@ -6,12 +6,14 @@ class FigmaCyanInfoBlock extends StatelessWidget {
   final IconData? icon;
   final String title;
   final String body;
+  final Widget? bodyWidget;
 
   const FigmaCyanInfoBlock({
     super.key,
     this.icon,
     required this.title,
-    required this.body,
+    this.body = '',
+    this.bodyWidget,
   });
 
   @override
@@ -47,15 +49,18 @@ class FigmaCyanInfoBlock extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 8),
-                Text(
-                  body,
-                  style: GoogleFonts.jetBrainsMono(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w400,
-                    height: 19.2 / 12,
-                    color: FigmaColors.textSecondary,
+                if (bodyWidget != null)
+                  bodyWidget!
+                else
+                  Text(
+                    body,
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w400,
+                      height: 19.2 / 12,
+                      color: FigmaColors.textSecondary,
+                    ),
                   ),
-                ),
               ],
             ),
           ),

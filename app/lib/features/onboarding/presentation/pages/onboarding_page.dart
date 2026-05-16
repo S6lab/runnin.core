@@ -603,11 +603,15 @@ class _OnboardingPageState extends State<OnboardingPage> {
           onSelect: (value) => setState(() => _pace = value),
         );
       case 11:
-        return _StepWearable(
-          selected: _hasWearable,
-          options: _wearableOptions,
-          onSelect: (value) => setState(() => _hasWearable = value),
+        return _StepRoutine(
+          selectedPeriod: _runPeriod,
+          selectedWakeTime: _wakeTime,
+          selectedSleepTime: _sleepTime,
+          onPeriodSelect: (v) => setState(() => _runPeriod = v),
+          onWakeTimeSelect: (v) => setState(() => _wakeTime = v),
+          onSleepTimeSelect: (v) => setState(() => _sleepTime = v),
         );
+
       case 12:
         return _StepWearableV2(
           selected: _hasWearable,
