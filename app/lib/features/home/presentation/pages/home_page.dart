@@ -2768,19 +2768,21 @@ class _HeroSection extends StatelessWidget {
     return Container(
       height: 540,
       width: double.infinity,
-      color: const Color(0xFF0A0A1A),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0A0A1A),
+        image: DecorationImage(
+          image: photoUrl != null
+              ? NetworkImage(photoUrl) as ImageProvider
+              : AssetImage(heroAsset),
+          fit: BoxFit.cover,
+          onError: (e, _) {
+            debugPrint('HERO image error: $e');
+          },
+        ),
+        borderRadius: FigmaBorderRadius.zero,
+      ),
       child: Stack(
-        fit: StackFit.expand,
         children: [
-          // Foto background usando Image.asset (com errorBuilder + frameBuilder pra debug)
-          Image(
-            image: photoUrl != null ? NetworkImage(photoUrl) as ImageProvider : AssetImage(heroAsset),
-            fit: BoxFit.cover,
-            errorBuilder: (_, error, __) {
-              debugPrint('HERO asset failed: $heroAsset -> $error');
-              return const ColoredBox(color: Color(0xFF0A0A1A));
-            },
-          ),
           // Vinheta sutil pra texto não competir com a foto
           Positioned.fill(
             child: DecoratedBox(
