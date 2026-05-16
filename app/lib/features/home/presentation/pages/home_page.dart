@@ -456,11 +456,19 @@ class _IniciarSessaoButton extends StatelessWidget {
 
     // _CyberTodayCard movido pra dentro do _HeroSection (evita duplicação).
     // Aqui fica só Coach AI + CTA INICIAR.
+    final isPremium = data.profile?.premium ?? false;
     return _CoachMessageCard(
       palette: palette,
       message: coachMessage,
-      ctaLabel: session != null ? 'INICIAR SESSAO ↗' : 'INICIAR CORRIDA LIVRE ↗',
+      ctaLabel: isPremium
+          ? (session != null ? 'INICIAR SESSAO ↗' : 'INICIAR CORRIDA LIVRE ↗')
+          : 'INICIAR CORRIDA LIVRE ↗',
       onCta: () async {
+        // Sem premium: corrida livre OK; sessão guiada AI = paywall
+        if (!isPremium && session != null) {
+          context.push('/paywall?next=/home');
+          return;
+        }
         // Briefing do Coach aparece UMA vez, antes do PREP, na primeira corrida
         // após o plano ter sido gerado.
         final introSeen = data.profile?.coachIntroSeen ?? false;

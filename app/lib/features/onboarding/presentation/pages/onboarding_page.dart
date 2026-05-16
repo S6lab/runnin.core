@@ -309,7 +309,20 @@ class _OnboardingPageState extends State<OnboardingPage> {
       _submitting = true;
     });
     _doSubmit();
-    if (mounted) context.push('/plan-loading');
+    if (!mounted) return;
+    // Gate freemium: anônimo ou não-premium vai pro paywall.
+    // Se assinar (ou continuar grátis), próximo destino é /home (sem plano AI).
+    // Premium real → plan-loading e geração do plano.
+    final user = FirebaseAuth.instance.currentUser;
+    final isAnon = user?.isAnonymous ?? false;
+    final profile = await _ds.getMe().catchError((_) => null);
+    final premium = profile?.premium ?? false;
+    if (!mounted) return;
+    if (isAnon || !premium) {
+      context.go('/paywall?next=/home');
+    } else {
+      context.push('/plan-loading');
+    }
   }
 
   Future<void> _doSubmit() async {
