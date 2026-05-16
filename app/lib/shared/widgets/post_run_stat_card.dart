@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:runnin/shared/widgets/figma/export.dart';
 import 'package:runnin/core/theme/app_palette.dart';
+import 'package:runnin/core/theme/design_system_tokens.dart';
 
 class PostRunStatCard extends StatelessWidget {
   const PostRunStatCard({

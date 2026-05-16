@@ -3,10 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:intl/intl.dart';
-import 'package:runnin/shared/widgets/week_plan_row.dart';
-import 'package:runnin/shared/widgets/month_week_card.dart';
-import 'package:runnin/shared/widgets/report_card.dart';
-import 'package:runnin/shared/widgets/run_feedback.dart';
 import 'package:runnin/features/coach/data/datasources/coach_report_remote_datasource.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
@@ -18,8 +14,6 @@ import 'package:runnin/shared/widgets/app_page_header.dart';
 import 'package:runnin/shared/widgets/app_panel.dart';
 import 'package:runnin/shared/widgets/app_tag.dart';
 import 'package:runnin/shared/widgets/coach_narrative_card.dart';
-import 'package:runnin/core/theme/design_system_tokens.dart';
-import 'package:runnin/shared/widgets/figma/export.dart';
 import 'package:runnin/shared/widgets/metric_card.dart';
 
 enum _TrainingTab { plan, reports, adjustments }
@@ -44,7 +38,7 @@ class _TrainingPageState extends State<TrainingPage> {
   final _userDs = UserRemoteDatasource();
   UserProfile? _profile;
   Plan? _plan;
-  List<RunFeedback> _reports = const [];
+  List<_RunFeedback> _reports = const [];
   bool _loading = true;
   bool _generating = false;
   bool _checkingPlan = false;
@@ -84,7 +78,7 @@ class _TrainingPageState extends State<TrainingPage> {
       ]);
       final profile = results[0] as UserProfile?;
       var plan = results[1] as Plan?;
-      final reports = results[2] as List<RunFeedback>;
+      final reports = results[2] as List<_RunFeedback>;
 
       if (plan == null && savedPendingPlanId != null) {
         try {
@@ -143,7 +137,7 @@ class _TrainingPageState extends State<TrainingPage> {
     await (await _settingsBox()).delete(_pendingPlanIdKey);
   }
 
-  Future<List<RunFeedback>> _loadRunFeedback() async {
+  Future<List<_RunFeedback>> _loadRunFeedback() async {
     final runs = await _runDs.listRuns(limit: 12);
     final completedRuns =
         runs
@@ -153,13 +147,13 @@ class _TrainingPageState extends State<TrainingPage> {
             .toList()
           ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
-    final reports = <RunFeedback>[];
+    final reports = <_RunFeedback>[];
     for (final run in completedRuns) {
       try {
         final report = await _reportDs.getReport(run.id);
         if (!report.isReady) continue;
         reports.add(
-          RunFeedback(
+          _RunFeedback(
             run: run,
             summary: report.summary!,
             generatedAt: report.generatedAt,
@@ -352,11 +346,11 @@ class _TrainingPageState extends State<TrainingPage> {
       return _PlanFailedState(generating: _generating, onGenerate: _generate);
     }
 
-      return _TrainingWorkspace(
-        plan: _plan!,
-        profile: _profile,
-        reports: reports,
-        generating: _generating,
+    return _TrainingWorkspace(
+      plan: _plan!,
+      profile: _profile,
+      reports: _reports,
+      generating: _generating,
       onRegenerate: _generate,
       selectedWeek: _selectedWeek,
       selectedTab: _selectedTab,
@@ -635,7 +629,7 @@ class _PlanFailedState extends StatelessWidget {
 class _TrainingWorkspace extends StatelessWidget {
   final Plan plan;
   final UserProfile? profile;
-  final List<RunFeedback> reports;
+  final List<_RunFeedback> reports;
   final bool generating;
   final VoidCallback onRegenerate;
   final int selectedWeek;
@@ -648,7 +642,7 @@ class _TrainingWorkspace extends StatelessWidget {
   const _TrainingWorkspace({
     required this.plan,
     required this.profile,
-    required reports,
+    required this.reports,
     required this.generating,
     required this.onRegenerate,
     required this.selectedWeek,
@@ -1086,25 +1080,11 @@ class _WeeklyPlanView extends StatelessWidget {
               .firstOrNull;
           final isToday = day == DateTime.now().weekday;
           final isDone = day < DateTime.now().weekday && sessionForDay != null;
-          final isRest = sessionForDay == null;
-          final rowState = isDone
-              ? WeekPlanRowState.ok
-              : isToday
-                  ? WeekPlanRowState.today
-                  : isRest
-                      ? WeekPlanRowState.rest
-                      : WeekPlanRowState.future;
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 4),
-            child: WeekPlanRow(
-              dayLabel: _kDayLabels[day] ?? 'DIA',
-              state: rowState,
-              type: sessionForDay?.type,
-              distance: sessionForDay == null
-                  ? null
-                  : _formatSessionDistance(sessionForDay),
-              pace: sessionForDay?.targetPace,
-            ),
+          return _WeeklySessionRow(
+            dayOfWeek: day,
+            session: sessionForDay,
+            isToday: isToday,
+            isDone: isDone,
           );
         }),
       ],
@@ -1174,21 +1154,17 @@ class _MonthlyPlanView extends StatelessWidget {
               : isCurrent
               ? 'ATUAL'
               : 'PRÓXIMA';
-          final statusColor = isCompleted
-              ? FigmaColors.brandCyan
-              : isCurrent
-                  ? FigmaColors.brandOrange
-                  : FigmaColors.textDim;
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: MonthWeekCard(
-              weekLabel: 'SEM ${week.weekNumber}',
-              focus: _deriveWeekFocus(week).toUpperCase(),
-              volumeKm: isCompleted || isCurrent ? weekDistance : 0,
-              targetKm: weekDistance,
-              statusLabel: status,
-              statusColor: statusColor,
-            ),
+          return _MonthlyWeekCard(
+            weekNumber: week.weekNumber,
+            focus: _deriveWeekFocus(week),
+            summary: _buildMonthSummary(week),
+            totalDistance: weekDistance,
+            status: status,
+            statusColor: isCompleted
+                ? context.runninPalette.primary
+                : isCurrent
+                ? context.runninPalette.secondary
+                : context.runninPalette.muted,
           );
         }),
       ],
@@ -1197,7 +1173,7 @@ class _MonthlyPlanView extends StatelessWidget {
 }
 
 class _ReportsTab extends StatelessWidget {
-  final List<RunFeedback> reports;
+  final List<_RunFeedback> reports;
 
   const _ReportsTab({required this.reports});
 
@@ -1221,22 +1197,7 @@ class _ReportsTab extends StatelessWidget {
               'Analises tecnicas geradas a partir das suas corridas reais',
         ),
         const SizedBox(height: 12),
-        ...reports.asMap().entries.map((entry) {
-          final i = entry.key;
-          final report = entry.value;
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: ReportCard(report:
-              dateLabel: _weekRangeLabel(report.run.createdAt),
-              weekLabel: 'SEM ${(i + 1).toString().padLeft(2, '0')}',
-              adherencePct: 100,
-              km: report.totalKm,
-              sessions: 1,
-              freeRuns: 0,
-              coachPreview: report.coachSummary,
-            ),
-          );
-        }),
+        ...reports.map((report) => _ReportCard(report: report)),
       ],
     );
   }
@@ -1374,6 +1335,324 @@ class _TabEmptyState extends StatelessWidget {
   }
 }
 
+class _WeeklySessionRow extends StatelessWidget {
+  final int dayOfWeek;
+  final PlanSession? session;
+  final bool isToday;
+  final bool isDone;
+
+  const _WeeklySessionRow({
+    required this.dayOfWeek,
+    required this.session,
+    required this.isToday,
+    required this.isDone,
+  });
+
+  static const _dayNames = [
+    '',
+    'Segunda',
+    'Terça',
+    'Quarta',
+    'Quinta',
+    'Sexta',
+    'Sábado',
+    'Domingo',
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    final isRest = session == null;
+
+    return AppPanel(
+      margin: const EdgeInsets.only(bottom: 8),
+      color: isToday ? palette.surfaceAlt : palette.surface,
+      borderColor: isToday
+          ? palette.primary.withValues(alpha: 0.4)
+          : palette.border,
+      child: Row(
+        children: [
+          Container(
+            width: 42,
+            height: 42,
+            alignment: Alignment.center,
+            color: isDone
+                ? palette.primary
+                : isToday
+                ? palette.primary.withValues(alpha: 0.15)
+                : palette.surfaceAlt,
+            child: Text(
+              isDone
+                  ? 'OK'
+                  : (isToday
+                        ? 'HOJE'
+                        : _dayNames[dayOfWeek].substring(0, 3).toUpperCase()),
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 9,
+                fontWeight: FontWeight.w900,
+                color: isDone
+                    ? palette.background
+                    : (isToday ? palette.primary : palette.muted),
+              ),
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _dayNames[dayOfWeek],
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                    color: palette.text,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  isRest ? 'Descanso' : session!.type,
+                  style: TextStyle(color: palette.muted),
+                ),
+              ],
+            ),
+          ),
+          if (!isRest)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  _distanceLabel(session!),
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w900,
+                    color: palette.secondary,
+                  ),
+                ),
+                if (session!.targetPace != null)
+                  Text(
+                    session!.targetPace!,
+                    style: TextStyle(color: palette.muted),
+                  ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+
+  String _distanceLabel(PlanSession session) {
+    if (session.type.toLowerCase().contains('interval')) {
+      return '${session.distanceKm.toStringAsFixed(1)}K';
+    }
+    if (session.distanceKm == session.distanceKm.truncateToDouble()) {
+      return '${session.distanceKm.toStringAsFixed(0)}K';
+    }
+    return '${session.distanceKm.toStringAsFixed(1)}K';
+  }
+}
+
+class _MonthlyWeekCard extends StatelessWidget {
+  final int weekNumber;
+  final String focus;
+  final String summary;
+  final double totalDistance;
+  final String status;
+  final Color statusColor;
+
+  const _MonthlyWeekCard({
+    required this.weekNumber,
+    required this.focus,
+    required this.summary,
+    required this.totalDistance,
+    required this.status,
+    required this.statusColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+
+    return AppPanel(
+      margin: const EdgeInsets.only(bottom: 8),
+      borderColor: status == 'ATUAL'
+          ? palette.primary.withValues(alpha: 0.45)
+          : palette.border,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Sem $weekNumber  Foco: $focus',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                    color: palette.text,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  summary,
+                  style: TextStyle(color: palette.muted, height: 1.5),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 16),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                '${totalDistance.toStringAsFixed(0)}K',
+                style: TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.w900,
+                  color: palette.secondary,
+                ),
+              ),
+              Text(
+                status,
+                style: TextStyle(
+                  color: statusColor,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.08,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ReportCard extends StatelessWidget {
+  final _RunFeedback report;
+
+  const _ReportCard({required this.report});
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+
+    return AppPanel(
+      margin: const EdgeInsets.only(bottom: 8),
+      color: report.isLatest ? palette.surfaceAlt : null,
+      borderColor: report.isLatest
+          ? palette.primary.withValues(alpha: 0.4)
+          : null,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  report.title,
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w900,
+                    color: palette.text,
+                  ),
+                ),
+              ),
+              if (report.isLatest)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
+                  color: palette.primary,
+                  child: Text(
+                    'MAIS RECENTE',
+                    style: TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w900,
+                      color: palette.background,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _MetricColumn(label: 'DATA', value: report.dateLabel),
+              ),
+              Expanded(
+                child: _MetricColumn(
+                  label: 'KM',
+                  value: report.totalKm.toStringAsFixed(2),
+                ),
+              ),
+              Expanded(
+                child: _MetricColumn(
+                  label: 'TEMPO',
+                  value: report.durationLabel,
+                ),
+              ),
+              Expanded(
+                child: _MetricColumn(label: 'PACE', value: report.paceLabel),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            report.coachSummary,
+            style: TextStyle(
+              color: palette.text.withValues(alpha: 0.8),
+              height: 1.5,
+            ),
+          ),
+          const SizedBox(height: 12),
+          AppTag(label: 'RELATORIO REAL', color: palette.primary),
+        ],
+      ),
+    );
+  }
+}
+
+class _MetricColumn extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _MetricColumn({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 9,
+            fontWeight: FontWeight.w700,
+            color: palette.muted,
+            letterSpacing: 0.08,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 24,
+            fontWeight: FontWeight.w900,
+            color: palette.secondary,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _MonthlyStats {
   final double totalKm;
   final int totalSessions;
@@ -1495,44 +1774,27 @@ String _deriveWeekFocus(PlanWeek week) {
   return 'Base';
 }
 
+String _buildMonthSummary(PlanWeek week) {
+  final ordered = [...week.sessions]
+    ..sort((a, b) => a.dayOfWeek.compareTo(b.dayOfWeek));
+  final summaryParts = ordered
+      .map((session) => '${_shortDayName(session.dayOfWeek)} ${session.type}')
+      .join(' · ');
+  final note = ordered
+      .map((session) => session.notes.trim())
+      .firstWhere((item) => item.isNotEmpty, orElse: () => '');
+
+  if (note.isEmpty) return summaryParts;
+  return '$summaryParts. $note';
+}
+
+String _shortDayName(int dayOfWeek) {
+  const names = ['', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab', 'Dom'];
+  return names[dayOfWeek];
+}
+
 String _formatDuration(int durationS) {
   final minutes = durationS ~/ 60;
   final seconds = durationS % 60;
   return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
-}
-
-const _kDayLabels = {
-  1: 'SEG',
-  2: 'TER',
-  3: 'QUA',
-  4: 'QUI',
-  5: 'SEX',
-  6: 'SAB',
-  7: 'DOM',
-};
-
-String _formatSessionDistance(PlanSession session) {
-  if (session.type.toLowerCase().contains('interval')) {
-    return '${session.distanceKm.toStringAsFixed(1)}K';
-  }
-  if (session.distanceKm == session.distanceKm.truncateToDouble()) {
-    return '${session.distanceKm.toStringAsFixed(0)}K';
-  }
-  return '${session.distanceKm.toStringAsFixed(1)}K';
-}
-
-String _weekRangeLabel(String isoDate) {
-  final parsed = DateTime.tryParse(isoDate);
-  if (parsed == null) return '--';
-  final local = parsed.toLocal();
-  final weekday = local.weekday;
-  final monday = local.subtract(Duration(days: weekday - 1));
-  final sunday = monday.add(const Duration(days: 6));
-  const monthAbbr = [
-    '',
-    'JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN',
-    'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ',
-  ];
-  final month = monthAbbr[sunday.month];
-  return '${monday.day.toString().padLeft(2, '0')}–${sunday.day.toString().padLeft(2, '0')} $month';
 }
