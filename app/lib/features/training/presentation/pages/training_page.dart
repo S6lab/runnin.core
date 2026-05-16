@@ -266,6 +266,15 @@ class _TrainingPageState extends State<TrainingPage> {
         throw Exception('Perfil incompleto');
       }
 
+      // Premium gate: gerar plano é feature Pro. Freemium vai pro paywall.
+      if (!profile.isPro) {
+        if (mounted) {
+          setState(() => _generating = false);
+          context.push('/paywall?next=/training');
+        }
+        return;
+      }
+
       String planId;
       try {
         planId = await _ds.generatePlan(
@@ -274,6 +283,15 @@ class _TrainingPageState extends State<TrainingPage> {
           frequency: profile.frequency,
         );
       } on DioException catch (e) {
+        // Backend pode rejeitar com 403 (premium_required) se UI gate falhar
+        // por algum motivo (cache profile, race condition). Redireciona pro paywall.
+        if (e.response?.statusCode == 403) {
+          if (mounted) {
+            setState(() => _generating = false);
+            context.push('/paywall?next=/training');
+          }
+          return;
+        }
         // Server rejeita se já existe plano ativo. Pergunta antes de overwrite.
         if (e.response?.statusCode == 409) {
           if (!mounted) return;

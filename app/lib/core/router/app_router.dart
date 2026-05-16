@@ -100,8 +100,15 @@ final appRouter = GoRouter(
     // Public routes (no auth needed). SplashPage advances itself.
     const publicRoutes = {'/splash', '/intro', '/login'};
     if (publicRoutes.contains(loc)) {
-      // Se já logado e cair em login/intro → home
-      if (loggedIn && (loc == '/login' || loc == '/intro')) return '/home';
+      // Se já logado e ONBOARDING CONCLUÍDO e cair em login/intro → home.
+      // Sem checar onboardingStatus == true, o login mid-onboarding dispara
+      // redirect pra /home enquanto OnboardingPage navega pra /paywall ou
+      // /plan-loading — stacked navigation (login aparece 2x).
+      if (loggedIn &&
+          (loc == '/login' || loc == '/intro') &&
+          onboardingStatus == true) {
+        return '/home';
+      }
       return null;
     }
 
