@@ -3,13 +3,15 @@ import { FirestoreRunRepository } from '../infra/firestore-run.repository';
 import { CreateRunUseCase, CreateRunSchema } from '../domain/use-cases/create-run.use-case';
 import { AddGpsBatchUseCase, AddGpsBatchSchema } from '../domain/use-cases/add-gps-batch.use-case';
 import { CompleteRunUseCase, CompleteRunSchema } from '../domain/use-cases/complete-run.use-case';
+import { BenchmarkRepository } from '@modules/benchmark/domain/benchmark.repository';
 import { NotFoundError } from '@shared/errors/app-error';
 import { triggerReportGeneration } from '@modules/coach/http/coach.controller';
 
 const repo = new FirestoreRunRepository();
+const benchmarkRepo = new BenchmarkRepository();
 const createRun = new CreateRunUseCase(repo);
 const addGpsBatch = new AddGpsBatchUseCase(repo);
-const completeRun = new CompleteRunUseCase(repo);
+const completeRun = new CompleteRunUseCase(repo, benchmarkRepo);
 
 export async function postRun(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {

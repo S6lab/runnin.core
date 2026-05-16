@@ -1,7 +1,10 @@
 import { z } from 'zod';
-import { RunRepository } from '../run.repository';
-import { Run } from '../run.entity';
+import { RunRepository } from '@modules/runs/domain/run.repository';
+import { Run } from '@modules/runs/domain/run.entity';
 import { NotFoundError } from '@shared/errors/app-error';
+import { BenchmarkRepository } from '@modules/benchmark/domain/benchmark.repository';
+import { FirestoreUserRepository } from '@modules/users/infra/firestore-user.repository';
+import { GetProfileUseCase } from '@modules/users/domain/use-cases/get-profile.use-case';
 
 export const CompleteRunSchema = z.object({
   distanceM: z.number().nonnegative(),
@@ -28,7 +31,10 @@ function calcXp(distanceM: number, durationS: number): number {
 }
 
 export class CompleteRunUseCase {
-  constructor(private readonly runRepo: RunRepository) {}
+  constructor(
+    private readonly runRepo: RunRepository,
+    private readonly benchmarkRepo?: BenchmarkRepository,
+  ) {}
 
   async execute(runId: string, userId: string, input: CompleteRunInput): Promise<Run> {
     const run = await this.runRepo.findById(runId, userId);
@@ -46,6 +52,53 @@ export class CompleteRunUseCase {
     };
 
     await this.runRepo.update(runId, userId, updates);
+
+    if (this.benchmarkRepo) {
+      try {
+        await this.triggerBenchmarkUpdate(runId, userId, updates);
+      } catch (err) {
+        console.warn('Failed to trigger benchmark update:', err instanceof Error ? err.message : String(err));
+      }
+    }
+
     return { ...run, ...updates };
+  }
+
+  private async triggerBenchmarkUpdate(runId: string, userId: string, updates: Partial<Run>): Promise<void> {
+    const userRepo = new FirestoreUserRepository();
+    const getProfileUseCase = new GetProfileUseCase(userRepo);
+    
+    try {
+      const profile = await getProfileUseCase.execute(userId);
+      if (!profile) {
+        console.warn(`User profile not found: ${userId}`);
+        return;
+      }
+
+      const distanceM = updates.distanceM!;
+      if (!distanceM) return;
+
+      const level = profile.level || 'intermediario';
+      const distanceKm = Math.round(distanceM / 1000);
+      const runType = updates.type || 'easy_run';
+
+      await this.benchmarkRepo!.createOrIncrementAggregate(level, runType, `${distanceKm}km`);
+      await this.benchmarkRepo!.addMetricToAggregate(level, runType, `${distanceKm}km`, 'paceAvgs', this.parsePace(updates.avgPace) ?? 300);
+      await this.benchmarkRepo!.addMetricToAggregate(level, runType, `${distanceKm}km`, 'bpmAvgs', updates.avgBpm ?? 0);
+      await this.benchmarkRepo!.addMetricToAggregate(level, runType, `${distanceKm}km`, 'distAvgs', distanceM);
+    } catch (err) {
+      console.warn('Failed to trigger benchmark update:', err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  private parsePace(paceStr?: string): number | undefined {
+    if (!paceStr) return undefined;
+    try {
+      const [min, sec] = paceStr.split(':').map(Number);
+      if (min === undefined || sec === undefined) return undefined;
+      return min + sec / 60;
+    } catch (_) {
+      return undefined;
+    }
   }
 }
