@@ -6,6 +6,11 @@ import { GoogleTtsService } from '@shared/infra/tts/google-tts.service';
 import { CoachConfigService } from './coach-config.service';
 import { CoachRuntimeContext, CoachRuntimeContextService } from './coach-runtime-context.service';
 import { resolveCoachVoicePreset } from './coach-voice-presets';
+import { CoachMessageLogRepository } from '../domain/coach-message-log.repository';
+import { CoachMessageLog } from '../domain/coach-message-log.entity';
+import { FirestoreCoachMessageLogRepository } from '../infra/firestore-coach-message-log.repository';
+import { logger } from '@shared/logger/logger';
+import { randomUUID } from 'crypto';
 
 const OptionalNumberSchema = z.preprocess(
   value => value === null ? undefined : value,
@@ -75,6 +80,7 @@ export class CoachMessageUseCase {
   private elevenLabsTts = new ElevenLabsTtsService();
   private config = new CoachConfigService();
   private runtime = new CoachRuntimeContextService();
+  private messageLog: CoachMessageLogRepository = new FirestoreCoachMessageLogRepository();
 
   async generate(ctx: CoachContext, userId: string): Promise<CoachCueResponse> {
     const [config, runtime] = await Promise.all([
@@ -128,11 +134,35 @@ export class CoachMessageUseCase {
       }
     }
 
+    // Persist log per-run for replay in HIST > "Ver conversa com coach"
+    if (ctx.runId && ctx.event !== 'question') {
+      const log: CoachMessageLog = {
+        id: randomUUID(),
+        runId: ctx.runId,
+        userId,
+        author: 'coach',
+        event: ctx.event,
+        text,
+        audioMimeType: audio?.mimeType,
+        kmAtTime: ctx.kmReached ?? (ctx.distanceM / 1000),
+        paceAtTime: ctx.currentPaceMinKm ? ctx.currentPaceMinKm.toFixed(2) : undefined,
+        bpmAtTime: ctx.bpm,
+        createdAt: new Date().toISOString(),
+      };
+      this.messageLog.save(log).catch(err => {
+        logger.warn('coach.message_log.save_failed', { runId: ctx.runId, err: String(err) });
+      });
+    }
+
     return {
       text,
       audioBase64: audio?.audioBase64,
       audioMimeType: audio?.mimeType,
     };
+  }
+
+  async listForRun(userId: string, runId: string): Promise<CoachMessageLog[]> {
+    return this.messageLog.listByRun(userId, runId);
   }
 }
 

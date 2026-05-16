@@ -67,6 +67,16 @@ export async function postCoachChat(req: Request, res: Response, next: NextFunct
   }
 }
 
+export async function getCoachMessagesByRun(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const runId = req.params['runId'] as string;
+    const items = await coachMessage.listForRun(req.uid, runId);
+    res.json({ items });
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function getCoachReport(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const runId = req.params['runId'] as string;

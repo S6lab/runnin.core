@@ -12,6 +12,8 @@ export interface PlanSession {
 export interface PlanWeek {
   weekNumber: number;
   sessions: PlanSession[];
+  focus?: string;       // "Base" | "Intervalado" | "Tempo" | "Recuperação"
+  narrative?: string;   // texto LLM da semana (1-2 frases)
 }
 
 export interface Plan {
@@ -22,6 +24,7 @@ export interface Plan {
   weeksCount: number;
   status: PlanStatus;
   weeks: PlanWeek[];
+  mesocycleNarrative?: string; // texto LLM do mesociclo (3-4 frases)
   createdAt: string;
   updatedAt: string;
 }

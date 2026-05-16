@@ -15,6 +15,13 @@ export const CompleteOnboardingSchema = z.object({
   height: z.string().optional(),
   hasWearable: z.boolean().default(false),
   medicalConditions: z.array(z.string()).default([]),
+  // Identity (ASSESSMENT_GENDER, novo step)
+  gender: z.enum(['male', 'female', 'other', 'na']).optional(),
+  // Routine (ASSESSMENT_08 — antes não persistia)
+  runPeriod: z.enum(['manha', 'tarde', 'noite']).optional(),
+  wakeTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+  sleepTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+  targetPace: z.string().optional(),
 });
 
 export type CompleteOnboardingInput = z.infer<typeof CompleteOnboardingSchema>;
@@ -71,6 +78,13 @@ export class CompleteOnboardingUseCase {
       hasWearable: input.hasWearable,
       medicalConditions: input.medicalConditions,
       coachVoiceId: existing?.coachVoiceId,
+      // New fields from Phase 4 foundation
+      gender: input.gender ?? existing?.gender,
+      runPeriod: input.runPeriod ?? existing?.runPeriod,
+      wakeTime: input.wakeTime ?? existing?.wakeTime,
+      sleepTime: input.sleepTime ?? existing?.sleepTime,
+      // Quota initialized on first onboarding
+      planRevisions: existing?.planRevisions ?? { usedThisWeek: 0, max: 1, resetAt: now },
       premium: existing?.premium ?? false,
       premiumUntil: existing?.premiumUntil,
       lastOnboardingAt: now,

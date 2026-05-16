@@ -13,25 +13,37 @@ export const UpsertProfileSchema = z.object({
   hasWearable: z.boolean().optional(),
   medicalConditions: z.array(z.string()).optional(),
   coachVoiceId: z.enum(['coach-bruno', 'coach-clara', 'coach-luna']).optional(),
-  
+
+  // Identity / demographics
+  gender: z.enum(['male', 'female', 'other', 'na']).optional(),
+
+  // Routine
+  runPeriod: z.enum(['manha', 'tarde', 'noite']).optional(),
+  wakeTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+  sleepTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+
   // Health metrics
   restingBpm: z.number().optional(),
   maxBpm: z.number().optional(),
-  
+
   // Coach preferences
+  coachIntroSeen: z.boolean().optional(),
   coachPersonality: z.enum(['motivador', 'tecnico', 'sereno']).optional(),
   coachMessageFrequency: z.enum(['per_km', 'per_2km', 'alerts_only', 'silent']).optional(),
   coachFeedbackEnabled: z.record(z.string(), z.boolean()).optional(),
-  
+
+  // PREP alerts
+  preRunAlerts: z.record(z.string(), z.boolean()).optional(),
+
   // Notifications
   notificationsEnabled: z.any(),
   dndWindow: z.object({ start: z.string(), end: z.string() }).optional(),
-  
+
   // Units and formatting
   unitsSystem: z.enum(['metric', 'imperial']).optional(),
   paceFormat: z.enum(['min_per_km', 'min_per_mi']).optional(),
   timeFormat: z.enum(['24h', '12h']).optional(),
-  
+
   onboarded: z.boolean().optional(),
 });
 
@@ -56,19 +68,33 @@ export class UpsertProfileUseCase {
       hasWearable: input.hasWearable ?? existing?.hasWearable ?? false,
       medicalConditions: input.medicalConditions ?? existing?.medicalConditions ?? [],
       coachVoiceId: input.coachVoiceId ?? existing?.coachVoiceId,
-      
+
+      // Identity / routine
+      gender: input.gender ?? existing?.gender,
+      runPeriod: input.runPeriod ?? existing?.runPeriod,
+      wakeTime: input.wakeTime ?? existing?.wakeTime,
+      sleepTime: input.sleepTime ?? existing?.sleepTime,
+
       // Health metrics
       restingBpm: input.restingBpm ?? existing?.restingBpm,
       maxBpm: input.maxBpm ?? existing?.maxBpm,
-      
+
       // Coach preferences
+      coachIntroSeen: input.coachIntroSeen ?? existing?.coachIntroSeen,
       coachPersonality: input.coachPersonality ?? existing?.coachPersonality,
       coachMessageFrequency: input.coachMessageFrequency ?? existing?.coachMessageFrequency,
       coachFeedbackEnabled: (input.coachFeedbackEnabled as Record<string, boolean> | undefined) ?? existing?.coachFeedbackEnabled,
-      
+
+      // PREP alerts
+      preRunAlerts: input.preRunAlerts ?? existing?.preRunAlerts,
+
       // Notifications
       notificationsEnabled: (input.notificationsEnabled as Record<string, boolean> | undefined) ?? existing?.notificationsEnabled,
       dndWindow: input.dndWindow ?? existing?.dndWindow,
+
+      // Preserved
+      planRevisions: existing?.planRevisions,
+      examsCount: existing?.examsCount,
       
       // Units and formatting
       unitsSystem: input.unitsSystem ?? existing?.unitsSystem,

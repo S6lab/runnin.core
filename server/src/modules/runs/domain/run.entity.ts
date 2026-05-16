@@ -22,6 +22,8 @@ export interface Run {
   avgPace?: string;
   avgBpm?: number;
   maxBpm?: number;
+  cadence?: number;        // spm (steps per minute)
+  elevationGain?: number;  // metros
   xpEarned?: number;
   coachReportId?: string;
   createdAt: string;

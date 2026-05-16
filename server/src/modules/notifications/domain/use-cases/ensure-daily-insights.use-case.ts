@@ -65,6 +65,13 @@ export class EnsureDailyInsightsUseCase {
     const weight = profile.weight ? Number(profile.weight.replace(/[^0-9.]/g, '')) : null;
     const hydrationGoalLiters = weight && weight > 0 ? +(weight * 0.035).toFixed(1) : null;
 
+    const periodLabel: Record<string, string> = { manha: '06-09h', tarde: '14-17h', noite: '19-21h' };
+    const periodSuggestion = profile.runPeriod
+      ? `Você prefere ${profile.runPeriod} (${periodLabel[profile.runPeriod]}). Janela sugerida para ${nextSession?.type ?? 'a próxima sessão'}: aqueça sem pressa antes e mantenha recuperação depois.`
+      : nextSession
+        ? `Janela sugerida para ${nextSession.type}: escolha um horário em que você consiga aquecer sem pressa e manter recuperação depois.`
+        : 'Sem próxima sessão planejada. Quando houver plano, o coach sugere horário e janela de aquecimento.';
+
     const inputs: CreateNotificationInput[] = [
       {
         userId,
@@ -72,10 +79,8 @@ export class EnsureDailyInsightsUseCase {
         dedupeKey,
         title: 'MELHOR HORARIO',
         icon: 'alarm_outlined',
-        timeLabel: nextSession ? DAY_NAMES[nextSession.dayOfWeek] : 'AGORA',
-        body: nextSession
-          ? `Janela sugerida para ${nextSession.type}: escolha um horário em que você consiga aquecer sem pressa e manter recuperação depois.`
-          : 'Sem próxima sessão planejada. Quando houver plano, o coach sugere horário e janela de aquecimento.',
+        timeLabel: profile.wakeTime ?? (nextSession ? DAY_NAMES[nextSession.dayOfWeek] : 'AGORA'),
+        body: periodSuggestion,
         ctaLabel: nextSession ? undefined : 'ABRIR TREINO',
         ctaRoute: nextSession ? undefined : '/training',
       },
