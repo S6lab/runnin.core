@@ -24,12 +24,16 @@ export 'figma_assessment_text.dart';
 export 'figma_coach_ai_block.dart';
 export 'figma_coach_chat_bubble.dart';
 export 'figma_coach_option_button.dart';
+export 'figma_conversa_coach_bubble.dart';
+export 'figma_wizard_choice_card.dart';
 
 // Training (TREINO)
 export 'figma_week_plan_row.dart';
 export 'figma_month_week_card.dart';
 export 'figma_report_card.dart';
 export 'figma_exam_card.dart';
+export 'figma_adherence_progress.dart';
+export 'figma_highlight_bullet.dart';
 
 // History (HIST)
 export 'figma_hist_stat_card.dart';
@@ -37,6 +41,8 @@ export 'figma_run_card.dart';
 export 'figma_zone_distribution_bar.dart';
 export 'figma_benchmark_bell_curve.dart';
 export 'figma_chart_line_spark.dart';
+export 'figma_period_selector.dart';
+export 'figma_stat_tile_with_delta.dart';
 
 // Gamification
 export 'figma_badge_card.dart';
