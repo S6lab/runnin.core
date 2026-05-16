@@ -1,15 +1,138 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:runnin/core/theme/app_palette.dart';
+import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/core/theme/theme_controller.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 import 'package:runnin/features/run/data/datasources/run_remote_datasource.dart';
 import 'package:runnin/features/run/domain/entities/run.dart';
-import 'package:runnin/shared/widgets/app_page_header.dart';
 import 'package:runnin/shared/widgets/app_panel.dart';
+import 'package:runnin/shared/widgets/figma/figma_coach_ai_block.dart';
+import 'package:runnin/shared/widgets/figma/figma_form_field_label.dart';
+import 'package:runnin/shared/widgets/figma/figma_form_text_field.dart';
+import 'package:runnin/shared/widgets/figma/figma_selection_button.dart';
+import 'package:runnin/shared/widgets/figma/figma_top_nav.dart';
 import 'package:runnin/shared/widgets/gamification_stats_row.dart';
 import 'package:runnin/shared/widgets/user_profile_header.dart';
+
+class _ProfileCoachAICard extends StatefulWidget {
+  const _ProfileCoachAICard();
+
+  @override
+  State<_ProfileCoachAICard> createState() => _ProfileCoachAICardState();
+}
+
+class _ProfileCoachAICardState extends State<_ProfileCoachAICard> {
+  bool _expanded = false;
+
+  String _monthName(int month) {
+    const months = [
+      'Janeiro',
+      'Fevereiro',
+      'Março',
+      'Abril',
+      'Maio',
+      'Junho',
+      'Julho',
+      'Agosto',
+      'Setembro',
+      'Outubro',
+      'Novembro',
+      'Dezembro'
+    ];
+    return months[month - 1];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () => setState(() => _expanded = !_expanded),
+      behavior: HitTestBehavior.opaque,
+      child: AnimatedSize(
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeInOut,
+        alignment: Alignment.topCenter,
+        child: FigmaCoachAIBlock(
+          variant: CoachAIBlockVariant.appGeneral,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const FigmaCoachAIBreadcrumb(action: 'FECHAMENTO MENSAL'),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Como foi o seu mês de treino?',
+                          maxLines: _expanded ? null : 1,
+                          overflow: _expanded ? null : TextOverflow.ellipsis,
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 11,
+                            height: 16.5 / 11,
+                            fontWeight: FontWeight.w500,
+                            color: FigmaColors.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  AnimatedRotation(
+                    turns: _expanded ? 0.5 : 0.0,
+                    duration: const Duration(milliseconds: 220),
+                    child: Text(
+                      '▼',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 10,
+                        height: 1,
+                        color: FigmaColors.textSecondary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              if (_expanded) ...[
+                const SizedBox(height: 14),
+                Text(
+                  'Você completou ${DateTime.now().month == 1 ? 'Janeiro' : _monthName(DateTime.now().month - 1)}. O Coach.AI preparou um resumo com suas métricas, zonas de esforço e evolução. Deseja ver o fechamento completo?',
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 11,
+                    height: 18 / 11,
+                    fontWeight: FontWeight.w400,
+                    color: FigmaColors.textSecondary,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: FigmaSelectionButton(
+                        label: 'VER RESUMO',
+                        selected: true,
+                        onTap: () {},
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    FigmaSelectionButton(
+                      label: 'IGNORAR',
+                      selected: false,
+                      onTap: () => setState(() => _expanded = false),
+                    ),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 class ProfilePage extends StatefulWidget {
   final bool initialEditing;
@@ -249,17 +372,7 @@ class _ProfilePageState extends State<ProfilePage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            AppPageHeader(
-              title: 'PERFIL',
-              trailing: _loading
-                  ? null
-                  : TextButton(
-                      onPressed: _editing
-                          ? _cancelEdit
-                          : () => setState(() => _editing = true),
-                      child: Text(_editing ? 'CANCELAR' : 'EDITAR'),
-                    ),
-            ),
+            const FigmaTopNav(breadcrumb: 'Perfil', showBackButton: false),
             const SizedBox(height: 24),
             Expanded(
               child: _loading
@@ -320,29 +433,29 @@ class _ProfilePageState extends State<ProfilePage> {
                                 child: _StatCard(
                                   label: 'NÍVEL',
                                   value: '$levelNumber',
-                                   accent: true,
-                                 ),
-                               ),
-                             ],
-                           ),
-                           const SizedBox(height: 12),
-                           GamificationStatsRow(
-                             streak: StatData(
-                               label: 'STREAK',
-                               value: '$streak',
-                             ),
-                             xp: StatData(
-                               label: 'XP',
-                               value: '$totalXp',
-                               accent: true,
-                             ),
-                             badges: StatData(
-                               label: 'BADGES',
-                               value: '$badges',
-                             ),
-                           ),
-                           const SizedBox(height: 24),
-                           _SectionLabel(label: 'PERFIL'),
+                                  accent: true,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          GamificationStatsRow(
+                            streak: StatData(
+                              label: 'STREAK',
+                              value: '$streak',
+                            ),
+                            xp: StatData(
+                              label: 'XP',
+                              value: '$totalXp',
+                              accent: true,
+                            ),
+                            badges: StatData(
+                              label: 'BADGES',
+                              value: '$badges',
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+                          const _FieldLabel(label: 'PERFIL'),
                           const SizedBox(height: 8),
                           _ProfileEditor(
                             nameController: _nameCtrl,
@@ -421,8 +534,10 @@ class _ProfilePageState extends State<ProfilePage> {
                               ],
                             ),
                           ],
+                          const SizedBox(height: 16),
+                          const _ProfileCoachAICard(),
                           const SizedBox(height: 32),
-                          _SectionLabel(label: 'PLANO'),
+                          const _FieldLabel(label: 'PLANO'),
                           const SizedBox(height: 8),
                           _PlanCard(
                             profile: _profile,
@@ -431,7 +546,7 @@ class _ProfilePageState extends State<ProfilePage> {
                             onRedoOnboarding: _redoOnboarding,
                           ),
                           const SizedBox(height: 32),
-                          _SectionLabel(label: 'SKIN'),
+                          const _FieldLabel(label: 'SKIN'),
                           const SizedBox(height: 8),
                           Text(
                             'Escolha a paleta de cores do app',
@@ -507,7 +622,7 @@ class _ProfilePageState extends State<ProfilePage> {
                             },
                           ),
                           const SizedBox(height: 32),
-                          _SectionLabel(label: 'CONTA'),
+                          const _FieldLabel(label: 'CONTA'),
                           const SizedBox(height: 8),
                           GestureDetector(
                             onTap: () => FirebaseAuth.instance.signOut(),
@@ -585,207 +700,134 @@ class _ProfileEditor extends StatelessWidget {
   Widget build(BuildContext context) {
     final palette = context.runninPalette;
 
-    return AppPanel(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            enabled ? 'MODO EDIÇÃO' : 'VISÃO GERAL',
-            style: TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.w800,
-              color: enabled ? palette.primary : palette.muted,
-              letterSpacing: 0.12,
-            ),
-          ),
-          const SizedBox(height: 14),
-          _FieldLabel(label: 'NOME'),
-          const SizedBox(height: 8),
-          _ProfileTextField(controller: nameController, enabled: enabled),
-          const SizedBox(height: 16),
-          _FieldLabel(label: 'DATA DE NASCIMENTO'),
-          const SizedBox(height: 8),
-          _ProfileTextField(
-            controller: birthDateController,
-            enabled: enabled,
-            keyboardType: TextInputType.datetime,
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _FieldLabel(label: 'PESO (KG)'),
-                    const SizedBox(height: 8),
-                    _ProfileTextField(
-                      controller: weightController,
-                      enabled: enabled,
-                      keyboardType: TextInputType.number,
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _FieldLabel(label: 'ALTURA (CM)'),
-                    const SizedBox(height: 8),
-                    _ProfileTextField(
-                      controller: heightController,
-                      enabled: enabled,
-                      keyboardType: TextInputType.number,
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          _FieldLabel(label: 'NÍVEL'),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: levels
-                .map(
-                  (level) => _SelectChip(
-                    label: level.$2,
-                    selected: selectedLevel == level.$1,
-                    enabled: enabled,
-                    onTap: () => onLevelChanged(level.$1),
-                  ),
-                )
-                .toList(),
-          ),
-          const SizedBox(height: 16),
-          _FieldLabel(label: 'OBJETIVO'),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: goals
-                .map(
-                  (goal) => _SelectChip(
-                    label: goal,
-                    selected: selectedGoal == goal,
-                    enabled: enabled,
-                    onTap: () => onGoalChanged(goal),
-                  ),
-                )
-                .toList(),
-          ),
-          const SizedBox(height: 16),
-          _FieldLabel(label: 'FREQUÊNCIA'),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: frequencyOptions
-                .map(
-                  (option) => _SelectChip(
-                    label: '${option}x',
-                    selected: frequency == option,
-                    enabled: enabled,
-                    onTap: () => onFrequencyChanged(option),
-                  ),
-                )
-                .toList(),
-          ),
-          const SizedBox(height: 16),
-          _FieldLabel(label: 'WEARABLE'),
-          const SizedBox(height: 8),
-          SwitchListTile(
-            value: hasWearable,
-            onChanged: enabled ? onWearableChanged : null,
-            activeThumbColor: palette.primary,
-            activeTrackColor: palette.primary.withValues(alpha: 0.35),
-            contentPadding: EdgeInsets.zero,
-            title: Text(
-              hasWearable ? 'Tenho/pretendo conectar' : 'Depois',
-              style: TextStyle(color: palette.text),
-            ),
-            subtitle: Text(
-              'Isso ainda nao confirma dados conectados. Health Connect / HealthKit sera usado na proxima fase.',
-              style: TextStyle(color: palette.muted),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ProfileTextField extends StatelessWidget {
-  final TextEditingController controller;
-  final bool enabled;
-  final TextInputType? keyboardType;
-
-  const _ProfileTextField({
-    required this.controller,
-    required this.enabled,
-    this.keyboardType,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.runninPalette;
-
-    return TextField(
-      controller: controller,
-      enabled: enabled,
-      keyboardType: keyboardType,
-      style: TextStyle(color: palette.text),
-      decoration: InputDecoration(
-        filled: true,
-        fillColor: enabled ? palette.surface : palette.surfaceAlt,
-      ),
-    );
-  }
-}
-
-class _SelectChip extends StatelessWidget {
-  final String label;
-  final bool selected;
-  final bool enabled;
-  final VoidCallback onTap;
-
-  const _SelectChip({
-    required this.label,
-    required this.selected,
-    required this.enabled,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.runninPalette;
-
-    return GestureDetector(
-      onTap: enabled ? onTap : null,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(
-          color: selected
-              ? palette.primary.withValues(alpha: 0.1)
-              : palette.surface,
-          border: Border.all(
-            color: selected ? palette.primary : palette.border,
-            width: 1.735,
-          ),
-        ),
-        child: Text(
-          label,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          enabled ? 'MODO EDIÇÃO' : 'VISÃO GERAL',
           style: TextStyle(
-            fontSize: 12,
-            fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-            color: selected ? palette.primary : palette.muted,
+            fontSize: 10,
+            fontWeight: FontWeight.w800,
+            color: enabled ? palette.primary : palette.muted,
+            letterSpacing: 0.12,
           ),
         ),
-      ),
+        const SizedBox(height: 14),
+        FigmaFormFieldLabel(text: 'Nome'),
+        const SizedBox(height: 8),
+        FigmaFormTextField(
+          controller: nameController,
+          enabled: enabled,
+        ),
+        const SizedBox(height: 16),
+        FigmaFormFieldLabel(text: 'Data de Nascimento'),
+        const SizedBox(height: 8),
+        FigmaFormTextField(
+          controller: birthDateController,
+          enabled: enabled,
+          keyboardType: TextInputType.datetime,
+        ),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  FigmaFormFieldLabel(text: 'Peso (KG)'),
+                  const SizedBox(height: 8),
+                  FigmaFormTextField(
+                    controller: weightController,
+                    enabled: enabled,
+                    keyboardType: TextInputType.number,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  FigmaFormFieldLabel(text: 'Altura (CM)'),
+                  const SizedBox(height: 8),
+                  FigmaFormTextField(
+                    controller: heightController,
+                    enabled: enabled,
+                    keyboardType: TextInputType.number,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        FigmaFormFieldLabel(text: 'Nível'),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: levels
+              .map(
+                (level) => FigmaSelectionButton(
+                  label: level.$2,
+                  selected: selectedLevel == level.$1,
+                  onTap: () => onLevelChanged(level.$1),
+                ),
+              )
+              .toList(),
+        ),
+        const SizedBox(height: 16),
+        FigmaFormFieldLabel(text: 'Objetivo'),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: goals
+              .map(
+                (goal) => FigmaSelectionButton(
+                  label: goal,
+                  selected: selectedGoal == goal,
+                  onTap: () => onGoalChanged(goal),
+                ),
+              )
+              .toList(),
+        ),
+        const SizedBox(height: 16),
+        FigmaFormFieldLabel(text: 'Frequência'),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: frequencyOptions
+              .map(
+                (option) => FigmaSelectionButton(
+                  label: '${option}x',
+                  selected: frequency == option,
+                  onTap: () => onFrequencyChanged(option),
+                ),
+              )
+              .toList(),
+        ),
+        const SizedBox(height: 16),
+        FigmaFormFieldLabel(text: 'Wearable'),
+        const SizedBox(height: 8),
+        SwitchListTile(
+          value: hasWearable,
+          onChanged: enabled ? onWearableChanged : null,
+          activeThumbColor: palette.primary,
+          activeTrackColor: palette.primary.withValues(alpha: 0.35),
+          contentPadding: EdgeInsets.zero,
+          title: Text(
+            hasWearable ? 'Tenho/pretendo conectar' : 'Depois',
+            style: TextStyle(color: palette.text),
+          ),
+          subtitle: Text(
+            'Isso ainda nao confirma dados conectados. Health Connect / HealthKit sera usado na proxima fase.',
+            style: TextStyle(color: palette.muted),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -794,27 +836,6 @@ class _FieldLabel extends StatelessWidget {
   final String label;
 
   const _FieldLabel({required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.runninPalette;
-
-    return Text(
-      label,
-      style: TextStyle(
-        fontSize: 9,
-        fontWeight: FontWeight.w700,
-        color: palette.muted,
-        letterSpacing: 0.1,
-      ),
-    );
-  }
-}
-
-class _SectionLabel extends StatelessWidget {
-  final String label;
-
-  const _SectionLabel({required this.label});
 
   @override
   Widget build(BuildContext context) {

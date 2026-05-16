@@ -15,6 +15,7 @@ class FigmaFormTextField extends StatefulWidget {
   final TextCapitalization textCapitalization;
   final bool readOnly;
   final VoidCallback? onTap;
+  final bool enabled;
 
   const FigmaFormTextField({
     super.key,
@@ -29,6 +30,7 @@ class FigmaFormTextField extends StatefulWidget {
     this.textCapitalization = TextCapitalization.none,
     this.readOnly = false,
     this.onTap,
+    this.enabled = true,
   });
 
   @override
@@ -75,10 +77,10 @@ class _FigmaFormTextFieldState extends State<FigmaFormTextField> {
         inputFormatters: widget.inputFormatters,
         autofocus: widget.autofocus,
         textCapitalization: widget.textCapitalization,
-        readOnly: widget.readOnly,
+        readOnly: widget.readOnly || !widget.enabled,
         onTap: widget.onTap,
         style: context.runninType.bodyMd.copyWith(
-          color: context.runninPalette.text,
+          color: widget.enabled ? context.runninPalette.text : FigmaColors.textDim,
         ),
         decoration: InputDecoration(
           hintText: widget.placeholder,
