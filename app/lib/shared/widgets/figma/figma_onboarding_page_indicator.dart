@@ -13,30 +13,59 @@ class FigmaOnboardingPageIndicator extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final dots = <Widget>[];
+    for (var i = 0; i < total; i++) {
+      if (i > 0) dots.add(const SizedBox(width: 4));
+      if (i == currentIndex) {
+        dots.add(const _ActiveDot());
+      } else if (i < currentIndex) {
+        dots.add(const _VisitedDot());
+      } else {
+        dots.add(const _InactiveDot());
+      }
+    }
     return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: List.generate(total, (i) {
-        final bool isActive = i == currentIndex;
-        final bool isVisited = i < currentIndex;
+      mainAxisSize: MainAxisSize.min,
+      children: dots,
+    );
+  }
+}
 
-        final Color color;
-        if (isActive) {
-          color = FigmaColors.dotActive;
-        } else if (isVisited) {
-          color = FigmaColors.dotVisited;
-        } else {
-          color = FigmaColors.dotInactive;
-        }
+class _ActiveDot extends StatelessWidget {
+  const _ActiveDot();
 
-        return Padding(
-          padding: EdgeInsets.only(left: i == 0 ? 0 : 4),
-          child: Container(
-            width: isActive ? 20 : 6,
-            height: 4,
-            color: color,
-          ),
-        );
-      }),
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 20,
+      height: 4,
+      color: FigmaColors.brandCyan,
+    );
+  }
+}
+
+class _VisitedDot extends StatelessWidget {
+  const _VisitedDot();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 6,
+      height: 4,
+      color: const Color(0x33FFFFFF),
+    );
+  }
+}
+
+class _InactiveDot extends StatelessWidget {
+  const _InactiveDot();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 6,
+      height: 4,
+      color: const Color(0x0FFFFFFF),
     );
   }
 }
