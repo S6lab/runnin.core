@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 
@@ -11,6 +12,11 @@ class FigmaFormTextField extends StatelessWidget {
   final int? maxLength;
   final ValueChanged<String>? onChanged;
   final bool obscureText;
+  final bool autofocus;
+  final bool readOnly;
+  final TextCapitalization textCapitalization;
+  final VoidCallback? onTap;
+  final List<TextInputFormatter>? inputFormatters;
 
   const FigmaFormTextField({
     super.key,
@@ -22,6 +28,11 @@ class FigmaFormTextField extends StatelessWidget {
     this.maxLength,
     this.onChanged,
     this.obscureText = false,
+    this.autofocus = false,
+    this.readOnly = false,
+    this.textCapitalization = TextCapitalization.none,
+    this.onTap,
+    this.inputFormatters,
   });
 
   @override
@@ -41,6 +52,11 @@ class FigmaFormTextField extends StatelessWidget {
         maxLength: maxLength,
         onChanged: onChanged,
         obscureText: obscureText,
+        autofocus: autofocus,
+        readOnly: readOnly,
+        textCapitalization: textCapitalization,
+        onTap: onTap,
+        inputFormatters: inputFormatters,
         style: GoogleFonts.jetBrainsMono(
           fontSize: 14,
           fontWeight: FontWeight.w400,

@@ -1248,14 +1248,12 @@ class _StepFrequency extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final palette = context.runninPalette;
-    const options = [2, 3, 4, 5, 6];
-    const labels = <int, String>{
-      2: 'Base leve',
-      3: 'Constancia',
-      4: 'Equilibrio',
-      5: 'Performance',
-      6: 'Alta carga',
+    const options = <int, String>{
+      2: '2x',
+      3: '3x',
+      4: '4x',
+      5: '5x',
+      6: '6x+',
     };
     final coachNotes = <int, String>{
       2: 'Otimo para comecar com constancia sem pesar a rotina. Vamos priorizar adaptacao e recuperacao.',
