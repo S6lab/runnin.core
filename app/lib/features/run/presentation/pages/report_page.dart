@@ -48,8 +48,8 @@ class _ReportPageState extends State<ReportPage> {
         return;
       }
       try {
-        final res = apiClient.get('/coach/report/${widget.runId}');
-        final data = res.data as Map<String, dynamic>;
+        final response = await apiClient.get('/coach/report/${widget.runId}');
+        final data = response.data as Map<String, dynamic>;
         if (data['status'] == 'ready') {
           timer.cancel();
           if (mounted) setState(() { _summary = data['summary'] as String?; _loadingReport = false; });
