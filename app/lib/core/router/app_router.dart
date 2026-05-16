@@ -161,6 +161,12 @@ final appRouter = GoRouter(
       routes: [
         GoRoute(path: '/home', builder: (_, _) => const HomePage()),
         GoRoute(path: '/training', builder: (_, _) => const TrainingPage()),
+        GoRoute(
+          path: '/training/revise',
+          builder: (_, state) => RevisionFlowPage(
+            planId: state.uri.queryParameters['planId'] ?? '',
+          ),
+        ),
         GoRoute(path: '/coach', builder: (_, _) => const CoachChatPage()),
         GoRoute(path: '/history', builder: (_, _) => const HistoryPage()),
         GoRoute(

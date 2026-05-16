@@ -15,6 +15,7 @@ import 'package:runnin/shared/widgets/app_panel.dart';
 import 'package:runnin/shared/widgets/app_tag.dart';
 import 'package:runnin/shared/widgets/coach_narrative_card.dart';
 import 'package:runnin/shared/widgets/metric_card.dart';
+import 'package:runnin/features/training/presentation/pages/adjustments_history_page.dart';
 
 enum _TrainingTab { plan, reports, adjustments }
 
@@ -682,7 +683,7 @@ class _TrainingWorkspace extends StatelessWidget {
               onPlanModeChanged: onPlanModeChanged,
             ),
             _TrainingTab.reports => _ReportsTab(reports: reports),
-            _TrainingTab.adjustments => const _AdjustmentsTab(),
+            _TrainingTab.adjustments => AdjustmentsHistoryPage(planId: plan.id),
           },
         ],
       ),
@@ -1203,18 +1204,6 @@ class _ReportsTab extends StatelessWidget {
   }
 }
 
-class _AdjustmentsTab extends StatelessWidget {
-  const _AdjustmentsTab();
-
-  @override
-  Widget build(BuildContext context) {
-    return const _TabEmptyState(
-      title: 'Nenhum ajuste real ainda',
-      body:
-          'Quando o fluxo de revisao de plano estiver conectado a execucao real, o historico aparecera aqui. Por enquanto, nao exibimos ajustes simulados.',
-    );
-  }
-}
 
 class _WeekChip extends StatelessWidget {
   final int weekNumber;
