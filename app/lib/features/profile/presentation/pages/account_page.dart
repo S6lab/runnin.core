@@ -1,6 +1,8 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:runnin/core/router/app_router.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/core/theme/theme_controller.dart';
@@ -573,6 +575,20 @@ class _MenuSection extends StatelessWidget {
         ),
         const SizedBox(height: AppSpacing.sm),
         _MenuItem(
+          icon: Icons.chat_bubble_outline,
+          title: 'FALAR COM COACH.AI',
+          subtitle: 'Chat com o seu coach',
+          onTap: () => context.push('/coach'),
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        _MenuItem(
+          icon: Icons.lock_outline,
+          title: 'CONTA & ACESSO',
+          subtitle: 'Email, telefone, login',
+          onTap: () => context.push('/profile/access'),
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        _MenuItem(
           icon: Icons.favorite_outline,
           title: 'SAÚDE',
           subtitle: 'BPM, Zonas, Wearable',
@@ -727,8 +743,10 @@ class _BottomActions extends StatelessWidget {
           height: 43,
           width: double.infinity,
           child: GestureDetector(
-            onTap: () {
-              // TODO: Implement logout
+            onTap: () async {
+              await FirebaseAuth.instance.signOut();
+              markOnboardingPending();
+              if (context.mounted) context.go('/login');
             },
             child: Center(
               child: Text(
