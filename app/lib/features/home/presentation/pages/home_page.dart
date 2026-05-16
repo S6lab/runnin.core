@@ -16,6 +16,7 @@ import 'package:runnin/features/notifications/presentation/cubit/notifications_c
 import 'package:runnin/features/run/domain/entities/run.dart';
 import 'package:runnin/shared/widgets/app_panel.dart';
 import 'package:runnin/shared/widgets/app_tag.dart';
+import 'package:runnin/shared/widgets/metric_card.dart';
 import 'package:runnin/shared/widgets/notification_card.dart';
 import 'package:runnin/shared/widgets/section_heading.dart';
 import 'package:runnin/shared/widgets/week_grid.dart' as wg;
@@ -274,12 +275,15 @@ class _CyberStatusBar extends StatelessWidget {
                   letterSpacing: 0.96,
                 ),
               ),
-              Text(
-                '$dateLabel — $greeting, ${firstName.toUpperCase()}',
-                style: GoogleFonts.jetBrainsMono(
-                  color: palette.text.withValues(alpha: 0.6),
-                  fontSize: 12,
-                  letterSpacing: 0.96,
+              Expanded(
+                child: Text(
+                  '$dateLabel — $greeting, ${firstName.toUpperCase()}',
+                  style: GoogleFonts.jetBrainsMono(
+                    color: palette.text.withValues(alpha: 0.6),
+                    fontSize: 12,
+                    letterSpacing: 0.96,
+                  ),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],
@@ -430,8 +434,8 @@ class _UserInfoCards extends StatelessWidget {
         Expanded(
           child: _InfoCard(
             label: 'FREQ',
-            value: '${frequency}x',
-            unit: '/sem',
+            value: frequency == '—' ? '—' : '${frequency}x',
+            unit: frequency == '—' ? '' : '/sem',
           ),
         ),
       ],
@@ -498,6 +502,8 @@ class _InfoCard extends StatelessWidget {
               fontWeight: FontWeight.w700,
               color: palette.text,
             ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
           if (unit.isNotEmpty) ...[
             const SizedBox(height: 2),
@@ -1738,7 +1744,6 @@ class _StatusCorporalSectionState extends State<_StatusCorporalSection> {
 
   @override
   Widget build(BuildContext context) {
-    final palette = context.runninPalette;
     final profile = widget.data.profile;
     final hasBpmData = _hasRealBpmData(widget.data);
     final hasSleepData = _hasRealSleepData(widget.data);
@@ -1753,9 +1758,8 @@ class _StatusCorporalSectionState extends State<_StatusCorporalSection> {
         ? null
         : (hydrationLoggedL / hydrationGoalL).clamp(0.0, 1.0);
 
-    // SUP-411 (HOME-B7): STATUS CORPORAL heading with superscript "06"
-    // per HOME.md §06. Inline metric cards stay; full migration to
-    // MetricCard component is a follow-up.
+    // SUP-411 (HOME-B7): STATUS CORPORAL — 2×2 MetricCard grid per HOME.md §06.
+    final muscleLoad = _muscleLoadLabel(widget.data);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1766,233 +1770,103 @@ class _StatusCorporalSectionState extends State<_StatusCorporalSection> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Expanded(
-                child: AppPanel(
-                  padding: const EdgeInsets.all(17.7),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'PRONTIDAO',
-                        style: TextStyle(
-                          color: palette.muted,
-                          fontSize: 9,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.08,
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Text(
-                            readinessScore?.toString() ?? '--',
-                            style: TextStyle(
-                              color: palette.secondary,
-                              fontSize: 28,
-                              fontWeight: FontWeight.w900,
-                            ),
-                          ),
-                          Text(
-                            ' /100',
-                            style: TextStyle(
-                              color: palette.muted,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ],
-                      ),
-                      Text(
-                        hasBodyData
-                            ? _readinessLabel(readinessScore!)
-                            : 'Preencha peso, altura e idade para destravar',
-                        style: TextStyle(color: palette.muted, fontSize: 10),
-                      ),
-                      const Spacer(),
-                      if (hasBodyData)
-                        _MiniProgressBar(
+                child: MetricCard(
+                  label: 'PRONTIDAO',
+                  value: readinessScore?.toString() ?? '--',
+                  unit: '/100',
+                  valueColor: FigmaColors.brandCyan,
+                  sub: hasBodyData
+                      ? _readinessLabel(readinessScore!)
+                      : 'Preencha peso, altura e idade',
+                  chart: hasBodyData
+                      ? _MiniProgressBar(
                           value: readinessScore! / 100,
-                          color: palette.secondary,
+                          color: FigmaColors.brandCyan,
                         )
-                      else
-                        TextButton(
+                      : TextButton(
                           onPressed: () => context.push('/profile/edit'),
                           child: const Text('PREENCHER DADOS'),
                         ),
-                    ],
-                  ),
                 ),
               ),
               const SizedBox(width: 8),
               Expanded(
-                child: AppPanel(
-                  padding: const EdgeInsets.all(17.7),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'SONO',
-                        style: TextStyle(
-                          color: palette.muted,
-                          fontSize: 9,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.08,
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                      Text(
-                        hasSleepData ? 'OK' : '--',
-                        style: TextStyle(
-                          color: palette.primary,
-                          fontSize: 22,
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                      Text(
-                        profile?.hasWearable == true
-                            ? 'Wearable informado, mas sem sono sincronizado'
-                            : 'Sem origem de sono conectada',
-                        style: TextStyle(color: palette.muted, fontSize: 10),
-                      ),
-                      const Spacer(),
-                      TextButton(
-                        onPressed: () => context.push('/profile/edit'),
-                        child: Text(
-                          hasSleepData ? 'VER DETALHES' : 'REVISAR PERFIL',
-                        ),
-                      ),
-                    ],
+                child: MetricCard(
+                  label: 'SONO',
+                  value: hasSleepData ? 'OK' : '--',
+                  valueColor: FigmaColors.textPrimary,
+                  sub: profile?.hasWearable == true
+                      ? 'Wearable sem sono sincronizado'
+                      : 'Sem origem de sono conectada',
+                  chart: TextButton(
+                    onPressed: () => context.push('/profile/edit'),
+                    child: Text(hasSleepData ? 'VER DETALHES' : 'REVISAR PERFIL'),
                   ),
                 ),
               ),
             ],
           ),
         ),
-        const SizedBox(height: 20),
+        const SizedBox(height: 8),
         IntrinsicHeight(
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Expanded(
-                child: AppPanel(
-                  padding: const EdgeInsets.all(17.7),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                child: MetricCard(
+                  label: 'CARGA MUSCULAR',
+                  value: muscleLoad,
+                  valueColor: FigmaColors.brandCyan,
+                  sub: hasBpmData
+                      ? 'Com BPM e volume da semana'
+                      : 'Sem BPM real; por distancia/volume',
+                  chart: Row(
                     children: [
-                      Text(
-                        'CARGA MUSCULAR',
-                        style: TextStyle(
-                          color: palette.muted,
-                          fontSize: 9,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.08,
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                      Text(
-                        _muscleLoadLabel(widget.data),
-                        style: TextStyle(
-                          color: palette.secondary,
-                          fontSize: 20,
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                      Text(
-                        hasBpmData
-                            ? 'Baseado em corrida com BPM e volume da semana'
-                            : 'Baseado em distancia e volume; sem BPM real ainda',
-                        style: TextStyle(color: palette.muted, fontSize: 10),
-                      ),
-                      const Spacer(),
-                      Row(
-                        children: [
-                          _CargaChip(
-                            label: 'BAIXA',
-                            active: _muscleLoadLabel(widget.data) == 'BAIXA',
-                          ),
-                          const SizedBox(width: 4),
-                          _CargaChip(
-                            label: 'MEDIA',
-                            active: _muscleLoadLabel(widget.data) == 'MEDIA',
-                          ),
-                          const SizedBox(width: 4),
-                          _CargaChip(
-                            label: 'ALTA',
-                            active: _muscleLoadLabel(widget.data) == 'ALTA',
-                          ),
-                        ],
-                      ),
+                      _CargaChip(label: 'BAIXA', active: muscleLoad == 'BAIXA'),
+                      const SizedBox(width: 4),
+                      _CargaChip(label: 'MEDIA', active: muscleLoad == 'MEDIA'),
+                      const SizedBox(width: 4),
+                      _CargaChip(label: 'ALTA', active: muscleLoad == 'ALTA'),
                     ],
                   ),
                 ),
               ),
               const SizedBox(width: 8),
               Expanded(
-                child: AppPanel(
-                  padding: const EdgeInsets.all(17.7),
-                  child: Column(
+                child: MetricCard(
+                  label: 'HIDRATACAO',
+                  value: hydrationLoggedL == null
+                      ? '--'
+                      : '${hydrationLoggedL.toStringAsFixed(1)}L',
+                  unit: hydrationGoalL == null
+                      ? null
+                      : '/${hydrationGoalL.toStringAsFixed(1)}L',
+                  valueColor: FigmaColors.brandCyan,
+                  sub: hydrationGoalL == null
+                      ? 'Informe peso para calcular meta'
+                      : hydrationLoggedL == null
+                          ? 'Sem ingestao registrada'
+                          : '${(hydrationPct! * 100).round()}% da meta diaria',
+                  chart: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        'HIDRATACAO',
-                        style: TextStyle(
-                          color: palette.muted,
-                          fontSize: 9,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.08,
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Text(
-                            hydrationLoggedL == null
-                                ? '--'
-                                : '${hydrationLoggedL.toStringAsFixed(1)}L',
-                            style: TextStyle(
-                              color: palette.primary,
-                              fontSize: 22,
-                              fontWeight: FontWeight.w900,
-                            ),
-                          ),
-                          Text(
-                            hydrationGoalL == null
-                                ? ''
-                                : ' /${hydrationGoalL.toStringAsFixed(1)}L',
-                            style: TextStyle(
-                              color: palette.muted,
-                              fontSize: 11,
-                            ),
-                          ),
-                        ],
-                      ),
-                      Text(
-                        hydrationGoalL == null
-                            ? 'Informe peso para calcular sua meta diaria'
-                            : hydrationLoggedL == null
-                            ? 'Sem ingestao de agua registrada no app'
-                            : '${(hydrationPct! * 100).round()}% da meta diaria registrada',
-                        style: TextStyle(color: palette.muted, fontSize: 10),
-                      ),
-                      const Spacer(),
-                      if (hydrationPct != null)
+                      if (hydrationPct != null) ...[
                         _MiniProgressBar(
                           value: hydrationPct,
-                          color: palette.primary,
+                          color: FigmaColors.brandCyan,
                         ),
-                      const SizedBox(height: 20),
+                        const SizedBox(height: 8),
+                      ],
                       TextButton(
                         onPressed: hydrationGoalL == null
                             ? () => context.push('/profile/edit')
-                            : () => _openHydrationSheet(
-                                goalLiters: hydrationGoalL,
-                              ),
+                            : () => _openHydrationSheet(goalLiters: hydrationGoalL),
                         child: Text(
                           hydrationGoalL == null
                               ? 'INFORMAR PESO'
                               : hydrationLoggedL == null
-                              ? 'REGISTRAR AGUA'
-                              : 'ATUALIZAR AGUA',
+                                  ? 'REGISTRAR AGUA'
+                                  : 'ATUALIZAR AGUA',
                         ),
                       ),
                     ],
