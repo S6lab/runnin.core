@@ -725,6 +725,13 @@ class _MenuSection extends StatelessWidget {
         ),
         const SizedBox(height: AppSpacing.sm),
         _MenuItem(
+          icon: Icons.bar_chart_outlined,
+          title: 'ANALYTICS',
+          subtitle: 'Corridas, distância, pace, plano',
+          onTap: () => context.push('/dashboard'),
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        _MenuItem(
           icon: Icons.chat_bubble_outline,
           title: 'FALAR COM COACH.AI',
           subtitle: 'Chat com o seu coach',
