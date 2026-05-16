@@ -32,7 +32,7 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
   bool _pushEnabled = true;
   bool _inAppBannerEnabled = true;
 
-  Map<String, bool> _dailyNotificationTypes = {
+  final Map<String, bool> _dailyNotificationTypes = {
     'melhor_horario': true,
     'preparo_nutricional': true,
     'hidratacao': true,
@@ -42,40 +42,26 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
     'fechamento_mensal': true,
   };
 
-  String _dndStart = '22:00';
-  String _dndEnd = '06:30';
-
-  late bool _dndEnabled;
-
   final List<Map<String, String>> _channels = [
-    {'type': 'push', 'label': 'Push notifications'},
-    {'type': 'in_app', 'label': 'In-app banner'},
+    {'type': 'push', 'label': 'Push'},
+    {'type': 'in_app', 'label': 'In-App Banner'},
+    {'type': 'email', 'label': 'E-mail'},
   ];
 
   final List<Map<String, String>> _notificationTypes = [
-    {'key': 'melhor_horario', 'label': 'Melhor horário para correr'},
-    {'key': 'preparo_nutricional', 'label': 'Preparo nutricional'},
+    {'key': 'melhor_horario', 'label': 'Melhor Horário'},
+    {'key': 'preparo_nutricional', 'label': 'Preparo Nutricional'},
     {'key': 'hidratacao', 'label': 'Hidratação'},
-    {
-      'key': 'checklist_pre_run',
-      'label': 'Checklist pré-easy run'
-    },
-    {'key': 'sono_performance', 'label': 'Sono → performance'},
-    {'key': 'bpm_real', 'label': 'BPM real'},
-    {
-      'key': 'fechamento_mensal',
-      'label': 'Fechamento mensal'
-    },
+    {'key': 'checklist_pre_run', 'label': 'Checklist Pré-Run'},
+    {'key': 'sono_performance', 'label': 'Sono & Performance'},
+    {'key': 'bpm_real', 'label': 'BPM Real'},
+    {'key': 'fechamento_mensal', 'label': 'Fechamento Mensal'},
   ];
 
-  TimeOfDay _dndStartTime = TimeOfDay(hour: 22, minute: 0);
-  TimeOfDay _dndEndTime = TimeOfDay(hour: 6, minute: 30);
+  bool _dndEnabled = false;
 
-  @override
-  void initState() {
-    super.initState();
-    _dndEnabled = true;
-  }
+  String _dndStart = '22:00';
+  String _dndEnd = '06:30';
 
   @override
   Widget build(BuildContext context) {
@@ -120,26 +106,20 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
                     },
                   ),
                   const SizedBox(height: AppSpacing.xxl),
-                  _Section3(
-                    dndStart: _dndStart,
-                    dndEnd: _dndEnd,
-                    dndEnabled: _dndEnabled,
-                    onToggle: (enabled) {
-                      setState(() => _dndEnabled = enabled);
-                    },
-                    onSelectStartTime: (time) {
-                      setState(() {
-                        _dndStartTime = time;
-                        _dndStart = '${_formatTimeOfDay(time)}';
-                      });
-                    },
-                    onSelectEndTime: (time) {
-                      setState(() {
-                        _dndEndTime = time;
-                        _dndEnd = '${_formatTimeOfDay(time)}';
-                      });
-                    },
-                  ),
+                   _Section3(
+                     dndStart: _dndStart,
+                     dndEnd: _dndEnd,
+                     dndEnabled: _dndEnabled,
+                     onToggle: (enabled) {
+                       setState(() => _dndEnabled = enabled);
+                     },
+                     onSelectStartTime: (time) {
+                       setState(() => _dndStart = _formatTimeOfDay(time));
+                     },
+                     onSelectEndTime: (time) {
+                       setState(() => _dndEnd = _formatTimeOfDay(time));
+                     },
+                   ),
                   const SizedBox(height: AppSpacing.xl),
                   _SaveButton(
                     saving: _saving,
