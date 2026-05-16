@@ -3,7 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/features/training/domain/entities/weekly_report.dart';
-import 'package:runnin/shared/widgets/app_page_header.dart';
+import 'package:runnin/shared/widgets/figma/figma_top_nav.dart';
 import 'package:runnin/features/training/data/weekly_report_remote_datasource.dart';
 import 'package:runnin/shared/widgets/figma/figma_adherence_progress.dart';
 import 'package:runnin/shared/widgets/figma/figma_highlight_bullet.dart';
@@ -82,15 +82,19 @@ class _WeeklyReportDetailPageState extends State<WeeklyReportDetailPage> {
 
     return Scaffold(
       backgroundColor: palette.background,
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const AppPageHeader(title: 'RELATÓRIO SEMANAL'),
-              const SizedBox(height: 20),
-              _buildReportInfoSection(palette, weeklyReport),
+      body: Column(
+        children: [
+          const FigmaTopNav(
+            breadcrumb: 'Treino / Relatório semanal',
+            showBackButton: true,
+          ),
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildReportInfoSection(palette, weeklyReport),
               const SizedBox(height: 20),
               _buildAdherenceCard(palette, weeklyReport),
               const SizedBox(height: 20),
@@ -104,10 +108,12 @@ class _WeeklyReportDetailPageState extends State<WeeklyReportDetailPage> {
               const SizedBox(height: 20),
               _buildAdaptationSuggestionSection(palette, weeklyReport),
               const SizedBox(height: 20),
-              _buildCTASection(palette, weeklyReport),
-            ],
+                  _buildCTASection(palette, weeklyReport),
+                ],
+              ),
+            ),
           ),
-        ),
+        ],
       ),
     );
   }

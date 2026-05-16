@@ -3,6 +3,7 @@ import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/features/run/data/datasources/run_remote_datasource.dart';
 import 'package:runnin/features/run/domain/entities/run.dart';
 import 'package:runnin/shared/widgets/achievement_card.dart';
+import 'package:runnin/shared/widgets/figma/figma_top_nav.dart';
 import 'package:runnin/shared/widgets/metric_card.dart';
 import 'package:runnin/shared/widgets/segmented_tab_bar.dart';
 
@@ -47,35 +48,9 @@ class _GamificationPageState extends State<GamificationPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-              child: Row(
-                children: [
-                  IconButton(
-                    icon: Icon(Icons.arrow_back, color: palette.muted),
-                    onPressed: () => Navigator.of(context).pop(),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                  ),
-                  const SizedBox(width: 12),
-                  RichText(
-                    text: TextSpan(children: [
-                      TextSpan(text: 'RUNNIN', style: type.displaySm),
-                      TextSpan(
-                        text: ' .AI',
-                        style: type.labelMd.copyWith(
-                          color: palette.primary,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                      TextSpan(
-                        text: ' / GAMIFICAÇÃO',
-                        style: type.labelMd.copyWith(color: palette.muted),
-                      ),
-                    ]),
-                  ),
-                ],
-              ),
+            const FigmaTopNav(
+              breadcrumb: 'Perfil / Gamificação',
+              showBackButton: true,
             ),
             const SizedBox(height: 16),
             Padding(

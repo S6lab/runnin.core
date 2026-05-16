@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/features/training/data/plan_revision_remote_datasource.dart';
-import 'package:runnin/shared/widgets/app_page_header.dart';
+import 'package:runnin/shared/widgets/figma/figma_top_nav.dart';
 import 'package:runnin/shared/widgets/app_panel.dart';
 import 'package:runnin/shared/widgets/figma/figma_wizard_choice_card.dart';
 import 'package:runnin/shared/widgets/figma/figma_coach_ai_block.dart';
@@ -104,7 +104,10 @@ class _RevisionFlowPageState extends State<RevisionFlowPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const AppPageHeader(title: '// SOLICITAR ALTERAÇÃO'),
+              const FigmaTopNav(
+                breadcrumb: 'Treino / Solicitar alteração',
+                showBackButton: true,
+              ),
               const SizedBox(height: 20),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),

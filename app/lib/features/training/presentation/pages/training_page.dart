@@ -15,7 +15,7 @@ import 'package:runnin/features/training/data/datasources/plan_remote_datasource
 import 'package:runnin/features/training/data/weekly_report_remote_datasource.dart';
 import 'package:runnin/features/training/domain/entities/plan.dart';
 import 'package:runnin/features/training/domain/entities/weekly_report.dart';
-import 'package:runnin/shared/widgets/app_page_header.dart';
+import 'package:runnin/shared/widgets/figma/figma_top_nav.dart';
 import 'package:runnin/shared/widgets/app_panel.dart';
 import 'package:runnin/shared/widgets/app_tag.dart';
 import 'package:runnin/shared/widgets/coach_narrative_card.dart';
@@ -366,7 +366,7 @@ class _TrainingPageState extends State<TrainingPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const AppPageHeader(title: 'TREINO'),
+              const FigmaTopNav(breadcrumb: 'Treino'),
               const SizedBox(height: 20),
               _buildBody(context),
             ],

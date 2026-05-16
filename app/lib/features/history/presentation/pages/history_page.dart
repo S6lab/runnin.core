@@ -7,7 +7,7 @@ import 'package:runnin/features/history/data/benchmark_remote_datasource.dart' s
 import 'package:runnin/features/history/presentation/widgets/hist_stat_card.dart';
 import 'package:runnin/features/run/data/datasources/run_remote_datasource.dart';
 import 'package:runnin/features/run/domain/entities/run.dart';
-import 'package:runnin/shared/widgets/app_page_header.dart';
+import 'package:runnin/shared/widgets/figma/figma_top_nav.dart';
 import 'package:runnin/shared/widgets/chart_panel.dart';
 import 'package:runnin/shared/widgets/figma/export.dart';
 import 'package:runnin/shared/widgets/segmented_tab_bar.dart';
@@ -119,7 +119,7 @@ class _HistoryPageState extends State<HistoryPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const AppPageHeader(title: 'HISTÓRICO'),
+            const FigmaTopNav(breadcrumb: 'Histórico'),
             const SizedBox(height: 16),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),

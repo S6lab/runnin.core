@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:runnin/core/theme/app_palette.dart';
-import 'package:runnin/shared/widgets/app_page_header.dart';
+import 'package:runnin/shared/widgets/figma/figma_top_nav.dart';
 import 'package:runnin/shared/widgets/app_panel.dart';
 import 'package:runnin/shared/widgets/otp_resend_button.dart';
 
@@ -383,7 +383,10 @@ class _AccountAccessPageState extends State<AccountAccessPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const AppPageHeader(title: 'ACESSO'),
+            const FigmaTopNav(
+              breadcrumb: 'Perfil / Conta & Acesso',
+              showBackButton: true,
+            ),
             const SizedBox(height: 20),
             Expanded(
               child: ListView(
