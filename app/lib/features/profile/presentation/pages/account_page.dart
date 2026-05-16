@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:runnin/core/theme/app_palette.dart';
+import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/core/theme/theme_controller.dart';
 
 class AccountPage extends StatelessWidget {
@@ -81,7 +82,7 @@ class _TopNav extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
                   color: Colors.white.withValues(alpha: 0.06),
-                  borderRadius: BorderRadius.circular(2),
+                  borderRadius: BorderRadius.zero,
                 ),
                 child: Text(
                   'PROF',
@@ -118,7 +119,7 @@ class _ProfileHeader extends StatelessWidget {
               height: 64,
               decoration: BoxDecoration(
                 color: const Color(0xFF00d4ff),
-                borderRadius: BorderRadius.circular(2),
+                borderRadius: BorderRadius.zero,
               ),
               alignment: Alignment.center,
               child: Text(
@@ -163,7 +164,7 @@ class _ProfileHeader extends StatelessWidget {
                         ),
                         decoration: BoxDecoration(
                           color: const Color(0xFF00d4ff),
-                          borderRadius: BorderRadius.circular(2),
+                          borderRadius: BorderRadius.zero,
                         ),
                         child: Text(
                           'PREMIUM',
@@ -483,7 +484,7 @@ class _ThemeCard extends StatelessWidget {
                         height: 16,
                         decoration: BoxDecoration(
                           color: palette.primary,
-                          borderRadius: BorderRadius.circular(2),
+                          borderRadius: BorderRadius.zero,
                         ),
                       ),
                       const SizedBox(width: 6),
@@ -492,7 +493,7 @@ class _ThemeCard extends StatelessWidget {
                         height: 16,
                         decoration: BoxDecoration(
                           color: palette.secondary,
-                          borderRadius: BorderRadius.circular(2),
+                          borderRadius: BorderRadius.zero,
                         ),
                       ),
                     ],
@@ -567,6 +568,16 @@ class _ThemeCard extends StatelessWidget {
 
 // ── Menu Section ────────────────────────────────────────────────────────────
 
+void _showComingSoon(BuildContext context, String featureLabel) {
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: Text('$featureLabel — em breve.'),
+      duration: const Duration(seconds: 2),
+      behavior: SnackBarBehavior.floating,
+    ),
+  );
+}
+
 class _MenuSection extends StatelessWidget {
   const _MenuSection();
 
@@ -601,28 +612,34 @@ class _MenuSection extends StatelessWidget {
           icon: Icons.emoji_events_outlined,
           title: 'GAMIFICAÇÃO',
           subtitle: 'Badges, XP, Streak',
-          onTap: () {},
+          onTap: () => context.push('/gamification'),
         ),
         const SizedBox(height: 8),
         _MenuItem(
           icon: Icons.favorite_outline,
           title: 'SAÚDE',
           subtitle: 'BPM, Zonas, Wearable',
-          onTap: () {},
+          onTap: () => _showComingSoon(
+            context,
+            'Saúde (BPM, Zonas, Wearable, Exames)',
+          ),
         ),
         const SizedBox(height: 8),
         _MenuItem(
           icon: Icons.settings_outlined,
           title: 'AJUSTES',
           subtitle: 'Coach, Alertas, Unidades',
-          onTap: () {},
+          onTap: () => _showComingSoon(
+            context,
+            'Ajustes (Coach, Alertas, Unidades)',
+          ),
         ),
         const SizedBox(height: 8),
         _MenuItem(
           icon: Icons.star_outline,
           title: 'ASSINATURA',
           subtitle: 'Premium',
-          onTap: () {},
+          onTap: () => _showComingSoon(context, 'Assinatura Premium'),
         ),
       ],
     );

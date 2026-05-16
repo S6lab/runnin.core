@@ -104,10 +104,12 @@ class _HomeViewState extends State<_HomeView> {
                     const SizedBox(height: 20),
                     _CyberStatusBar(data: state.data),
                     const SizedBox(height: 20),
-                    _UserInfoCards(data: state.data),
-                    const SizedBox(height: 20),
-                    const _SkinSection(),
-                    const SizedBox(height: 20),
+                    // NOTE: _UserInfoCards (peso/altura/idade/freq) and
+                    // _SkinSection used to live here as a dashboard-style
+                    // layout. They are PERFIL-owned sections and were
+                    // duplicates of identically-named private widgets in
+                    // account_page.dart. Removed from HOME to fix the
+                    // cross-tab content leak reported by the user.
                     // B2 SUP-406 Section 1 — Coach Brief + INICIAR
                     _IniciarSessaoButton(data: state.data),
                     const SizedBox(height: 20),
@@ -129,8 +131,9 @@ class _HomeViewState extends State<_HomeView> {
                     // B8 SUP-412 Section 7 — Última Corrida
                     _UltimaCorrida(run: state.data.latestRun),
                     const SizedBox(height: 20),
-                    const _MenuSection(),
-                    const SizedBox(height: 20),
+                    // _MenuSection removed — that menu (GAMIFICAÇÃO /
+                    // SAÚDE / AJUSTES / ASSINATURA) is PERFIL-owned and
+                    // duplicated PERFIL's _MenuSection. See PERFIL tab.
                   ] else ...[
                     const _LoadingCard(),
                   ],
