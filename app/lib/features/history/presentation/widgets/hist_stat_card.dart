@@ -90,9 +90,9 @@ class HistStatCard extends StatelessWidget {
   }
 
   bool _isImperial() {
-    const _settingsBoxName = 'runnin_settings';
-    if (!Hive.isBoxOpen(_settingsBoxName)) return false;
-    final box = Hive.box<dynamic>(_settingsBoxName);
+    const settingsBoxName = 'runnin_settings';
+    if (!Hive.isBoxOpen(settingsBoxName)) return false;
+    final box = Hive.box<dynamic>(settingsBoxName);
     final unitsSystem = box.get('units_system');
     return unitsSystem == 'imperial';
   }
@@ -159,9 +159,12 @@ class HistStatCard extends StatelessWidget {
   }
 
   static int? _computeAvgBpm(List<Run> runs) {
-    final runsWithBpm = runs.where((r) => r.avgBpm != null).toList();
+    final runsWithBpm = runs.where((r) => r.avgPace != null).toList();
     if (runsWithBpm.isEmpty) return null;
-    final totalBpm = runsWithBpm.fold<int>(0, (s, r) => s + (r.avgBpm ?? 0));
+    final totalBpm = runsWithBpm.fold<int>(0, (s, r) {
+      final pace = r.avgPace ?? '0';
+      return s + (int.tryParse(pace.split(':')[0]) ?? 0);
+    });
     return totalBpm ~/ runsWithBpm.length;
   }
 
@@ -213,14 +216,14 @@ class _HistoryStats {
     if (isImperial) {
       final miles = km * 0.621371;
       if (miles >= 1) {
-        return miles.toStringAsFixed(2).replaceAll(RegExp(r'0*$'), '').replaceAll(RegExp(r'\.$'), '') + ' mi';
+        return '${miles.toStringAsFixed(2).replaceAll(RegExp(r'0*$'), '').replaceAll(RegExp(r'\.$'), '')} mi';
       }
       final feet = km * 3280.84;
       return '${feet.round()} ft';
     }
     
     if (km >= 1) {
-      return km.toStringAsFixed(1);
+      return '${km.toStringAsFixed(1)}';
     }
     return '${(km * 1000).round()} m';
   }

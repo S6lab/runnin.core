@@ -338,32 +338,6 @@ class _CyberStatusBar extends StatelessWidget {
       ),
     );
   }
-
-  String _greeting(int hour) {
-    if (hour < 12) return 'BOM DIA';
-    if (hour < 18) return 'BOA TARDE';
-    return 'BOA NOITE';
-  }
-
-  String _formatDate(DateTime d) {
-    const months = [
-      '',
-      'JAN',
-      'FEV',
-      'MAR',
-      'ABR',
-      'MAI',
-      'JUN',
-      'JUL',
-      'AGO',
-      'SET',
-      'OUT',
-      'NOV',
-      'DEZ',
-    ];
-    final day = d.day.toString().padLeft(2, '0');
-    return '$day.${months[d.month]}.${d.year}';
-  }
 }
 
 class _DeviceChip extends StatelessWidget {
@@ -2319,22 +2293,6 @@ class _HeroSection extends StatelessWidget {
   final HomeData data;
   const _HeroSection({required this.data});
 
-  String _greeting(int hour) {
-    if (hour < 12) return 'BOM DIA';
-    if (hour < 18) return 'BOA TARDE';
-    return 'BOA NOITE';
-  }
-
-  String _formatDate(DateTime d) {
-    const months = [
-      '',
-      'JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN',
-      'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ',
-    ];
-    final day = d.day.toString().padLeft(2, '0');
-    return '$day.${months[d.month]}.${d.year}';
-  }
-
   @override
   Widget build(BuildContext context) {
     final palette = context.runninPalette;
@@ -2377,7 +2335,7 @@ class _HeroSection extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '$dateLabel',
+                      dateLabel,
                       style: GoogleFonts.jetBrainsMono(
                         fontSize: 10,
                         fontWeight: FontWeight.w500,
