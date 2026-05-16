@@ -88,7 +88,9 @@ final appRouter = GoRouter(
     }
 
     // Logado mas ainda não fez onboarding
-    if (onboardingStatus == false && loc != '/onboarding') {
+    if (onboardingStatus == false &&
+        loc != '/onboarding' &&
+        loc != '/plan-loading') {
       return '/onboarding';
     }
 

@@ -1,4 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import 'package:runnin/core/router/app_router.dart';
 import 'package:runnin/shared/widgets/coach_ai_breadcrumb.dart';
 import 'package:runnin/shared/widgets/plan_task_row.dart';
 
@@ -10,6 +14,42 @@ class PlanLoadingPage extends StatefulWidget {
 }
 
 class _PlanLoadingPageState extends State<PlanLoadingPage> {
+  static const _taskEntries = [
+    ('Analisando seu perfil e histórico de saúde...', 'Nível, idade, peso, condições'),
+    ('Calculando zonas cardíacas personalizadas...', 'Z1-Z5 baseadas no seu perfil'),
+    ('Definindo volume e progressão semanal...', 'Periodização linear 3:1'),
+    ('Gerando plano do primeiro mesociclo...', '4 semanas adaptativas'),
+    ('Calibrando alertas de segurança...', null),
+    ('Definindo metas de XP e gamificação...', null),
+    ('Preparando sua primeira sessão...', null),
+    ('Plano pronto!', null),
+  ];
+
+  int _completedCount = 0;
+  late final Timer _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(milliseconds: 750), _tick);
+  }
+
+  void _tick(Timer timer) {
+    if (_completedCount >= _taskEntries.length) {
+      timer.cancel();
+      markOnboardingDone();
+      if (mounted) context.go('/home');
+      return;
+    }
+    setState(() => _completedCount++);
+  }
+
+  @override
+  void dispose() {
+    _timer.cancel();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -45,14 +85,17 @@ class _PlanLoadingPageState extends State<PlanLoadingPage> {
                 ),
               ),
               const SizedBox(height: 51.51),
-              ..._getTasks().map((task) {
-                return PlanTaskRow(
-                  status: task.status,
-                  label: task.label,
-                  mainText: task.mainText,
-                  detail: task.detail,
-                );
-              }),
+              for (var i = 0; i < _taskEntries.length; i++)
+                PlanTaskRow(
+                  status: i < _completedCount
+                      ? PlanTaskStatus.done
+                      : i == _completedCount
+                          ? PlanTaskStatus.active
+                          : PlanTaskStatus.pending,
+                  label: i < _completedCount ? 'OK' : i == _completedCount ? '●' : '○',
+                  mainText: _taskEntries[i].$1,
+                  detail: _taskEntries[i].$2,
+                ),
               const Spacer(),
               const SizedBox(width: 329.55, height: 4),
               const SizedBox(height: 3.284),
@@ -62,71 +105,4 @@ class _PlanLoadingPageState extends State<PlanLoadingPage> {
       ),
     );
   }
-
-  List<_TaskData> _getTasks() {
-    return [
-      _TaskData(
-        status: PlanTaskStatus.done,
-        label: 'OK',
-        mainText: 'Analisando seu perfil e histórico de saúde...',
-        detail: 'Nível, idade, peso, condições',
-      ),
-      _TaskData(
-        status: PlanTaskStatus.done,
-        label: 'OK',
-        mainText: 'Calculando zonas cardíacas personalizadas...',
-        detail: 'Z1-Z5 baseadas no seu perfil',
-      ),
-      _TaskData(
-        status: PlanTaskStatus.done,
-        label: 'OK',
-        mainText: 'Definindo volume e progressão semanal...',
-        detail: 'Periodização linear 3:1',
-      ),
-      _TaskData(
-        status: PlanTaskStatus.active,
-        label: '●',
-        mainText: 'Gerando plano do primeiro mesociclo...',
-        detail: '4 semanas adaptativas',
-      ),
-      _TaskData(
-        status: PlanTaskStatus.pending,
-        label: '○',
-        mainText: 'Calibrando alertas de segurança...',
-        detail: null,
-      ),
-      _TaskData(
-        status: PlanTaskStatus.pending,
-        label: '○',
-        mainText: 'Definindo metas de XP e gamificação...',
-        detail: null,
-      ),
-      _TaskData(
-        status: PlanTaskStatus.pending,
-        label: '○',
-        mainText: 'Preparando sua primeira sessão...',
-        detail: null,
-      ),
-      _TaskData(
-        status: PlanTaskStatus.pending,
-        label: '○',
-        mainText: 'Plano pronto!',
-        detail: null,
-      ),
-    ];
-  }
-}
-
-class _TaskData {
-  final PlanTaskStatus status;
-  final String label;
-  final String mainText;
-  final String? detail;
-
-  const _TaskData({
-    required this.status,
-    required this.label,
-    required this.mainText,
-    this.detail,
-  });
 }
