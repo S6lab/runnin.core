@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/features/steps/domain/entities/step.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:runnin/features/steps/presentation/widgets/step_card.dart';

@@ -20,6 +20,33 @@ import 'package:runnin/shared/widgets/notification_card.dart';
 import 'package:runnin/shared/widgets/section_heading.dart';
 import 'package:runnin/shared/widgets/week_grid.dart' as wg;
 
+// Helper functions for greeting and date formatting (used by both _HeroSection and _CyberStatusBar)
+String _greeting(int hour) {
+  if (hour < 12) return 'BOM DIA';
+  if (hour < 18) return 'BOA TARDE';
+  return 'BOA NOITE';
+}
+
+String _formatDate(DateTime d) {
+  const months = [
+    '',
+    'JAN',
+    'FEV',
+    'MAR',
+    'ABR',
+    'MAI',
+    'JUN',
+    'JUL',
+    'AGO',
+    'SET',
+    'OUT',
+    'NOV',
+    'DEZ',
+  ];
+  final day = d.day.toString().padLeft(2, '0');
+  return '$day.${months[d.month]}.${d.year}';
+}
+
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
 
@@ -94,12 +121,11 @@ class _HomeViewState extends State<_HomeView> {
                       onRetry: () => context.read<HomeCubit>().load(),
                     ),
                   ] else if (state is HomeLoaded) ...[
-                    // B1 SUP-405 Hero placeholder — full-bleed area awaiting
-                    // the Figma map asset (imgContainer) + 12 icon overlays
-                    // + vector graphics. Real assets pending design export;
-                    // current stub keeps the section in the layout so other
-                    // refactors compose correctly.
-                    const _HeroPlaceholder(),
+                    // B1 SUP-405 / SUP-598 Hero section — full-bleed area
+                    // Map background + 12 icon overlays + vector graphics.
+                    // Real assets pending Figma export; uses structured mock
+                    // until then. Today's session data from plan is displayed.
+                    _HeroSection(data: state.data),
                     const SizedBox(height: 20),
                     _CyberStatusBar(data: state.data),
                     const SizedBox(height: 20),
@@ -2285,41 +2311,229 @@ class _BigHeading extends StatelessWidget {
   }
 }
 
-/// Hero/header area placeholder — full-bleed map background + 12 icon
-/// overlays + vector graphics per HOME §00 spec. Real assets pending
-/// design export (imgContainer, MuiSvgIconRoot×12, imgVector 0–2).
-/// SUP-405. Renders as a tall dark gradient container with a TODO note.
-class _HeroPlaceholder extends StatelessWidget {
-  const _HeroPlaceholder();
+/// Hero section — full-bleed map background with today's session data.
+/// Displays real data from plan + dynamic greeting, awaiting Figma assets
+/// for map image and 12 icon overlays. Per HOME spec §01, this section
+/// spans ~490px and contains user profile stats + session brief.
+class _HeroSection extends StatelessWidget {
+  final HomeData data;
+  const _HeroSection({required this.data});
+
+  String _greeting(int hour) {
+    if (hour < 12) return 'BOM DIA';
+    if (hour < 18) return 'BOA TARDE';
+    return 'BOA NOITE';
+  }
+
+  String _formatDate(DateTime d) {
+    const months = [
+      '',
+      'JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN',
+      'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ',
+    ];
+    final day = d.day.toString().padLeft(2, '0');
+    return '$day.${months[d.month]}.${d.year}';
+  }
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    final user = FirebaseAuth.instance.currentUser;
+    final now = DateTime.now();
+    final greeting = _greeting(now.hour);
+    final firstName = user?.displayName?.split(' ').firstOrNull ?? 'ATLETA';
+    final dateLabel = _formatDate(now);
+    
+    // Today's session information
+    final session = data.todaySession;
+    final sessionInfo = session == null
+        ? 'Nenhuma sessao planejada para hoje'
+        : '${session.type.toUpperCase()} • ${session.targetPace ?? 'livre'}';
+
     return Container(
-      height: 200, // Figma spec ~490 px; reduced until assets land
+      height: 490,
       width: double.infinity,
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [Color(0xFF0A0A1A), FigmaColors.bgBase],
+          colors: [
+            const Color(0xFF0A0A1A),
+            palette.background,
+          ],
         ),
         borderRadius: FigmaBorderRadius.zero,
       ),
-      alignment: Alignment.center,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 24),
-        child: Text(
-          'HERO\n[map + 12 icons + vectors]\nawaiting Figma asset export',
-          textAlign: TextAlign.center,
-          style: GoogleFonts.jetBrainsMono(
-            fontSize: 10,
-            height: 16 / 10,
-            letterSpacing: 1.0,
-            fontWeight: FontWeight.w500,
-            color: FigmaColors.textMuted,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Profile row with greeting
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 30, 24, 16),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '$dateLabel',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w500,
+                        color: palette.text.withValues(alpha: 0.6),
+                        letterSpacing: 1.0,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '$greeting, ${firstName.toUpperCase()}',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: palette.text,
+                        letterSpacing: 1.4,
+                      ),
+                    ),
+                  ],
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: palette.primary, width: 1.735),
+                  ),
+                  child: Text(
+                    sessionInfo,
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      color: palette.primary,
+                      letterSpacing: 1.0,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
+          
+          // Mock map background placeholder (real asset pending Figma export)
+          Expanded(
+            child: Container(
+              margin: const EdgeInsets.symmetric(horizontal: 24),
+              decoration: BoxDecoration(
+                border: Border.all(color: palette.border, width: 1.735),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              alignment: Alignment.center,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.map_outlined,
+                    size: 48,
+                    color: palette.text.withValues(alpha: 0.3),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'MAPA DO DIA',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      color: palette.text.withValues(alpha: 0.6),
+                      letterSpacing: 1.0,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          
+          // Stats row (mock 12 icon layout per Figma spec)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: List.generate(12, (index) => _HeroStatIcon(index: index)),
+            ),
+          ),
+          
+          // Session brief
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 16, 24, 20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: palette.secondary.withValues(alpha: 0.02),
+                    border: Border(left: BorderSide(color: palette.secondary, width: 1.735)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'COACH.AI',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                          color: palette.secondary,
+                          letterSpacing: 1.1,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        session == null
+                            ? 'Nenhuma sessao planejada para hoje. Use uma corrida livre ou revise a distribuicao da semana no modulo de treino.'
+                            : 'Easy Run hoje — pace controlado entre ${session.targetPace ?? "livre"} e foco em cadencia e respiracao. Nao acelere nos ultimos 2km.',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w400,
+                          color: palette.text.withValues(alpha: 0.7),
+                          height: 21.45 / 13,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
 }
+
+class _HeroStatIcon extends StatelessWidget {
+  final int index;
+  const _HeroStatIcon({required this.index});
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    
+    // Mock icons for 12 icon layout per Figma spec
+    final icons = [
+      Icons.watch_outlined,
+      Icons.brightness_3_outlined,
+      Icons.water_drop_outlined,
+      Icons.directions_run_outlined,
+      Icons.speed_outlined,
+      Icons.heart_broken_outlined,
+      Icons.blur_circular_outlined,
+      Icons.access_time_outlined,
+      Icons.map_outlined,
+      Icons.location_on_outlined,
+      Icons.brightness_high_outlined,
+      Icons.wb_sunny_outlined,
+    ];
+    
+    return Icon(
+      icons[index % icons.length],
+      size: 18,
+      color: palette.text.withValues(alpha: 0.5),
+    );
+  }
+}
+

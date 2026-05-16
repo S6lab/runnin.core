@@ -47,16 +47,16 @@ class HealthIndexPage extends StatelessWidget {
                     _HealthCard(
                       title: 'ZONAS',
                       subtitle: 'Distribuição de frequência cardíaca',
-                      onTap: null,
-                      available: false,
+                      onTap: () => context.push('/profile/health/zones'),
+                      available: true,
                     ),
                     const SizedBox(height: 7.997),
-                    _HealthCard(
-                      title: 'DISPOSITIVOS',
-                      subtitle: 'Wearables conectados',
-                      onTap: null,
-                      available: false,
-                    ),
+                      _HealthCard(
+                        title: 'DISPOSITIVOS',
+                        subtitle: 'Wearables conectados',
+                        onTap: () => context.push('/profile/health/devices'),
+                        available: true,
+                      ),
                     const SizedBox(height: 7.997),
                     _HealthCard(
                       title: 'EXAMES',

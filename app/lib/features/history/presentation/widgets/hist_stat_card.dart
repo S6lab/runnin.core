@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/features/run/domain/entities/run.dart';
 import 'package:runnin/shared/widgets/figma/export.dart';
@@ -26,8 +27,8 @@ class HistStatCard extends StatelessWidget {
           Expanded(
             child: FigmaHistStatCard(
               label: 'VOLUME',
-              value: stats.totalKm.toStringAsFixed(1),
-              unit: 'km',
+              value: stats.totalKmFormatted,
+              unit: _getUnit(stats.totalKm, 'km', 'mi'),
             ),
           ),
           const SizedBox(width: 8),
@@ -44,7 +45,7 @@ class HistStatCard extends StatelessWidget {
             child: FigmaHistStatCard(
               label: 'PACE MÉD.',
               value: stats.avgPaceLabel,
-              unit: '/km',
+              unit: '/${_getUnit(1, 'km', 'mi')}',
             ),
           ),
           const SizedBox(width: 8),
@@ -69,7 +70,7 @@ class HistStatCard extends StatelessWidget {
          ]),
          const SizedBox(height: 8),
          Row(children: [
-           Expanded(
+          Expanded(
              child: FigmaHistStatCard(
                label: 'BPM MÉD.',
                value: stats.avgBpm?.toString() ?? '--',
@@ -77,8 +78,23 @@ class HistStatCard extends StatelessWidget {
              ),
            ),
          ]),
-      ],
-    );
+       ],
+     );
+   }
+
+  String _getUnit(double value, String metricUnit, String imperialUnit) {
+    if (value >= 1 && _isImperial()) {
+      return imperialUnit;
+    }
+    return metricUnit;
+  }
+
+  bool _isImperial() {
+    const _settingsBoxName = 'runnin_settings';
+    if (!Hive.isBoxOpen(_settingsBoxName)) return false;
+    final box = Hive.box<dynamic>(_settingsBoxName);
+    final unitsSystem = box.get('units_system');
+    return unitsSystem == 'imperial';
   }
 
   _HistoryStats _computeStats(List<Run> runs) {
@@ -170,6 +186,7 @@ class HistStatCard extends StatelessWidget {
 class _HistoryStats {
   final int count;
   final double totalKm;
+  String get totalKmFormatted => _formatDistance(totalKm);
   final String totalTimeLabel;
   final String avgPaceLabel;
   final int streakDays;
@@ -187,6 +204,26 @@ class _HistoryStats {
     required this.avgBpm,
     required this.benchmarkPercentile,
   });
+
+  String _formatDistance(double km) {
+    final isImperial = Hive.isBoxOpen('runnin_settings') 
+        ? Hive.box<dynamic>('runnin_settings').get('units_system') == 'imperial'
+        : false;
+    
+    if (isImperial) {
+      final miles = km * 0.621371;
+      if (miles >= 1) {
+        return miles.toStringAsFixed(2).replaceAll(RegExp(r'0*$'), '').replaceAll(RegExp(r'\.$'), '') + ' mi';
+      }
+      final feet = km * 3280.84;
+      return '${feet.round()} ft';
+    }
+    
+    if (km >= 1) {
+      return km.toStringAsFixed(1);
+    }
+    return '${(km * 1000).round()} m';
+  }
 
   factory _HistoryStats.empty() => const _HistoryStats(
         count: 0,
