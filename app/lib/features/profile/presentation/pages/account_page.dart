@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:runnin/core/theme/app_palette.dart';
+import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/core/theme/theme_controller.dart';
+import 'package:runnin/shared/widgets/figma/figma_top_nav.dart';
 
 class AccountPage extends StatelessWidget {
   const AccountPage({super.key});
@@ -10,29 +12,29 @@ class AccountPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF050510),
+      backgroundColor: FigmaColors.bgBase,
       body: Column(
         children: [
           const _TopNav(),
           Expanded(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(23.99, 0, 23.99, 32),
+              padding: const EdgeInsets.fromLTRB(AppSpacing.xxl, 0, AppSpacing.xxl, AppSpacing.xl),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const SizedBox(height: 24),
+                  const SizedBox(height: AppSpacing.xl),
                   const _ProfileHeader(),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: AppSpacing.xl),
                   const _StatsCards(),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: AppSpacing.md),
                   const _UserInfoCards(),
-                  const SizedBox(height: 32),
+                  const SizedBox(height: AppSpacing.xxl),
                   const _SkinSection(),
-                  const SizedBox(height: 32),
+                  const SizedBox(height: AppSpacing.xxl),
                   const _MenuSection(),
-                  const SizedBox(height: 32),
+                  const SizedBox(height: AppSpacing.xxl),
                   _BottomActions(),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: AppSpacing.sm),
                 ],
               ),
             ),
@@ -50,53 +52,9 @@ class _TopNav extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: 60,
-      decoration: BoxDecoration(
-        color: const Color(0xFF050510).withValues(alpha: 0.92),
-        border: Border(
-          bottom: BorderSide(
-            color: Colors.white.withValues(alpha: 0.06),
-            width: 1,
-          ),
-        ),
-      ),
-      child: SafeArea(
-        bottom: false,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 23.99),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'RUNNIN.AI',
-                style: GoogleFonts.jetBrainsMono(
-                  color: Colors.white,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 1.2,
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.06),
-                  borderRadius: BorderRadius.zero,
-                ),
-                child: Text(
-                  'PROF',
-                  style: GoogleFonts.jetBrainsMono(
-                    color: Colors.white.withValues(alpha: 0.6),
-                    fontSize: 9,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 1.0,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
+    return FigmaTopNav(
+      breadcrumb: 'Perfil',
+      showBackButton: false,
     );
   }
 }
@@ -117,20 +75,20 @@ class _ProfileHeader extends StatelessWidget {
               width: 64,
               height: 64,
               decoration: BoxDecoration(
-                color: const Color(0xFF00d4ff),
-                borderRadius: BorderRadius.zero,
+                color: FigmaColors.brandCyan,
+                borderRadius: FigmaBorderRadius.zero,
               ),
               alignment: Alignment.center,
               child: Text(
                 'L',
                 style: GoogleFonts.jetBrainsMono(
-                  color: const Color(0xFF050510),
+                  color: FigmaColors.bgBase,
                   fontSize: 32,
                   fontWeight: FontWeight.w900,
                 ),
               ),
             ),
-            const SizedBox(width: 16),
+            const SizedBox(width: AppSpacing.md),
             // Name and level
             Expanded(
               child: Column(
@@ -139,36 +97,36 @@ class _ProfileHeader extends StatelessWidget {
                   Text(
                     'Lucas',
                     style: GoogleFonts.jetBrainsMono(
-                      color: Colors.white,
+                      color: FigmaColors.textPrimary,
                       fontSize: 20,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: AppSpacing.xs),
                   Row(
                     children: [
                       Text(
                         'Nível 7 · ·',
                         style: GoogleFonts.jetBrainsMono(
-                          color: Colors.white.withValues(alpha: 0.4),
+                          color: FigmaColors.textSecondary,
                           fontSize: 11,
                           fontWeight: FontWeight.w500,
                         ),
                       ),
-                      const SizedBox(width: 8),
+                      const SizedBox(width: AppSpacing.sm),
                       Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 6,
                           vertical: 2,
                         ),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF00d4ff),
-                          borderRadius: BorderRadius.zero,
+                          color: FigmaColors.brandCyan,
+                          borderRadius: FigmaBorderRadius.zero,
                         ),
                         child: Text(
                           'PREMIUM',
                           style: GoogleFonts.jetBrainsMono(
-                            color: const Color(0xFF050510),
+                            color: FigmaColors.bgBase,
                             fontSize: 8,
                             fontWeight: FontWeight.w900,
                             letterSpacing: 0.8,
@@ -182,13 +140,13 @@ class _ProfileHeader extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: AppSpacing.md),
         Align(
           alignment: Alignment.centerLeft,
           child: Text(
             '24 corridas · 98.5km total',
             style: GoogleFonts.jetBrainsMono(
-              color: Colors.white.withValues(alpha: 0.5),
+              color: FigmaColors.textMuted,
               fontSize: 11,
               fontWeight: FontWeight.w500,
             ),
@@ -212,23 +170,23 @@ class _StatsCards extends StatelessWidget {
           child: _StatCard(
             label: 'STREAK',
             value: '12',
-            valueColor: const Color(0xFF00d4ff),
+            valueColor: FigmaColors.brandCyan,
           ),
         ),
-        const SizedBox(width: 8),
+        const SizedBox(width: AppSpacing.sm),
         Expanded(
           child: _StatCard(
             label: 'XP',
             value: '340/500',
-            valueColor: const Color(0xFFff6b35),
+            valueColor: FigmaColors.brandOrange,
           ),
         ),
-        const SizedBox(width: 8),
+        const SizedBox(width: AppSpacing.sm),
         Expanded(
           child: _StatCard(
             label: 'BADGES',
             value: '7/21',
-            valueColor: Colors.white,
+            valueColor: FigmaColors.textPrimary,
           ),
         ),
       ],
@@ -250,12 +208,12 @@ class _StatCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: 14),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.03),
+        color: FigmaColors.surfaceCard,
         border: Border.all(
-          color: Colors.white.withValues(alpha: 0.08),
-          width: 1.735,
+          color: FigmaColors.borderDefault,
+          width: AppDimensions.borderUniversal,
         ),
       ),
       child: Column(
@@ -264,10 +222,10 @@ class _StatCard extends StatelessWidget {
           Text(
             label,
             style: GoogleFonts.jetBrainsMono(
-              color: Colors.white.withValues(alpha: 0.4),
+              color: FigmaColors.textMuted,
               fontSize: 9,
               fontWeight: FontWeight.w700,
-              letterSpacing: 1.0,
+              letterSpacing: AppDimensions.borderUniversal,
             ),
           ),
           const SizedBox(height: 8),
@@ -297,15 +255,15 @@ class _UserInfoCards extends StatelessWidget {
         Expanded(
           child: _InfoCard(label: 'PESO', value: '—', unit: 'kg'),
         ),
-        const SizedBox(width: 8),
+        const SizedBox(width: AppSpacing.sm),
         Expanded(
           child: _InfoCard(label: 'ALTURA', value: '—', unit: 'cm'),
         ),
-        const SizedBox(width: 8),
+        const SizedBox(width: AppSpacing.sm),
         Expanded(
           child: _InfoCard(label: 'IDADE', value: '—', unit: 'anos'),
         ),
-        const SizedBox(width: 8),
+        const SizedBox(width: AppSpacing.sm),
         Expanded(
           child: _InfoCard(label: 'FREQ', value: '3x', unit: '/sem'),
         ),
@@ -328,12 +286,12 @@ class _InfoCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs, vertical: 10),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.03),
+        color: FigmaColors.surfaceCard,
         border: Border.all(
-          color: Colors.white.withValues(alpha: 0.08),
-          width: 1.735,
+          color: FigmaColors.borderDefault,
+          width: AppDimensions.borderUniversal,
         ),
       ),
       child: Column(
@@ -342,17 +300,17 @@ class _InfoCard extends StatelessWidget {
           Text(
             label,
             style: GoogleFonts.jetBrainsMono(
-              color: Colors.white.withValues(alpha: 0.4),
+              color: FigmaColors.textMuted,
               fontSize: 8,
               fontWeight: FontWeight.w700,
-              letterSpacing: 0.8,
+              letterSpacing: AppDimensions.borderUniversal - 0.2,
             ),
           ),
           const SizedBox(height: 6),
           Text(
             value,
             style: GoogleFonts.jetBrainsMono(
-              color: Colors.white,
+              color: FigmaColors.textPrimary,
               fontSize: 16,
               fontWeight: FontWeight.w900,
             ),
@@ -360,7 +318,7 @@ class _InfoCard extends StatelessWidget {
           Text(
             unit,
             style: GoogleFonts.jetBrainsMono(
-              color: Colors.white.withValues(alpha: 0.3),
+              color: FigmaColors.textDim,
               fontSize: 9,
               fontWeight: FontWeight.w500,
             ),
@@ -386,32 +344,32 @@ class _SkinSection extends StatelessWidget {
             Text(
               'SKIN',
               style: GoogleFonts.jetBrainsMono(
-                color: Colors.white,
+                color: FigmaColors.textPrimary,
                 fontSize: 16,
                 fontWeight: FontWeight.w700,
               ),
             ),
-            const SizedBox(width: 6),
+            const SizedBox(width: AppSpacing.xs),
             Text(
               '01',
               style: GoogleFonts.jetBrainsMono(
-                color: const Color(0xFF00d4ff),
+                color: FigmaColors.brandCyan,
                 fontSize: 9,
                 fontWeight: FontWeight.w700,
               ),
             ),
           ],
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: AppSpacing.md),
         Text(
           'Escolha a paleta de cores do app',
           style: GoogleFonts.jetBrainsMono(
-            color: Colors.white.withValues(alpha: 0.4),
+            color: FigmaColors.textMuted,
             fontSize: 11,
             fontWeight: FontWeight.w500,
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: AppSpacing.md),
         const _ThemeCardsGrid(),
       ],
     );
@@ -424,13 +382,13 @@ class _ThemeCardsGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Wrap(
-      spacing: 8,
-      runSpacing: 8,
+      spacing: AppSpacing.sm,
+      runSpacing: AppSpacing.sm,
       children: const [
-        _ThemeCard(skin: RunninSkin.sangue, label: 'Sangue'),
-        _ThemeCard(skin: RunninSkin.magenta, label: 'Magenta'),
-        _ThemeCard(skin: RunninSkin.volt, label: 'Volt'),
-        _ThemeCard(skin: RunninSkin.artico, label: 'Ártico'),
+        _ThemeCard(skin: RunninSkin.sangue, label: 'SANGUE'),
+        _ThemeCard(skin: RunninSkin.magenta, label: 'MAGENTA'),
+        _ThemeCard(skin: RunninSkin.volt, label: 'VOLT'),
+        _ThemeCard(skin: RunninSkin.artico, label: 'ÁRTICO'),
       ],
     );
   }
@@ -458,13 +416,13 @@ class _ThemeCard extends StatelessWidget {
         height: 103,
         decoration: BoxDecoration(
           color: isActive
-              ? const Color(0xFF00d4ff).withValues(alpha: 0.06)
-              : Colors.white.withValues(alpha: 0.03),
+              ? FigmaColors.skinActiveBg
+              : FigmaColors.surfaceCard,
           border: Border.all(
             color: isActive
-                ? const Color(0xFF00d4ff)
-                : Colors.white.withValues(alpha: 0.08),
-            width: 1.735,
+                ? FigmaColors.brandCyan
+                : FigmaColors.borderDefault,
+            width: AppDimensions.borderUniversal,
           ),
         ),
         child: Stack(
@@ -483,7 +441,7 @@ class _ThemeCard extends StatelessWidget {
                         height: 16,
                         decoration: BoxDecoration(
                           color: palette.primary,
-                          borderRadius: BorderRadius.zero,
+                          borderRadius: FigmaBorderRadius.zero,
                         ),
                       ),
                       const SizedBox(width: 6),
@@ -492,7 +450,7 @@ class _ThemeCard extends StatelessWidget {
                         height: 16,
                         decoration: BoxDecoration(
                           color: palette.secondary,
-                          borderRadius: BorderRadius.zero,
+                          borderRadius: FigmaBorderRadius.zero,
                         ),
                       ),
                     ],
@@ -505,8 +463,8 @@ class _ThemeCard extends StatelessWidget {
                         label,
                         style: GoogleFonts.jetBrainsMono(
                           color: isActive
-                              ? Colors.white
-                              : Colors.white.withValues(alpha: 0.6),
+                              ? FigmaColors.textPrimary
+                              : FigmaColors.textSecondary,
                           fontSize: 13,
                           fontWeight: FontWeight.w700,
                         ),
@@ -514,7 +472,7 @@ class _ThemeCard extends StatelessWidget {
                       const SizedBox(height: 8),
                       // Progress bar
                       ClipRRect(
-                        borderRadius: BorderRadius.zero,
+                        borderRadius: FigmaBorderRadius.zero,
                         child: Row(
                           children: [
                             Expanded(
@@ -551,10 +509,10 @@ class _ThemeCard extends StatelessWidget {
                 child: Text(
                   'ATIVA',
                   style: GoogleFonts.jetBrainsMono(
-                    color: const Color(0xFF00d4ff),
+                    color: FigmaColors.brandCyan,
                     fontSize: 8,
                     fontWeight: FontWeight.w900,
-                    letterSpacing: 1.0,
+                    letterSpacing: AppDimensions.borderUniversal,
                   ),
                 ),
               ),
@@ -590,30 +548,30 @@ class _MenuSection extends StatelessWidget {
             Text(
               'MENU',
               style: GoogleFonts.jetBrainsMono(
-                color: Colors.white,
+                color: FigmaColors.textPrimary,
                 fontSize: 16,
                 fontWeight: FontWeight.w700,
               ),
             ),
-            const SizedBox(width: 6),
+            const SizedBox(width: AppSpacing.xs),
             Text(
               '02',
               style: GoogleFonts.jetBrainsMono(
-                color: const Color(0xFF00d4ff),
+                color: FigmaColors.brandCyan,
                 fontSize: 9,
                 fontWeight: FontWeight.w700,
               ),
             ),
           ],
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: AppSpacing.md),
         _MenuItem(
           icon: Icons.emoji_events_outlined,
           title: 'GAMIFICAÇÃO',
           subtitle: 'Badges, XP, Streak',
           onTap: () => context.push('/gamification'),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: AppSpacing.sm),
         _MenuItem(
           icon: Icons.favorite_outline,
           title: 'SAÚDE',
@@ -623,7 +581,7 @@ class _MenuSection extends StatelessWidget {
             'Saúde (BPM, Zonas, Wearable, Exames)',
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: AppSpacing.sm),
         _MenuItem(
           icon: Icons.settings_outlined,
           title: 'AJUSTES',
@@ -633,7 +591,7 @@ class _MenuSection extends StatelessWidget {
             'Ajustes (Coach, Alertas, Unidades)',
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: AppSpacing.sm),
         _MenuItem(
           icon: Icons.star_outline,
           title: 'ASSINATURA',
@@ -665,20 +623,20 @@ class _MenuItem extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.03),
+          color: FigmaColors.surfaceCard,
           border: Border.all(
-            color: Colors.white.withValues(alpha: 0.08),
-            width: 1.735,
+            color: FigmaColors.borderDefault,
+            width: AppDimensions.borderUniversal,
           ),
         ),
         child: Row(
           children: [
             Icon(
               icon,
-              color: Colors.white.withValues(alpha: 0.6),
+              color: FigmaColors.textSecondary,
               size: 20,
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: AppSpacing.sm),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -686,17 +644,17 @@ class _MenuItem extends StatelessWidget {
                   Text(
                     title,
                     style: GoogleFonts.jetBrainsMono(
-                      color: Colors.white,
+                      color: FigmaColors.textPrimary,
                       fontSize: 11,
                       fontWeight: FontWeight.w700,
-                      letterSpacing: 0.8,
+                      letterSpacing: AppDimensions.borderUniversal - 0.7,
                     ),
                   ),
                   const SizedBox(height: 3),
                   Text(
                     subtitle,
                     style: GoogleFonts.jetBrainsMono(
-                      color: Colors.white.withValues(alpha: 0.4),
+                      color: FigmaColors.textMuted,
                       fontSize: 10,
                       fontWeight: FontWeight.w500,
                     ),
@@ -707,7 +665,7 @@ class _MenuItem extends StatelessWidget {
             Text(
               '↗',
               style: GoogleFonts.jetBrainsMono(
-                color: Colors.white.withValues(alpha: 0.3),
+                color: FigmaColors.textDim,
                 fontSize: 16,
               ),
             ),
@@ -730,14 +688,14 @@ class _BottomActions extends StatelessWidget {
           height: 47,
           width: double.infinity,
           child: Material(
-            color: Colors.white.withValues(alpha: 0.03),
+            color: FigmaColors.surfaceCard,
             child: InkWell(
               onTap: () => context.push('/profile/edit'),
               child: Container(
                 decoration: BoxDecoration(
                   border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.08),
-                    width: 1.735,
+                    color: FigmaColors.borderDefault,
+                    width: AppDimensions.borderUniversal,
                   ),
                 ),
                 child: Row(
@@ -746,15 +704,15 @@ class _BottomActions extends StatelessWidget {
                     Icon(
                       Icons.edit_outlined,
                       size: 16,
-                      color: Colors.white.withValues(alpha: 0.6),
+                      color: FigmaColors.textSecondary,
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: AppSpacing.sm),
                     Text(
                       'Editar perfil ↗',
                       style: GoogleFonts.jetBrainsMono(
                         fontSize: 13,
                         fontWeight: FontWeight.w500,
-                        color: Colors.white.withValues(alpha: 0.6),
+                        color: FigmaColors.textSecondary,
                       ),
                     ),
                   ],
@@ -763,7 +721,7 @@ class _BottomActions extends StatelessWidget {
             ),
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: AppSpacing.sm),
         // Logout button
         SizedBox(
           height: 43,
@@ -778,7 +736,7 @@ class _BottomActions extends StatelessWidget {
                 style: GoogleFonts.jetBrainsMono(
                   fontSize: 13,
                   fontWeight: FontWeight.w500,
-                  color: Colors.white.withValues(alpha: 0.2),
+                  color: FigmaColors.textGhost,
                 ),
               ),
             ),
