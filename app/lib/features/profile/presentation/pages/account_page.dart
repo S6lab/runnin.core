@@ -592,20 +592,14 @@ class _MenuSection extends StatelessWidget {
           icon: Icons.favorite_outline,
           title: 'SAÚDE',
           subtitle: 'BPM, Zonas, Wearable',
-          onTap: () => _showComingSoon(
-            context,
-            'Saúde (BPM, Zonas, Wearable, Exames)',
-          ),
+          onTap: () => context.push('/profile/health'),
         ),
         const SizedBox(height: AppSpacing.sm),
         _MenuItem(
           icon: Icons.settings_outlined,
           title: 'AJUSTES',
           subtitle: 'Coach, Alertas, Unidades',
-          onTap: () => _showComingSoon(
-            context,
-            'Ajustes (Coach, Alertas, Unidades)',
-          ),
+          onTap: () => context.push('/profile/settings'),
         ),
         const SizedBox(height: AppSpacing.sm),
         _MenuItem(

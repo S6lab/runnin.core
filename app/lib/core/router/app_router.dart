@@ -18,6 +18,7 @@ import 'package:runnin/features/coach/presentation/pages/coach_chat_page.dart';
 import 'package:runnin/features/history/presentation/pages/history_page.dart';
 import 'package:runnin/features/profile/presentation/pages/account_page.dart';
 import 'package:runnin/features/profile/presentation/pages/account_access_page.dart';
+import 'package:runnin/features/profile/presentation/pages/health_exams_page.dart';
 import 'package:runnin/features/profile/presentation/pages/profile_page.dart';
 import 'package:runnin/features/dashboard/presentation/pages/dashboard_page.dart';
 import 'package:runnin/features/gamification/presentation/pages/gamification_page.dart';
@@ -148,11 +149,21 @@ final appRouter = GoRouter(
           builder: (_, _) => const AccountAccessPage(),
         ),
         GoRoute(
+          path: '/profile/settings',
+          builder: (_, _) => const SettingsIndexPage(),
+        ),
+        GoRoute(
+          path: '/profile/settings/coach',
+          builder: (_, _) => const CoachSettingsPage(),
+        ),
+        GoRoute(
           path: '/profile/edit',
           builder: (_, _) => const ProfilePage(initialEditing: true),
         ),
         GoRoute(path: '/dashboard', builder: (_, _) => const DashboardPage()),
         GoRoute(path: '/gamification', builder: (_, _) => const GamificationPage()),
+        GoRoute(path: '/profile/health', builder: (_, _) => const HealthIndexPage()),
+        GoRoute(path: '/profile/health/trends', builder: (_, _) => const HealthTrendsPage()),
       ],
     ),
   ],
