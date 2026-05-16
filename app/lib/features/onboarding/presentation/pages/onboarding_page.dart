@@ -132,14 +132,12 @@ class _OnboardingPageState extends State<OnboardingPage> {
   ];
 
   static const _goals = [
-    'Saúde e bem-estar',
+    'Saude e bem-estar',
     'Perder peso',
     'Completar 5K',
     'Completar 10K',
     'Meia maratona (21K)',
     'Maratona (42K)',
-    'Ultramaratona',
-    'Triathlon',
   ];
 
   static const _paceOptions = [
@@ -1217,23 +1215,36 @@ class _StepGoal extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _StepCode('ASSESSMENT_06'),
+          _StepCode('ASSESSMENT_05'),
           const SizedBox(height: 12),
           Text('Qual sua meta principal?', style: context.runninType.displayMd),
           const SizedBox(height: 10),
           Text(
-            'O Coach monta periodização, volume e progressão com base no seu objetivo.',
+            'A periodizacao nasce do objetivo certo.',
             style: TextStyle(color: palette.muted, height: 1.5),
           ),
           const SizedBox(height: 24),
-          ...goals.map((goal) => Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: FigmaSelectionButton(
-              label: goal,
-              selected: selectedGoal == goal,
+          ...goals.map((goal) {
+            final isSelected = selectedGoal == goal;
+            return GestureDetector(
               onTap: () => onGoalSelect(goal),
-            ),
-          )),
+              child: AppPanel(
+                margin: const EdgeInsets.only(bottom: 8),
+                color: isSelected
+                    ? palette.primary.withValues(alpha: 0.08)
+                    : null,
+                borderColor: isSelected ? palette.primary : palette.border,
+                child: Text(
+                  goal,
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                    color: isSelected ? palette.primary : palette.text,
+                  ),
+                ),
+              ),
+            );
+          }),
         ],
       ),
     );
