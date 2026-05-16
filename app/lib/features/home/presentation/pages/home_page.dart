@@ -126,6 +126,10 @@ class _HomeViewState extends State<_HomeView> {
                      //12 stat icons, and coach.ai brief. Real map asset from Figma pending.
                      _HeroSection(data: state.data),
                     const SizedBox(height: 20),
+                    if (!(state.data.profile?.premium ?? false)) ...[
+                      _PremiumUpsellBanner(),
+                      const SizedBox(height: 20),
+                    ],
                     // NOTE: _UserInfoCards (peso/altura/idade/freq) and
                     // _SkinSection used to live here as a dashboard-style
                     // layout. They are PERFIL-owned sections and were
@@ -213,6 +217,15 @@ class _HomeHeader extends StatelessWidget {
         ),
         Row(
           children: [
+            InkWell(
+              onTap: () => context.push('/coach-live'),
+              child: Icon(
+                Icons.headphones_outlined,
+                size: 22,
+                color: palette.primary,
+              ),
+            ),
+            const SizedBox(width: 14),
             InkWell(
               onTap: () => context.push('/dashboard'),
               child: Icon(
@@ -3082,6 +3095,54 @@ class _HeroStatIcon extends StatelessWidget {
       icons[index % icons.length],
       size: 18,
       color: palette.text.withValues(alpha: 0.5),
+    );
+  }
+}
+
+class _PremiumUpsellBanner extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    return GestureDetector(
+      onTap: () => context.push('/paywall?next=/home'),
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
+        decoration: BoxDecoration(
+          color: FigmaColors.brandCyan.withValues(alpha: 0.08),
+          border: Border.all(color: FigmaColors.brandCyan, width: 1.735),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.bolt_outlined, color: FigmaColors.brandCyan, size: 22),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'COACH AI PREMIUM',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 11, fontWeight: FontWeight.w800,
+                      color: FigmaColors.brandCyan, letterSpacing: 1.0,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Plano personalizado, coach ao vivo e integração com wearable. R\$ 19,90/mês.',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 11, fontWeight: FontWeight.w400,
+                      color: palette.text.withValues(alpha: 0.75),
+                      height: 1.5,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(Icons.arrow_forward, color: palette.text.withValues(alpha: 0.5), size: 18),
+          ],
+        ),
+      ),
     );
   }
 }
