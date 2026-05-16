@@ -22,9 +22,24 @@ export function errorMiddleware(err: unknown, req: Request, res: Response, _next
   }
 
   const asError = err instanceof Error ? err : undefined;
+
+  // Gemini API rate limit (429): tratar como 503 amigável ao app
+  const msg = asError?.message ?? String(err);
+  if (msg.includes('429') || msg.toLowerCase().includes('quota') || msg.toLowerCase().includes('rate limit')) {
+    logger.warn('llm.rate_limited', { requestId: req.id, errorMessage: msg.slice(0, 200) });
+    res.status(503).json({
+      error: {
+        code: 'LLM_RATE_LIMITED',
+        message: 'O coach está sobrecarregado. Tente novamente em alguns segundos.',
+        retryAfterSeconds: 60,
+      },
+    });
+    return;
+  }
+
   logger.error('Unhandled error', {
     requestId: req.id,
-    errorMessage: asError?.message ?? String(err),
+    errorMessage: msg,
     errorName: asError?.name,
     stack: asError?.stack,
     err,
