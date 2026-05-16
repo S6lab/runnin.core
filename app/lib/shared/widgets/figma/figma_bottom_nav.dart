@@ -45,6 +45,7 @@ class FigmaBottomNav extends StatelessWidget {
                 }
 
                 final isActive = currentIndex == index;
+                final color = isActive ? palette.primary : palette.muted;
                 return Expanded(
                   child: InkWell(
                     onTap: () => onTap(index),
@@ -54,20 +55,23 @@ class FigmaBottomNav extends StatelessWidget {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(
-                            item.icon,
-                            size: 18,
-            color: isActive ? palette.primary : palette.muted,
+                          Icon(item.icon, size: 20, color: color),
+                          const SizedBox(height: 4),
+                          Text(
+                            item.label,
+                            style: TextStyle(
+                              color: color,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w500,
+                              letterSpacing: 0.5,
+                            ),
                           ),
                           if (isActive) ...[
-                            const SizedBox(height: 2),
+                            const SizedBox(height: 3),
                             Container(
                               height: 1.979,
                               width: 19.98,
-                              decoration: BoxDecoration(
-                                color: palette.primary,
-                                borderRadius: BorderRadius.zero,
-                              ),
+                              color: palette.primary,
                             ),
                           ],
                         ],
