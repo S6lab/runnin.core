@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:runnin/core/router/app_router.dart';
+import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/shared/widgets/coach_ai_breadcrumb.dart';
 import 'package:runnin/shared/widgets/plan_task_row.dart';
 
@@ -97,7 +98,24 @@ class _PlanLoadingPageState extends State<PlanLoadingPage> {
                   detail: _taskEntries[i].$2,
                 ),
               const Spacer(),
-              const SizedBox(width: 329.55, height: 4),
+              SizedBox(
+                width: 329.55,
+                height: 4,
+                child: Stack(
+                  children: [
+                    const SizedBox.expand(
+                      child: ColoredBox(color: FigmaColors.borderDefault),
+                    ),
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 400),
+                      curve: Curves.easeOut,
+                      width: 329.55 * (_completedCount / _taskEntries.length),
+                      height: 4,
+                      color: FigmaColors.brandCyan,
+                    ),
+                  ],
+                ),
+              ),
               const SizedBox(height: 3.284),
             ],
           ),

@@ -19,25 +19,37 @@ class SplashPage extends StatefulWidget {
   State<SplashPage> createState() => _SplashPageState();
 }
 
-class _SplashPageState extends State<SplashPage> {
+class _SplashPageState extends State<SplashPage>
+    with SingleTickerProviderStateMixin {
   Timer? _advanceTimer;
+  late final AnimationController _fadeController;
+  late final Animation<double> _fadeAnimation;
 
   @override
   void initState() {
     super.initState();
+    _fadeController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 200),
+    );
+    _fadeAnimation =
+        Tween<double>(begin: 1.0, end: 0.0).animate(_fadeController);
     _advanceTimer = Timer(widget.duration, _advance);
   }
 
   @override
   void dispose() {
     _advanceTimer?.cancel();
+    _fadeController.dispose();
     super.dispose();
   }
 
   void _advance() {
     if (!mounted) return;
-    // Router redirect logic decides whether to land on /onboarding, /home, etc.
-    context.go('/onboarding');
+    _fadeController.forward().then((_) {
+      if (!mounted) return;
+      context.go('/onboarding');
+    });
   }
 
   @override
@@ -48,13 +60,16 @@ class _SplashPageState extends State<SplashPage> {
         _advanceTimer?.cancel();
         _advance();
       },
-      child: const Scaffold(
+      child: Scaffold(
         backgroundColor: FigmaColors.bgBase,
-        body: Center(
-          child: SizedBox(
-            width: 201.59,
-            height: 109.95,
-            child: _SplashLockup(),
+        body: FadeTransition(
+          opacity: _fadeAnimation,
+          child: const Center(
+            child: SizedBox(
+              width: 201.59,
+              height: 109.95,
+              child: _SplashLockup(),
+            ),
           ),
         ),
       ),

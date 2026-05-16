@@ -477,7 +477,13 @@ class _OnboardingPageState extends State<OnboardingPage> {
                   children: [
                     _buildHeader(context),
                     const SizedBox(height: 24),
-                    Expanded(child: _buildStep(context)),
+                    Expanded(
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.translucent,
+                        onHorizontalDragEnd: _handleSwipe,
+                        child: _buildStep(context),
+                      ),
+                    ),
                     const SizedBox(height: 18),
                     _buildNav(context),
                     const SizedBox(height: 12),
@@ -772,6 +778,19 @@ class _OnboardingPageState extends State<OnboardingPage> {
           ? _loginStep
           : _firstAssessmentStep;
     });
+  }
+
+  void _handleSwipe(DragEndDetails details) {
+    if (_authLoading || _submitting) return;
+    final velocity = details.primaryVelocity ?? 0;
+    if (velocity > 300 && _step > 0) {
+      setState(() => _step--);
+    } else if (velocity < -300 &&
+        _step != _loginStep &&
+        _step < _totalSteps - 1 &&
+        _canProceed()) {
+      _nextStep();
+    }
   }
 
   void _nextStep() => setState(() => _step++);
