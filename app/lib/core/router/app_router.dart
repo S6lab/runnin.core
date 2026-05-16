@@ -226,7 +226,7 @@ final appRouter = GoRouter(
         GoRoute(path: '/profile/health', builder: (_, _) => const HealthIndexPage()),
         GoRoute(
           path: '/profile/health/devices',
-          builder: (_, _) => const DevicesPage(),
+          builder: (_, _) => const HealthDevicesPage(),
         ),
         GoRoute(
           path: '/profile/health/trends',

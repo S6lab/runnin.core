@@ -54,6 +54,19 @@ export interface CoachRuntimeContext {
     recommendations: string[];
     uploadedAt?: string;
   }>;
+  runningKnowledgeContext?: {
+    name: 'recent_exams';
+    description: string;
+    chunks: Array<{
+      relevanceScore?: number;
+      text: string;
+      metadata: {
+        examId?: string;
+        examType?: string;
+        uploadedAt?: string;
+      };
+    }>;
+  };
 }
 
 export class CoachRuntimeContextService {

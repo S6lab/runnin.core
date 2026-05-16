@@ -43,8 +43,13 @@ class RunCoachRemoteDatasource {
       options: Options(
         responseType: ResponseType.stream,
         headers: {'Accept': 'text/event-stream'},
+        validateStatus: (status) => status != null && (status < 400 || status == 204),
       ),
     );
+
+    // Decision layer no server pode skipar a mensagem (frequency=silent, DND, etc).
+    // Server retorna 204 No Content — apenas encerra o stream sem yield.
+    if (res.statusCode == 204) return;
 
     final body = res.data;
     if (body is! ResponseBody) {

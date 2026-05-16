@@ -1376,14 +1376,23 @@ class _CoachPromptPanelState extends State<_CoachPromptPanel> {
             ],
           ),
           const SizedBox(height: 12),
-          TextField(
-            controller: widget.promptCtrl,
-            enabled: widget.canEdit && !widget.loading,
-            minLines: 5,
-            maxLines: 7,
-            decoration: const InputDecoration(
-              labelText: 'Prompt do coach em tempo real',
-              alignLabelWithHint: true,
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: palette.surfaceAlt,
+              border: Border.all(color: palette.border),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.info_outline, size: 16),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'O prompt do coach ao vivo agora é editado em Prompts & Personas → live-coach. Este painel mantém apenas as configurações de TTS.',
+                    style: TextStyle(fontSize: 12, color: palette.muted),
+                  ),
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 12),

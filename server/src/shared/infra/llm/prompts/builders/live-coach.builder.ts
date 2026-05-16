@@ -39,10 +39,12 @@ export async function buildLiveCoachPrompt(args: LiveCoachBuildInput): Promise<B
     rag: args.ragContext,
   };
 
+  // Prioridade: novo store (firestore prompts) > default em código > legacy livePrompt (fallback final)
   let systemPrompt = renderTemplate(config.systemPrompt, values);
   let resolvedSource = source;
 
-  if (args.legacyLivePrompt && args.legacyLivePrompt.trim().length > 0) {
+  if (source === 'default' && args.legacyLivePrompt && args.legacyLivePrompt.trim().length > 0) {
+    // Só usa legacy quando admin ainda não setou nada no novo store
     systemPrompt = `${args.legacyLivePrompt}\n\nTOM (persona):\n${tone}`;
     resolvedSource = 'firestore';
   }

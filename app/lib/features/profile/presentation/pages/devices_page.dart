@@ -5,14 +5,14 @@ import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 import 'package:runnin/shared/widgets/figma/figma_device_card.dart';
 import 'package:runnin/shared/widgets/figma/figma_top_nav.dart';
 
-class DevicesPage extends StatefulWidget {
-  const DevicesPage({super.key});
+class HealthDevicesPage extends StatefulWidget {
+  const HealthDevicesPage({super.key});
 
   @override
-  State<DevicesPage> createState() => _DevicesPageState();
+  State<HealthDevicesPage> createState() => _HealthDevicesPageState();
 }
 
-class _DevicesPageState extends State<DevicesPage> {
+class _HealthDevicesPageState extends State<HealthDevicesPage> {
   final _remote = UserRemoteDatasource();
   UserProfile? _profile;
   bool _loading = true;
@@ -58,7 +58,7 @@ class _DevicesPageState extends State<DevicesPage> {
                   else if (_profile?.hasWearable == true)
                     _ConnectedDevice(userProfile: _profile!)
                   else
-                    _CompatibleDevices(),
+                    const _CompatibleDevices(),
                   const SizedBox(height: 24),
                 ],
               ),
@@ -151,28 +151,28 @@ class _CompatibleDevices extends StatelessWidget {
       children: [
         _SectionHeader(label: 'COMPATÍVEIS'),
         const SizedBox(height: 12),
-        _CompatibleDeviceItem(
+        FigmaCompatibleDeviceCard(
           icon: Icons.watch_later_outlined,
           deviceName: 'Apple Watch',
           dataLabel: 'BPM · Sono · Passos',
           onConnect: () => _showComingSoon(context),
         ),
         const SizedBox(height: 12),
-        _CompatibleDeviceItem(
+        FigmaCompatibleDeviceCard(
           icon: Icons.track_changes_outlined,
-          deviceName: 'Samsung Galaxy Watch',
+          deviceName: 'Garmin Forerunner',
           dataLabel: 'BPM · Sono · Passos',
           onConnect: () => _showComingSoon(context),
         ),
         const SizedBox(height: 12),
-        _CompatibleDeviceItem(
+        FigmaCompatibleDeviceCard(
           icon: Icons.health_and_safety_outlined,
           deviceName: 'Fitbit Sense',
           dataLabel: 'BPM · Sono · ECG',
           onConnect: () => _showComingSoon(context),
         ),
         const SizedBox(height: 12),
-        _CompatibleDeviceItem(
+        FigmaCompatibleDeviceCard(
           icon: Icons.fitness_center_outlined,
           deviceName: 'Polar H10',
           dataLabel: 'BPM · ECG · Sono',
@@ -194,76 +194,6 @@ class _CompatibleDevices extends StatelessWidget {
             child: const Text('OK'),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _CompatibleDeviceItem extends StatelessWidget {
-  final IconData icon;
-  final String deviceName;
-  final String dataLabel;
-  final VoidCallback onConnect;
-
-  const _CompatibleDeviceItem({
-    required this.icon,
-    required this.deviceName,
-    required this.dataLabel,
-    required this.onConnect,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onConnect,
-      behavior: HitTestBehavior.opaque,
-      child: Container(
-        padding: const EdgeInsets.all(13.718),
-        decoration: BoxDecoration(
-          color: FigmaColors.surfaceCard,
-          border: Border.all(color: FigmaColors.borderDefault, width: 1.735),
-          borderRadius: FigmaBorderRadius.zero,
-        ),
-        child: Row(
-          children: [
-            Icon(icon, size: 22, color: FigmaColors.textSecondary),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    deviceName,
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: 13,
-                      height: 19.5 / 13,
-                      fontWeight: FontWeight.w700,
-                      color: FigmaColors.textPrimary,
-                    ),
-                  ),
-                  Text(
-                    dataLabel,
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w400,
-                      color: FigmaColors.textMuted,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Text(
-              'Conectar  ↗',
-              style: GoogleFonts.jetBrainsMono(
-                fontSize: 11,
-                letterSpacing: 0.55,
-                fontWeight: FontWeight.w500,
-                color: FigmaColors.brandCyan,
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

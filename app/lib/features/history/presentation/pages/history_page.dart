@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:runnin/core/theme/app_palette.dart';
+import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/features/history/presentation/widgets/hist_stat_card.dart';
 import 'package:runnin/features/run/data/datasources/run_remote_datasource.dart';
 import 'package:runnin/features/run/domain/entities/run.dart';
@@ -225,34 +226,66 @@ class _DataView extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
       children: [
-        // Totais
         Row(children: [
-          Expanded(child: MetricCard(label: 'CORRIDAS', value: '${stats.count}')),
+          Expanded(child: FigmaHistStatCard(
+            label: 'CORRIDAS',
+            value: '${stats.count}',
+            valueColor: FigmaColors.brandCyan,
+          )),
           const SizedBox(width: 8),
-          Expanded(child: MetricCard(
+          Expanded(child: FigmaHistStatCard(
             label: 'VOLUME',
             value: stats.totalKm.toStringAsFixed(1),
             unit: 'km',
           )),
           const SizedBox(width: 8),
-          Expanded(child: MetricCard(label: 'TEMPO', value: stats.totalTimeLabel)),
+          Expanded(child: FigmaHistStatCard(
+            label: 'TEMPO',
+            value: stats.totalTimeLabel,
+          )),
         ]),
         const SizedBox(height: 8),
         Row(children: [
-          Expanded(child: MetricCard(
+          Expanded(child: FigmaHistStatCard(
             label: 'PACE MÉD.',
             value: stats.avgPaceLabel,
             unit: '/km',
           )),
           const SizedBox(width: 8),
-          Expanded(child: MetricCard(
+          Expanded(child: FigmaHistStatCard(
             label: 'STREAK',
             value: '${stats.streakDays}',
             unit: 'd',
+            valueColor: stats.streakDays > 2
+                ? FigmaColors.brandOrange
+                : FigmaColors.textPrimary,
           )),
           const SizedBox(width: 8),
-          Expanded(child: MetricCard(label: 'XP', value: '${stats.totalXp}')),
+          Expanded(child: FigmaHistStatCard(
+            label: 'XP',
+            value: '${stats.totalXp}',
+            valueColor: FigmaColors.brandCyan,
+          )),
         ]),
+        const SizedBox(height: 8),
+        Row(children: [
+          Expanded(child: FigmaHistStatCard(
+            label: 'BPM MÉD.',
+            value: stats.avgBpm?.toString() ?? '--',
+            unit: 'BPM',
+          )),
+        ]),
+        const SizedBox(height: 16),
+
+        // Seção Zonas Cardíacas
+        if (stats.zoneDistribution.isNotEmpty)
+          ChartPanel(
+            title: 'ZONAS CARDÍACAS',
+            subtitle: 'Distribuição de tempo nas zonas',
+            child: FigmaZoneDistributionBar(
+              zonePercentages: stats.zoneDistribution,
+            ),
+          ),
         const SizedBox(height: 16),
 
         // Volume semanal
@@ -267,10 +300,48 @@ class _DataView extends StatelessWidget {
           ),
         const SizedBox(height: 16),
 
-        // Análise do Coach
-        CoachNarrativeCard(
-          text: _buildCoachNarrative(stats),
-          borderColor: context.runninPalette.secondary,
+        // Evolução Resumo
+        Row(children: [
+          Expanded(child: FigmaStatTileWithDelta(
+            label: 'PACE',
+            value: stats.avgPaceLabel,
+            delta: '+5s',
+            deltaIsPositive: false,
+          )),
+          const SizedBox(width: 8),
+          Expanded(child: FigmaStatTileWithDelta(
+            label: 'VOLUME',
+            value: stats.totalKm.toStringAsFixed(1),
+            unit: 'km',
+            delta: '+2.5km',
+            deltaIsPositive: true,
+          )),
+        ]),
+        const SizedBox(height: 8),
+        Row(children: [
+          Expanded(child: FigmaStatTileWithDelta(
+            label: 'BPM',
+            value: stats.avgBpm?.toString() ?? '--',
+            unit: 'BPM',
+            delta: '-2',
+            deltaIsPositive: true,
+          )),
+          const SizedBox(width: 8),
+          Expanded(child: FigmaStatTileWithDelta(
+            label: 'CORRIDAS',
+            value: '${stats.count}',
+            delta: '+1',
+            deltaIsPositive: true,
+          )),
+        ]),
+        const SizedBox(height: 16),
+
+        // Coach.AI Análise
+        FigmaCoachAIBlock(
+          child: Text(
+            _buildCoachNarrative(stats),
+            style: context.runninType.bodyMd.copyWith(height: 1.6),
+          ),
         ),
       ],
     );
@@ -282,6 +353,7 @@ class _DataView extends StatelessWidget {
     final totalDistM = runs.fold<double>(0.0, (s, r) => s + r.distanceM);
     final totalS = runs.fold<int>(0, (s, r) => s + r.durationS);
     final totalXp = runs.fold<int>(0, (s, r) => s + (r.xpEarned ?? 0));
+    final runningCount = runs.where((r) => r.status == 'completed').length;
 
     // Pace médio em segundos/km
     int? avgPaceSec;
@@ -301,7 +373,38 @@ class _DataView extends StatelessWidget {
         ? '--:--'
         : '${avgPaceSec ~/ 60}:${(avgPaceSec % 60).toString().padLeft(2, '0')}';
 
-    // Volume por semana
+    // BPM médio
+    int? avgBpm;
+    final runsWithAvg = runs.where((r) => r.avgPace != null).toList();
+    if (runsWithAvg.isNotEmpty) {
+      final totalBpm = runsWithAvg.fold<int>(0, (s, r) => s + (r.avgBpm ?? 0));
+      avgBpm = totalBpm ~/ runsWithAvg.length;
+    }
+
+    // Zonas cardíacas (simulado se não tiver dados)
+    final runsWithBpm = runs.where((r) => r.avgBpm != null && r.avgBpm! > 0).toList();
+    List<double> zoneDistribution = [];
+    if (runsWithBpm.isNotEmpty) {
+      int z1 = 0, z2 = 0, z3 = 0, z4 = 0, z5 = 0;
+      for (final r in runsWithBpm) {
+        final bpm = r.avgBpm!;
+        if (bpm < 100) z1++;
+        else if (bpm < 120) z2++;
+        else if (bpm < 145) z3++;
+        else if (bpm < 170) z4++;
+        else z5++;
+      }
+      final total = runsWithBpm.length;
+      zoneDistribution = [
+        (z1 / total) * 100,
+        (z2 / total) * 100,
+        (z3 / total) * 100,
+        (z4 / total) * 100,
+        (z5 / total) * 100,
+      ];
+    }
+
+    // Volume por semana (últimas 4 semanas)
     final Map<String, double> weekMap = {};
     for (final r in runs) {
       final d = DateTime.tryParse(r.createdAt);
@@ -337,11 +440,14 @@ class _DataView extends StatelessWidget {
 
     return _HistoryStats(
       count: runs.length,
+      runningCount: runningCount,
       totalKm: totalDistM / 1000,
       totalTimeLabel: totalTimeLabel,
       avgPaceLabel: avgPaceLabel,
       streakDays: streak,
       totalXp: totalXp,
+      avgBpm: avgBpm,
+      zoneDistribution: zoneDistribution,
       weeklyVolume: weeklyVolume,
     );
   }
@@ -353,30 +459,46 @@ class _DataView extends StatelessWidget {
         '${s.streakDays > 2 ? "Excelente consistência de ${s.streakDays} dias! " : ""}'
         'Continue mantendo a progressão de volume semanal para evoluir no ciclo.';
   }
+
+  String _computeEficiencia(double totalKm, int totalS, int runningCount) {
+    if (runningCount == 0 || totalS == 0) return '--';
+    final hours = totalS / 3600;
+    final kmh = totalKm / hours;
+    return '${kmh.toStringAsFixed(1)}';
+  }
 }
 
 class _HistoryStats {
   final int count;
+  final int runningCount;
   final double totalKm;
+  final int totalS;
   final String totalTimeLabel;
   final String avgPaceLabel;
   final int streakDays;
   final int totalXp;
+  final int? avgBpm;
+  final List<double> zoneDistribution;
   final List<_WeeklyEntry> weeklyVolume;
 
   const _HistoryStats({
     required this.count,
+    this.runningCount = 0,
     required this.totalKm,
+    required this.totalS,
     required this.totalTimeLabel,
     required this.avgPaceLabel,
     required this.streakDays,
     required this.totalXp,
+    this.avgBpm,
+    this.zoneDistribution = const [],
     required this.weeklyVolume,
   });
 
   factory _HistoryStats.empty() => const _HistoryStats(
-    count: 0, totalKm: 0, totalTimeLabel: '0m',
-    avgPaceLabel: '--:--', streakDays: 0, totalXp: 0, weeklyVolume: [],
+    count: 0, runningCount: 0, totalKm: 0, totalS: 0, totalTimeLabel: '0m',
+    avgPaceLabel: '--:--', streakDays: 0, totalXp: 0,
+    avgBpm: null, zoneDistribution: [], weeklyVolume: [],
   );
 }
 
@@ -397,79 +519,14 @@ class _RunsListView extends StatelessWidget {
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
       itemCount: runs.length,
-      itemBuilder: (_, i) => _RunCard(run: runs[i]),
-    );
-  }
-}
-
-class _RunCard extends StatelessWidget {
-  final Run run;
-  const _RunCard({required this.run});
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.runninPalette;
-    final type = context.runninType;
-    final km = (run.distanceM / 1000).toStringAsFixed(2);
-    final date = _fmtDate(run.createdAt);
-    final duration = _fmtDuration(run.durationS);
-
-    return GestureDetector(
-      onTap: () => context.push('/history/run/${run.id}'),
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 8),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: palette.surface,
-          border: Border.all(color: palette.border),
-        ),
-        child: Row(
-          children: [
-            // Data
-            SizedBox(
-              width: 36,
-              child: Text(
-                date.replaceAll(' ', '\n'),
-                textAlign: TextAlign.center,
-                style: type.labelCaps.copyWith(height: 1.3),
-              ),
-            ),
-            const SizedBox(width: 12),
-            // Tipo
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              color: palette.primary.withValues(alpha: 0.15),
-              child: Text(
-                run.type.toUpperCase(),
-                style: type.labelCaps.copyWith(color: palette.primary),
-              ),
-            ),
-            const SizedBox(width: 12),
-            // Métricas
-            Expanded(
-              child: Row(
-                children: [
-                  _Stat(value: km, unit: 'km'),
-                  const SizedBox(width: 16),
-                  _Stat(value: duration, unit: ''),
-                  if (run.avgPace != null) ...[
-                    const SizedBox(width: 16),
-                    _Stat(value: run.avgPace!, unit: '/km'),
-                  ],
-                ],
-              ),
-            ),
-            if (run.xpEarned != null && run.xpEarned! > 0) ...[
-              const SizedBox(width: 8),
-              Text(
-                '+${run.xpEarned}xp',
-                style: type.labelCaps.copyWith(color: palette.primary),
-              ),
-            ],
-            const SizedBox(width: 8),
-            Icon(Icons.chevron_right, size: 16, color: palette.muted),
-          ],
-        ),
+      itemBuilder: (_, i) => FigmaRunCard(
+        typeLabel: runs[i].type.toUpperCase(),
+        dateLabel: _fmtDate(runs[i].createdAt),
+        distanceKm: runs[i].distanceM / 1000,
+        pace: runs[i].avgPace ?? '--:--',
+        duration: _fmtDuration(runs[i].durationS),
+        coachPreview: runs[i].type,
+        onTap: () => context.push('/report', extra: runs[i].id),
       ),
     );
   }
@@ -486,26 +543,5 @@ class _RunCard extends StatelessWidget {
     final m = s ~/ 60;
     final sec = s % 60;
     return '${m.toString().padLeft(2, '0')}:${sec.toString().padLeft(2, '0')}';
-  }
-}
-
-class _Stat extends StatelessWidget {
-  final String value;
-  final String unit;
-  const _Stat({required this.value, required this.unit});
-
-  @override
-  Widget build(BuildContext context) {
-    final type = context.runninType;
-    return RichText(
-      text: TextSpan(
-        text: value,
-        style: type.dataSm,
-        children: [
-          if (unit.isNotEmpty)
-            TextSpan(text: unit, style: type.bodySm),
-        ],
-      ),
-    );
   }
 }
