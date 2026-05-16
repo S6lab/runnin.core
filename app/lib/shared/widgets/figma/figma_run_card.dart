@@ -36,7 +36,7 @@ class FigmaRunCard extends StatelessWidget {
         padding: const EdgeInsets.all(13.718),
         decoration: BoxDecoration(
           color: FigmaColors.surfaceCard,
-          border: Border.all(color: FigmaColors.borderDefault, width: 1.735),
+          border: Border.all(color: FigmaColors.borderDefault, width: 1.041),
           borderRadius: FigmaBorderRadius.zero,
         ),
         child: Column(
@@ -50,7 +50,7 @@ class FigmaRunCard extends StatelessWidget {
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
                     color: typeAccent.withValues(alpha: 0.14),
-                    border: Border.all(color: typeAccent, width: 1.735),
+                    border: Border.all(color: typeAccent, width: 1.041),
                   ),
                   child: Text(
                     typeLabel.substring(0, 1),

@@ -34,7 +34,7 @@ class FigmaBadgeUnlockModal extends StatelessWidget {
         padding: const EdgeInsets.all(28),
         decoration: BoxDecoration(
           color: FigmaColors.bgBase,
-          border: Border.all(color: FigmaColors.brandCyan, width: 1.735),
+          border: Border.all(color: FigmaColors.brandCyan, width: 1.041),
           borderRadius: FigmaBorderRadius.zero,
         ),
         child: Column(

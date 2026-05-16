@@ -170,7 +170,7 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
       decoration: BoxDecoration(
-        border: Border.all(color: FigmaColors.borderDefault, width: 1.735),
+        border: Border.all(color: FigmaColors.borderDefault, width: 1.041),
       ),
       child: TabBar(
         controller: _tabController,
@@ -263,7 +263,7 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
                 color: active ? FigmaColors.brandCyan : Colors.transparent,
                 border: Border.all(
                   color: active ? FigmaColors.brandCyan : FigmaColors.borderDefault,
-                  width: 1.735,
+                  width: 1.041,
                 ),
               ),
               child: Text(
@@ -353,7 +353,7 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
                     color: active ? FigmaColors.brandCyan : Colors.transparent,
                     border: Border.all(
                       color: active ? FigmaColors.brandCyan : FigmaColors.borderDefault,
-                      width: 1.735,
+                      width: 1.041,
                     ),
                   ),
                   child: Text(
@@ -563,7 +563,7 @@ class _ShareTarget extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
         margin: const EdgeInsets.only(bottom: 8),
         decoration: BoxDecoration(
-          border: Border.all(color: FigmaColors.borderDefault, width: 1.735),
+          border: Border.all(color: FigmaColors.borderDefault, width: 1.041),
         ),
         child: Row(
           children: [

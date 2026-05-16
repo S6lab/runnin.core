@@ -205,7 +205,7 @@ class _LevelCard extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: palette.surface,
-        border: Border.all(color: palette.border, width: 1.735),
+        border: Border.all(color: palette.border, width: 1.041),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -250,7 +250,7 @@ class _PlanProgressCard extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: palette.surface,
-        border: Border.all(color: palette.border, width: 1.735),
+        border: Border.all(color: palette.border, width: 1.041),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -291,7 +291,7 @@ class _WeeklyChart extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(12, 16, 12, 12),
       decoration: BoxDecoration(
         color: palette.surface,
-        border: Border.all(color: palette.border, width: 1.735),
+        border: Border.all(color: palette.border, width: 1.041),
       ),
       child: Column(
         children: [

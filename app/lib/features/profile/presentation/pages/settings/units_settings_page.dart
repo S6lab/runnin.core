@@ -257,7 +257,7 @@ class _UnitsSettingsPageState extends State<UnitsSettingsPage> {
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
                   color: FigmaColors.brandCyan,
-                  border: Border.all(color: FigmaColors.brandCyan, width: 1.735),
+                  border: Border.all(color: FigmaColors.brandCyan, width: 1.041),
                 ),
                 child: _saving
                     ? const SizedBox(

@@ -49,7 +49,7 @@ class FigmaCoachChatBubble extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(17.73, 17.73, 17.73, 12),
             decoration: BoxDecoration(
               color: bg,
-              border: Border.all(color: borderColor, width: 1.735),
+              border: Border.all(color: borderColor, width: 1.041),
               borderRadius: FigmaBorderRadius.zero,
             ),
             child: Column(

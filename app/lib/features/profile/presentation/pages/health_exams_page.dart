@@ -217,7 +217,7 @@ class _EmptyState extends StatelessWidget {
         color: FigmaColors.surfaceCard,
         border: Border.all(
           color: FigmaColors.borderDefault,
-          width: 1.735,
+          width: 1.041,
         ),
       ),
       child: Column(

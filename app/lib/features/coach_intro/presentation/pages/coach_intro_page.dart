@@ -334,7 +334,7 @@ class _BulletCard extends StatelessWidget {
       decoration: const BoxDecoration(
         color: FigmaColors.surfaceCard,
         border: Border.fromBorderSide(
-          BorderSide(color: FigmaColors.borderDefault, width: 1.735),
+          BorderSide(color: FigmaColors.borderDefault, width: 1.041),
         ),
         borderRadius: FigmaBorderRadius.zero,
       ),

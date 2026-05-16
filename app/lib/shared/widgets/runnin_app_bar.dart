@@ -40,7 +40,7 @@ class RunninAppBar extends StatelessWidget implements PreferredSizeWidget {
       decoration: BoxDecoration(
         color: palette.background,
         border: Border(
-          bottom: BorderSide(color: palette.border, width: 1.735),
+          bottom: BorderSide(color: palette.border, width: 1.041),
         ),
       ),
       padding: EdgeInsets.fromLTRB(

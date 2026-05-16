@@ -28,7 +28,7 @@ class FigmaZoneCard extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 13.718, vertical: 10),
       decoration: BoxDecoration(
         color: FigmaColors.surfaceCard,
-        border: Border.all(color: FigmaColors.borderDefault, width: 1.735),
+        border: Border.all(color: FigmaColors.borderDefault, width: 1.041),
         borderRadius: FigmaBorderRadius.zero,
       ),
       child: Row(

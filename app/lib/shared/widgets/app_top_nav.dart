@@ -18,7 +18,7 @@ class AppTopNav extends StatelessWidget {
         border: Border(
           bottom: BorderSide(
             color: Color(0xFFFFFFFF),
-            width: 1.735,
+            width: 1.041,
           ),
         ),
       ),

@@ -141,7 +141,7 @@ class _PaywallPageState extends State<PaywallPage> {
                     OutlinedButton(
                       onPressed: _saving ? null : _continueFree,
                       style: OutlinedButton.styleFrom(
-                        side: BorderSide(color: palette.border, width: 1.735),
+                        side: BorderSide(color: palette.border, width: 1.041),
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
                         minimumSize: const Size(double.infinity, 0),
@@ -178,7 +178,7 @@ class _PricingCard extends StatelessWidget {
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: palette.surface,
-        border: Border.all(color: FigmaColors.brandCyan, width: 1.735),
+        border: Border.all(color: FigmaColors.brandCyan, width: 1.041),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

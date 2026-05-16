@@ -34,7 +34,7 @@ class FigmaBadgeCard extends StatelessWidget {
         padding: const EdgeInsets.all(13.718),
         decoration: BoxDecoration(
           color: bg,
-          border: Border.all(color: border, width: 1.735),
+          border: Border.all(color: border, width: 1.041),
           borderRadius: FigmaBorderRadius.zero,
         ),
         child: Column(

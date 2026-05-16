@@ -66,7 +66,7 @@ class _FigmaFormTextFieldState extends State<FigmaFormTextField> {
         color: FigmaColors.surfaceInput,
         border: Border.all(
           color: _hasFocus ? FigmaColors.borderCyanActive : FigmaColors.borderInput,
-          width: 1.735,
+          width: 1.041,
         ),
       ),
       child: TextField(

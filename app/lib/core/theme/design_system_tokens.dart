@@ -19,7 +19,7 @@ abstract final class AppDimensions {
   static const double borderRadius = 0;
   static const double borderRadiusPill = 999; // toggle pill only
 
-  // Figma universal border width: 1.735px on all cards/rows/inputs
+  // Figma universal border width: 1.041px on all cards/rows/inputs
   static const double borderUniversal = 1.735;
 
   static const double shadowBlur = 10;

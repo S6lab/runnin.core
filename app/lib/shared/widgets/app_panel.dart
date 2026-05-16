@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:runnin/core/theme/app_palette.dart';
+import 'package:runnin/core/theme/design_system_tokens.dart';
 
 class AppPanel extends StatelessWidget {
   final Widget child;
@@ -19,14 +19,17 @@ class AppPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final palette = context.runninPalette;
-
     return Container(
       margin: margin,
       padding: padding,
       decoration: BoxDecoration(
-        color: color ?? palette.surface,
-        border: Border.all(color: borderColor ?? palette.border, width: 1.735),
+        // Padrão: tom escuro levemente opaco (mesmo de _StatusCorporal).
+        // Callers podem overridar com `color:` pra mudar (errors, warnings, etc).
+        color: color ?? FigmaColors.surfaceCard,
+        border: Border.all(
+          color: borderColor ?? FigmaColors.borderDefault,
+          width: 1.041,
+        ),
       ),
       child: child,
     );

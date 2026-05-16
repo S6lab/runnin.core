@@ -41,7 +41,7 @@ class FigmaWizardChoiceCard extends StatelessWidget {
             color: selected
                 ? FigmaColors.selectionActiveBorder
                 : FigmaColors.borderDefault,
-            width: 1.735,
+            width: 1.041,
           ),
           borderRadius: FigmaBorderRadius.zero,
         ),
@@ -117,7 +117,7 @@ class FigmaQuickReplyButton extends StatelessWidget {
               : Colors.transparent,
           border: Border.all(
             color: FigmaColors.brandOrange.withValues(alpha: selected ? 0.7 : 0.35),
-            width: 1.735,
+            width: 1.041,
           ),
         ),
         child: Text(

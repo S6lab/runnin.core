@@ -126,7 +126,7 @@ class _RunFAB extends StatelessWidget {
             'RUN',
             style: TextStyle(
               color: palette.background,
-              fontSize: 14,
+              fontSize: 18,
               fontWeight: FontWeight.w700,
               fontStyle: FontStyle.italic,
             ),

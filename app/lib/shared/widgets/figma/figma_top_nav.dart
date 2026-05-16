@@ -27,7 +27,7 @@ class FigmaTopNav extends StatelessWidget {
         border: Border(
           bottom: BorderSide(
             color: palette.border,
-            width: 1.735,
+            width: 1.041,
           ),
         ),
       ),

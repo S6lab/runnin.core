@@ -676,6 +676,40 @@ class _ProfilePageState extends State<ProfilePage> {
                               );
                             },
                           ),
+                          const SizedBox(height: 24),
+                          const _FieldLabel(label: 'TAMANHO DA FONTE'),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Ajuste a leitura do app (afeta todas as telas)',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: palette.muted,
+                              height: 1.5,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          AnimatedBuilder(
+                            animation: themeController,
+                            builder: (context, _) => Row(
+                              children: AppTextScale.values.map((scale) {
+                                final isActive =
+                                    themeController.textScale == scale;
+                                return Expanded(
+                                  child: Padding(
+                                    padding: EdgeInsets.only(
+                                      right: scale == AppTextScale.large ? 0 : 8,
+                                    ),
+                                    child: _TextScaleChip(
+                                      scale: scale,
+                                      isActive: isActive,
+                                      onTap: () => themeController
+                                          .setTextScale(scale),
+                                    ),
+                                  ),
+                                );
+                              }).toList(),
+                            ),
+                          ),
                           const SizedBox(height: 32),
                           const _FieldLabel(label: 'CONTA'),
                           const SizedBox(height: 8),
@@ -1168,7 +1202,7 @@ class _SkinCard extends StatelessWidget {
           color: palette.surface,
           border: Border.all(
             color: isActive ? palette.primary : palette.border,
-            width: 1.735,
+            width: 1.041,
           ),
         ),
         child: Column(
@@ -1420,7 +1454,7 @@ class _RedoOnboardingRow extends StatelessWidget {
         style: OutlinedButton.styleFrom(
           side: BorderSide(
             color: canRedo ? palette.primary : palette.border,
-            width: 1.735,
+            width: 1.041,
           ),
           foregroundColor: canRedo ? palette.primary : palette.muted,
         ),
@@ -1448,7 +1482,7 @@ class _AnonPromoBanner extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
         decoration: BoxDecoration(
           color: FigmaColors.brandCyan.withValues(alpha: 0.08),
-          border: Border.all(color: FigmaColors.brandCyan, width: 1.735),
+          border: Border.all(color: FigmaColors.brandCyan, width: 1.041),
         ),
         child: Row(
           children: [
@@ -1479,6 +1513,53 @@ class _AnonPromoBanner extends StatelessWidget {
             ),
             Icon(Icons.arrow_forward, color: palette.text.withValues(alpha: 0.5), size: 18),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TextScaleChip extends StatelessWidget {
+  final AppTextScale scale;
+  final bool isActive;
+  final VoidCallback onTap;
+
+  const _TextScaleChip({
+    required this.scale,
+    required this.isActive,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    final fontSize = scale == AppTextScale.small
+        ? 12.0
+        : scale == AppTextScale.normal
+            ? 14.0
+            : 17.0;
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        height: 48,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: isActive
+              ? palette.primary.withValues(alpha: 0.12)
+              : palette.surface,
+          border: Border.all(
+            color: isActive ? palette.primary : palette.border,
+            width: 1.041,
+          ),
+        ),
+        child: Text(
+          scale.label,
+          style: TextStyle(
+            color: isActive ? palette.primary : palette.text,
+            fontSize: fontSize,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.5,
+          ),
         ),
       ),
     );

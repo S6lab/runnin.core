@@ -144,7 +144,7 @@ class _CalendarGrid extends StatelessWidget {
                         : palette.surface,
                     border: Border.all(
                       color: isToday ? palette.primary : palette.border,
-                      width: 1.735,
+                      width: 1.041,
                     ),
                   ),
                   alignment: Alignment.center,

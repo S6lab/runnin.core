@@ -59,6 +59,16 @@ class RunrunApp extends StatelessWidget {
         theme: AppTheme.build(themeController.palette),
         debugShowCheckedModeBanner: false,
         routerConfig: appRouter,
+        builder: (context, child) {
+          // Aplica o textScale global (3 níveis: A−/A/A+) escolhido no perfil.
+          final mq = MediaQuery.of(context);
+          return MediaQuery(
+            data: mq.copyWith(
+              textScaler: TextScaler.linear(themeController.textScaleFactor),
+            ),
+            child: child ?? const SizedBox.shrink(),
+          );
+        },
       ),
     );
   }

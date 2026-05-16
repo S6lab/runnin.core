@@ -54,7 +54,7 @@ class FigmaCoachOptionButton extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 11.98),
         decoration: BoxDecoration(
           color: colors.bg,
-          border: Border.all(color: colors.border, width: 1.735),
+          border: Border.all(color: colors.border, width: 1.041),
           borderRadius: FigmaBorderRadius.zero,
         ),
         child: Text(

@@ -104,7 +104,7 @@ class MetricCard extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: effectiveBg,
-        border: Border.all(color: effectiveBorder, width: 1.735),
+        border: Border.all(color: effectiveBorder, width: 1.041),
         borderRadius: FigmaBorderRadius.zero,
       ),
       child: Column(

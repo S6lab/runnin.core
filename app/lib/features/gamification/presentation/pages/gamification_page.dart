@@ -258,7 +258,7 @@ class _XpTab extends StatelessWidget {
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             color: palette.surface,
-            border: Border.all(color: palette.border, width: 1.735),
+            border: Border.all(color: palette.border, width: 1.041),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -750,7 +750,7 @@ class _CalendarGrid extends StatelessWidget {
                         : palette.surface,
                     border: Border.all(
                       color: isToday ? palette.primary : palette.border,
-                      width: 1.735,
+                      width: 1.041,
                     ),
                   ),
                   alignment: Alignment.center,

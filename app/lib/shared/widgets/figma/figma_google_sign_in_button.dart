@@ -17,7 +17,7 @@ class FigmaGoogleSignInButton extends StatelessWidget {
         decoration: BoxDecoration(
           color: const Color(0x0CFFFFFF),
           border: Border.all(
-            width: 1.735,
+            width: 1.041,
             color: FigmaColors.borderInput,
           ),
         ),

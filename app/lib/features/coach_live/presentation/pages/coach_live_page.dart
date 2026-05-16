@@ -262,8 +262,8 @@ class _MsgBubble extends StatelessWidget {
               decoration: BoxDecoration(
                 color: isUser ? palette.primary.withValues(alpha: 0.12) : palette.surfaceAlt,
                 border: Border(
-                  left: isUser ? BorderSide.none : BorderSide(color: palette.primary, width: 1.735),
-                  right: isUser ? BorderSide(color: palette.primary, width: 1.735) : BorderSide.none,
+                  left: isUser ? BorderSide.none : BorderSide(color: palette.primary, width: 1.041),
+                  right: isUser ? BorderSide(color: palette.primary, width: 1.041) : BorderSide.none,
                 ),
               ),
               child: Text(

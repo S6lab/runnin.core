@@ -355,7 +355,7 @@ class _CalendarVisualization extends StatelessWidget {
                     color: hasRevision
                         ? palette.primary.withValues(alpha: 0.5)
                         : palette.border,
-                    width: 1.735,
+                    width: 1.041,
                   ),
                 ),
                 child: Column(

@@ -203,7 +203,7 @@ class _IntroSlideView extends StatelessWidget {
             height: 64,
             decoration: BoxDecoration(
               color: FigmaColors.brandCyan.withValues(alpha: 0.1),
-              border: Border.all(color: FigmaColors.brandCyan, width: 1.735),
+              border: Border.all(color: FigmaColors.brandCyan, width: 1.041),
             ),
             child: Icon(slide.icon, color: FigmaColors.brandCyan, size: 32),
           ),

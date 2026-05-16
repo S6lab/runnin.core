@@ -225,7 +225,7 @@ class _WeeklyReportDetailPageState extends State<WeeklyReportDetailPage> {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: FigmaColors.surfaceCardOrange,
-        border: Border.all(color: FigmaColors.borderOrange, width: 1.735),
+        border: Border.all(color: FigmaColors.borderOrange, width: 1.041),
         borderRadius: BorderRadius.circular(4),
       ),
       child: Column(
@@ -357,7 +357,7 @@ class _WeeklyReportDetailPageState extends State<WeeklyReportDetailPage> {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: FigmaColors.surfaceCardOrange,
-        border: Border.all(color: FigmaColors.borderOrange, width: 1.735),
+        border: Border.all(color: FigmaColors.borderOrange, width: 1.041),
         borderRadius: BorderRadius.circular(4),
       ),
       child: Column(
@@ -415,7 +415,7 @@ class _WeeklyReportDetailPageState extends State<WeeklyReportDetailPage> {
           width: double.infinity,
           height: 48,
           decoration: BoxDecoration(
-            border: Border.all(color: palette.border, width: 1.735),
+            border: Border.all(color: palette.border, width: 1.041),
             borderRadius: BorderRadius.circular(4),
           ),
           child: Center(
@@ -462,7 +462,7 @@ class _StatTile extends StatelessWidget {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: palette.surface,
-        border: Border.all(color: palette.border, width: 1.735),
+        border: Border.all(color: palette.border, width: 1.041),
         borderRadius: BorderRadius.circular(4),
       ),
       child: Row(

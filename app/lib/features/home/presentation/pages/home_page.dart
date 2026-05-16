@@ -301,7 +301,7 @@ class _CyberStatusBar extends StatelessWidget {
         border: Border(
           bottom: BorderSide(
             color: palette.text.withValues(alpha: 0.06),
-            width: 1.735,
+            width: 1.041,
           ),
         ),
       ),
@@ -515,7 +515,7 @@ class _CoachMessageCard extends StatelessWidget {
            decoration: BoxDecoration(
              color: palette.secondary.withValues(alpha: 0.02),
              border: Border(
-               left: BorderSide(color: palette.secondary, width: 1.735),
+               left: BorderSide(color: palette.secondary, width: 1.041),
              ),
            ),
           child: Column(
@@ -860,7 +860,7 @@ class _NotificationsHubState extends State<_NotificationsHub> {
         Container(
           decoration: BoxDecoration(
             color: palette.surface,
-            border: Border.all(color: palette.border, width: 1.735),
+            border: Border.all(color: palette.border, width: 1.041),
           ),
           child: Column(
             children: [
@@ -1023,8 +1023,8 @@ class _NotifItemRow extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
         decoration: BoxDecoration(
-          color: palette.surfaceAlt,
-          border: Border(left: BorderSide(color: accent, width: 1.735)),
+          color: FigmaColors.surfaceCard,
+          border: Border.all(color: FigmaColors.borderDefault, width: 1.041),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1157,8 +1157,8 @@ class _HydrationLoggerState extends State<_HydrationLogger> {
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
       decoration: BoxDecoration(
-        color: palette.surfaceAlt,
-        border: Border(left: BorderSide(color: widget.accent, width: 1.735)),
+        color: FigmaColors.surfaceCard,
+        border: Border.all(color: FigmaColors.borderDefault, width: 1.041),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1538,16 +1538,12 @@ class _SemanaSection extends StatelessWidget {
         const SizedBox(height: 20),
         _MiniProgressBar(value: volumePct, color: palette.primary),
         if (data.plannedSessions == 0) ...[
-          const SizedBox(height: 20),
-          AppPanel(
-            padding: const EdgeInsets.all(17.7),
-            color: palette.surfaceAlt,
-            child: Text(
-              data.plan == null
-                  ? 'Nenhum plano ativo ainda. A semana fica pronta assim que voce gerar o primeiro plano.'
-                  : 'O plano existe, mas esta semana nao tem sessoes distribuidas. Revise o plano em Treino.',
-              style: TextStyle(color: palette.muted, height: 1.5),
-            ),
+          const SizedBox(height: 16),
+          Text(
+            data.plan == null
+                ? 'Nenhum plano ativo ainda. A semana fica pronta assim que voce gerar o primeiro plano.'
+                : 'O plano existe, mas esta semana nao tem sessoes distribuidas. Revise o plano em Treino.',
+            style: TextStyle(color: palette.muted, height: 1.5, fontSize: 12),
           ),
         ],
       ],
@@ -1609,26 +1605,23 @@ class _CoachAiWeeklySummary extends StatelessWidget {
           label: '> RESUMO SEMANAL · SEM 2',
           dotColor: FigmaColors.brandOrange,
         ),
-        const SizedBox(height: 20),
-        AppPanel(
-          color: palette.surfaceAlt,
-          borderColor: palette.secondary.withValues(alpha: 0.45),
-          child: Container(
-            padding: const EdgeInsets.only(left: 12),
-            decoration: BoxDecoration(
-              border: Border(
-                left: BorderSide(color: palette.secondary, width: 1.735),
-              ),
+        const SizedBox(height: 16),
+        Container(
+          padding: const EdgeInsets.only(left: 12),
+          decoration: BoxDecoration(
+            border: Border(
+              left: BorderSide(color: palette.secondary, width: 1.041),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '> RESUMO SEMANAL',
-                  style: context.runninType.labelCaps.copyWith(
-                    color: palette.secondary,
-                  ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '> RESUMO SEMANAL',
+                style: context.runninType.labelCaps.copyWith(
+                  color: palette.secondary,
                 ),
+              ),
                 const SizedBox(height: 20),
                 _CoachSummaryBlock(
                   title: 'PROGRESSO',
@@ -1672,7 +1665,6 @@ class _CoachAiWeeklySummary extends StatelessWidget {
               ],
             ),
           ),
-        ),
       ],
     );
   }
@@ -2655,7 +2647,7 @@ class _RunCard extends StatelessWidget {
               height: 38,
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                border: Border.all(color: FigmaColors.brandCyan, width: 1.735),
+                border: Border.all(color: FigmaColors.brandCyan, width: 1.041),
               ),
               child: Text(
                 'COMPARTILHAR',
@@ -3156,7 +3148,7 @@ class _PremiumUpsellBanner extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
         decoration: BoxDecoration(
           color: FigmaColors.brandCyan.withValues(alpha: 0.08),
-          border: Border.all(color: FigmaColors.brandCyan, width: 1.735),
+          border: Border.all(color: FigmaColors.brandCyan, width: 1.041),
         ),
         child: Row(
           children: [

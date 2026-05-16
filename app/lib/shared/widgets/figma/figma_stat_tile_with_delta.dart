@@ -41,10 +41,10 @@ class FigmaStatTileWithDelta extends StatelessWidget {
       decoration: BoxDecoration(
         color: FigmaColors.surfaceCard,
         border: Border(
-          left: BorderSide(color: deltaColor, width: 1.735),
-          top: BorderSide(color: FigmaColors.borderDefault, width: 1.735),
-          right: BorderSide(color: FigmaColors.borderDefault, width: 1.735),
-          bottom: BorderSide(color: FigmaColors.borderDefault, width: 1.735),
+          left: BorderSide(color: deltaColor, width: 1.041),
+          top: BorderSide(color: FigmaColors.borderDefault, width: 1.041),
+          right: BorderSide(color: FigmaColors.borderDefault, width: 1.041),
+          bottom: BorderSide(color: FigmaColors.borderDefault, width: 1.041),
         ),
         borderRadius: FigmaBorderRadius.zero,
       ),

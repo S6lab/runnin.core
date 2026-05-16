@@ -505,7 +505,7 @@ class _AccountAccessPageState extends State<AccountAccessPage> {
                             icon: const Icon(Icons.account_circle_outlined, size: 18),
                             label: Text(isAnonymous ? 'VINCULAR CONTA GOOGLE' : 'ENTRAR COM GOOGLE'),
                             style: OutlinedButton.styleFrom(
-                              side: BorderSide(color: palette.border, width: 1.735),
+                              side: BorderSide(color: palette.border, width: 1.041),
                               shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
                             ),
                           ),

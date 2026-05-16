@@ -5,15 +5,29 @@ import 'app_palette.dart';
 
 const _settingsBoxName = 'runnin_settings';
 const _skinPreferenceKey = 'selected_skin';
+const _textScalePreferenceKey = 'text_scale';
+
+enum AppTextScale {
+  small(0.9, 'A−'),
+  normal(1.0, 'A'),
+  large(1.15, 'A+');
+
+  final double factor;
+  final String label;
+  const AppTextScale(this.factor, this.label);
+}
 
 final themeController = ThemeController();
 
 class ThemeController extends ChangeNotifier {
   RunninSkin _skin = RunninSkin.cyber;
+  AppTextScale _textScale = AppTextScale.normal;
   Box<dynamic>? _box;
 
   RunninSkin get skin => _skin;
   RunninPalette get palette => _skin.palette;
+  AppTextScale get textScale => _textScale;
+  double get textScaleFactor => _textScale.factor;
 
   Future<void> load() async {
     _box = await Hive.openBox<dynamic>(_settingsBoxName);
@@ -22,6 +36,11 @@ class ThemeController extends ChangeNotifier {
       (candidate) => candidate.palette.id == savedId,
       orElse: () => RunninSkin.cyber,
     );
+    final savedScale = _box?.get(_textScalePreferenceKey) as String?;
+    _textScale = AppTextScale.values.firstWhere(
+      (c) => c.name == savedScale,
+      orElse: () => AppTextScale.normal,
+    );
     notifyListeners();
   }
 
@@ -29,6 +48,13 @@ class ThemeController extends ChangeNotifier {
     if (_skin == skin) return;
     _skin = skin;
     await _box?.put(_skinPreferenceKey, skin.palette.id);
+    notifyListeners();
+  }
+
+  Future<void> setTextScale(AppTextScale scale) async {
+    if (_textScale == scale) return;
+    _textScale = scale;
+    await _box?.put(_textScalePreferenceKey, scale.name);
     notifyListeners();
   }
 }

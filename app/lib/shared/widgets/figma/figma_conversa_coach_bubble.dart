@@ -38,7 +38,7 @@ class FigmaConversaCoachBubble extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
           color: color.withValues(alpha: 0.06),
-          border: Border.all(color: color.withValues(alpha: 0.6), width: 1.735),
+          border: Border.all(color: color.withValues(alpha: 0.6), width: 1.041),
           borderRadius: FigmaBorderRadius.zero,
         ),
         child: Column(

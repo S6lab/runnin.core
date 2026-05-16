@@ -51,7 +51,7 @@ class NotificationCard extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(17.74, 12, 16, 12),
         decoration: BoxDecoration(
           color: FigmaColors.surfaceCard, // rgba(255,255,255,0.03)
-          border: Border.all(color: borderColor, width: 1.735),
+          border: Border.all(color: borderColor, width: 1.041),
           borderRadius: FigmaBorderRadius.zero,
         ),
         child: Row(

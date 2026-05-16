@@ -241,7 +241,7 @@ class _LoginPageState extends State<LoginPage> {
                     onPressed: _loading ? null : _signInAnonymously,
                     style: OutlinedButton.styleFrom(
                       minimumSize: const Size(double.infinity, 52),
-                      side: BorderSide(color: palette.border, width: 1.735),
+                      side: BorderSide(color: palette.border, width: 1.041),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
                     ),
                     child: const Text('CONTINUAR ANONIMAMENTE'),

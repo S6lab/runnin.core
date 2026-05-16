@@ -33,7 +33,7 @@ class BadgeCard extends StatelessWidget {
           color: isUnlocked
               ? palette.primary.withValues(alpha: 0.4)
               : palette.border,
-          width: 1.735,
+          width: 1.041,
         ),
       ),
       child: Column(

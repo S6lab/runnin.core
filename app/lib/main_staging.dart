@@ -61,6 +61,15 @@ class RunrunApp extends StatelessWidget {
         theme: AppTheme.build(themeController.palette),
         debugShowCheckedModeBanner: false,
         routerConfig: appRouter,
+        builder: (context, child) {
+          final mq = MediaQuery.of(context);
+          return MediaQuery(
+            data: mq.copyWith(
+              textScaler: TextScaler.linear(themeController.textScaleFactor),
+            ),
+            child: child ?? const SizedBox.shrink(),
+          );
+        },
       ),
     );
   }

@@ -26,7 +26,7 @@ class FigmaDeviceConnectedCard extends StatelessWidget {
       padding: const EdgeInsets.all(13.718),
       decoration: BoxDecoration(
         color: FigmaColors.surfaceCardCyan,
-        border: Border.all(color: FigmaColors.brandCyan, width: 1.735),
+        border: Border.all(color: FigmaColors.brandCyan, width: 1.041),
         borderRadius: FigmaBorderRadius.zero,
       ),
       child: Column(
@@ -140,7 +140,7 @@ class FigmaCompatibleDeviceCard extends StatelessWidget {
         padding: const EdgeInsets.all(13.718),
         decoration: BoxDecoration(
           color: FigmaColors.surfaceCard,
-          border: Border.all(color: FigmaColors.borderDefault, width: 1.735),
+          border: Border.all(color: FigmaColors.borderDefault, width: 1.041),
           borderRadius: FigmaBorderRadius.zero,
         ),
         child: Row(

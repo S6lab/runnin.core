@@ -16,7 +16,7 @@ class FigmaBenchmarkTable extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: FigmaColors.surfaceCard,
-        border: Border.all(color: FigmaColors.borderDefault, width: 1.735),
+        border: Border.all(color: FigmaColors.borderDefault, width: 1.041),
       ),
       child: Column(
         children: benchmarkData.map((row) => RowItem(row: row)).toList(),
