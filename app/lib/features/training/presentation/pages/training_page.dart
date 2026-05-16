@@ -27,7 +27,7 @@ enum _PlanMode { weekly, monthly }
 
 const _settingsBoxName = 'runnin_settings';
 const _pendingPlanIdKey = 'pending_training_plan_id';
-const _planPollInterval = Duration(seconds: 15);
+const _planPollInterval = Duration(seconds: 3);
 
 class TrainingPage extends StatefulWidget {
   const TrainingPage({super.key});

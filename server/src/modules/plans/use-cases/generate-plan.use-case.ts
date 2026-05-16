@@ -88,14 +88,28 @@ export class GeneratePlanUseCase {
       ragContext: knowledgeContext,
     });
 
+    const startedAt = Date.now();
     try {
+      const llmStart = Date.now();
       const raw = await this.llm.generate(built.userPrompt, {
         systemPrompt: built.systemPrompt,
         maxTokens: built.maxTokens,
         temperature: built.temperature,
       });
+      const llmMs = Date.now() - llmStart;
+      const parseStart = Date.now();
       const weeks = await this._parseWeeks(raw, input.weeksCount);
-      logger.info('plan.generate.completed', { planId: plan.id, version: built.version, source: built.source });
+      const parseMs = Date.now() - parseStart;
+      const totalMs = Date.now() - startedAt;
+      logger.info('plan.generate.completed', {
+        planId: plan.id,
+        version: built.version,
+        source: built.source,
+        llmMs,
+        parseMs,
+        totalMs,
+        weeksCount: input.weeksCount,
+      });
       await this.repo.update(plan.id, plan.userId, {
         status: 'ready',
         weeks,

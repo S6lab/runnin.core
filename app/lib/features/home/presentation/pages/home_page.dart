@@ -126,8 +126,6 @@ class _HomeViewState extends State<_HomeView> {
                      //12 stat icons, and coach.ai brief. Real map asset from Figma pending.
                      _HeroSection(data: state.data),
                     const SizedBox(height: 20),
-                    _CyberStatusBar(data: state.data),
-                    const SizedBox(height: 20),
                     // NOTE: _UserInfoCards (peso/altura/idade/freq) and
                     // _SkinSection used to live here as a dashboard-style
                     // layout. They are PERFIL-owned sections and were
@@ -2337,6 +2335,8 @@ class _HeroSection extends StatelessWidget {
         ? 'Nenhuma sessao planejada para hoje'
         : '${session.type.toUpperCase()} • ${session.targetPace ?? 'livre'}';
 
+    final hasPhoto = user?.photoURL != null;
+
     return Container(
       height: 490,
       width: double.infinity,
@@ -2349,6 +2349,17 @@ class _HeroSection extends StatelessWidget {
             palette.background,
           ],
         ),
+        image: hasPhoto
+            ? DecorationImage(
+                image: NetworkImage(user!.photoURL!),
+                fit: BoxFit.cover,
+                opacity: 0.35,
+                colorFilter: ColorFilter.mode(
+                  palette.background.withValues(alpha: 0.55),
+                  BlendMode.darken,
+                ),
+              )
+            : null,
         borderRadius: FigmaBorderRadius.zero,
       ),
       child: Column(

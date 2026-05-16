@@ -44,6 +44,6 @@ export const PLAN_INIT_DEFAULTS = {
   ].join('\n'),
 
   temperature: 0.7,
-  maxTokens: 6000,
-  ragChunks: 5,
+  maxTokens: 4500,
+  ragChunks: 3,
 };
