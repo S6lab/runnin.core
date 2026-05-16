@@ -8,6 +8,7 @@ import 'package:runnin/core/audio/coach_audio_player.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/features/run/domain/entities/run.dart' show GpsPoint;
 import 'package:runnin/features/run/presentation/bloc/run_bloc.dart';
+import 'package:runnin/shared/widgets/figma/export.dart' show FigmaBadgeUnlockModal;
 
 class ActiveRunPage extends StatelessWidget {
   final String runId;
@@ -18,13 +19,65 @@ class ActiveRunPage extends StatelessWidget {
     return BlocListener<RunBloc, RunState>(
       listenWhen: (_, curr) => curr.status == RunStatus.completed,
       listener: (context, state) {
-        context.pushReplacement(
-          '/report',
-          extra: state.completedRun?.id ?? runId,
-        );
+        if (state.completedRun?.newBadges != null &&
+            state.completedRun!.newBadges!.isNotEmpty) {
+          _showBadgeUnlockModal(context, state.completedRun!.newBadges!, runId);
+        } else {
+          context.pushReplacement(
+            '/report',
+            extra: state.completedRun?.id ?? runId,
+          );
+        }
       },
       child: const _ActiveRunView(),
     );
+  }
+
+  static void _showBadgeUnlockModal(
+    BuildContext context,
+    List<String> newBadges,
+    String originalRunId,
+  ) {
+    if (newBadges.isEmpty) return;
+    
+    final badge = newBadges.first;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => FigmaBadgeUnlockModal(
+        badgeIcon: Icons.celebration,
+        badgeTitle: _getBadgeTitle(badge),
+        xpGained: 100,
+        message: 'Parabéns! Você desbloqueou um novo badge.',
+        onDismiss: () {
+          Navigator.of(ctx).pop();
+          final remainingBadges = List<String>.from(newBadges)..removeAt(0);
+          if (remainingBadges.isEmpty) {
+            context.pushReplacement(
+              '/report',
+              extra: originalRunId,
+            );
+          } else {
+            _showBadgeUnlockModal(context, remainingBadges, originalRunId);
+          }
+        },
+      ),
+    );
+  }
+
+  static String _getBadgeTitle(String badgeId) {
+    switch (badgeId) {
+      case 'first_run':
+        return 'Primeira Corrida';
+      case '距離10':
+        return '10km Club';
+      case 'streak_7':
+        return 'Corredor de 7 Dias';
+      case 'distance_50':
+        return '50km Master';
+      default:
+        return badgeId.toUpperCase().replaceAll('_', ' ');
+    }
   }
 }
 
@@ -37,6 +90,7 @@ class _ActiveRunView extends StatefulWidget {
 
 class _ActiveRunViewState extends State<_ActiveRunView> {
   bool _coachMuted = false;
+  bool _coachAudioPlaying = false;
 
   @override
   Widget build(BuildContext context) {
@@ -45,9 +99,8 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
     return Scaffold(
       backgroundColor: palette.background,
       body: BlocListener<RunBloc, RunState>(
-        listenWhen: (prev, curr) =>
-            prev.coachAudioBase64 != curr.coachAudioBase64 &&
-            (curr.coachAudioBase64?.isNotEmpty ?? false),
+        listenWhen: (_, curr) =>
+            curr.coachAudioBase64 != null && curr.coachAudioBase64!.isNotEmpty,
         listener: (context, state) {
           if (_coachMuted) return;
           playCoachAudio(
@@ -55,7 +108,7 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
             mimeType: state.coachAudioMimeType ?? 'audio/mpeg',
             volume: 1.0,
             maxDurationMs: 3000,
-          );
+          ).then((_) => setState(() => _coachAudioPlaying = true));
         },
         child: BlocBuilder<RunBloc, RunState>(
           builder: (context, state) => Stack(
@@ -75,9 +128,27 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
                 top: 12,
                 right: 14,
                 child: SafeArea(
-                  child: _CoachMuteButton(
-                    muted: _coachMuted,
-                    onTap: () => setState(() => _coachMuted = !_coachMuted),
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      _CoachMuteButton(
+                        muted: _coachMuted,
+                        onTap: () => setState(() => _coachMuted = !_coachMuted),
+                      ),
+                      if (_coachAudioPlaying)
+                        Positioned(
+                          bottom: 0,
+                          right: 4,
+                          child: Container(
+                            width: 8,
+                            height: 8,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: palette.primary,
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                 ),
               ),

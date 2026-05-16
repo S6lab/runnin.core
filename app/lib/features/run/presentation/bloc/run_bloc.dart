@@ -322,6 +322,25 @@ class RunBloc extends Bloc<RunEvent, RunState> {
       );
     }
 
+    // Pace alert trigger: when pace deviates from target by ±10%
+    if (smoothedPace != null &&
+        state.targetPace != null &&
+        state.status == RunStatus.active) {
+      final targetPace = _parsePaceMinKm(state.targetPace);
+      if (targetPace != null) {
+        final deviation = (smoothedPace - targetPace).abs() / targetPace;
+        if (deviation >= 0.10) {
+          _requestCoachCue(
+            event: 'pace_alert',
+            currentPaceMinKm: smoothedPace,
+            targetPaceMinKm: targetPace,
+            distanceM: newDistance,
+            elapsedS: state.elapsedS,
+          );
+        }
+      }
+    }
+
     // Salva localmente (local-first)
     if (state.runId != null) {
       _local.addPoint(state.runId!, newPoint);
@@ -415,6 +434,7 @@ class RunBloc extends Bloc<RunEvent, RunState> {
     double? distanceM,
     int? elapsedS,
     double? currentPaceMinKm,
+    double? targetPaceMinKm,
   }) {
     if (state.runId == null || _coachRequestInFlight) return;
 
@@ -425,7 +445,7 @@ class RunBloc extends Bloc<RunEvent, RunState> {
           event: event,
           runType: state.runType,
           currentPaceMinKm: currentPaceMinKm ?? _computePaceMinKm(),
-          targetPaceMinKm: _parsePaceMinKm(state.targetPace),
+          targetPaceMinKm: targetPaceMinKm ?? _parsePaceMinKm(state.targetPace),
           targetDistance: state.targetDistance,
           distanceM: distanceM ?? state.distanceM,
           elapsedS: elapsedS ?? state.elapsedS,

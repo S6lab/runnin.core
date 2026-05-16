@@ -35,6 +35,7 @@ class Run {
   final int? avgBpm;
   final int? xpEarned;
   final String? coachReportId;
+  final List<String>? newBadges;
   final String createdAt;
   final int? elapsedSeconds;
   final double? elevationGain;
@@ -53,6 +54,7 @@ class Run {
     this.avgBpm,
     this.xpEarned,
     this.coachReportId,
+    this.newBadges,
     required this.createdAt,
     this.elapsedSeconds,
     this.elevationGain,
@@ -72,6 +74,9 @@ class Run {
     avgBpm: j['avgBpm'] as int?,
     xpEarned: j['xpEarned'] as int?,
     coachReportId: j['coachReportId'] as String?,
+    newBadges: j['newBadges'] != null
+        ? (j['newBadges'] as List).map((e) => e as String).toList()
+        : null,
     createdAt: j['createdAt'] as String,
     elapsedSeconds: j['elapsedSeconds'] as int?,
     elevationGain: (j['elevationGain'] as num?)?.toDouble(),
