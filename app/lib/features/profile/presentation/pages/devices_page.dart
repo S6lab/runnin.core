@@ -68,7 +68,6 @@ class _DevicesPageState extends State<DevicesPage> {
       ),
     );
   }
-
 }
 
 class _TopNav extends StatelessWidget {
