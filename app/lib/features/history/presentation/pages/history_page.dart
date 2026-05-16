@@ -188,8 +188,8 @@ class _HistoryPageState extends State<HistoryPage> {
       children: [
         _buildBenchmarkMetricRow(
           label: 'Pace médio',
-          userValue: runs.isNotEmpty && runs[0].avgPace != null ? runs[0].avgPace! : '6:08',
-          comparison: 'vs 5:30",
+           userValue: runs.isNotEmpty && runs[0].avgPace != null ? runs[0].avgPace! : '6:08',
+           comparison: 'vs 5:30',
         ),
         _buildBenchmarkMetricRow(
           label: 'Distância semanal',
@@ -249,6 +249,3 @@ class _HistoryPageState extends State<HistoryPage> {
       ),
     );
   }
-
-  _HistoryStats _computeStats(List<Run> runs) {
-}
