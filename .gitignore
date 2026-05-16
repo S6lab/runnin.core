@@ -37,6 +37,12 @@
 **/*.iml
 .vscode/launch.json
 
+# Claude Code (local dev artifact)
+.claude/
+
+# Firebase local caches
+.firebase/hosting.*.cache
+
 # Google Cloud service account keys — never commit
 runnin-*-*.json
 *service-account*.json
