@@ -4,7 +4,6 @@ import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 import 'package:runnin/features/run/data/datasources/run_remote_datasource.dart';
 import 'package:runnin/features/run/domain/entities/run.dart';
-import 'package:runnin/shared/widgets/figma/figma_chart_line_spark.dart';
 import 'package:runnin/shared/widgets/figma/figma_hist_stat_card.dart';
 import 'package:runnin/shared/widgets/figma/figma_top_nav.dart';
 
