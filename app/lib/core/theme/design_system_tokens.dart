@@ -155,6 +155,7 @@ abstract final class FigmaColors {
   // --- Brand ---
   static const Color brandCyan = Color(0xFF00D4FF);
   static const Color brandOrange = Color(0xFFFF6B35);
+  static const Color brandGreen = Color(0xFF22C55E);
 
   // --- Text ---
   static const Color textPrimary = Color(0xFFFFFFFF);
