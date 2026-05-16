@@ -109,7 +109,7 @@ class _HomeViewState extends State<_HomeView> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const _HomeHeader(),
+                  _HomeHeader(profileName: state is HomeLoaded ? state.data.profile?.name : null),
                   const SizedBox(height: 20),
                   if (state is HomeLoading) ...[
                     const _LoadingCard(),
@@ -173,7 +173,8 @@ class _HomeViewState extends State<_HomeView> {
 // ─── Header ──────────────────────────────────────────────────────────────────
 
 class _HomeHeader extends StatelessWidget {
-  const _HomeHeader();
+  final String? profileName;
+  const _HomeHeader({this.profileName});
 
   @override
   Widget build(BuildContext context) {
@@ -257,8 +258,8 @@ class _HomeHeader extends StatelessWidget {
   }
 
   String _initial(User? user) {
-    final name = user?.displayName?.trim();
-    if (name == null || name.isEmpty) return 'R';
+    final name = (profileName ?? user?.displayName ?? user?.email ?? '').trim();
+    if (name.isEmpty) return 'A';
     return name[0].toUpperCase();
   }
 }
@@ -2335,43 +2336,53 @@ class _HeroSection extends StatelessWidget {
         ? 'Nenhuma sessao planejada para hoje'
         : '${session.type.toUpperCase()} • ${session.targetPace ?? 'livre'}';
 
-    final hasPhoto = user?.photoURL != null;
+    final photoUrl = user?.photoURL;
+    // Rotate between 2 hero photos by day-of-year so it feels alive without being random
+    final dayOfYear = now.difference(DateTime(now.year, 1, 1)).inDays;
+    final heroAsset = dayOfYear.isEven
+        ? 'assets/img/hero/runner_1.jpg'
+        : 'assets/img/hero/runner_2.jpg';
 
     return Container(
-      height: 490,
+      height: 380,
       width: double.infinity,
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            const Color(0xFF0A0A1A),
-            palette.background,
-          ],
+        color: const Color(0xFF0A0A1A),
+        image: DecorationImage(
+          image: photoUrl != null ? NetworkImage(photoUrl) as ImageProvider : AssetImage(heroAsset),
+          fit: BoxFit.cover,
+          colorFilter: ColorFilter.mode(
+            Colors.black.withValues(alpha: 0.55),
+            BlendMode.darken,
+          ),
         ),
-        image: hasPhoto
-            ? DecorationImage(
-                image: NetworkImage(user!.photoURL!),
-                fit: BoxFit.cover,
-                opacity: 0.35,
-                colorFilter: ColorFilter.mode(
-                  palette.background.withValues(alpha: 0.55),
-                  BlendMode.darken,
-                ),
-              )
-            : null,
         borderRadius: FigmaBorderRadius.zero,
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Stack(
         children: [
-          // Profile row with greeting
-          Padding(
-            padding: const EdgeInsets.fromLTRB(24, 30, 24, 16),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Column(
+          // Bottom gradient pra garantir legibilidade do COACH.AI por cima da foto
+          Positioned.fill(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.transparent,
+                    palette.background.withValues(alpha: 0.85),
+                  ],
+                  stops: const [0.45, 1.0],
+                ),
+              ),
+            ),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Greeting + data
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 30, 24, 0),
+                child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
@@ -2379,7 +2390,7 @@ class _HeroSection extends StatelessWidget {
                       style: GoogleFonts.jetBrainsMono(
                         fontSize: 10,
                         fontWeight: FontWeight.w500,
-                        color: palette.text.withValues(alpha: 0.6),
+                        color: Colors.white.withValues(alpha: 0.7),
                         letterSpacing: 1.0,
                       ),
                     ),
@@ -2387,141 +2398,23 @@ class _HeroSection extends StatelessWidget {
                     Text(
                       '$greeting, ${firstName.toUpperCase()}',
                       style: GoogleFonts.jetBrainsMono(
-                        fontSize: 14,
+                        fontSize: 16,
                         fontWeight: FontWeight.w700,
-                        color: palette.text,
+                        color: Colors.white,
                         letterSpacing: 1.4,
                       ),
                     ),
                   ],
                 ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    border: Border.all(color: palette.primary, width: 1.735),
-                  ),
-                  child: Text(
-                    sessionInfo,
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                      color: palette.primary,
-                      letterSpacing: 1.0,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          
-          // Map background — real asset from Figma pending
-           // For now, shows a placeholder with map icon and vector graphics overlay hint
-           Expanded(
-             child: Container(
-               margin: const EdgeInsets.symmetric(horizontal: 24),
-               decoration: BoxDecoration(
-                 gradient: LinearGradient(
-                   begin: Alignment.topLeft,
-                   end: Alignment.bottomRight,
-                   colors: [
-                     palette.primary.withValues(alpha: 0.15),
-                     palette.background,
-                   ],
-                 ),
-                 border: Border.all(color: palette.border, width: 1.735),
-                 borderRadius: BorderRadius.circular(8),
-               ),
-               child: Stack(
-                 alignment: Alignment.center,
-                 children: [
-                   // Vector graphics overlay hint (simulating Figma imgVector)
-                   Positioned(
-                     top: 20,
-                     right: 24,
-                     child: Container(
-                       width: 120,
-                       height: 60,
-                       decoration: BoxDecoration(
-                         gradient: LinearGradient(
-                           colors: [
-                             palette.secondary.withValues(alpha: 0.4),
-                             Colors.transparent,
-                           ],
-                         ),
-                       ),
-                     ),
-                   ),
-                   Positioned(
-                     bottom: 30,
-                     left: 24,
-                     child: Container(
-                       width: 180,
-                       height: 80,
-                       decoration: BoxDecoration(
-                         gradient: LinearGradient(
-                           colors: [
-                             palette.text.withValues(alpha: 0.1),
-                             Colors.transparent,
-                           ],
-                         ),
-                       ),
-                     ),
-                   ),
-                   Center(
-                     child: Column(
-                       mainAxisAlignment: MainAxisAlignment.center,
-                       children: [
-                         Icon(
-                           Icons.map_rounded,
-                           size: 64,
-                           color: palette.text.withValues(alpha: 0.25),
-                         ),
-                         const SizedBox(height: 12),
-                         Text(
-                           'MAPA DO DIA',
-                           style: GoogleFonts.jetBrainsMono(
-                             fontSize: 12,
-                             fontWeight: FontWeight.w700,
-                             color: palette.text.withValues(alpha: 0.5),
-                             letterSpacing: 1.2,
-                           ),
-                         ),
-                         const SizedBox(height: 6),
-                         Text(
-                           'Asset da Figma pendente',
-                           style: GoogleFonts.jetBrainsMono(
-                             fontSize: 10,
-                             color: palette.text.withValues(alpha: 0.35),
-                             letterSpacing: 1.0,
-                           ),
-                         ),
-                       ],
-                     ),
-                   ),
-                 ],
-               ),
-             ),
-           ),
-          
-          // Stats row (mock 12 icon layout per Figma spec)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: List.generate(12, (index) => _HeroStatIcon(index: index)),
-            ),
-          ),
-          
-          // Session brief
-          Padding(
-            padding: const EdgeInsets.fromLTRB(24, 16, 24, 20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
+              ),
+              const Spacer(),
+              // COACH.AI brief (única ocorrência — sem duplicação)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+                child: Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: palette.secondary.withValues(alpha: 0.02),
+                    color: Colors.black.withValues(alpha: 0.5),
                     border: Border(left: BorderSide(color: palette.secondary, width: 1.735)),
                   ),
                   child: Column(
@@ -2539,20 +2432,22 @@ class _HeroSection extends StatelessWidget {
                       const SizedBox(height: 8),
                       Text(
                         session == null
-                            ? 'Nenhuma sessao planejada para hoje. Use uma corrida livre ou revise a distribuicao da semana no modulo de treino.'
+                            ? sessionInfo == 'Nenhuma sessao planejada para hoje'
+                                ? 'Nenhuma sessao planejada para hoje. Use uma corrida livre ou revise a distribuicao da semana no modulo de treino.'
+                                : sessionInfo
                             : 'Easy Run hoje — pace controlado entre ${session.targetPace ?? "livre"} e foco em cadencia e respiracao. Nao acelere nos ultimos 2km.',
                         style: GoogleFonts.jetBrainsMono(
                           fontSize: 13,
                           fontWeight: FontWeight.w400,
-                          color: palette.text.withValues(alpha: 0.7),
+                          color: Colors.white.withValues(alpha: 0.92),
                           height: 21.45 / 13,
                         ),
                       ),
                     ],
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ],
       ),

@@ -8,9 +8,7 @@ import 'package:runnin/features/run/data/datasources/run_remote_datasource.dart'
 import 'package:runnin/features/run/domain/entities/run.dart';
 import 'package:runnin/shared/widgets/app_page_header.dart';
 import 'package:runnin/shared/widgets/chart_panel.dart';
-import 'package:runnin/shared/widgets/coach_narrative_card.dart';
 import 'package:runnin/shared/widgets/figma/export.dart';
-import 'package:runnin/shared/widgets/metric_card.dart';
 import 'package:runnin/shared/widgets/segmented_tab_bar.dart';
 
 enum _Period { week, month, threeMonths }
@@ -517,18 +515,53 @@ class _RunsListView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
       itemCount: runs.length,
-      itemBuilder: (_, i) => FigmaRunCard(
-        typeLabel: runs[i].type.toUpperCase(),
-        dateLabel: _fmtDate(runs[i].createdAt),
-        distanceKm: runs[i].distanceM / 1000,
-        pace: runs[i].avgPace ?? '--:--',
-        duration: _fmtDuration(runs[i].durationS),
-        coachPreview: runs[i].type,
-        onTap: () => context.push('/report', extra: runs[i].id),
-      ),
+      itemBuilder: (_, i) {
+        final run = runs[i];
+        return Stack(
+          children: [
+            FigmaRunCard(
+              typeLabel: run.type.toUpperCase(),
+              dateLabel: _fmtDate(run.createdAt),
+              distanceKm: run.distanceM / 1000,
+              pace: run.avgPace ?? '--:--',
+              duration: _fmtDuration(run.durationS),
+              coachPreview: run.type,
+              onTap: () => context.push('/report', extra: run.id),
+            ),
+            if (run.planSessionId == null)
+              Positioned(
+                top: 8,
+                right: 0,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(0, 0, 8, 0),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: palette.primary,
+                      borderRadius: const BorderRadius.only(
+                        topLeft: Radius.circular(4),
+                        bottomLeft: Radius.circular(4),
+                      ),
+                    ),
+                    child: const Text(
+                      'FREE',
+                      style: TextStyle(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
     );
   }
 
