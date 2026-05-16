@@ -917,8 +917,170 @@ class _CoachNotificationsList extends StatelessWidget {
                 : () => context.push(items[i].ctaRoute!),
           ),
         ],
+        const SizedBox(height: 6),
+        const _ExpandableCoachAICard(),
       ],
     );
+  }
+}
+
+// ─── Expandable Coach.AI Card ─────────────────────────────────────────────────
+
+class _ExpandableCoachAICard extends StatefulWidget {
+  const _ExpandableCoachAICard();
+
+  @override
+  State<_ExpandableCoachAICard> createState() => _ExpandableCoachAICardState();
+}
+
+class _ExpandableCoachAICardState extends State<_ExpandableCoachAICard> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () => setState(() => _expanded = !_expanded),
+      behavior: HitTestBehavior.opaque,
+      child: AnimatedSize(
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeInOut,
+        alignment: Alignment.topCenter,
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.fromLTRB(17.74, 14, 16, 14),
+          decoration: BoxDecoration(
+            color: FigmaColors.surfaceCardOrange,
+            border: Border(
+              left: BorderSide(
+                color: FigmaColors.brandOrange,
+                width: FigmaDimensions.borderUniversal,
+              ),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'COACH.AI > FECHAMENTO MENSAL',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 11,
+                            height: 16.5 / 11,
+                            letterSpacing: 1.1,
+                            fontWeight: FontWeight.w700,
+                            color: FigmaColors.brandOrange,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Como foi o seu mês de treino?',
+                          maxLines: _expanded ? null : 1,
+                          overflow: _expanded ? null : TextOverflow.ellipsis,
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 11,
+                            height: 16.5 / 11,
+                            fontWeight: FontWeight.w500,
+                            color: FigmaColors.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  AnimatedRotation(
+                    turns: _expanded ? 0.5 : 0.0,
+                    duration: const Duration(milliseconds: 220),
+                    child: Text(
+                      '▼',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 10,
+                        height: 1,
+                        color: FigmaColors.textSecondary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              if (_expanded) ...[
+                const SizedBox(height: 14),
+                Text(
+                  'Você completou ${DateTime.now().month == 1 ? 'Janeiro' : _monthName(DateTime.now().month - 1)}. O Coach.AI preparou um resumo com suas métricas, zonas de esforço e evolução. Deseja ver o fechamento completo?',
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 11,
+                    height: 18 / 11,
+                    fontWeight: FontWeight.w400,
+                    color: FigmaColors.textSecondary,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () {},
+                        child: Container(
+                          height: 38,
+                          alignment: Alignment.center,
+                          color: FigmaColors.brandCyan,
+                          child: Text(
+                            'VER RESUMO',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 11,
+                              height: 1,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 1.1,
+                              color: FigmaColors.bgBase,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    GestureDetector(
+                      onTap: () => setState(() => _expanded = false),
+                      child: Container(
+                        height: 38,
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          border: Border.all(
+                            color: FigmaColors.textSecondary,
+                            width: FigmaDimensions.borderUniversal,
+                          ),
+                        ),
+                        child: Text(
+                          'IGNORAR',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 11,
+                            height: 1,
+                            fontWeight: FontWeight.w500,
+                            letterSpacing: 1.1,
+                            color: FigmaColors.textSecondary,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _monthName(int month) {
+    const names = [
+      '', 'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+      'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro',
+    ];
+    return names[month.clamp(1, 12)];
   }
 }
 
@@ -1055,118 +1217,6 @@ class _SemanaSection extends StatelessWidget {
       'Dez',
     ];
     return abbrs[month];
-  }
-}
-
-class _WeekGrid extends StatelessWidget {
-  final List<WeekDayData> weekDays;
-  const _WeekGrid({required this.weekDays});
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.runninPalette;
-
-    return Row(
-      children: weekDays.map((day) {
-        final isRest = day.session == null;
-        final distLabel = day.session == null
-            ? 'DESC'
-            : _fmtDist(day.session!.distanceKm);
-
-        return Expanded(
-          child: Container(
-             height: 100,
-            margin: EdgeInsets.only(right: day.dayOfWeek == 7 ? 0 : 4),
-            decoration: BoxDecoration(
-              color: day.isToday ? palette.surfaceAlt : palette.surface,
-              border: Border.all(
-                color: day.isToday
-                    ? palette.primary.withValues(alpha: 0.4)
-                    : palette.border,
-              ),
-            ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  day.shortName,
-                  style: TextStyle(
-                    color: day.isDone
-                        ? palette.primary
-                        : day.isToday
-                        ? palette.secondary
-                        : palette.muted,
-                    fontSize: 9,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 0.06,
-                  ),
-                ),
-                const SizedBox(height: 20),
-                if (day.isDone)
-                  Icon(Icons.check, size: 18, color: palette.primary)
-                else if (isRest)
-                  Text(
-                    'DESC',
-                    style: TextStyle(
-                      color: palette.border,
-                      fontSize: 9,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  )
-                else
-                  Text(
-                    day.session!.type.substring(0, 3).toUpperCase(),
-                    style: TextStyle(
-                      color: day.isToday ? palette.text : palette.muted,
-                      fontSize: 9,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                const SizedBox(height: 20),
-                Text(
-                  distLabel,
-                  style: TextStyle(
-                    color: isRest ? palette.border : palette.secondary,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                if (day.session?.targetPace != null) ...[
-                  const SizedBox(height: 20),
-                  Text(
-                    day.session!.targetPace!,
-                    style: TextStyle(
-                      color: palette.muted,
-                      fontSize: 9,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ],
-                if (day.isToday) ...[
-                  const SizedBox(height: 20),
-                  Text(
-                    'HOJE',
-                    style: TextStyle(
-                      color: palette.primary,
-                      fontSize: 8,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        );
-      }).toList(),
-    );
-  }
-
-  String _fmtDist(double km) {
-    if (km >= 1) {
-      final dec = km == km.truncateToDouble() ? 0 : 1;
-      return '${km.toStringAsFixed(dec)}K';
-    }
-    return '${(km * 1000).toStringAsFixed(0)}m';
   }
 }
 
