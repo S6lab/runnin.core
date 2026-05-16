@@ -9,6 +9,7 @@ import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 import 'package:runnin/shared/widgets/app_panel.dart';
 import 'package:runnin/shared/widgets/app_tag.dart';
+import 'package:runnin/shared/widgets/figma/export.dart';
 import 'package:runnin/shared/widgets/otp_resend_button.dart';
 
 class OnboardingPage extends StatefulWidget {
@@ -130,12 +131,14 @@ class _OnboardingPageState extends State<OnboardingPage> {
   ];
 
   static const _goals = [
-    'Saude e bem-estar',
+    'Saúde e bem-estar',
     'Perder peso',
     'Completar 5K',
     'Completar 10K',
     'Meia maratona (21K)',
     'Maratona (42K)',
+    'Ultramaratona',
+    'Triathlon',
   ];
 
   static const _wearableOptions = [
@@ -451,25 +454,11 @@ class _OnboardingPageState extends State<OnboardingPage> {
   Widget build(BuildContext context) {
     final palette = context.runninPalette;
 
-    final progressValue = _step == _loadingStep
-        ? 1.0
-        : (_step / (_totalSteps - 1)).clamp(0.0, 1.0);
-
     return Scaffold(
       backgroundColor: palette.background,
       body: Column(
         children: [
-          // Figma: 2px top progress bar, fill ciano proporcional
-          Container(
-            width: double.infinity,
-            height: 2,
-            color: palette.border,
-            child: FractionallySizedBox(
-              alignment: Alignment.centerLeft,
-              widthFactor: progressValue,
-              child: Container(color: palette.primary),
-            ),
-          ),
+          FigmaOnboardingTopProgressBar(total: 13, currentIndex: _step),
           Expanded(
             child: SafeArea(
               top: false,
@@ -484,7 +473,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
                     const SizedBox(height: 18),
                     _buildNav(context),
                     const SizedBox(height: 12),
-                    _StepDots(total: _loadingStep, current: _step),
+                    FigmaOnboardingPageIndicator(total: 13, currentIndex: _step),
                   ],
                 ),
               ),
@@ -1310,36 +1299,23 @@ class _StepGoal extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _StepCode('ASSESSMENT_05'),
+          _StepCode('ASSESSMENT_06'),
           const SizedBox(height: 12),
           Text('Qual sua meta principal?', style: context.runninType.displayMd),
           const SizedBox(height: 10),
           Text(
-            'A periodizacao nasce do objetivo certo.',
+            'O Coach monta periodização, volume e progressão com base no seu objetivo.',
             style: TextStyle(color: palette.muted, height: 1.5),
           ),
           const SizedBox(height: 24),
-          ...goals.map((goal) {
-            final isSelected = selectedGoal == goal;
-            return GestureDetector(
+          ...goals.map((goal) => Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: FigmaSelectionButton(
+              label: goal,
+              selected: selectedGoal == goal,
               onTap: () => onGoalSelect(goal),
-              child: AppPanel(
-                margin: const EdgeInsets.only(bottom: 8),
-                color: isSelected
-                    ? palette.primary.withValues(alpha: 0.08)
-                    : null,
-                borderColor: isSelected ? palette.primary : palette.border,
-                child: Text(
-                  goal,
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                    color: isSelected ? palette.primary : palette.text,
-                  ),
-                ),
-              ),
-            );
-          }),
+            ),
+          )),
         ],
       ),
     );
@@ -1643,43 +1619,6 @@ class _StepGeneratingPlan extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-class _StepDots extends StatelessWidget {
-  final int total;
-  final int current;
-
-  const _StepDots({required this.total, required this.current});
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.runninPalette;
-    final clamped = current.clamp(0, total - 1);
-
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: List.generate(total, (index) {
-        final isDone = index < clamped;
-        final isActive = index == clamped;
-        return AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          width: isActive ? 14 : 4,
-          height: 4,
-          margin: const EdgeInsets.symmetric(horizontal: 3),
-          decoration: BoxDecoration(
-            color: isActive
-                ? palette.primary
-                : isDone
-                    ? palette.primary.withValues(alpha: 0.5)
-                    : Colors.transparent,
-            border: isDone || isActive
-                ? null
-                : Border.all(color: palette.border, width: 1),
-          ),
-        );
-      }),
     );
   }
 }
