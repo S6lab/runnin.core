@@ -73,7 +73,7 @@ export class CoachRuntimeContextService {
   async getContext(userId: string): Promise<CoachRuntimeContext> {
     try {
       const db = getFirestore();
-      const [profileDoc, plansSnap, runsSnap, examsSnap] = await Promise.all([
+      const [profileDoc, plansSnap, runsSnap, examsSnap, ragSnap] = await Promise.all([
         db.collection('users').doc(userId).get(),
         db.collection(`users/${userId}/plans`).get(),
         db.collection(`users/${userId}/runs`)
@@ -85,6 +85,7 @@ export class CoachRuntimeContextService {
           .orderBy('uploadedAt', 'desc')
           .limit(3)
           .get(),
+        db.collection(`users/${userId}/rag_chunks`).orderBy('updatedAt', 'desc').limit(5).get(),
       ]);
 
       const profile = profileDoc.exists
@@ -114,6 +115,16 @@ export class CoachRuntimeContextService {
         }) as any)
         .filter((exam: any) => exam.extractedData?.summary)
         .slice(0, 3);
+
+      const ragChunks = ragSnap.docs.map(doc => {
+        const d = doc.data() as Record<string, unknown>;
+        return {
+          text: (d.text as string) ?? '',
+          embedding: d.embedding as number[] | undefined,
+          updatedAt: d.updatedAt as string | undefined,
+          examId: d.examId as string | undefined,
+        };
+      });
 
       return {
         profile: profile
@@ -166,6 +177,18 @@ export class CoachRuntimeContextService {
           recommendations: exam.extractedData.recommendations || [],
           uploadedAt: exam.uploadedAt,
         })),
+        runningKnowledgeContext: {
+          name: 'recent_exams',
+          description: 'Exames médicos recentes do usuário extraídos via OCR e RAG',
+          chunks: ragChunks.map(chunk => ({
+            relevanceScore: 0.9,
+            text: chunk.text,
+            metadata: {
+              examId: (chunk as any).examId,
+              uploadedAt: chunk.updatedAt,
+            },
+          })),
+        },
       };
     } catch (err) {
       logger.warn('coach.runtime_context.unavailable', {
