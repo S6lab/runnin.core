@@ -88,13 +88,6 @@ export class GetBenchmarkUseCase {
     }
   }
 
-  // Returns percentile rank (0-100): lower pace = faster = higher percentile
-  private calculatePercentile(paceAvgs: number[], userPace?: number): number {
-    if (!userPace || paceAvgs.length === 0) return 0;
-    const slower = paceAvgs.filter((p) => p > userPace).length;
-    return Math.round((slower / paceAvgs.length) * 100);
-  }
-
   private parsePaceToMinutes(pace?: string): number | undefined {
     if (!pace) return undefined;
     const parts = pace.split(':');
@@ -128,6 +121,60 @@ export class GetBenchmarkUseCase {
       consistency: Math.round(consistencyAvg || 0),
       avgBpm: Math.round(bpmAvg || 0),
     };
+  }
+
+  private calculatePercentile(userValues: any, cohortValues: any, cohortSize: number): number {
+    if (!cohortValues || cohortSize === 0) return 0;
+
+    let userScore = 0;
+    let totalMetrics = 0;
+
+    if (userValues.pace && cohortValues.pace) {
+      const userPace = this.parsePaceToSeconds(userValues.pace);
+      const cohortPace = this.parsePaceToSeconds(cohortValues.pace);
+      if (userPace !== undefined && cohortPace !== undefined) {
+        userScore += userPace < cohortPace ? 1 : 0;
+        totalMetrics++;
+      }
+    }
+
+    if (userValues.weeklyDistance && cohortValues.weeklyDistance) {
+      const userDist = parseInt(userValues.weeklyDistance.replace('km', ''), 10);
+      const cohortDist = parseInt(cohortValues.weeklyDistance.replace('km', ''), 10);
+      if (!isNaN(userDist) && !isNaN(cohortDist)) {
+        userScore += userDist > cohortDist ? 1 : 0;
+        totalMetrics++;
+      }
+    }
+
+    if (userValues.consistency !== undefined && cohortValues.consistency !== undefined) {
+      userScore += userValues.consistency > cohortValues.consistency ? 1 : 0;
+      totalMetrics++;
+    }
+
+    if (userValues.avgBpm !== undefined && cohortValues.avgBpm !== undefined) {
+      const userBpm = userValues.avgBpm;
+      const cohortBpm = cohortValues.avgBpm;
+      if (!isNaN(userBpm) && !isNaN(cohortBpm)) {
+        userScore += userBpm < cohortBpm ? 1 : 0;
+        totalMetrics++;
+      }
+    }
+
+    if (totalMetrics === 0) return 0;
+
+    const percentage = userScore / totalMetrics;
+    return Math.round(percentage * 100);
+  }
+
+  private parsePaceToSeconds(paceStr: string): number | undefined {
+    try {
+      const [min, sec] = paceStr.split(':').map(Number);
+      if (min === undefined || sec === undefined) return undefined;
+      return min * 60 + sec;
+    } catch (_) {
+      return undefined;
+    }
   }
 
   private formatPace(value?: number): string | undefined {
