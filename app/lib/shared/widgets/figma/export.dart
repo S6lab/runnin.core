@@ -3,4 +3,5 @@ export 'figma_bottom_nav.dart';
 export 'figma_run_fab.dart';
 export 'figma_tab_bar.dart';
 export 'figma_zone_distribution_bar.dart';
-export 'figma_tab_bar.dart';
+export 'figma_form_field_label.dart';
+export 'figma_onboarding_progress_bar.dart';

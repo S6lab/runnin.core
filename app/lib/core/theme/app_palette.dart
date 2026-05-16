@@ -18,6 +18,15 @@ abstract final class HeartZoneColors {
   };
 }
 
+// Cores de notificação (HOME.md Section 02)
+abstract final class NotificationColors {
+  static const notification1 = Color(0xFF00D4FF); // MELHOR HORÁRIO
+  static const notification2 = Color(0xFFEAB308); // PREPARO NUTRICIONAL
+  static const notification3 = Color(0xFF3B82F6); // HIDRATAÇÃO
+  static const notification4 = Color(0xFFFF6B35); // CHECKLIST PRÉ-EASY RUN
+  static const notification5 = Color(0xFF8B5CF6); // SONO → PERFORMANCE
+}
+
 @immutable
 class RunninTypography {
   // Display — headers de seção, títulos de página (all-caps, peso alto)
