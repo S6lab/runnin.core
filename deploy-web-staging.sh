@@ -9,7 +9,10 @@ if ! command -v firebase &> /dev/null; then
 fi
 
 echo "Building Flutter web..."
-flutter build web --release
+# CRÍTICO: aponta o app pro server staging (sem isso usa o default prod URL e
+# bate em produção desatualizada — gera 404 em endpoints novos como /admin/*).
+flutter build web --release \
+  --dart-define=API_BASE_URL=https://runnin-api-staging-rogiz7losq-rj.a.run.app
 
 if [ -z "$GCLOUD_SERVICE_ACCOUNT_KEY" ]; then
     echo "Error: GCLOUD_SERVICE_ACCOUNT_KEY not set"
