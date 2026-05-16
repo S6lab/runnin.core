@@ -454,19 +454,13 @@ class _IniciarSessaoButton extends StatelessWidget {
         ? 'Nenhuma sessao planejada para hoje. Use uma corrida livre ou revise a distribuicao da semana no modulo de treino.'
         : 'Easy Run hoje — pace controlado entre ${session.targetPace ?? "livre"} e foco em cadencia e respiracao. Nao acelere nos ultimos 2km.';
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _CyberTodayCard(data: data),
-        const SizedBox(height: 20),
-        _CoachMessageCard(
-          palette: palette,
-          message: coachMessage,
-          ctaLabel:
-              session != null ? 'INICIAR SESSAO ↗' : 'INICIAR CORRIDA LIVRE ↗',
-          onCta: () => context.push('/prep'),
-        ),
-      ],
+    // _CyberTodayCard movido pra dentro do _HeroSection (evita duplicação).
+    // Aqui fica só Coach AI + CTA INICIAR.
+    return _CoachMessageCard(
+      palette: palette,
+      message: coachMessage,
+      ctaLabel: session != null ? 'INICIAR SESSAO ↗' : 'INICIAR CORRIDA LIVRE ↗',
+      onCta: () => context.push('/prep'),
     );
   }
 }
@@ -2339,8 +2333,8 @@ class _HeroSection extends StatelessWidget {
     final photoUrl = user?.photoURL;
     final dayOfYear = now.difference(DateTime(now.year, 1, 1)).inDays;
     final heroAsset = dayOfYear.isEven
-        ? 'assets/img/hero/runner_1.jpg'
-        : 'assets/img/hero/runner_2.jpg';
+        ? 'assets/img/hero/runner_1.png'
+        : 'assets/img/hero/runner_2.png';
 
     final weekdayLabel = _weekdayLabel(now.weekday).toUpperCase();
     final weekNumber = _isoWeekNumber(now);
@@ -2352,8 +2346,8 @@ class _HeroSection extends StatelessWidget {
     final etaLabel = session != null
         ? '~${(session.distanceKm * _paceSecPerKm(session.targetPace) / 60).round()}min'
         : '';
-    // Session ordinal: assume single session today; could pull from plan in future
-    const sessionOrdinal = '01';
+    // Session ordinal: # sessões já completadas + 1 (a de hoje)
+    final sessionOrdinal = (data.completedSessions + 1).toString().padLeft(2, '0');
 
     return Container(
       height: 540,
@@ -2456,7 +2450,7 @@ class _HeroSection extends StatelessWidget {
                         style: GoogleFonts.jetBrainsMono(
                           fontSize: 14,
                           fontWeight: FontWeight.w800,
-                          color: Colors.white,
+                          color: palette.primary,
                           letterSpacing: 0.6,
                         ),
                       ),
