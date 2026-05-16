@@ -1096,13 +1096,16 @@ class _HydrationLoggerState extends State<_HydrationLogger> {
   static const _hydrationBoxName = 'runnin_settings';
   static const _hydrationKey = 'hydration_ml_today';
   static const _hydrationDateKey = 'hydration_date';
+  static const _defaultGoalMl = 2000;
 
   int _todayMl = 0;
+  int? _goalMl;
 
   @override
   void initState() {
     super.initState();
     _load();
+    _loadGoal();
   }
 
   Future<Box<dynamic>> _box() async {
@@ -1121,6 +1124,17 @@ class _HydrationLoggerState extends State<_HydrationLogger> {
     if (mounted) setState(() => _todayMl = (b.get(_hydrationKey) as int?) ?? 0);
   }
 
+  Future<void> _loadGoal() async {
+    try {
+      final profile = await UserRemoteDatasource().getMe();
+      final weightStr = profile?.weight?.trim();
+      if (weightStr == null || weightStr.isEmpty) return;
+      final weightKg = double.tryParse(weightStr.replaceAll(',', '.'));
+      if (weightKg == null || weightKg <= 0) return;
+      if (mounted) setState(() => _goalMl = (weightKg * 35).round());
+    } catch (_) {}
+  }
+
   Future<void> _add(int ml) async {
     final b = await _box();
     final newTotal = _todayMl + ml;
@@ -1131,6 +1145,15 @@ class _HydrationLoggerState extends State<_HydrationLogger> {
   @override
   Widget build(BuildContext context) {
     final palette = context.runninPalette;
+    final goalMl = _goalMl ?? _defaultGoalMl;
+    final progress = (_todayMl / goalMl).clamp(0.0, 1.0);
+    final isGoalReached = _todayMl >= goalMl;
+    final goalLiters = (goalMl / 1000).toStringAsFixed(goalMl % 1000 == 0 ? 1 : 2);
+    final currentLiters = (_todayMl / 1000).toStringAsFixed(2);
+    final goalSourceLabel = _goalMl == null
+        ? 'meta 2L (cadastre seu peso para meta personalizada)'
+        : 'meta ${goalLiters}L (35ml/kg)';
+
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
       decoration: BoxDecoration(
@@ -1140,24 +1163,50 @@ class _HydrationLoggerState extends State<_HydrationLogger> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'REGISTRAR HOJE',
-            style: GoogleFonts.jetBrainsMono(
-              fontSize: 10,
-              fontWeight: FontWeight.w800,
-              color: palette.text,
-              letterSpacing: 0.8,
-            ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'REGISTRAR HOJE',
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  color: palette.text,
+                  letterSpacing: 0.8,
+                ),
+              ),
+              if (isGoalReached)
+                Text(
+                  '✓ META',
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w700,
+                    color: widget.accent,
+                    letterSpacing: 0.8,
+                  ),
+                ),
+            ],
           ),
           const SizedBox(height: 6),
           Text(
-            '${(_todayMl / 1000).toStringAsFixed(2)} L consumidos hoje',
+            '${currentLiters}L / ${goalLiters}L',
             style: GoogleFonts.jetBrainsMono(
-              fontSize: 11,
-              color: palette.text.withValues(alpha: 0.7),
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: palette.text,
             ),
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 4),
+          Text(
+            goalSourceLabel,
+            style: GoogleFonts.jetBrainsMono(
+              fontSize: 10,
+              color: palette.text.withValues(alpha: 0.55),
+            ),
+          ),
+          const SizedBox(height: 8),
+          _MiniProgressBar(value: progress, color: widget.accent),
+          const SizedBox(height: 12),
           Wrap(
             spacing: 6,
             children: [
@@ -1703,7 +1752,7 @@ class _PerformanceSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const _BigHeading('PERFORMANCE', '04'),
+        const _BigHeading('PERFORMANCE', '03'),
         const SizedBox(height: 20),
         IntrinsicHeight(
           child: Row(
@@ -2070,7 +2119,7 @@ class _StatusCorporalSectionState extends State<_StatusCorporalSection> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const _BigHeading('STATUS CORPORAL', '06'),
+        const _BigHeading('STATUS CORPORAL', '04'),
         const SizedBox(height: 20),
         IntrinsicHeight(
           child: Row(
@@ -2373,7 +2422,7 @@ class _UltimaCorrida extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const _BigHeading('ÚLTIMA CORRIDA', '07'),
+        const _BigHeading('ÚLTIMA CORRIDA', '05'),
         const SizedBox(height: 20),
         if (run == null)
           AppPanel(

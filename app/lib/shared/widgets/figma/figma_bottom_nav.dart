@@ -112,21 +112,11 @@ class _RunFAB extends StatelessWidget {
         width: 55.982,
         height: 55.982,
         decoration: BoxDecoration(
-          gradient: RadialGradient(
-            colors: [
-              palette.primary,
-              palette.primary.withValues(alpha: 0.31),
-            ],
-          ),
+          color: palette.primary,
           boxShadow: [
             BoxShadow(
-              color: palette.primary.withValues(alpha: 0.4),
-              blurRadius: 30,
-              offset: const Offset(0, 0),
-            ),
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.5),
-              blurRadius: 20,
+              color: Colors.black.withValues(alpha: 0.4),
+              blurRadius: 16,
               offset: const Offset(0, 4),
             ),
           ],
@@ -136,8 +126,9 @@ class _RunFAB extends StatelessWidget {
             'RUN',
             style: TextStyle(
               color: palette.background,
-              fontSize: 11,
+              fontSize: 14,
               fontWeight: FontWeight.w700,
+              fontStyle: FontStyle.italic,
             ),
           ),
         ),
