@@ -11,3 +11,6 @@ export 'figma_onboarding_page_indicator.dart';
 export 'figma_otp_text_field.dart';
 export 'figma_assessment_blocks.dart';
 export 'figma_coach_ai_block.dart';
+export 'figma_assessment_text.dart';
+export 'figma_form_text_field.dart';
+export 'figma_form_field_label.dart';

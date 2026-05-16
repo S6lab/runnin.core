@@ -1088,38 +1088,24 @@ class _StepLevel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final palette = context.runninPalette;
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _StepCode('ASSESSMENT_01'),
+        const FigmaAssessmentLabel(text: 'ASSESSMENT_01'),
         const SizedBox(height: 12),
-        Text('Qual seu nivel atual?', style: context.runninType.displayMd),
+        const FigmaAssessmentHeading(text: 'Qual seu nivel atual?'),
         const SizedBox(height: 10),
-        Text(
-          'O Coach adapta intensidade, volume e progressao ao seu nivel.',
-          style: TextStyle(color: palette.muted, height: 1.5),
+        const FigmaAssessmentDescription(
+          text: 'O Coach adapta intensidade, volume e progressao ao seu nivel.',
         ),
         const SizedBox(height: 32),
         ...levels.map((level) {
-          final isSelected = selected == level.$1;
-          return GestureDetector(
-            onTap: () => onSelect(level.$1),
-            child: AppPanel(
-              margin: const EdgeInsets.only(bottom: 8),
-              color: isSelected
-                  ? palette.primary.withValues(alpha: 0.08)
-                  : null,
-              borderColor: isSelected ? palette.primary : palette.border,
-              child: Text(
-                '${level.$2} - ${level.$3}',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  color: isSelected ? palette.primary : palette.text,
-                ),
-              ),
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: FigmaSelectionButton(
+              label: '${level.$2} - ${level.$3}',
+              selected: selected == level.$1,
+              onTap: () => onSelect(level.$1),
             ),
           );
         }),
