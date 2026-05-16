@@ -27,7 +27,7 @@ import 'package:runnin/features/history/presentation/pages/coach_conversation_re
 import 'package:runnin/features/profile/presentation/pages/account_page.dart';
 import 'package:runnin/features/profile/presentation/pages/account_access_page.dart';
 import 'package:runnin/features/profile/presentation/pages/health_exams_page.dart';
-import 'package:runnin/features/profile/presentation/pages/devices_page.dart';
+import 'package:runnin/features/profile/presentation/pages/health/devices_page.dart';
 import 'package:runnin/features/profile/presentation/pages/health/health_zones_page.dart';
 import 'package:runnin/features/profile/presentation/pages/profile_page.dart';
 import 'package:runnin/features/profile/presentation/pages/settings/settings_index_page.dart';
