@@ -149,6 +149,14 @@ final appRouter = GoRouter(
           builder: (_, _) => const AccountAccessPage(),
         ),
         GoRoute(
+          path: '/profile/health/exams',
+          builder: (_, _) => const HealthExamsPage(),
+        ),
+        GoRoute(
+          path: '/profile/edit',
+          builder: (_, _) => const ProfilePage(initialEditing: true),
+        ),
+        GoRoute(
           path: '/profile/settings',
           builder: (_, _) => const SettingsIndexPage(),
         ),
