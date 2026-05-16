@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:dio/dio.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter/material.dart';
 import 'dart:convert';
@@ -265,11 +266,45 @@ class _TrainingPageState extends State<TrainingPage> {
         throw Exception('Perfil incompleto');
       }
 
-      final planId = await _ds.generatePlan(
-        goal: goal,
-        level: level,
-        frequency: profile.frequency,
-      );
+      String planId;
+      try {
+        planId = await _ds.generatePlan(
+          goal: goal,
+          level: level,
+          frequency: profile.frequency,
+        );
+      } on DioException catch (e) {
+        // Server rejeita se já existe plano ativo. Pergunta antes de overwrite.
+        if (e.response?.statusCode == 409) {
+          if (!mounted) return;
+          final confirmed = await showDialog<bool>(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              title: const Text('Substituir plano atual?'),
+              content: const Text(
+                'Você já tem um plano ativo. Gerar um novo apaga o atual e o histórico de revisões. '
+                'Para ajustes pontuais, prefira a "Revisão semanal" do plano.',
+              ),
+              actions: [
+                TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('CANCELAR')),
+                TextButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('SUBSTITUIR')),
+              ],
+            ),
+          );
+          if (confirmed != true) {
+            if (mounted) setState(() => _generating = false);
+            return;
+          }
+          planId = await _ds.generatePlan(
+            goal: goal,
+            level: level,
+            frequency: profile.frequency,
+            confirmOverwrite: true,
+          );
+        } else {
+          rethrow;
+        }
+      }
       await _savePendingPlanId(planId);
       if (!mounted) return;
       setState(() {

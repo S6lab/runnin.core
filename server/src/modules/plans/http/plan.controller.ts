@@ -27,9 +27,16 @@ export async function getPlanKnowledge(_req: Request, res: Response, next: NextF
 export async function postGeneratePlan(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const input = GeneratePlanSchema.parse(req.body);
-    const plan = await generatePlan.execute(req.uid, input);
+    const confirmOverwrite = req.query['confirmOverwrite'] === '1' || (req.body as { confirmOverwrite?: boolean }).confirmOverwrite === true;
+    const plan = await generatePlan.execute(req.uid, input, { confirmOverwrite });
     res.status(202).json({ planId: plan.id, status: plan.status });
-  } catch (err) { next(err); }
+  } catch (err) {
+    if (err instanceof Error && (err as Error & { code?: string }).code === 'PLAN_ALREADY_EXISTS') {
+      res.status(409).json({ error: 'PLAN_ALREADY_EXISTS', message: err.message });
+      return;
+    }
+    next(err);
+  }
 }
 
 export async function getPlanById(req: Request, res: Response, next: NextFunction): Promise<void> {

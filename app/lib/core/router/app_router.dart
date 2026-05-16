@@ -7,6 +7,7 @@ import 'package:runnin/features/admin/presentation/pages/admin_page.dart';
 import 'package:runnin/features/admin/presentation/pages/prompts_admin_page.dart';
 import 'package:runnin/features/intro/presentation/pages/intro_page.dart';
 import 'package:runnin/features/paywall/presentation/pages/paywall_page.dart';
+import 'package:runnin/features/coach_live/presentation/pages/coach_live_page.dart';
 import 'package:runnin/features/auth/presentation/pages/login_page.dart';
 import 'package:runnin/features/coach_intro/presentation/pages/coach_intro_page.dart';
 import 'package:runnin/features/home/presentation/pages/home_page.dart';
@@ -132,6 +133,7 @@ final appRouter = GoRouter(
     GoRoute(path: '/admin', builder: (_, _) => const AdminPage()),
     GoRoute(path: '/admin/prompts', builder: (_, _) => const PromptsAdminPage()),
     GoRoute(path: '/intro', builder: (_, _) => const IntroPage()),
+    GoRoute(path: '/coach-live', builder: (_, _) => const CoachLivePage()),
     GoRoute(
       path: '/paywall',
       builder: (_, state) => PaywallPage(

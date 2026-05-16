@@ -22,9 +22,11 @@ class PlanRemoteDatasource {
     required String level,
     int? frequency,
     int? weeksCount,
+    bool confirmOverwrite = false,
   }) async {
     final res = await _dio.post(
       '/plans/generate',
+      queryParameters: confirmOverwrite ? {'confirmOverwrite': '1'} : null,
       data: {
         'goal': goal,
         'level': level,

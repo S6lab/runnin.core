@@ -38,7 +38,16 @@ export class GeneratePlanUseCase {
 
   constructor(private repo: PlanRepository) {}
 
-  async execute(userId: string, input: GeneratePlanInput): Promise<Plan> {
+  async execute(userId: string, input: GeneratePlanInput, opts: { confirmOverwrite?: boolean } = {}): Promise<Plan> {
+    // Limite: 1 plano ativo por user. Pra mudar, usar /plans/:id/request-revision
+    // (rate-limited 1/semana). Overwrite explícito permitido com confirmOverwrite=true.
+    const existing = await this.repo.findCurrent(userId);
+    if (existing && existing.status !== 'failed' && !opts.confirmOverwrite) {
+      const err = new Error('Você já tem um plano ativo. Confirme a substituição ou use a revisão semanal.');
+      (err as Error & { code?: string }).code = 'PLAN_ALREADY_EXISTS';
+      throw err;
+    }
+
     const planId = uuid();
     const now = new Date().toISOString();
     const weeksCount = input.weeksCount ?? resolvePlanWeeksCount(input);
