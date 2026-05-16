@@ -98,10 +98,10 @@ class _CoachIntroPageState extends State<CoachIntroPage> {
         curve: Curves.easeOut,
       );
     } else {
-      // Final CTA "VAMOS CORRER ↗" — mark seen + go to home (user can start run from there).
+      // Final CTA "VAMOS CORRER ↗" — marca seen e vai pro PREP (briefing termina na primeira corrida).
       await _markIntroSeen();
       if (!mounted) return;
-      context.go('/home');
+      context.go('/prep');
     }
   }
 

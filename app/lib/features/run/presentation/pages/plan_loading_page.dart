@@ -42,16 +42,9 @@ class _PlanLoadingPageState extends State<PlanLoadingPage> {
       timer.cancel();
       markOnboardingDone();
       if (!mounted) return;
-      // Route Coach Intro on first plan (intro only on first time)
-      bool introSeen = false;
-      try {
-        final profile = await _ds.getMe();
-        introSeen = profile?.coachIntroSeen ?? false;
-      } catch (_) {
-        introSeen = false;
-      }
-      if (!mounted) return;
-      context.go(introSeen ? '/home' : '/coach-intro');
+      // Após gerar o plano sempre vai pra home. O briefing do Coach (coach-intro)
+      // só aparece quando o user toca INICIAR pela primeira vez, antes do prep.
+      context.go('/home');
       return;
     }
     setState(() => _completedCount++);

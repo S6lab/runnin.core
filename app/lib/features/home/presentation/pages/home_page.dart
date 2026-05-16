@@ -460,7 +460,13 @@ class _IniciarSessaoButton extends StatelessWidget {
       palette: palette,
       message: coachMessage,
       ctaLabel: session != null ? 'INICIAR SESSAO ↗' : 'INICIAR CORRIDA LIVRE ↗',
-      onCta: () => context.push('/prep'),
+      onCta: () async {
+        // Briefing do Coach aparece UMA vez, antes do PREP, na primeira corrida
+        // após o plano ter sido gerado.
+        final introSeen = data.profile?.coachIntroSeen ?? false;
+        if (!context.mounted) return;
+        context.push(introSeen ? '/prep' : '/coach-intro');
+      },
     );
   }
 }
@@ -2352,16 +2358,19 @@ class _HeroSection extends StatelessWidget {
     return Container(
       height: 540,
       width: double.infinity,
-      decoration: BoxDecoration(
-        color: const Color(0xFF0A0A1A),
-        image: DecorationImage(
-          image: photoUrl != null ? NetworkImage(photoUrl) as ImageProvider : AssetImage(heroAsset),
-          fit: BoxFit.cover,
-        ),
-        borderRadius: FigmaBorderRadius.zero,
-      ),
+      color: const Color(0xFF0A0A1A),
       child: Stack(
+        fit: StackFit.expand,
         children: [
+          // Foto background usando Image.asset (com errorBuilder + frameBuilder pra debug)
+          Image(
+            image: photoUrl != null ? NetworkImage(photoUrl) as ImageProvider : AssetImage(heroAsset),
+            fit: BoxFit.cover,
+            errorBuilder: (_, error, __) {
+              debugPrint('HERO asset failed: $heroAsset -> $error');
+              return const ColoredBox(color: Color(0xFF0A0A1A));
+            },
+          ),
           // Vinheta sutil pra texto não competir com a foto
           Positioned.fill(
             child: DecoratedBox(
@@ -2381,6 +2390,8 @@ class _HeroSection extends StatelessWidget {
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
+            // Stack expandido, conteúdo cobre todo o hero
+
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
