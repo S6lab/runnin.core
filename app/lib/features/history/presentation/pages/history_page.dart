@@ -337,7 +337,7 @@ class _RunCard extends StatelessWidget {
     final duration = _fmtDuration(run.durationS);
 
     return GestureDetector(
-      onTap: () => context.push('/report', extra: run.id),
+      onTap: () => context.push('/history/run/${run.id}'),
       child: Container(
         margin: const EdgeInsets.only(bottom: 8),
         padding: const EdgeInsets.all(16),

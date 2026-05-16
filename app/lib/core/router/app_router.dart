@@ -12,10 +12,14 @@ import 'package:runnin/features/run/presentation/bloc/run_bloc.dart';
 import 'package:runnin/features/run/presentation/pages/prep_page.dart';
 import 'package:runnin/features/run/presentation/pages/active_run_page.dart';
 import 'package:runnin/features/run/presentation/pages/report_page.dart';
+import 'package:runnin/features/run/presentation/pages/share_page.dart';
 import 'package:runnin/features/run/presentation/pages/plan_loading_page.dart';
 import 'package:runnin/features/training/presentation/pages/training_page.dart';
+import 'package:runnin/features/training/presentation/pages/revision_flow_page.dart';
 import 'package:runnin/features/coach/presentation/pages/coach_chat_page.dart';
 import 'package:runnin/features/history/presentation/pages/history_page.dart';
+import 'package:runnin/features/history/presentation/pages/run_detail_page.dart';
+import 'package:runnin/features/history/presentation/pages/coach_conversation_replay_page.dart';
 import 'package:runnin/features/profile/presentation/pages/account_page.dart';
 import 'package:runnin/features/profile/presentation/pages/account_access_page.dart';
 import 'package:runnin/features/profile/presentation/pages/health_exams_page.dart';
@@ -120,6 +124,14 @@ final appRouter = GoRouter(
     GoRoute(path: '/onboarding', builder: (_, _) => const OnboardingPage()),
     GoRoute(path: '/plan-loading', builder: (_, _) => const PlanLoadingPage()),
     GoRoute(path: '/coach-intro', builder: (_, _) => const CoachIntroPage()),
+    GoRoute(
+      path: '/share',
+      parentNavigatorKey: _rootNavigatorKey,
+      builder: (_, state) {
+        final extra = state.extra as Map<String, dynamic>? ?? {};
+        return SharePage(runId: extra['runId'] as String? ?? '');
+      },
+    ),
 
     // Fluxo de corrida — RunBloc compartilhado entre prep → run → report
     ShellRoute(
@@ -151,6 +163,16 @@ final appRouter = GoRouter(
         GoRoute(path: '/training', builder: (_, _) => const TrainingPage()),
         GoRoute(path: '/coach', builder: (_, _) => const CoachChatPage()),
         GoRoute(path: '/history', builder: (_, _) => const HistoryPage()),
+        GoRoute(
+          path: '/history/run/:runId',
+          builder: (_, state) =>
+              RunDetailPage(runId: state.pathParameters['runId']!),
+        ),
+        GoRoute(
+          path: '/history/run/:runId/conversa',
+          builder: (_, state) =>
+              CoachConversationReplayPage(runId: state.pathParameters['runId']!),
+        ),
         GoRoute(path: '/profile', builder: (_, _) => const AccountPage()),
         GoRoute(
           path: '/profile/access',
