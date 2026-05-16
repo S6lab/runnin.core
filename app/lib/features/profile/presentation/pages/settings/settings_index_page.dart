@@ -47,13 +47,7 @@ class SettingsIndexPage extends StatelessWidget {
                     icon: Icons.straighten_outlined,
                     title: 'UNIDADES',
                     subtitle: 'Métrico / Imperial, pace, horário',
-                    onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Unidades — em breve.'),
-                        duration: Duration(seconds: 2),
-                        behavior: SnackBarBehavior.floating,
-                      ),
-                    ),
+                    onTap: () => context.push('/profile/settings/units'),
                   ),
                 ],
               ),

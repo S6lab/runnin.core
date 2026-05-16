@@ -19,10 +19,13 @@ import 'package:runnin/features/history/presentation/pages/history_page.dart';
 import 'package:runnin/features/profile/presentation/pages/account_page.dart';
 import 'package:runnin/features/profile/presentation/pages/account_access_page.dart';
 import 'package:runnin/features/profile/presentation/pages/health_exams_page.dart';
+import 'package:runnin/features/profile/presentation/pages/devices_page.dart';
+import 'package:runnin/features/profile/presentation/pages/health/health_zones_page.dart';
 import 'package:runnin/features/profile/presentation/pages/profile_page.dart';
 import 'package:runnin/features/profile/presentation/pages/settings/settings_index_page.dart';
 import 'package:runnin/features/profile/presentation/pages/settings/coach_settings_page.dart';
 import 'package:runnin/features/profile/presentation/pages/settings/notifications_settings_page.dart';
+import 'package:runnin/features/profile/presentation/pages/settings/units_settings_page.dart';
 import 'package:runnin/features/dashboard/presentation/pages/dashboard_page.dart';
 import 'package:runnin/features/profile/presentation/pages/health/health_index_page.dart';
 import 'package:runnin/features/profile/presentation/pages/health/health_trends_page.dart';
@@ -174,13 +177,28 @@ final appRouter = GoRouter(
           builder: (_, _) => const NotificationsSettingsPage(),
         ),
         GoRoute(
+          path: '/profile/settings/units',
+          builder: (_, _) => const UnitsSettingsPage(),
+        ),
+        GoRoute(
           path: '/profile/edit',
           builder: (_, _) => const ProfilePage(initialEditing: true),
         ),
         GoRoute(path: '/dashboard', builder: (_, _) => const DashboardPage()),
         GoRoute(path: '/gamification', builder: (_, _) => const GamificationPage()),
         GoRoute(path: '/profile/health', builder: (_, _) => const HealthIndexPage()),
-        GoRoute(path: '/profile/health/trends', builder: (_, _) => const HealthTrendsPage()),
+        GoRoute(
+          path: '/profile/health/devices',
+          builder: (_, _) => const DevicesPage(),
+        ),
+        GoRoute(
+          path: '/profile/health/trends',
+          builder: (_, _) => const HealthTrendsPage(),
+        ),
+        GoRoute(
+          path: '/profile/health/zones',
+          builder: (_, _) => const HealthZonesPage(),
+        ),
       ],
     ),
   ],
