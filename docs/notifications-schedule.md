@@ -1,4 +1,4 @@
-# Cloud Scheduler para Notificações Diárias
+# Cloud Scheduler para Notificações Diárias e Reset de Cota
 
 ## Visão Geral
 
@@ -35,7 +35,7 @@ gcloud functions deploy notifications-function \
   --set-env-vars=X_CRON_TOKEN=seu-token-secreto-unico
 ```
 
-### 2. Criar o Cloud Scheduler Job
+### 2. Criar o Cloud Scheduler Job para Notificações
 
 ```bash
 gcloud scheduler jobs create http daily-notifs \
@@ -46,7 +46,22 @@ gcloud scheduler jobs create http daily-notifs \
   --time-zone="America/Sao_Paulo"
 ```
 
-### 3. Verificar o job criado
+### 3. Criar o Cloud Scheduler Job para Reset de Cota ( SUP-601 )
+
+Adicione este job para zera `user.planRevisions.usedThisWeek` toda segunda às 03:00 BRT:
+
+```bash
+gcloud scheduler jobs create http reset-plan-revision-quota \
+  --schedule='0 3 * * 1' \
+  --time-zone='America/Sao_Paulo' \
+  --uri="https://<YOUR_REGION>-<YOUR_PROJECT_ID>.run.app/v1/users/internal/reset-plan-revision-quota" \
+  --http-method=POST \
+  --headers="X-CRON-TOKEN=seu-token-secreto-unico"
+```
+
+**⚠️ Importante:** Use o URI da API (não a função) para endpoints `/internal/*`.
+
+### 4. Verificar os jobs criados
 
 ```bash
 gcloud scheduler jobs describe daily-notifs
@@ -58,32 +73,34 @@ gcloud scheduler jobs describe daily-notifs
 gcloud scheduler jobs list
 ```
 
-## Parâmetros do Schedule
+## Parâmetros do Schedule (Notifications)
 
 - **Schedule:** `0 6 * * *` (rodar todos os dias às 06:00 horário de São Paulo)
 - **URI:** URL da função cloud (ajustar conforme deploy)
 - **Time Zone:** `America/Sao_Paulo` (horário local)
 
+## Parâmetros do Schedule (Reset de Cota)
+
+- **Schedule:** `0 3 * * 1` (rodar toda segunda-feira às 03:00 horário de São Paulo)
+- **URI:** URL da API Cloud Run (ajustar conforme deploy)
+- **Time Zone:** `America/Sao_Paulo` (horário local)
+
 ## Processamento em Batch
 
-O endpoint processa usuários em lotes de 100 para evitar timeouts e garantir escalabilidade:
+O endpoint processa todos os usuários com `planRevisions` definido:
 
-- Itera todos os usuários com `onboarded: true`
-- Executa `EnsureDailyInsightsUseCase` para cada usuário
-- Logs de sucesso/falha por usuário
-- Resumo final com total processado
+- Itera todos os usuários em lotes de 100
+- Reseta `usedThisWeek = 0` e atualiza `resetAt = now()`
+- Retorna contador total de usuários resetados
 
 ## Monitoramento
 
-Logs do Cloud Functions mostrarão:
-- `notifications.ensure_daily_user_failed` para usuários que falharam
-- `notifications.ensure_daily_complete` com contador final
+Logs mostrarão contador final após cada execução:
 
 Exemplo de log:
 ```json
 {
-  "message": "notifications.ensure_daily_complete",
-  "count": 150
+  "resetCount": 150
 }
 ```
 
@@ -96,7 +113,19 @@ Exemplo de log:
 ### Erro: X-CRON-TOKEN env var not configured
 - Defina a variável de ambiente no deploy da função
 
-### Job não roda
+### Job não roda (Notifications)
 - Verifique o schedule: `gcloud scheduler jobs describe daily-notifs`
 - Confirme que a função existe e está ativa
 - Verifique permissões do Cloud Scheduler para invocar a função
+
+### Job não roda (Reset de Cota)
+- Verifique o schedule: `gcloud scheduler jobs describe reset-plan-revision-quota`
+- Confirme que o endpoint está acessível via Cloud Run
+- Verifique permissões do Cloud Scheduler para invocar a API
+
+### Erro: Invalid or missing X-CRON-TOKEN header
+- Verifique se a variável `X_CRON_TOKEN` está configurada no deploy
+- Certifique-se que o header `X-CRON-TOKEN` está presente na requisição
+
+### Erro: X-CRON-TOKEN env var not configured
+- Defina a variável de ambiente no deploy do Cloud Run ou função

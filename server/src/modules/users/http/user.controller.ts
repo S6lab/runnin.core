@@ -5,6 +5,7 @@ import { UpsertProfileUseCase, UpsertProfileSchema } from '../domain/use-cases/u
 import { CompleteOnboardingUseCase, CompleteOnboardingSchema } from '../domain/use-cases/complete-onboarding.use-case';
 import { ProvisionUserSchema, ProvisionUserUseCase } from '../domain/use-cases/provision-user.use-case';
 import { ActivateTrialUseCase } from '../domain/use-cases/activate-trial.use-case';
+import { ResetPlanRevisionsQuotaUseCase } from '../domain/use-cases/reset-plan-revisions-quota.use-case';
 
 const repo = new FirestoreUserRepository();
 const getProfile = new GetProfileUseCase(repo);
@@ -12,6 +13,7 @@ const upsertProfile = new UpsertProfileUseCase(repo);
 const completeOnboarding = new CompleteOnboardingUseCase(repo);
 const provisionUser = new ProvisionUserUseCase(repo);
 const activateTrial = new ActivateTrialUseCase(repo);
+const resetPlanRevisionsQuota = new ResetPlanRevisionsQuotaUseCase(repo);
 
 export async function getMe(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
@@ -59,4 +61,9 @@ export async function postActivateTrial(req: Request, res: Response, next: NextF
   } catch (err) {
     next(err);
   }
+}
+
+export async function postResetPlanRevisionsQuota(_req: Request, res: Response): Promise<void> {
+  const result = await resetPlanRevisionsQuota.execute();
+  res.json(result);
 }
