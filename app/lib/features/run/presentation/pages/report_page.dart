@@ -129,7 +129,20 @@ class _ReportPageState extends State<ReportPage> {
               ),
             ),
 
-            const SizedBox(height: 32),
+            const SizedBox(height: 24),
+            if (_run != null)
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton(
+                  onPressed: () => context.push('/share', extra: {'runId': widget.runId}),
+                  style: OutlinedButton.styleFrom(
+                    side: BorderSide(color: palette.primary),
+                    foregroundColor: palette.primary,
+                  ),
+                  child: const Text('COMPARTILHAR'),
+                ),
+              ),
+            const SizedBox(height: 12),
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(

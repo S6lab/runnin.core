@@ -2168,6 +2168,27 @@ class _RunCard extends StatelessWidget {
               ),
             ],
           ),
+          const SizedBox(height: 16),
+          GestureDetector(
+            onTap: () => context.push('/share', extra: {'runId': run.id}),
+            child: Container(
+              width: double.infinity,
+              height: 38,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                border: Border.all(color: FigmaColors.brandCyan, width: 1.735),
+              ),
+              child: Text(
+                'COMPARTILHAR',
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.1,
+                  color: FigmaColors.brandCyan,
+                ),
+              ),
+            ),
+          ),
         ],
       ),
     );
