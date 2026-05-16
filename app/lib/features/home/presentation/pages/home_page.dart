@@ -403,7 +403,7 @@ class _UserInfoCards extends StatelessWidget {
     final weight = data.profile?.weight ?? '—';
     final height = data.profile?.height ?? '—';
     final age = _calculateAge(data.profile?.birthDate);
-    final frequency = data.profile?.frequency?.toString() ?? '—';
+    final frequency = data.profile?.frequency.toString() ?? '—';
 
     return Row(
       children: [
@@ -2257,14 +2257,18 @@ class _RunCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                dateLabel,
-                style: TextStyle(
-                  color: palette.primary,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
+              Expanded(
+                child: Text(
+                  dateLabel,
+                  style: TextStyle(
+                    color: palette.primary,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
+              const SizedBox(width: 8),
               Text(
                 'DURACAO',
                 style: TextStyle(
