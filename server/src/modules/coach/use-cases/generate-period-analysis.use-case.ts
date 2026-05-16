@@ -1,13 +1,9 @@
 import { getAsyncLLM } from '@shared/infra/llm/llm.factory';
-import { Run } from '@modules/runs/domain/run.entity';
 import { RunRepository } from '@modules/runs/domain/run.repository';
 import { logger } from '@shared/logger/logger';
 import { formatRunningKnowledgeContext } from '@shared/knowledge/running/running-knowledge';
-
-const SYSTEM_PROMPT = `Você é o Coach.AI do runnin: um personal trainer de corrida experiente.
-Gere análises técnicas de corrida em português brasileiro, falando diretamente com o corredor.
-Seja específico com dados reais fornecidos e transforme a análise em orientação prática.
-Tom humano, firme e motivador, como feedback pós-treino. Máximo 3 parágrafos curtos. Sem emojis.`;
+import { buildPeriodAnalysisPrompt } from '@shared/infra/llm/prompts';
+import { CoachRuntimeContextService } from './coach-runtime-context.service';
 
 export interface PeriodAnalysisRun {
   id: string;
@@ -30,6 +26,7 @@ export interface PeriodAnalysis {
 
 export class GeneratePeriodAnalysisUseCase {
   private llm = getAsyncLLM();
+  private runtime = new CoachRuntimeContextService();
 
   constructor(private readonly runs: RunRepository) {}
 
@@ -46,35 +43,48 @@ export class GeneratePeriodAnalysisUseCase {
       };
     }
 
-    const totalDistanceKm = periodRuns.reduce((sum, r) => sum + (r.distanceM / 1000), 0);
+    const totalDistanceKm = periodRuns.reduce((sum, r) => sum + r.distanceM / 1000, 0);
     const totalDurationS = periodRuns.reduce((sum, r) => sum + r.durationS, 0);
     const avgBpmValues = periodRuns.map(r => r.avgBpm).filter((b): b is number => typeof b === 'number');
     const maxBpmValues = periodRuns.map(r => r.maxBpm).filter((b): b is number => typeof b === 'number');
     const avgBpm = avgBpmValues.length > 0 ? Math.round(avgBpmValues.reduce((a, b) => a + b, 0) / avgBpmValues.length) : undefined;
     const maxBpm = maxBpmValues.length > 0 ? Math.max(...maxBpmValues) : undefined;
 
+    const runtime = await this.runtime.getContext(userId);
+
     const knowledgeContext = await formatRunningKnowledgeContext(
       `periodo corrida ${totalDistanceKm.toFixed(1)}km ${Math.floor(totalDurationS / 60)}min`,
       3,
     );
 
-    const prompt = `Analise este período de treino:
-- Quantidade de corridas: ${periodRuns.length}
-- Distância total: ${totalDistanceKm.toFixed(2)}km
-- Duração total: ${Math.floor(totalDurationS / 60)} minutos (${Math.floor((totalDurationS % 60))}s)
-${avgBpm ? `- BPM médio: ${avgBpm}` : ''}
-${maxBpm ? `- BPM máximo: ${maxBpm}` : ''}
+    const metricsLines = [
+      `- Quantidade de corridas: ${periodRuns.length}`,
+      `- Distância total: ${totalDistanceKm.toFixed(2)}km`,
+      `- Duração total: ${Math.floor(totalDurationS / 60)} minutos`,
+    ];
+    if (avgBpm) metricsLines.push(`- BPM médio: ${avgBpm}`);
+    if (maxBpm) metricsLines.push(`- BPM máximo: ${maxBpm}`);
 
-Baseado nestas corridas, dê um feedback de personal trainer com: (1) avaliação do desempenho do período, (2) pontos de melhoria, (3) sugestão para próximo período.
+    const runsList = periodRuns
+      .map(r => `- ${new Date(r.createdAt).toLocaleDateString('pt-BR')}: ${(r.distanceM / 1000).toFixed(2)}km em ${Math.floor(r.durationS / 60)}min`)
+      .join('\n');
 
-Datas das corridas:
-${periodRuns.map(r => `- ${new Date(r.createdAt).toLocaleDateString('pt-BR')}: ${(r.distanceM / 1000).toFixed(2)}km em ${Math.floor(r.durationS / 60)}min`).join('\n')}
-
-Base de conhecimento:
-${knowledgeContext}`;
+    const built = await buildPeriodAnalysisPrompt({
+      profile: runtime.profile,
+      period: {
+        range: `${periodRuns.length} corridas (${totalDistanceKm.toFixed(1)} km totais)`,
+        metrics: metricsLines.join('\n'),
+        runs: runsList,
+      },
+      ragContext: knowledgeContext,
+    });
 
     try {
-      const summary = await this.llm.generate(prompt, { systemPrompt: SYSTEM_PROMPT, maxTokens: 400 });
+      const summary = await this.llm.generate(built.userPrompt, {
+        systemPrompt: built.systemPrompt,
+        maxTokens: built.maxTokens,
+        temperature: built.temperature,
+      });
 
       const runsData: PeriodAnalysisRun[] = periodRuns.map(r => ({
         id: r.id,
@@ -86,6 +96,8 @@ ${knowledgeContext}`;
         type: r.type,
         date: new Date(r.createdAt).toISOString(),
       }));
+
+      logger.info('coach.period-analysis.generated', { userId, version: built.version, source: built.source });
 
       return {
         userId,

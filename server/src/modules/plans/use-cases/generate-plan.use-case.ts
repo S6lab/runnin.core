@@ -5,17 +5,8 @@ import { PlanRepository } from '../domain/plan.repository';
 import { Plan, PlanSession, PlanWeek } from '../domain/plan.entity';
 import { logger } from '@shared/logger/logger';
 import { formatRunningKnowledgeContext } from '@shared/knowledge/running/running-knowledge';
-
-const SYSTEM_PROMPT = `Você é o Coach.AI do runnin: um personal trainer de corrida experiente, presente e direto.
-Gere um plano de treino estruturado em JSON válido.
-O JSON deve ser um array de semanas. Cada semana tem weekNumber e sessions.
-Cada sessão tem: dayOfWeek (1=Seg,7=Dom), type (Easy Run/Intervalado/Tempo Run/Long Run), distanceKm (number), targetPace (string opcional, ex: "6:00"), notes (string curta).
-Retorne SOMENTE o JSON, sem explicação, sem markdown.
-Nao invente justificativas cientificas fora da base fornecida.
-Se o atleta for iniciante, seja conservador com intensidade e progressao.
-As notes devem falar diretamente com o corredor, como um personal trainer: tom humano, motivador, firme e pratico.
-Use frases curtas no imperativo ou primeira pessoa do plural, como "Segura o pace", "Vamos trabalhar base" e "Fecha leve para recuperar".
-Evite texto robotico, explicacao academica longa ou linguagem de relatorio.`;
+import { buildPlanInitPrompt } from '@shared/infra/llm/prompts';
+import { CoachRuntimeContextService } from '@modules/coach/use-cases/coach-runtime-context.service';
 
 const PlanSessionSchema = z.object({
   dayOfWeek: z.number().int().min(1).max(7),
@@ -43,6 +34,7 @@ export type GeneratePlanInput = z.infer<typeof GeneratePlanSchema>;
 
 export class GeneratePlanUseCase {
   private llm = getAsyncLLM();
+  private runtime = new CoachRuntimeContextService();
 
   constructor(private repo: PlanRepository) {}
 
@@ -83,41 +75,27 @@ export class GeneratePlanUseCase {
     const freq =
         input.frequency ??
         (input.level === 'iniciante' ? 3 : input.level === 'intermediario' ? 4 : 5);
+
+    const runtime = await this.runtime.getContext(plan.userId);
     const knowledgeContext = await formatRunningKnowledgeContext(
       `${input.goal} ${input.level} ${input.weeksCount} semanas corrida`,
       5,
     );
-    const prompt = `Gere um plano de corrida de ${input.weeksCount} semanas.
-Objetivo: ${input.goal}
-Nível: ${input.level}
-Frequência: ${freq} dias por semana
-Estruture o plano com predominio de baixa intensidade e distribuicao coerente de carga.
-Evite regras fixas nao sustentadas por evidencia, como aumento automatico de 10% toda semana.
-Inclua semanas de consolidacao ou alivio quando a carga estiver subindo.
-Se houver prova-alvo nas ultimas semanas, reduza volume e preserve especificidade.
 
-Base de conhecimento baseada em evidencia:
-${knowledgeContext}
-
-Requisitos:
-- Retorne um array JSON com ${input.weeksCount} objetos de semana.
-- O array deve conter weekNumber de 1 ate ${input.weeksCount}, sem agrupar varias semanas em um unico objeto.
-- Cada semana deve ter exatamente ${freq} sessoes, salvo necessidade muito clara de uma semana de alivio.
-- Distribua os dias para evitar sessoes duras em dias consecutivos.
-- Em iniciantes, use no maximo 1 sessao de intensidade por semana.
-- Em intermediarios e avancados, use no maximo 2 sessoes de qualidade por semana.
-- Notes deve explicar o objetivo da sessao em portugues brasileiro, de forma curta.
-- Notes deve soar como uma orientacao de personal trainer para o corredor: direta, motivadora, pratica e natural.
-- Fale com o corredor em segunda pessoa ou primeira pessoa do plural ("voce", "vamos", "mantem", "fecha").
-- Se nao houver dados suficientes para pace exato, deixe targetPace ausente.
-- Nao inclua sessoes de fortalecimento dentro do JSON; mencione isso em notes quando relevante.`;
+    const built = await buildPlanInitPrompt({
+      profile: runtime.profile,
+      input: { goal: input.goal, level: input.level, frequency: freq, weeksCount: input.weeksCount },
+      ragContext: knowledgeContext,
+    });
 
     try {
-      const raw = await this.llm.generate(prompt, {
-        systemPrompt: SYSTEM_PROMPT,
-        maxTokens: 6000,
+      const raw = await this.llm.generate(built.userPrompt, {
+        systemPrompt: built.systemPrompt,
+        maxTokens: built.maxTokens,
+        temperature: built.temperature,
       });
       const weeks = await this._parseWeeks(raw, input.weeksCount);
+      logger.info('plan.generate.completed', { planId: plan.id, version: built.version, source: built.source });
       await this.repo.update(plan.id, plan.userId, {
         status: 'ready',
         weeks,

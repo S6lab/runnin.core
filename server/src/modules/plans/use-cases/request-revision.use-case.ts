@@ -9,6 +9,7 @@ import { UserProfile } from '@modules/users/domain/user.entity';
 import { Plan, PlanWeek } from '../domain/plan.entity';
 import { logger } from '@shared/logger/logger';
 import { formatRunningKnowledgeContext } from '@shared/knowledge/running/running-knowledge';
+import { buildPlanRevisionPrompt } from '@shared/infra/llm/prompts';
 
 export class QuotaExhaustedError extends Error {
   public readonly quota: { usedThisWeek: number; max: number; resetAt: string };
@@ -101,20 +102,38 @@ export class RequestRevisionUseCase {
       5,
     );
 
-    const prompt = this._buildLLMPrompt(plan, currentWeekIndex, input, profile, knowledgeContext);
+    const futureWeeks = plan.weeks.slice(currentWeekIndex);
+
+    const built = await buildPlanRevisionPrompt({
+      profile,
+      plan: {
+        goal: plan.goal,
+        level: plan.level,
+        weeksCount: plan.weeksCount,
+        weeks: futureWeeks,
+      },
+      revision: {
+        type: input.type,
+        subOption: input.subOption,
+        freeText: input.freeText,
+      },
+      ragContext: knowledgeContext,
+    });
 
     let coachExplanation: string;
     let newWeeks: typeof plan.weeks;
 
     try {
-      const raw = await this.llm.generate(prompt, {
-        systemPrompt: this._getSystemPrompt(),
-        maxTokens: 4000,
+      const raw = await this.llm.generate(built.userPrompt, {
+        systemPrompt: built.systemPrompt,
+        maxTokens: built.maxTokens,
+        temperature: built.temperature,
       });
 
       const parsed = this._parseRevisionResponse(raw);
       coachExplanation = parsed.coachExplanation;
       newWeeks = this._mergeWeeks(plan.weeks, parsed.newWeeks, currentWeekIndex);
+      logger.info('plan.revision.generated', { planId, version: built.version, source: built.source });
     } catch (err) {
       logger.error('plan.revision.llm_failed', {
         planId,
@@ -175,43 +194,6 @@ export class RequestRevisionUseCase {
     const diffTime = Math.abs(now.getTime() - planDate.getTime());
     const diffWeeks = Math.ceil(diffTime / (1000 * 60 * 60 * 24 * 7));
     return Math.min(diffWeeks, plan.weeksCount - 1);
-  }
-
-  private _buildLLMPrompt(
-    plan: Plan,
-    currentWeekIndex: number,
-    input: RequestRevisionInput,
-    profile: UserProfile,
-    knowledgeContext: string,
-  ): string {
-    const futureWeeks = plan.weeks.slice(currentWeekIndex);
-    const promptWeeksJson = JSON.stringify(futureWeeks, null, 2);
-
-    return `Plano atual (semanas futuras a partir da semana ${currentWeekIndex + 1}):
-${promptWeeksJson}
-
-Solicitação do user:
-- Tipo: ${input.type}
-- Sub-opção: ${input.subOption ?? 'N/A'}
-- Texto livre: ${input.freeText ?? 'N/A'}
-
-Profile: nível=${profile.level}, objetivo=${profile.goal}, frequência=${profile.frequency}x/semana
-${knowledgeContext ? `Exames recentes:
-${knowledgeContext}` : ''}
-
-Retorne JSON estrito no formato esperado.`;
-  }
-
-  private _getSystemPrompt(): string {
-    return `Você é o Coach.AI do runnin. Modifique o plano de treino existente conforme a solicitação.
-
-Regras:
-1. Mantenha o objetivo do user
-2. NÃO altere semanas já completadas/passadas
-3. Modifique apenas semanas futuras a partir da atual
-4. Se houver dados clínicos (exam summaries), respeite limites (FCmáx, limiar)
-5. Preserve a periodização (não quebre estrutura linear 3:1)
-6. Retorne APENAS JSON estrito conforme schema.`;
   }
 
   private _parseRevisionResponse(raw: string): { coachExplanation: string; newWeeks: z.infer<typeof PlanWeekSchema>[] } {

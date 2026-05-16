@@ -4,8 +4,35 @@ import { Run } from '@modules/runs/domain/run.entity';
 import { UserProfile } from '@modules/users/domain/user.entity';
 import { logger } from '@shared/logger/logger';
 
+export type CoachRuntimeProfile = Pick<
+  UserProfile,
+  | 'name'
+  | 'level'
+  | 'goal'
+  | 'frequency'
+  | 'hasWearable'
+  | 'coachVoiceId'
+  | 'gender'
+  | 'birthDate'
+  | 'weight'
+  | 'height'
+  | 'runPeriod'
+  | 'wakeTime'
+  | 'sleepTime'
+  | 'restingBpm'
+  | 'maxBpm'
+  | 'medicalConditions'
+  | 'coachPersonality'
+  | 'coachMessageFrequency'
+  | 'coachFeedbackEnabled'
+  | 'preRunAlerts'
+  | 'dndWindow'
+  | 'unitsSystem'
+  | 'paceFormat'
+>;
+
 export interface CoachRuntimeContext {
-  profile: Pick<UserProfile, 'name' | 'level' | 'goal' | 'frequency' | 'hasWearable' | 'coachVoiceId'> | null;
+  profile: CoachRuntimeProfile | null;
   currentPlan: {
     goal: string;
     level: string;
@@ -84,6 +111,23 @@ export class CoachRuntimeContextService {
               frequency: profile.frequency,
               hasWearable: profile.hasWearable,
               coachVoiceId: profile.coachVoiceId,
+              gender: profile.gender,
+              birthDate: profile.birthDate,
+              weight: profile.weight,
+              height: profile.height,
+              runPeriod: profile.runPeriod,
+              wakeTime: profile.wakeTime,
+              sleepTime: profile.sleepTime,
+              restingBpm: profile.restingBpm,
+              maxBpm: profile.maxBpm,
+              medicalConditions: profile.medicalConditions,
+              coachPersonality: profile.coachPersonality,
+              coachMessageFrequency: profile.coachMessageFrequency,
+              coachFeedbackEnabled: profile.coachFeedbackEnabled,
+              preRunAlerts: profile.preRunAlerts,
+              dndWindow: profile.dndWindow,
+              unitsSystem: profile.unitsSystem,
+              paceFormat: profile.paceFormat,
             }
           : null,
         currentPlan: plan

@@ -29,5 +29,7 @@ export interface CoachMessageLog {
   kmAtTime?: number;          // distância acumulada ao gerar
   paceAtTime?: string;        // pace ao gerar
   bpmAtTime?: number;         // bpm ao gerar
+  promptVersion?: string;     // ex: 'live-coach.v1.2026-05' ou '...+admin-override'
+  promptSource?: 'firestore' | 'env' | 'default';
   createdAt: string;
 }
