@@ -57,4 +57,14 @@ export class FirestoreRunRepository implements RunRepository {
     const runs = docs.slice(0, limit).map(d => ({ id: d.id, userId, ...d.data() }) as Run);
     return { runs, nextCursor: hasMore ? runs[runs.length - 1].createdAt : undefined };
   }
+
+  async findByDateRange(userId: string, from: Date, to: Date): Promise<Run[]> {
+    const snap = await this.col(userId)
+      .where('status', '==', 'completed')
+      .where('createdAt', '>=', from.toISOString())
+      .where('createdAt', '<=', to.toISOString())
+      .orderBy('createdAt', 'asc')
+      .get();
+    return snap.docs.map(d => ({ id: d.id, userId, ...d.data() }) as Run);
+  }
 }
