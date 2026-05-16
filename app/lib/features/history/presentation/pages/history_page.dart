@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
+import 'package:runnin/features/history/data/benchmark_remote_datasource.dart' show BenchmarkRemoteDatasource;
 import 'package:runnin/features/history/presentation/widgets/hist_stat_card.dart';
 import 'package:runnin/features/run/data/datasources/run_remote_datasource.dart';
 import 'package:runnin/features/run/domain/entities/run.dart';
@@ -31,6 +32,8 @@ class _HistoryPageState extends State<HistoryPage> {
   _ContentTab _tab = _ContentTab.data;
   bool _benchmarkLoading = false;
   double? _benchmarkPercentile;
+  List<BenchmarkRow> _benchmarkTableData = [];
+  final _benchmarkDatasource = BenchmarkRemoteDatasource();
 
   @override
   void initState() {
@@ -72,6 +75,20 @@ class _HistoryPageState extends State<HistoryPage> {
       }
     } catch (_) {
       if (mounted) setState(() { _benchmarkLoading = false; });
+    }
+  }
+
+  Future<void> _loadBenchmarkTable(String runId) async {
+    setState(() { });
+    try {
+      final tableData = await _benchmarkDatasource.getBenchmark(runId);
+      if (mounted) {
+        setState(() { 
+          _benchmarkTableData = tableData;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() { });
     }
   }
 
@@ -121,8 +138,12 @@ class _HistoryPageState extends State<HistoryPage> {
                 onChanged: (i) {
                   final newTab = _ContentTab.values[i];
                   setState(() => _tab = newTab);
-                  if (newTab == _ContentTab.bench && _benchmarkPercentile == null) {
+                  if (newTab == _ContentTab.bench) {
                     _loadBenchmark();
+                    if (_allRuns != null && _allRuns!.isNotEmpty) {
+                      final lastRunId = _allRuns!.first.id;
+                      _loadBenchmarkTable(lastRunId);
+                    }
                   }
                 },
               ),
@@ -193,6 +214,28 @@ class _HistoryPageState extends State<HistoryPage> {
                 ],
               ),
             ),
+            const SizedBox(height: 16),
+            if (_benchmarkTableData.isNotEmpty)
+              FigmaBenchmarkTable(benchmarkData: _benchmarkTableData)
+            else if (_benchmarkLoading)
+              const SizedBox(
+                height: 200,
+                child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+              )
+            else
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: palette.surface,
+                  border: Border.all(color: palette.border),
+                ),
+                child: Center(
+                  child: Text(
+                    'Carregando dados de benchmark...',
+                    style: TextStyle(color: palette.muted),
+                  ),
+                ),
+              ),
           ],
         ],
       ),
