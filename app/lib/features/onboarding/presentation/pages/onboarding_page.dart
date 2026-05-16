@@ -30,7 +30,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
   final _medicalOtherCtrl = TextEditingController();
   final Set<String> _medicalConditions = {};
 
-  static const _totalSteps = 12;
+  static const _totalSteps = 13;
   static const _loadingStep = _totalSteps - 1;
   static const _loginStep = 3;
   static const _firstAssessmentStep = 4;
@@ -39,6 +39,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
   String _level = 'iniciante';
   String _goal = 'Completar 10K';
   int _frequency = 4;
+  String? _pace;
   bool _hasWearable = false;
   bool _authLoading = false;
   bool _submitting = false;
@@ -139,6 +140,15 @@ class _OnboardingPageState extends State<OnboardingPage> {
     'Maratona (42K)',
     'Ultramaratona',
     'Triathlon',
+  ];
+
+  static const _paceOptions = [
+    'Não sei o que é pace',
+    'Acima de 7:00/km',
+    'Entre 6:00 e 7:00/km',
+    'Entre 5:00 e 6:00/km',
+    'Abaixo de 5:00/km',
+    'Deixa o Coach decidir',
   ];
 
   static const _wearableOptions = [
@@ -434,6 +444,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
         height: _heightCtrl.text.trim().isEmpty
             ? null
             : _heightCtrl.text.trim(),
+        targetPace: _pace,
         hasWearable: _hasWearable,
         medicalConditions: _medicalConditions.toList()..sort(),
       );
@@ -586,6 +597,12 @@ class _OnboardingPageState extends State<OnboardingPage> {
           onFreqChange: (value) => setState(() => _frequency = value),
         );
       case 10:
+        return _StepPace(
+          selected: _pace,
+          options: _paceOptions,
+          onSelect: (value) => setState(() => _pace = value),
+        );
+      case 11:
         return _StepWearable(
           selected: _hasWearable,
           options: _wearableOptions,
@@ -905,29 +922,23 @@ class _StepLogin extends StatelessWidget {
           const SizedBox(height: 14),
           Text('Entre na corrida', style: context.runninType.displayMd),
           const SizedBox(height: 28),
-          _FieldLabel('TELEFONE'),
+          const FigmaFormFieldLabel(text: 'TELEFONE'),
           const SizedBox(height: 8),
-          TextField(
+          FigmaFormTextField(
             controller: phoneController,
             keyboardType: TextInputType.phone,
+            placeholder: '+55 (11) 99999-9999',
+            maxLength: 14,
             inputFormatters: [
               FilteringTextInputFormatter.allow(RegExp(r'[0-9+]')),
-              LengthLimitingTextInputFormatter(14),
             ],
-            decoration: const InputDecoration(hintText: '+55 (11) 99999-9999'),
           ),
           const SizedBox(height: 18),
-          _FieldLabel('CODIGO OTP'),
+          const FigmaFormFieldLabel(text: 'CODIGO OTP'),
           const SizedBox(height: 8),
-          TextField(
+          FigmaOtpTextField(
             controller: smsCodeController,
             enabled: codeRequested,
-            keyboardType: TextInputType.number,
-            inputFormatters: [
-              FilteringTextInputFormatter.digitsOnly,
-              LengthLimitingTextInputFormatter(6),
-            ],
-            decoration: const InputDecoration(hintText: '_  _  _  _  _  _'),
           ),
           if (codeRequested) ...[
             const SizedBox(height: 8),
@@ -937,35 +948,8 @@ class _StepLogin extends StatelessWidget {
             ),
           ],
           const SizedBox(height: 18),
-          SizedBox(
-            width: double.infinity,
-            height: 44,
-            child: OutlinedButton(
-              onPressed: loading ? null : onGoogleSignIn,
-              child: loading
-                  ? SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: palette.primary,
-                      ),
-                    )
-                  : Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          'G',
-                          style: TextStyle(
-                            color: palette.secondary,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        const Text('Google Sign-In'),
-                      ],
-                    ),
-            ),
+          FigmaGoogleSignInButton(
+            onPressed: loading ? null : onGoogleSignIn,
           ),
           if (message != null) ...[
             const SizedBox(height: 16),
@@ -990,87 +974,55 @@ class _StepIdentity extends StatelessWidget {
     required this.birthDateController,
   });
 
+  Future<void> _pickDate(BuildContext context) async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: DateTime.now().subtract(const Duration(days: 365 * 25)),
+      firstDate: DateTime(1900),
+      lastDate: DateTime.now(),
+    );
+    if (picked != null) {
+      birthDateController.text =
+          '${picked.day.toString().padLeft(2, '0')}/${picked.month.toString().padLeft(2, '0')}/${picked.year}';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final palette = context.runninPalette;
-
     return SingleChildScrollView(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _StepCode('ASSESSMENT_02'),
+          const FigmaAssessmentLabel(text: 'ASSESSMENT_02'),
           const SizedBox(height: 12),
-          Text('Como te chamo?', style: context.runninType.displayMd),
+          const FigmaAssessmentHeading(text: 'Como te chamo?'),
           const SizedBox(height: 10),
-          Text(
-            'Nome e data de nascimento ajudam o Coach a personalizar comunicacao, zonas e progressao.',
-            style: TextStyle(color: palette.muted, height: 1.5),
+          const FigmaAssessmentDescription(
+            text:
+                'Nome e data de nascimento ajudam o Coach a personalizar comunicacao, zonas e progressao.',
           ),
           const SizedBox(height: 28),
-          _FieldLabel('SEU NOME'),
+          const FigmaFormFieldLabel(text: 'SEU NOME'),
           const SizedBox(height: 8),
-          TextField(
+          FigmaFormTextField(
             controller: nameController,
             autofocus: true,
             textCapitalization: TextCapitalization.words,
-            style: TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.w700,
-              color: palette.text,
-            ),
-            decoration: InputDecoration(
-              hintText: 'Ex: Lucas',
-              hintStyle: TextStyle(color: palette.border, fontSize: 22),
-            ),
+            height: 51.5,
+            placeholder: 'Ex: Lucas',
           ),
           const SizedBox(height: 28),
-          _FieldLabel('DATA DE NASCIMENTO'),
+          const FigmaFormFieldLabel(text: 'DATA DE NASCIMENTO'),
           const SizedBox(height: 8),
-          TextField(
+          FigmaFormTextField(
             controller: birthDateController,
-            keyboardType: TextInputType.number,
-            inputFormatters: [
-              FilteringTextInputFormatter.digitsOnly,
-              LengthLimitingTextInputFormatter(8),
-              _DateTextInputFormatter(),
-            ],
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-              color: palette.text,
-            ),
-            decoration: InputDecoration(
-              hintText: 'dd/mm/aaaa',
-              hintStyle: TextStyle(color: palette.border, fontSize: 18),
-            ),
+            height: 51.5,
+            readOnly: true,
+            onTap: () => _pickDate(context),
+            placeholder: 'dd/mm/aaaa',
           ),
         ],
       ),
-    );
-  }
-}
-
-class _DateTextInputFormatter extends TextInputFormatter {
-  @override
-  TextEditingValue formatEditUpdate(
-    TextEditingValue oldValue,
-    TextEditingValue newValue,
-  ) {
-    final digits = newValue.text.replaceAll(RegExp(r'[^0-9]'), '');
-    final trimmed = digits.length > 8 ? digits.substring(0, 8) : digits;
-    final buffer = StringBuffer();
-
-    for (var i = 0; i < trimmed.length; i++) {
-      buffer.write(trimmed[i]);
-      if ((i == 1 || i == 3) && i != trimmed.length - 1) {
-        buffer.write('/');
-      }
-    }
-
-    final text = buffer.toString();
-    return TextEditingValue(
-      text: text,
-      selection: TextSelection.collapsed(offset: text.length),
     );
   }
 }
@@ -1125,33 +1077,33 @@ class _StepBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final palette = context.runninPalette;
-
     return SingleChildScrollView(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _StepCode('ASSESSMENT_03'),
+          const FigmaAssessmentLabel(text: 'ASSESSMENT_03'),
           const SizedBox(height: 12),
-          Text('Peso e altura', style: context.runninType.displayMd),
+          const FigmaAssessmentHeading(text: 'Peso e altura'),
           const SizedBox(height: 10),
-          Text(
-            'Usamos isso para estimar gasto calorico, zonas e carga de impacto.',
-            style: TextStyle(color: palette.muted, height: 1.5),
+          const FigmaAssessmentDescription(
+            text:
+                'Usamos isso para estimar gasto calorico, zonas e carga de impacto.',
           ),
           const SizedBox(height: 28),
           Row(
             children: [
               Expanded(
-                child: _MetricInput(
-                  label: 'PESO (KG)',
+                child: FigmaNumericInputField(
+                  label: 'PESO',
+                  unit: 'kg',
                   controller: weightController,
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 16),
               Expanded(
-                child: _MetricInput(
-                  label: 'ALTURA (CM)',
+                child: FigmaNumericInputField(
+                  label: 'ALTURA',
+                  unit: 'cm',
                   controller: heightController,
                 ),
               ),
@@ -1189,26 +1141,25 @@ class _StepMedicalConditions extends StatelessWidget {
         children: [
           _StepCode('ASSESSMENT_04'),
           const SizedBox(height: 12),
-          Text('Informacoes de saude', style: context.runninType.displayMd),
+          Text('Informações de saúde', style: context.runninType.displayMd),
           const SizedBox(height: 10),
           Text(
-            'Opcional, mas importante. Selecione condicoes relevantes para que o Coach ajuste intensidade, alertas e limites de seguranca.',
+            'Opcional, mas importante. Selecione condições relevantes para que o Coach ajuste intensidade, alertas e limites de segurança.',
             style: TextStyle(color: palette.muted, height: 1.5),
           ),
           const SizedBox(height: 18),
-          AppPanel(
-            color: palette.secondary.withValues(alpha: 0.06),
-            borderColor: palette.secondary.withValues(alpha: 0.16),
+          FigmaCoachAIBlock(
+            variant: CoachAIBlockVariant.assessment,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                AppTag(label: 'COACH.AI', color: palette.secondary),
+                const FigmaCoachAIBreadcrumb(action: 'ANÁLISE'),
                 const SizedBox(height: 12),
                 Text(
-                  'Vou avaliar suas informacoes para montar um programa seguro e personalizado. Se voce toma medicacao que altera frequencia cardiaca, ajusto as zonas de BPM automaticamente.',
+                  'Vou avaliar todas as suas informações para montar um programa de treino seguro e personalizado. Se você toma medicação que altera frequência cardíaca, por exemplo, ajusto as zonas de BPM automaticamente.',
                   style: context.runninType.bodySm.copyWith(
-                    color: palette.text.withValues(alpha: 0.86),
-                    height: 1.55,
+                    color: palette.text.withValues(alpha: 0.70),
+                    height: 21.45 / 13,
                   ),
                 ),
               ],
@@ -1220,14 +1171,14 @@ class _StepMedicalConditions extends StatelessWidget {
             runSpacing: 8,
             children: [
               ...options.map(
-                (option) => _ConditionChip(
+                (option) => FigmaHealthChip(
                   label: option,
                   selected: selected.contains(option),
                   onTap: () => onToggle(option),
                 ),
               ),
               ...customOptions.map(
-                (option) => _ConditionChip(
+                (option) => FigmaHealthChip(
                   label: option,
                   selected: true,
                   onTap: () => onToggle(option),
@@ -1236,29 +1187,10 @@ class _StepMedicalConditions extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: otherController,
-                  textInputAction: TextInputAction.done,
-                  onSubmitted: (_) => onAddOther(),
-                  decoration: const InputDecoration(
-                    hintText: 'Adicionar outra condicao ou medicacao',
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              SizedBox(
-                width: 48,
-                height: 48,
-                child: OutlinedButton(
-                  onPressed: onAddOther,
-                  style: OutlinedButton.styleFrom(padding: EdgeInsets.zero),
-                  child: Icon(Icons.add, color: palette.primary),
-                ),
-              ),
-            ],
+          _DashedAddButton(
+            label: '+ Adicionar outra condição ou medicação',
+            controller: otherController,
+            onAdd: onAddOther,
           ),
         ],
       ),
@@ -1426,6 +1358,46 @@ class _StepFrequency extends StatelessWidget {
   }
 }
 
+class _StepPace extends StatelessWidget {
+  final String? selected;
+  final List<String> options;
+  final ValueChanged<String> onSelect;
+
+  const _StepPace({
+    required this.selected,
+    required this.options,
+    required this.onSelect,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const FigmaAssessmentLabel(text: '// ASSESSMENT_07'),
+        const SizedBox(height: 12),
+        const FigmaAssessmentHeading(text: 'Você tem um pace alvo?'),
+        const SizedBox(height: 10),
+        const FigmaAssessmentDescription(
+          text:
+              'Não se preocupe se não sabe — o Coach avalia na primeira corrida e calibra tudo automaticamente.',
+        ),
+        const SizedBox(height: 24),
+        ...options.map((option) {
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: FigmaSelectionButton(
+              label: option,
+              selected: selected == option,
+              onTap: () => onSelect(option),
+            ),
+          );
+        }),
+      ],
+    );
+  }
+}
+
 class _StepWearable extends StatelessWidget {
   final bool selected;
   final List<(bool, String, String)> options;
@@ -1444,7 +1416,7 @@ class _StepWearable extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _StepCode('ASSESSMENT_07'),
+        _StepCode('ASSESSMENT_08'),
         const SizedBox(height: 12),
         Text('Conectar wearable?', style: context.runninType.displayMd),
         const SizedBox(height: 10),
@@ -1481,52 +1453,6 @@ class _StepWearable extends StatelessWidget {
             ),
           );
         }),
-      ],
-    );
-  }
-}
-
-class _MetricInput extends StatelessWidget {
-  final String label;
-  final TextEditingController controller;
-
-  const _MetricInput({required this.label, required this.controller});
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.runninPalette;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _FieldLabel(label),
-        const SizedBox(height: 8),
-        TextField(
-          controller: controller,
-          keyboardType: TextInputType.number,
-          inputFormatters: [
-            FilteringTextInputFormatter.digitsOnly,
-            LengthLimitingTextInputFormatter(3),
-          ],
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: 28,
-            fontWeight: FontWeight.w700,
-            color: palette.text,
-          ),
-          decoration: InputDecoration(
-            filled: true,
-            fillColor: palette.surface,
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.zero,
-              borderSide: BorderSide(color: palette.border),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.zero,
-              borderSide: BorderSide(color: palette.primary),
-            ),
-          ),
-        ),
       ],
     );
   }
@@ -1620,25 +1546,6 @@ class _StepCode extends StatelessWidget {
       '// $value',
       style: context.runninType.labelMd.copyWith(
         color: context.runninPalette.primary,
-      ),
-    );
-  }
-}
-
-class _FieldLabel extends StatelessWidget {
-  final String value;
-
-  const _FieldLabel(this.value);
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      value,
-      style: TextStyle(
-        fontSize: 10,
-        color: context.runninPalette.muted,
-        letterSpacing: 0.15,
-        fontWeight: FontWeight.w700,
       ),
     );
   }

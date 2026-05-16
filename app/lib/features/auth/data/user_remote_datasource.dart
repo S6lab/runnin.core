@@ -106,6 +106,7 @@ class UserRemoteDatasource {
     String? birthDate,
     String? weight,
     String? height,
+    String? targetPace,
     bool hasWearable = false,
     List<String> medicalConditions = const [],
   }) async {
@@ -119,6 +120,7 @@ class UserRemoteDatasource {
         'birthDate': birthDate,
         'weight': weight,
         'height': height,
+        'targetPace': targetPace,
         'hasWearable': hasWearable,
         'medicalConditions': medicalConditions,
       },
