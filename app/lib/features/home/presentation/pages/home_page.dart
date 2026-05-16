@@ -2066,20 +2066,7 @@ class _UltimaCorrida extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        RichText(
-          text: TextSpan(
-            children: [
-              TextSpan(
-                text: 'ULTIMA CORRIDA',
-                style: context.runninType.displaySm,
-              ),
-              TextSpan(
-                text: ' ᴬᴵ',
-                style: TextStyle(color: palette.primary, fontSize: 10),
-              ),
-            ],
-          ),
-        ),
+        const _BigHeading('ÚLTIMA CORRIDA', '07'),
         const SizedBox(height: 20),
         if (run == null)
           AppPanel(
@@ -2242,10 +2229,9 @@ class _RunCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final palette = context.runninPalette;
     final createdAt = DateTime.tryParse(run.createdAt);
     final dateLabel = createdAt != null
-        ? '${createdAt.day.toString().padLeft(2, '0')}.${createdAt.month.toString().padLeft(2, '0')} · ${run.type.toUpperCase()}'
+        ? '${createdAt.day.toString().padLeft(2, '0')}.${_monthAbbr(createdAt.month)} · ${run.type.toUpperCase()}'
         : run.type.toUpperCase();
     final distKm = (run.distanceM / 1000).toStringAsFixed(1);
     final duration = _fmtDuration(run.durationS);
@@ -2260,105 +2246,47 @@ class _RunCard extends StatelessWidget {
               Expanded(
                 child: Text(
                   dateLabel,
-                  style: TextStyle(
-                    color: palette.primary,
+                  style: GoogleFonts.jetBrainsMono(
                     fontSize: 11,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w400,
+                    letterSpacing: 1.1,
+                    color: FigmaColors.brandCyan,
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
               const SizedBox(width: 8),
               Text(
-                'DURACAO',
-                style: TextStyle(
-                  color: palette.muted,
-                  fontSize: 9,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.08,
+                'DURAÇÃO',
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w400,
+                  letterSpacing: 1.1,
+                  color: FigmaColors.textMuted,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 12),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            crossAxisAlignment: CrossAxisAlignment.end,
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
             children: [
-              Text('${distKm}K', style: context.runninType.dataMd),
+              Text(
+                '${distKm}K',
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 28,
+                  fontWeight: FontWeight.w700,
+                  color: FigmaColors.textPrimary,
+                ),
+              ),
               Text(
                 duration,
-                style: TextStyle(
-                  color: palette.secondary,
+                style: GoogleFonts.jetBrainsMono(
                   fontSize: 22,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          Row(
-            children: [
-              _RunMetric(
-                label: 'PACE',
-                sub: '/km',
-                value: run.avgPace ?? '--',
-                accent: palette.secondary,
-              ),
-              const SizedBox(width: 8),
-              _RunMetric(
-                label: 'BPM',
-                sub: 'avg',
-                value: run.avgBpm?.toString() ?? '--',
-                accent: palette.primary,
-              ),
-              const SizedBox(width: 8),
-              _RunMetric(
-                label: 'XP',
-                sub: 'pts',
-                value: run.xpEarned != null ? '+${run.xpEarned}' : '--',
-                accent: palette.primary,
-              ),
-              const SizedBox(width: 8),
-              _RunMetric(
-                label: 'STREAK',
-                sub: 'dias',
-                value: run.status == 'completed' ? '1+' : '--',
-                accent: palette.text,
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          Container(
-            padding: const EdgeInsets.all(17.7),
-            decoration: BoxDecoration(
-              border: Border(
-                left: BorderSide(color: palette.primary, width: 3),
-              ),
-            ),
-            child: Text(
-              'Resumo real da corrida concluida. O relatorio tecnico completo fica na aba de feedback do treino.',
-              style: TextStyle(
-                color: palette.text.withValues(alpha: 0.8),
-                height: 1.5,
-                fontSize: 12,
-              ),
-            ),
-          ),
-          const SizedBox(height: 20),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: () => context.push('/history'),
-                  child: const Text('VER DETALHES'),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: ElevatedButton(
-                  onPressed: () {},
-                  child: const Text('COMPARTILHAR →'),
+                  fontWeight: FontWeight.w700,
+                  color: FigmaColors.brandOrange,
                 ),
               ),
             ],
@@ -2366,55 +2294,17 @@ class _RunCard extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  static String _monthAbbr(int month) {
+    const months = ['JAN','FEV','MAR','ABR','MAI','JUN','JUL','AGO','SET','OUT','NOV','DEZ'];
+    return months[month - 1];
   }
 
   String _fmtDuration(int seconds) {
     final m = (seconds / 60).floor();
     final s = seconds % 60;
     return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
-  }
-}
-
-class _RunMetric extends StatelessWidget {
-  final String label;
-  final String sub;
-  final String value;
-  final Color accent;
-  const _RunMetric({
-    required this.label,
-    required this.sub,
-    required this.value,
-    required this.accent,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.runninPalette;
-    return Expanded(
-      child: Column(
-        children: [
-          Text(
-            label,
-            style: TextStyle(
-              color: palette.muted,
-              fontSize: 9,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 0.06,
-            ),
-          ),
-          const SizedBox(height: 20),
-          Text(
-            value,
-            style: TextStyle(
-              color: accent,
-              fontSize: 16,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          Text(sub, style: TextStyle(color: palette.muted, fontSize: 9)),
-        ],
-      ),
-    );
   }
 }
 
