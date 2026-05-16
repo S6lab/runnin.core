@@ -136,12 +136,14 @@ class _OnboardingPageState extends State<OnboardingPage> {
   ];
 
   static const _goals = [
-    'Saude e bem-estar',
+    'Saúde e bem-estar',
     'Perder peso',
     'Completar 5K',
     'Completar 10K',
     'Meia maratona (21K)',
     'Maratona (42K)',
+    'Ultramaratona',
+    'Triathlon',
   ];
 
   static const _paceOptions = [
@@ -427,6 +429,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
       _submitting = true;
     });
     _doSubmit();
+    if (mounted) context.push('/plan-loading');
   }
 
   Future<void> _doSubmit() async {
@@ -450,14 +453,8 @@ class _OnboardingPageState extends State<OnboardingPage> {
         medicalConditions: _medicalConditions.toList()..sort(),
       );
       markOnboardingDone();
-      if (mounted) context.go('/home');
     } catch (_) {
-      if (mounted) {
-        setState(() {
-          _error = 'Erro ao salvar perfil. Tente novamente.';
-          _submitting = false;
-        });
-      }
+      // User already navigated to PlanLoadingPage; silent best-effort.
     }
   }
 
@@ -1215,42 +1212,29 @@ class _StepGoal extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final palette = context.runninPalette;
-
     return SingleChildScrollView(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _StepCode('ASSESSMENT_05'),
+          const FigmaAssessmentLabel(text: '// ASSESSMENT_06'),
           const SizedBox(height: 12),
-          Text('Qual sua meta principal?', style: context.runninType.displayMd),
+          const FigmaAssessmentHeading(text: 'Qual sua meta principal?'),
           const SizedBox(height: 10),
-          Text(
-            'A periodizacao nasce do objetivo certo.',
-            style: TextStyle(color: palette.muted, height: 1.5),
+          const FigmaAssessmentDescription(
+            text:
+                'O Coach monta periodização, volume e progressão com base no seu objetivo.',
           ),
           const SizedBox(height: 24),
-          ...goals.map((goal) {
-            final isSelected = selectedGoal == goal;
-            return GestureDetector(
-              onTap: () => onGoalSelect(goal),
-              child: AppPanel(
-                margin: const EdgeInsets.only(bottom: 8),
-                color: isSelected
-                    ? palette.primary.withValues(alpha: 0.08)
-                    : null,
-                borderColor: isSelected ? palette.primary : palette.border,
-                child: Text(
-                  goal,
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                    color: isSelected ? palette.primary : palette.text,
-                  ),
-                ),
+          ...goals.map(
+            (goal) => Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: FigmaSelectionButton(
+                label: goal,
+                selected: selectedGoal == goal,
+                onTap: () => onGoalSelect(goal),
               ),
-            );
-          }),
+            ),
+          ),
         ],
       ),
     );
