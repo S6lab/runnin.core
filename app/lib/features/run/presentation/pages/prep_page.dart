@@ -5,9 +5,11 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:runnin/core/audio/coach_audio_player.dart';
 import 'package:runnin/core/theme/app_palette.dart';
+import 'package:runnin/core/warmup/warmup_exercises.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 import 'package:runnin/features/run/data/datasources/run_coach_remote_datasource.dart';
 import 'package:runnin/features/run/presentation/bloc/run_bloc.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class PrepPage extends StatelessWidget {
   const PrepPage({super.key});
@@ -25,6 +27,7 @@ class _PrepView extends StatefulWidget {
 
 class _PrepViewState extends State<_PrepView> {
   final _coachRemote = RunCoachRemoteDatasource();
+  final _userRemote = UserRemoteDatasource();
   final _types = [
     'Easy Run',
     'Intervalado',
@@ -69,23 +72,56 @@ class _PrepViewState extends State<_PrepView> {
   bool _coachMuted = false;
   bool? _isPro;
 
+  List<WarmupExercise> _exercises = const [];
+
+  final Map<String, bool> _alerts = {
+    'kmAlert': true,
+    'paceOutOfRange': true,
+    'highBpm': true,
+    'kmSplits': false,
+    'motivation': true,
+  };
+
+  static const _alertLabels = {
+    'kmAlert': 'Alerta a cada km',
+    'paceOutOfRange': 'Pace fora do range',
+    'highBpm': 'BPM elevado',
+    'kmSplits': 'Splits por km',
+    'motivation': 'Motivação',
+  };
+
   @override
   void initState() {
     super.initState();
     _resolvePremiumThenLoadCue();
+    _loadExercises();
   }
 
   Future<void> _resolvePremiumThenLoadCue() async {
     try {
-      final profile = await UserRemoteDatasource().getMe();
+      final profile = await _userRemote.getMe();
       if (!mounted) return;
       final isPro = profile?.isPro ?? false;
       setState(() => _isPro = isPro);
       if (isPro) _requestPreRunCue();
+
+      final saved = profile?.preRunAlerts;
+      if (saved != null) {
+        setState(() {
+          for (final e in saved.entries) {
+            if (_alerts.containsKey(e.key)) _alerts[e.key] = e.value;
+          }
+        });
+      }
     } catch (_) {
       if (!mounted) return;
       setState(() => _isPro = false);
     }
+  }
+
+  Future<void> _loadExercises() async {
+    final list = await loadWarmupExercises(_selectedType);
+    if (mounted) setState(() => _exercises = list);
   }
 
   @override
@@ -97,6 +133,7 @@ class _PrepViewState extends State<_PrepView> {
 
   void _selectType(String type) {
     setState(() => _selectedType = type);
+    _loadExercises();
     _coachDebounce?.cancel();
     _coachDebounce = Timer(
       const Duration(milliseconds: 350),
@@ -142,6 +179,23 @@ class _PrepViewState extends State<_PrepView> {
             if (mounted) setState(() => _coachLoading = false);
           },
         );
+  }
+
+  void _toggleAlert(String key, bool value) {
+    setState(() => _alerts[key] = value);
+    _userRemote.patchMe(preRunAlerts: Map<String, bool>.from(_alerts));
+  }
+
+  Future<void> _openMusicApp(_MusicProvider provider) async {
+    final nativeUri = Uri.parse(provider.scheme);
+    if (await canLaunchUrl(nativeUri)) {
+      await launchUrl(nativeUri, mode: LaunchMode.externalApplication);
+    } else {
+      await launchUrl(
+        Uri.parse(provider.webUrl),
+        mode: LaunchMode.externalApplication,
+      );
+    }
   }
 
   @override
@@ -289,6 +343,43 @@ class _PrepViewState extends State<_PrepView> {
                               setState(() => _coachMuted = !_coachMuted),
                           onRefresh: _requestPreRunCue,
                         ),
+
+                      const SizedBox(height: 24),
+                      Text('AQUECIMENTO', style: type.labelCaps),
+                      const SizedBox(height: 12),
+                      ..._exercises.map(
+                        (ex) => _WarmupExerciseTile(exercise: ex),
+                      ),
+
+                      const SizedBox(height: 24),
+                      Text('ALERTAS PRÉ-CORRIDA', style: type.labelCaps),
+                      const SizedBox(height: 8),
+                      ..._alerts.entries.map(
+                        (e) => _AlertToggleRow(
+                          label: _alertLabels[e.key] ?? e.key,
+                          value: e.value,
+                          onChanged: (v) => _toggleAlert(e.key, v),
+                        ),
+                      ),
+
+                      const SizedBox(height: 24),
+                      Text('MÚSICA', style: type.labelCaps),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: _MusicProvider.values.map((p) {
+                          return Expanded(
+                            child: Padding(
+                              padding: EdgeInsets.only(
+                                right: p != _MusicProvider.values.last ? 8 : 0,
+                              ),
+                              child: _MusicProviderButton(
+                                provider: p,
+                                onTap: () => _openMusicApp(p),
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
                     ],
                   ),
                 ),
@@ -323,6 +414,8 @@ class _PrepViewState extends State<_PrepView> {
     );
   }
 }
+
+// --- Coach Cards ---
 
 class _PreRunCoachCard extends StatelessWidget {
   final bool loading;
@@ -446,6 +539,179 @@ class _PreRunCoachLockedCard extends StatelessWidget {
                   ),
                 ],
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// --- Warmup Exercise Tile ---
+
+class _WarmupExerciseTile extends StatelessWidget {
+  final WarmupExercise exercise;
+
+  const _WarmupExerciseTile({required this.exercise});
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    final type = context.runninType;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: palette.surface,
+          border: Border.all(color: palette.border),
+        ),
+        child: Row(
+          children: [
+            Icon(exercise.icon, color: palette.primary, size: 22),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    exercise.title,
+                    style: type.bodySm.copyWith(fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    exercise.description,
+                    style: type.bodySm.copyWith(
+                      color: palette.muted,
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: palette.primary.withValues(alpha: 0.12),
+              ),
+              child: Text(
+                exercise.reps,
+                style: type.labelCaps.copyWith(
+                  color: palette.primary,
+                  fontSize: 10,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// --- Alert Toggle Row ---
+
+class _AlertToggleRow extends StatelessWidget {
+  final String label;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  const _AlertToggleRow({
+    required this.label,
+    required this.value,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    final type = context.runninType;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(label, style: type.bodySm),
+          ),
+          Switch.adaptive(
+            value: value,
+            onChanged: onChanged,
+            activeTrackColor: palette.primary,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// --- Music Provider ---
+
+enum _MusicProvider {
+  spotify(
+    label: 'Spotify',
+    icon: Icons.music_note,
+    scheme: 'spotify://',
+    webUrl: 'https://open.spotify.com',
+  ),
+  youtubeMusic(
+    label: 'YT Music',
+    icon: Icons.play_circle_outline,
+    scheme: 'vnd.youtube.music://',
+    webUrl: 'https://music.youtube.com',
+  ),
+  appleMusic(
+    label: 'Apple Music',
+    icon: Icons.library_music,
+    scheme: 'music://',
+    webUrl: 'https://music.apple.com',
+  );
+
+  final String label;
+  final IconData icon;
+  final String scheme;
+  final String webUrl;
+
+  const _MusicProvider({
+    required this.label,
+    required this.icon,
+    required this.scheme,
+    required this.webUrl,
+  });
+}
+
+class _MusicProviderButton extends StatelessWidget {
+  final _MusicProvider provider;
+  final VoidCallback onTap;
+
+  const _MusicProviderButton({
+    required this.provider,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    final type = context.runninType;
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        decoration: BoxDecoration(
+          color: palette.surface,
+          border: Border.all(color: palette.border),
+        ),
+        child: Column(
+          children: [
+            Icon(provider.icon, color: palette.primary, size: 24),
+            const SizedBox(height: 6),
+            Text(
+              provider.label,
+              style: type.labelCaps.copyWith(fontSize: 10),
+              textAlign: TextAlign.center,
             ),
           ],
         ),

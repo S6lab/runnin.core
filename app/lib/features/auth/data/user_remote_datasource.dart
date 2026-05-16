@@ -26,6 +26,7 @@ class UserProfile {
   final bool? coachIntroSeen;
   final int? restingBpm;
   final int? maxBpm;
+  final Map<String, bool>? preRunAlerts;
 
   const UserProfile({
     required this.id,
@@ -50,6 +51,7 @@ class UserProfile {
     this.coachIntroSeen,
     this.restingBpm,
     this.maxBpm,
+    this.preRunAlerts,
   });
 
   bool get isPro {
@@ -88,6 +90,8 @@ class UserProfile {
     coachIntroSeen: j['coachIntroSeen'] as bool?,
     restingBpm: j['restingBpm'] as int?,
     maxBpm: j['maxBpm'] as int?,
+    preRunAlerts: (j['preRunAlerts'] as Map<String, dynamic>?)
+        ?.map((k, v) => MapEntry(k, v as bool)),
   );
 }
 
