@@ -7,6 +7,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:runnin/core/router/app_router.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/theme_controller.dart';
+import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 import 'package:runnin/features/home/domain/use_cases/get_home_data_use_case.dart';
 import 'package:runnin/features/home/presentation/cubit/home_cubit.dart';
@@ -15,7 +16,8 @@ import 'package:runnin/features/notifications/presentation/cubit/notifications_c
 import 'package:runnin/features/run/domain/entities/run.dart';
 import 'package:runnin/shared/widgets/app_panel.dart';
 import 'package:runnin/shared/widgets/app_tag.dart';
-import 'package:runnin/shared/widgets/notification_tile.dart';
+import 'package:runnin/shared/widgets/notification_card.dart';
+import 'package:runnin/shared/widgets/section_heading.dart';
 
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
@@ -69,8 +71,6 @@ class _HomeViewState extends State<_HomeView> {
 
   @override
   Widget build(BuildContext context) {
-    final palette = context.runninPalette;
-
     return Scaffold(
       backgroundColor: const Color(0xFF050510),
       body: SafeArea(
@@ -93,23 +93,39 @@ class _HomeViewState extends State<_HomeView> {
                       onRetry: () => context.read<HomeCubit>().load(),
                     ),
                   ] else if (state is HomeLoaded) ...[
+                    // B1 SUP-405 Hero placeholder — full-bleed area awaiting
+                    // the Figma map asset (imgContainer) + 12 icon overlays
+                    // + vector graphics. Real assets pending design export;
+                    // current stub keeps the section in the layout so other
+                    // refactors compose correctly.
+                    const _HeroPlaceholder(),
+                    const SizedBox(height: 20),
                     _CyberStatusBar(data: state.data),
                     const SizedBox(height: 20),
                     _UserInfoCards(data: state.data),
                     const SizedBox(height: 20),
                     const _SkinSection(),
                     const SizedBox(height: 20),
+                    // B2 SUP-406 Section 1 — Coach Brief + INICIAR
                     _IniciarSessaoButton(data: state.data),
                     const SizedBox(height: 20),
+                    // B3 SUP-407 Section 2 — Notificações
                     const _CoachNotifications(),
                     const SizedBox(height: 20),
+                    // B4 SUP-408 Section 3 — Semana
                     _SemanaSection(data: state.data),
                     const SizedBox(height: 20),
-                    _CoachAiWeeklySummary(data: state.data),
-                    const SizedBox(height: 20),
+                    // B5 SUP-409 Section 4 — Performance
                     _PerformanceSection(data: state.data),
                     const SizedBox(height: 20),
+                    // B6 SUP-410 Section 5 — Coach Resumo Semanal
+                    _CoachAiWeeklySummary(data: state.data),
+                    const SizedBox(height: 20),
+                    // B7 SUP-411 Section 6 — Status Corporal
                     _StatusCorporalSection(data: state.data),
+                    const SizedBox(height: 20),
+                    // B8 SUP-412 Section 7 — Última Corrida
+                    _UltimaCorrida(run: state.data.latestRun),
                     const SizedBox(height: 20),
                     const _MenuSection(),
                     const SizedBox(height: 20),
@@ -179,7 +195,7 @@ class _HomeHeader extends StatelessWidget {
             const SizedBox(width: 14),
             InkWell(
               onTap: () => context.push('/profile'),
-              borderRadius: BorderRadius.circular(999),
+              borderRadius: BorderRadius.zero,
               child: Container(
                 width: 34,
                 height: 34,
@@ -340,7 +356,7 @@ class _DeviceChip extends StatelessWidget {
           color: palette.text.withValues(alpha: 0.08),
           width: 1.5,
         ),
-        borderRadius: BorderRadius.circular(2),
+        borderRadius: BorderRadius.zero,
       ),
       child: Row(
         children: [
@@ -458,7 +474,7 @@ class _InfoCard extends StatelessWidget {
           color: palette.text.withValues(alpha: 0.08),
           width: 1.735,
         ),
-        borderRadius: BorderRadius.circular(2),
+        borderRadius: BorderRadius.zero,
       ),
       padding: const EdgeInsets.all(12),
       child: Column(
@@ -863,56 +879,43 @@ class _CoachNotificationsList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final palette = context.runninPalette;
     final cubit = context.read<NotificationsCubit>();
 
+    // SUP-407 (HOME-B3): Section 2 — COACH.AI > NOTIFICAÇÕES
+    // Uses SectionHeading + 5-color cycling NotificationCard per HOME.md §02.
+    const accents = [
+      NotificationAccent.cyan,
+      NotificationAccent.yellow,
+      NotificationAccent.blue,
+      NotificationAccent.orange,
+      NotificationAccent.purple,
+    ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Icon(Icons.notifications_outlined, size: 22, color: palette.muted),
-            const SizedBox(width: 6),
-            Text(
-              'COACH.AI > NOTIFICAÇÕES',
-              style: context.runninType.labelCaps,
-            ),
-            const SizedBox(width: 8),
-            AppTag(label: '${items.length}', color: palette.primary),
-            const Spacer(),
-            InkWell(
-              onTap: cubit.clear,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-                child: Text('LIMPAR', style: context.runninType.labelCaps),
-              ),
-            ),
-          ],
+        SectionHeading(
+          label: 'COACH.AI > NOTIFICAÇÕES',
+          dotColor: FigmaColors.brandCyan,
+          badge: '${items.length}',
+          action: 'LIMPAR',
+          onAction: cubit.clear,
         ),
         const SizedBox(height: 20),
-        Container(
-          decoration: BoxDecoration(border: Border.all(color: palette.border)),
-          child: Column(
-            children: items
-                .map(
-                  (item) => NotificationTile(
-                    icon: item.icon,
-                    title: item.title,
-                    preview: item.body.length > 80
-                        ? '${item.body.substring(0, 80)}...'
-                        : item.body,
-                    fullText: item.body,
-                    timestamp: item.timeLabel,
-                    ctaLabel: item.ctaLabel,
-                    onCta: item.ctaRoute == null
-                        ? null
-                        : () => context.push(item.ctaRoute!),
-                    onDismiss: () => cubit.dismiss(item.id),
-                  ),
-                )
-                .toList(),
+        for (int i = 0; i < items.length; i++) ...[
+          if (i > 0) const SizedBox(height: 6),
+          NotificationCard(
+            icon: items[i].icon,
+            title: items[i].title.toUpperCase(),
+            subtitle: items[i].body.length > 60
+                ? '${items[i].body.substring(0, 60)}…'
+                : items[i].body,
+            timestamp: items[i].timeLabel,
+            borderColor: accents[i % accents.length],
+            onTap: items[i].ctaRoute == null
+                ? null
+                : () => context.push(items[i].ctaRoute!),
           ),
-        ),
+        ],
       ],
     );
   }
@@ -936,29 +939,25 @@ class _SemanaSection extends StatelessWidget {
         ? 0.0
         : (data.completedSessions / data.plannedSessions).clamp(0.0, 1.0);
 
+    // SUP-408 (HOME-B4): SEMANA heading with cyan superscript "02"
+    // per HOME.md §03 + existing subtitle and weekly grid.
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        _BigHeading(
+          'SEMANA',
+          '02',
+          subtitle:
+              'Sem $weekNum · $monthAbbr ${monday.day}-${sunday.day} · ${data.completedSessions}/${data.plannedSessions} sessoes · ${(volumePct * 100).round()}% volume',
+        ),
+        const SizedBox(height: 12),
         Row(
           children: [
-            Flexible(
-              child: Text('SEMANA', style: context.runninType.displaySm),
-            ),
-            const SizedBox(width: 8),
             AppTag(
               label: '${data.completedSessions}/${data.plannedSessions} FEITAS',
               color: palette.primary,
             ),
           ],
-        ),
-        const SizedBox(height: 20),
-        Text(
-          'Sem $weekNum · $monthAbbr ${monday.day}-${sunday.day} · ${data.completedSessions}/${data.plannedSessions} sessoes · ${(volumePct * 100).round()}% volume',
-          style: TextStyle(
-            color: palette.muted,
-            fontSize: 11,
-            fontWeight: FontWeight.w600,
-          ),
         ),
         const SizedBox(height: 20),
         _WeekGrid(weekDays: data.weekDays),
@@ -1160,19 +1159,16 @@ class _CoachAiWeeklySummary extends StatelessWidget {
     final hasPlan = data.plan != null && data.plannedSessions > 0;
     final hasRuns = data.completedRuns.isNotEmpty;
 
+    // SUP-410 (HOME-B6): Coach.AI Resumo Semanal — replaces the previous
+    // "COACH.AI ᴬᴵ" heading with a SectionHeading using the orange dot
+    // pattern per HOME.md §05. Inner left-border container keeps its
+    // existing 3-sub-block layout (PROGRESSO / PERFORMANCE / RECOMENDACAO).
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        RichText(
-          text: TextSpan(
-            children: [
-              TextSpan(text: 'COACH.AI', style: context.runninType.displaySm),
-              TextSpan(
-                text: ' ᴬᴵ',
-                style: TextStyle(color: palette.primary, fontSize: 10),
-              ),
-            ],
-          ),
+        const SectionHeading(
+          label: '> RESUMO SEMANAL · SEM 2',
+          dotColor: FigmaColors.brandOrange,
         ),
         const SizedBox(height: 20),
         AppPanel(
@@ -1310,23 +1306,14 @@ class _PerformanceSection extends StatelessWidget {
         ? null
         : (data.weeklyDistanceKm / weeklyGoalKm).clamp(0.0, 1.0);
 
+    // SUP-409 (HOME-B5): PERFORMANCE heading with cyan superscript "04"
+    // per HOME.md §04. Inline metric cards stay; full migration to
+    // MetricCard component is a follow-up (deeper refactor would touch
+    // ~240 lines of grid layout currently inline here).
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        RichText(
-          text: TextSpan(
-            children: [
-              TextSpan(
-                text: 'PERFORMANCE',
-                style: context.runninType.displaySm,
-              ),
-              TextSpan(
-                text: ' ᴬᴵ',
-                style: TextStyle(color: palette.primary, fontSize: 10),
-              ),
-            ],
-          ),
-        ),
+        const _BigHeading('PERFORMANCE', '04'),
         const SizedBox(height: 20),
         IntrinsicHeight(
           child: Row(
@@ -1689,23 +1676,13 @@ class _StatusCorporalSectionState extends State<_StatusCorporalSection> {
         ? null
         : (hydrationLoggedL / hydrationGoalL).clamp(0.0, 1.0);
 
+    // SUP-411 (HOME-B7): STATUS CORPORAL heading with superscript "06"
+    // per HOME.md §06. Inline metric cards stay; full migration to
+    // MetricCard component is a follow-up.
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        RichText(
-          text: TextSpan(
-            children: [
-              TextSpan(
-                text: 'STATUS CORPORAL',
-                style: context.runninType.displaySm,
-              ),
-              TextSpan(
-                text: ' ᴬᴵ',
-                style: TextStyle(color: palette.primary, fontSize: 10),
-              ),
-            ],
-          ),
-        ),
+        const _BigHeading('STATUS CORPORAL', '06'),
         const SizedBox(height: 20),
         IntrinsicHeight(
           child: Row(
@@ -2011,7 +1988,7 @@ class _HydrationUpdateSheetState extends State<_HydrationUpdateSheet> {
                   height: 4,
                   decoration: BoxDecoration(
                     color: palette.border,
-                    borderRadius: BorderRadius.circular(999),
+                    borderRadius: BorderRadius.zero,
                   ),
                 ),
               ),
@@ -2029,7 +2006,7 @@ class _HydrationUpdateSheetState extends State<_HydrationUpdateSheet> {
               ),
               const SizedBox(height: 20),
               ClipRRect(
-                borderRadius: BorderRadius.circular(999),
+                borderRadius: BorderRadius.zero,
                 child: LinearProgressIndicator(
                   value: pct > 1 ? 1 : pct,
                   minHeight: 8,
@@ -2602,7 +2579,7 @@ class _PaletteCard extends StatelessWidget {
             color: isActive ? palette.primary : palette.border,
             width: isActive ? 1.5 : 1,
           ),
-          borderRadius: BorderRadius.circular(2),
+          borderRadius: BorderRadius.zero,
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -2614,7 +2591,7 @@ class _PaletteCard extends StatelessWidget {
                   height: 16,
                   decoration: BoxDecoration(
                     color: skinPalette.primary,
-                    borderRadius: BorderRadius.circular(2),
+                    borderRadius: BorderRadius.zero,
                   ),
                 ),
                 const SizedBox(width: 6),
@@ -2623,7 +2600,7 @@ class _PaletteCard extends StatelessWidget {
                   height: 16,
                   decoration: BoxDecoration(
                     color: skinPalette.secondary,
-                    borderRadius: BorderRadius.circular(2),
+                    borderRadius: BorderRadius.zero,
                   ),
                 ),
                 const Spacer(),
@@ -2650,7 +2627,7 @@ class _PaletteCard extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             ClipRRect(
-              borderRadius: BorderRadius.circular(1),
+              borderRadius: BorderRadius.zero,
               child: Row(
                 children: skinPalette.previewBars
                     .map(
@@ -2841,6 +2818,104 @@ class _ErrorCard extends StatelessWidget {
           const SizedBox(height: 20),
           TextButton(onPressed: onRetry, child: const Text('TENTAR NOVAMENTE')),
         ],
+      ),
+    );
+  }
+}
+
+// ─── Helpers added with HOME-B series (SUP-405..SUP-412) ─────────────────────
+
+/// Bold-22 + cyan-superscript section heading per HOME §03–§07
+/// (e.g. "SEMANA" + small "02"). The dot-prefixed variant
+/// (Coach.AI sections) lives in [SectionHeading].
+class _BigHeading extends StatelessWidget {
+  const _BigHeading(this.label, this.index, {this.subtitle});
+
+  final String label;
+  final String index; // e.g. "02"
+  final String? subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        RichText(
+          text: TextSpan(
+            children: [
+              TextSpan(
+                text: label,
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 22,
+                  height: 24.2 / 22,
+                  letterSpacing: -0.44,
+                  fontWeight: FontWeight.w700,
+                  color: FigmaColors.textPrimary,
+                ),
+              ),
+              const WidgetSpan(child: SizedBox(width: 4)),
+              TextSpan(
+                text: index,
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 6.6,
+                  fontWeight: FontWeight.w400,
+                  color: FigmaColors.brandCyan,
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (subtitle != null) ...[
+          const SizedBox(height: 4),
+          Text(
+            subtitle!,
+            style: GoogleFonts.jetBrainsMono(
+              fontSize: 12,
+              height: 18 / 12,
+              fontWeight: FontWeight.w400,
+              color: FigmaColors.textSecondary,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// Hero/header area placeholder — full-bleed map background + 12 icon
+/// overlays + vector graphics per HOME §00 spec. Real assets pending
+/// design export (imgContainer, MuiSvgIconRoot×12, imgVector 0–2).
+/// SUP-405. Renders as a tall dark gradient container with a TODO note.
+class _HeroPlaceholder extends StatelessWidget {
+  const _HeroPlaceholder();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 200, // Figma spec ~490 px; reduced until assets land
+      width: double.infinity,
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xFF0A0A1A), FigmaColors.bgBase],
+        ),
+        borderRadius: FigmaBorderRadius.zero,
+      ),
+      alignment: Alignment.center,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        child: Text(
+          'HERO\n[map + 12 icons + vectors]\nawaiting Figma asset export',
+          textAlign: TextAlign.center,
+          style: GoogleFonts.jetBrainsMono(
+            fontSize: 10,
+            height: 16 / 10,
+            letterSpacing: 1.0,
+            fontWeight: FontWeight.w500,
+            color: FigmaColors.textMuted,
+          ),
+        ),
       ),
     );
   }
