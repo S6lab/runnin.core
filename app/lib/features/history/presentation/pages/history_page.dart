@@ -1,18 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:runnin/core/theme/app_palette.dart';
+import 'package:runnin/features/history/presentation/widgets/hist_stat_card.dart';
 import 'package:runnin/features/run/data/datasources/run_remote_datasource.dart';
 import 'package:runnin/features/run/domain/entities/run.dart';
 import 'package:runnin/shared/widgets/app_page_header.dart';
 import 'package:runnin/shared/widgets/chart_panel.dart';
 import 'package:runnin/shared/widgets/coach_narrative_card.dart';
+import 'package:runnin/shared/widgets/figma/export.dart';
 import 'package:runnin/shared/widgets/metric_card.dart';
 import 'package:runnin/shared/widgets/segmented_tab_bar.dart';
 
 enum _Period { week, month, threeMonths }
 
-enum _ContentTab { data, runs }
+enum _ContentTab { data, runs, bench }
 
 class HistoryPage extends StatefulWidget {
   const HistoryPage({super.key});
@@ -28,6 +31,8 @@ class _HistoryPageState extends State<HistoryPage> {
   String? _error;
   _Period _period = _Period.month;
   _ContentTab _tab = _ContentTab.data;
+  bool _benchmarkLoading = false;
+  double? _benchmarkPercentile;
 
   @override
   void initState() {
@@ -38,10 +43,37 @@ class _HistoryPageState extends State<HistoryPage> {
   Future<void> _load() async {
     setState(() { _loading = true; _error = null; });
     try {
-      final runs = await _remote.listRuns(limit: 90);
-      if (mounted) setState(() { _allRuns = runs; _loading = false; });
+      final runs = await _remote.listRuns(limit: 200);
+      if (mounted) {
+        setState(() { 
+          _allRuns = runs; 
+          _loading = false; 
+          if (runs.isNotEmpty) {
+            _benchmarkPercentile = HistStatCard.computeBenchmarkPercentile(runs);
+          }
+        });
+      }
     } catch (_) {
       if (mounted) setState(() { _error = 'Erro ao carregar corridas.'; _loading = false; });
+    }
+  }
+
+  Future<void> _loadBenchmark() async {
+    setState(() { _benchmarkLoading = true; });
+    try {
+      if (_allRuns != null && _allRuns!.isNotEmpty) {
+        await Future.delayed(const Duration(milliseconds: 300));
+        if (mounted) {
+          setState(() { 
+            _benchmarkPercentile = HistStatCard.computeBenchmarkPercentile(_allRuns!);
+            _benchmarkLoading = false; 
+          });
+        }
+      } else {
+        setState(() { _benchmarkLoading = false; });
+      }
+    } catch (_) {
+      if (mounted) setState(() { _benchmarkLoading = false; });
     }
   }
 
@@ -86,9 +118,15 @@ class _HistoryPageState extends State<HistoryPage> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: SegmentedTabBar(
-                tabs: const ['DADOS', 'CORRIDAS'],
+                tabs: const ['DADOS', 'CORRIDAS', 'BENCH'],
                 selectedIndex: _ContentTab.values.indexOf(_tab),
-                onChanged: (i) => setState(() => _tab = _ContentTab.values[i]),
+                onChanged: (i) {
+                  final newTab = _ContentTab.values[i];
+                  setState(() => _tab = newTab);
+                  if (newTab == _ContentTab.bench && _benchmarkPercentile == null) {
+                    _loadBenchmark();
+                  }
+                },
               ),
             ),
             const SizedBox(height: 16),
@@ -123,13 +161,54 @@ class _HistoryPageState extends State<HistoryPage> {
       ]));
     }
 
+    final benchmarkWidget = Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
+      child: Column(
+        children: [
+          if (_benchmarkLoading || _benchmarkPercentile == null)
+            const SizedBox(
+              height: 120,
+              child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+            )
+          else ...[
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: palette.surface,
+                border: Border.all(color: palette.border),
+              ),
+              child: Column(
+                children: [
+                  const Text(
+                    'BENCHMARK',
+                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                  ),
+                  const SizedBox(height: 8),
+                  FigmaBenchmarkBellCurve(userPercentile: _benchmarkPercentile!),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Você está no ${_benchmarkPercentile!.toInt()}º percentil '
+                    'em relação à média dos usuários.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: palette.muted, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+
     return RefreshIndicator(
       color: palette.primary,
       backgroundColor: palette.surface,
       onRefresh: _load,
       child: _tab == _ContentTab.data
           ? _DataView(runs: runs)
-          : _RunsListView(runs: runs),
+          : _tab == _ContentTab.runs
+              ? _RunsListView(runs: runs)
+              : benchmarkWidget,
     );
   }
 }

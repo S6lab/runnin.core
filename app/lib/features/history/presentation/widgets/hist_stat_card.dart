@@ -154,7 +154,7 @@ class HistStatCard extends StatelessWidget {
       streakDays: streak,
       totalXp: totalXp,
       avgBpm: avgBpm,
-      benchmarkPercentile: _computeBenchmarkPercentile(runs),
+      benchmarkPercentile: computeBenchmarkPercentile(runs),
     );
   }
 
@@ -168,7 +168,7 @@ class HistStatCard extends StatelessWidget {
     return totalBpm ~/ runsWithBpm.length;
   }
 
-  static double _computeBenchmarkPercentile(List<Run> runs) {
+  static double computeBenchmarkPercentile(List<Run> runs) {
     if (runs.isEmpty) return 0;
     
     final totalDistM = runs.fold<double>(0.0, (s, r) => s + r.distanceM);

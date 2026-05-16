@@ -9,7 +9,9 @@ import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 import 'package:runnin/features/run/data/datasources/run_remote_datasource.dart';
 import 'package:runnin/features/run/domain/entities/run.dart';
 import 'package:runnin/features/training/data/datasources/plan_remote_datasource.dart';
+import 'package:runnin/features/training/data/weekly_report_remote_datasource.dart';
 import 'package:runnin/features/training/domain/entities/plan.dart';
+import 'package:runnin/features/training/domain/entities/weekly_report.dart';
 import 'package:runnin/shared/widgets/app_page_header.dart';
 import 'package:runnin/shared/widgets/app_panel.dart';
 import 'package:runnin/shared/widgets/app_tag.dart';
@@ -37,6 +39,10 @@ class _TrainingPageState extends State<TrainingPage> {
   final _runDs = RunRemoteDatasource();
   final _reportDs = CoachReportRemoteDatasource();
   final _userDs = UserRemoteDatasource();
+  final _weeklyReportDs = WeeklyReportRemoteDatasource();
+  List<WeeklyReport> _weeklyReports = const [];
+  bool _loadingWeeklyReports = false;
+  String? _selectedWeekStart;
   UserProfile? _profile;
   Plan? _plan;
   List<_RunFeedback> _reports = const [];
@@ -76,10 +82,12 @@ class _TrainingPageState extends State<TrainingPage> {
         _userDs.getMe(),
         _ds.getCurrentPlan(),
         _loadRunFeedback(),
+        _loadWeeklyReports(),
       ]);
       final profile = results[0] as UserProfile?;
       var plan = results[1] as Plan?;
       final reports = results[2] as List<_RunFeedback>;
+      _weeklyReports = results[3] as List<WeeklyReport>;
 
       if (plan == null && savedPendingPlanId != null) {
         try {
@@ -128,6 +136,15 @@ class _TrainingPageState extends State<TrainingPage> {
   Future<String?> _readPendingPlanId() async {
     final value = (await _settingsBox()).get(_pendingPlanIdKey);
     return value is String && value.trim().isNotEmpty ? value : null;
+  }
+
+
+  Future<List<WeeklyReport>> _loadWeeklyReports() async {
+    try {
+      return await _weeklyReportDs.getWeeklyReports();
+    } catch (_) {
+      return [];
+    }
   }
 
   Future<void> _savePendingPlanId(String planId) async {
@@ -351,6 +368,7 @@ class _TrainingPageState extends State<TrainingPage> {
       plan: _plan!,
       profile: _profile,
       reports: _reports,
+      weeklyReports: _weeklyReports,
       generating: _generating,
       onRegenerate: _generate,
       selectedWeek: _selectedWeek,
@@ -639,6 +657,7 @@ class _TrainingWorkspace extends StatelessWidget {
   final ValueChanged<int> onWeekChanged;
   final ValueChanged<_TrainingTab> onTabChanged;
   final ValueChanged<_PlanMode> onPlanModeChanged;
+  final List<WeeklyReport> weeklyReports;
 
   const _TrainingWorkspace({
     required this.plan,
@@ -652,6 +671,7 @@ class _TrainingWorkspace extends StatelessWidget {
     required this.onWeekChanged,
     required this.onTabChanged,
     required this.onPlanModeChanged,
+    required this.weeklyReports,
   });
 
   @override
@@ -682,7 +702,7 @@ class _TrainingWorkspace extends StatelessWidget {
               onWeekChanged: onWeekChanged,
               onPlanModeChanged: onPlanModeChanged,
             ),
-            _TrainingTab.reports => _ReportsTab(reports: reports),
+            _TrainingTab.reports => _ReportsTab(reports: reports, weeklyReports: weeklyReports),
             _TrainingTab.adjustments => AdjustmentsHistoryPage(planId: plan.id),
           },
         ],
@@ -1175,12 +1195,13 @@ class _MonthlyPlanView extends StatelessWidget {
 
 class _ReportsTab extends StatelessWidget {
   final List<_RunFeedback> reports;
+  final List<WeeklyReport> weeklyReports;
 
-  const _ReportsTab({required this.reports});
+  const _ReportsTab({required this.reports, required this.weeklyReports});
 
   @override
   Widget build(BuildContext context) {
-    if (reports.isEmpty) {
+    if (reports.isEmpty && weeklyReports.isEmpty) {
       return const _TabEmptyState(
         title: 'Nenhum feedback de IA ainda',
         body:
@@ -1191,16 +1212,97 @@ class _ReportsTab extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _SectionTitle(
-          title: 'FEEDBACKS DA IA',
-          indexLabel: '01',
-          subtitle:
-              'Analises tecnicas geradas a partir das suas corridas reais',
-        ),
-        const SizedBox(height: 12),
-        ...reports.map((report) => _ReportCard(report: report)),
+        if (weeklyReports.isNotEmpty) ...[
+          _SectionTitle(
+            title: 'RELATÓRIOS SEMANAIS',
+            indexLabel: '02',
+            subtitle:
+                'Analises semanais de aderencia e desempenho',
+          ),
+          const SizedBox(height: 12),
+          ...weeklyReports.map((report) => _WeeklyReportCard(report: report)),
+        ],
+        if (reports.isNotEmpty && weeklyReports.isNotEmpty) const SizedBox(height: 24),
+        if (reports.isNotEmpty) ...[
+          _SectionTitle(
+            title: 'FEEDBACKS DA IA',
+            indexLabel: '01',
+            subtitle:
+                'Analises tecnicas geradas a partir das suas corridas reais',
+          ),
+          const SizedBox(height: 12),
+          ...reports.map((report) => _ReportCard(report: report)),
+        ],
       ],
     );
+  }
+}
+
+class _WeeklyReportCard extends StatelessWidget {
+  final WeeklyReport report;
+
+  const _WeeklyReportCard({required this.report});
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+
+    return AppPanel(
+      margin: const EdgeInsets.only(bottom: 8),
+      color: palette.surfaceAlt,
+      borderColor: palette.primary.withValues(alpha: 0.35),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Semana ${_formatWeekStart(report.weekStart)}',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                    color: palette.text,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  '${report.sessionsDone}/${report.sessionsPlanned} sessoes · ${report.totalKm.toStringAsFixed(1)}K',
+                  style: TextStyle(
+                    color: palette.muted,
+                    fontSize: 13,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: palette.primary,
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Text(
+              '${report.adherencePercent}%',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
+                color: palette.background,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatWeekStart(String weekStart) {
+    try {
+      final date = DateTime.parse(weekStart);
+      return DateFormat('dd/MM').format(date);
+    } catch (_) {
+      return weekStart;
+    }
   }
 }
 
