@@ -4,26 +4,71 @@ import 'package:intl/intl.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/features/training/domain/entities/weekly_report.dart';
 import 'package:runnin/shared/widgets/app_page_header.dart';
+import 'package:runnin/features/training/data/weekly_report_remote_datasource.dart';
 import 'package:runnin/shared/widgets/figma/figma_adherence_progress.dart';
 import 'package:runnin/shared/widgets/figma/figma_highlight_bullet.dart';
 import 'package:runnin/shared/widgets/figma/figma_coach_ai_block.dart';
 
-class WeeklyReportDetailPage extends StatelessWidget {
+class WeeklyReportDetailPage extends StatefulWidget {
   final String weekStart;
   final WeeklyReport? report;
 
   const WeeklyReportDetailPage({
     super.key,
     required this.weekStart,
-    required this.report,
+    this.report,
   });
 
   @override
+  State<WeeklyReportDetailPage> createState() => _WeeklyReportDetailPageState();
+}
+
+class _WeeklyReportDetailPageState extends State<WeeklyReportDetailPage> {
+  final _ds = WeeklyReportRemoteDatasource();
+  WeeklyReport? _report;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadData();
+  }
+
+  Future<void> _loadData() async {
+    setState(() {
+      _loading = true;
+    });
+    
+    if (widget.report != null) {
+      _report = widget.report;
+    } else {
+      try {
+        _report = await _ds.getWeeklyReportByWeekStart(widget.weekStart);
+      } catch (e) {
+        print('Error loading weekly report: $e');
+      }
+    }
+    
+    if (mounted) {
+      setState(() {
+        _loading = false;
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    if (report == null) {
+    if (_loading) {
       return Scaffold(
         backgroundColor: context.runninPalette.background,
-        body: const SafeArea(
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+    
+    if (_report == null) {
+      return Scaffold(
+        backgroundColor: context.runninPalette.background,
+        body: SafeArea(
           child: Center(
             child: Text('Relatório não encontrado'),
           ),
@@ -31,7 +76,7 @@ class WeeklyReportDetailPage extends StatelessWidget {
       );
     }
 
-    final weeklyReport = report!;
+    final weeklyReport = _report!;
     final palette = context.runninPalette;
 
     return Scaffold(

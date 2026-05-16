@@ -6,6 +6,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:go_router/go_router.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/features/admin/data/admin_file_picker.dart';
 
@@ -1081,7 +1082,7 @@ class _PromptsConsoleEntry extends StatelessWidget {
         title: const Text('Prompts & Personas'),
         subtitle: const Text('Editar prompts dos 7 momentos LLM, personas do coach, knobs do decision layer'),
         trailing: const Icon(Icons.chevron_right),
-        onTap: () => Navigator.of(context).pushNamed('/admin/prompts'),
+        onTap: () => GoRouter.of(context).push('/admin/prompts'),
       ),
     );
   }

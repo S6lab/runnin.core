@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:hive_flutter/hive_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/features/history/presentation/widgets/hist_stat_card.dart';
