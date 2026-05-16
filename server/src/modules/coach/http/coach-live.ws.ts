@@ -20,7 +20,10 @@ export function attachCoachLiveWebSocket(httpServer: HttpServer): void {
 
   httpServer.on('upgrade', (req: IncomingMessage, socket, head) => {
     const url = new URL(req.url ?? '/', `http://${req.headers.host}`);
-    if (url.pathname !== '/v1/coach/live') return;
+    logger.info('coach.live.upgrade_received', { url: url.pathname, host: req.headers.host });
+    if (url.pathname !== '/coach-live' && url.pathname !== '/v1/coach/live') {
+      return;
+    }
 
     const token = url.searchParams.get('token');
     if (!token) {
