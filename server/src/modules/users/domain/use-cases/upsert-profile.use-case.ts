@@ -21,10 +21,7 @@ export const UpsertProfileSchema = z.object({
   // Coach preferences
   coachPersonality: z.enum(['motivador', 'tecnico', 'sereno']).optional(),
   coachMessageFrequency: z.enum(['per_km', 'per_2km', 'alerts_only', 'silent']).optional(),
-  // TODO: coachFeedbackEnabled and notificationsEnabled record types currently have
-  // a type mismatch with zod v4 record() which requires 2 args (keySchema, valueSchema)
-  // Re-enable validation when zod upgrade to v5 or type is resolved
- coachFeedbackEnabled: z.any(),
+  coachFeedbackEnabled: z.record(z.string(), z.boolean()).optional(),
   
   // Notifications
   notificationsEnabled: z.any(),
