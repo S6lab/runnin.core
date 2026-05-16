@@ -7,6 +7,8 @@ import { logger } from '@shared/logger/logger';
 import { formatRunningKnowledgeContext } from '@shared/knowledge/running/running-knowledge';
 import { buildPlanInitPrompt } from '@shared/infra/llm/prompts';
 import { CoachRuntimeContextService } from '@modules/coach/use-cases/coach-runtime-context.service';
+import { container } from '@shared/container';
+import { CooldownError } from '@shared/errors/app-error';
 
 const PlanSessionSchema = z.object({
   dayOfWeek: z.number().int().min(1).max(7),
@@ -46,6 +48,36 @@ export class GeneratePlanUseCase {
       const err = new Error('Você já tem um plano ativo. Confirme a substituição ou use a revisão semanal.');
       (err as Error & { code?: string }).code = 'PLAN_ALREADY_EXISTS';
       throw err;
+    }
+
+    // Overwrite quota: pro user pode substituir plano 1x/semana.
+    // Primeiro plano (sem existing ativo) não consome quota.
+    if (existing && existing.status !== 'failed' && opts.confirmOverwrite) {
+      const profile = await container.repos.users.findById(userId);
+      const quota = profile?.planRevisions ?? { usedThisWeek: 0, max: 1, resetAt: new Date().toISOString() };
+      const resetAt = new Date(quota.resetAt);
+      const now = new Date();
+      // Se janela semanal expirou, reseta
+      if (resetAt < now) {
+        quota.usedThisWeek = 0;
+        // próxima janela: 7 dias a partir de agora
+        quota.resetAt = new Date(now.getTime() + 7 * 24 * 3600 * 1000).toISOString();
+      }
+      if (quota.usedThisWeek >= quota.max) {
+        throw new CooldownError(
+          quota.resetAt,
+          `Limite semanal de novo plano atingido (${quota.max}/semana). Disponível em ${quota.resetAt}.`,
+        );
+      }
+      // Consome 1 unidade da quota
+      quota.usedThisWeek += 1;
+      if (profile) {
+        await container.repos.users.upsert({
+          ...profile,
+          planRevisions: quota,
+          updatedAt: now.toISOString(),
+        });
+      }
     }
 
     const planId = uuid();

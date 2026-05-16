@@ -1,8 +1,10 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:go_router/go_router.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:flutter/services.dart';
+import 'package:runnin/core/router/app_router.dart';
 import 'package:runnin/shared/widgets/runnin_app_bar.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
@@ -31,6 +33,27 @@ class _LoginPageState extends State<LoginPage> {
     super.dispose();
   }
 
+  /// Após login bem-sucedido + provisionMe, decide pra onde mandar:
+  /// - onboarded == true → /home
+  /// - onboarded == false (ou null) → /onboarding (assessment)
+  Future<void> _navigateAfterAuth() async {
+    if (!mounted) return;
+    try {
+      final profile = await UserRemoteDatasource().getMe();
+      final onboarded = profile?.onboarded ?? false;
+      if (onboarded) {
+        markOnboardingDone();
+        if (mounted) context.go('/home');
+      } else {
+        markOnboardingPending();
+        if (mounted) context.go('/onboarding');
+      }
+    } catch (_) {
+      // Fallback: vai pro onboarding se algo falhar (mais seguro que home)
+      if (mounted) context.go('/onboarding');
+    }
+  }
+
   Future<void> _signInWithGoogle() async {
     setState(() { _loading = true; _error = null; });
     try {
@@ -50,6 +73,7 @@ class _LoginPageState extends State<LoginPage> {
         await FirebaseAuth.instance.signInWithCredential(credential);
       }
       await UserRemoteDatasource().provisionMe();
+      await _navigateAfterAuth();
     } catch (e) {
       setState(() {
         _error = 'Erro ao fazer login. Tente novamente.';
@@ -63,6 +87,7 @@ class _LoginPageState extends State<LoginPage> {
     try {
       await FirebaseAuth.instance.signInAnonymously();
       await UserRemoteDatasource().provisionMe();
+      await _navigateAfterAuth();
     } catch (_) {
       setState(() {
         _error = 'Não foi possível entrar no modo anônimo.';
@@ -93,6 +118,7 @@ class _LoginPageState extends State<LoginPage> {
             try {
               await auth.signInWithCredential(credential);
               await UserRemoteDatasource().provisionMe();
+              await _navigateAfterAuth();
             } catch (_) {}
           },
           verificationFailed: (e) {
@@ -161,6 +187,7 @@ class _LoginPageState extends State<LoginPage> {
         await auth.signInWithCredential(credential);
       }
       await UserRemoteDatasource().provisionMe();
+      await _navigateAfterAuth();
     } on FirebaseAuthException catch (e) {
       if (!mounted) return;
       setState(() {
