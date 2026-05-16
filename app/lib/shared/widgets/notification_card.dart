@@ -1,110 +1,143 @@
 import 'package:flutter/material.dart';
-import 'package:runnin/core/theme/app_palette.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:runnin/core/theme/design_system_tokens.dart';
 
+/// Coach.AI notification card per `docs/figma/screens/HOME.md` §02
+/// (lines 74–91). Five colored variants (cyan / yellow / blue / orange /
+/// purple) sharing layout: icon + title + subtitle + timestamp + caret.
+///
+/// Pixel-perfect Figma values inlined (sizes, line-heights, weights) so
+/// the component renders identically regardless of theme overrides.
 class NotificationCard extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final String? timestamp;
-  final Color borderColor;
-
   const NotificationCard({
     super.key,
     required this.icon,
     required this.title,
     required this.subtitle,
-    this.timestamp,
     required this.borderColor,
+    this.timestamp,
+    this.expandable = true,
+    this.onTap,
   });
 
-  static List<NotificationCard> sampleNotifications() {
-    return [
-      NotificationCard(
-        icon: Icons.access_time,
-        title: 'MELHOR HORÁRIO',
-        subtitle: '06:30',
-        timestamp: 'AGORA',
-        borderColor: NotificationColors.notification1,
-      ),
-      NotificationCard(
-        icon: Icons.restaurant,
-        title: 'PREPARO NUTRICIONAL',
-        subtitle: 'Carb-loading e hidratação pré-treino',
-        timestamp: '05:30',
-        borderColor: NotificationColors.notification2,
-      ),
-      NotificationCard(
-        icon: Icons.local_drink,
-        title: 'HIDRATAÇÃO',
-        subtitle: '72% (1.8L/2.5L)',
-        timestamp: 'CONTÍNUO',
-        borderColor: NotificationColors.notification3,
-      ),
-      NotificationCard(
-        icon: Icons.checklist,
-        title: 'CHECKLIST PRÉ-EASY RUN',
-        subtitle: 'Aquecimento e mobilização',
-        timestamp: '06:00',
-        borderColor: NotificationColors.notification4,
-      ),
-      NotificationCard(
-        icon: Icons.air,
-        title: 'SONO → PERFORMANCE',
-        subtitle: 'Fase REM completada',
-        timestamp: '21:00',
-        borderColor: NotificationColors.notification5,
-      ),
-    ];
-  }
+  /// Leading icon (18×18 px), tinted with [borderColor].
+  final IconData icon;
+
+  /// Bold 11 px title, color = [borderColor]. Caller controls casing.
+  final String title;
+
+  /// Medium 11 px subtitle, ellipsized to one line.
+  final String subtitle;
+
+  /// Optional Medium 9 px timestamp shown top-right (e.g. "AGORA", "05:30").
+  final String? timestamp;
+
+  /// 1.735 px solid border. One of the five HOME §02 accent colors.
+  final Color borderColor;
+
+  /// When true (default), shows the ▼ caret indicating expansion.
+  final bool expandable;
+
+  /// Tap handler for the whole card.
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    final palette = context.runninPalette;
-    final type = context.runninType;
-
-    return Container(
-      height: 62.4,
-      padding: const EdgeInsets.fromLTRB(17.7, 16, 16, 16),
-      decoration: BoxDecoration(
-        color: const Color(0x08FFFFFF),
-        border: Border.all(color: borderColor, width: 1.741),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Icon(icon, size: 18, color: borderColor),
-          const SizedBox(width: 10),
-          Expanded(
-            child: IntrinsicHeight(
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        height: 62.444,
+        padding: const EdgeInsets.fromLTRB(17.74, 12, 16, 12),
+        decoration: BoxDecoration(
+          color: FigmaColors.surfaceCard, // rgba(255,255,255,0.03)
+          border: Border.all(color: borderColor, width: 1.735),
+          borderRadius: FigmaBorderRadius.zero,
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Icon(icon, size: 18, color: borderColor),
+            const SizedBox(width: 12),
+            Expanded(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    title.toUpperCase(),
-                    style: type.labelMd.copyWith(color: borderColor),
-                  ),
-                  const SizedBox(height: 1),
-                  Text(
-                    subtitle,
-                    style: type.bodySm.copyWith(color: palette.muted),
+                    title,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 11,
+                      height: 16.5 / 11,
+                      fontWeight: FontWeight.w700,
+                      color: borderColor,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 11,
+                      height: 16.5 / 11,
+                      fontWeight: FontWeight.w500,
+                      color: FigmaColors.textSecondary,
+                    ),
                   ),
                 ],
               ),
             ),
-          ),
-          if (timestamp != null) ...[
-            Text(
-              timestamp!,
-              style: type.labelCaps.copyWith(color: palette.muted),
-            ),
-            const SizedBox(width: 8),
-            Icon(Icons.arrow_drop_down, size: 10, color: palette.muted),
+            if (timestamp != null) ...[
+              const SizedBox(width: 8),
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    timestamp!,
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 9,
+                      height: 13.5 / 9,
+                      fontWeight: FontWeight.w500,
+                      color: FigmaColors.textSecondary,
+                    ),
+                  ),
+                  if (expandable)
+                    Text(
+                      '▼',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 10,
+                        height: 1,
+                        color: FigmaColors.textSecondary,
+                      ),
+                    ),
+                ],
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
+}
+
+/// Canonical accent colors for the 5 HOME §02 notification variants.
+abstract final class NotificationAccent {
+  /// Cyan — "MELHOR HORÁRIO" (timing).
+  static const Color cyan = Color(0xFF00D4FF);
+
+  /// Yellow — "PREPARO NUTRICIONAL".
+  static const Color yellow = Color(0xFFEAB308);
+
+  /// Blue — "HIDRATAÇÃO".
+  static const Color blue = Color(0xFF3B82F6);
+
+  /// Orange — "CHECKLIST PRÉ-EASY RUN".
+  static const Color orange = Color(0xFFFF6B35);
+
+  /// Purple — "SONO → PERFORMANCE".
+  static const Color purple = Color(0xFF8B5CF6);
 }
