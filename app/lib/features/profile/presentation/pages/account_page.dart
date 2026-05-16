@@ -2,44 +2,147 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:runnin/core/gamification/levels.dart';
 import 'package:runnin/core/router/app_router.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/core/theme/theme_controller.dart';
+import 'package:runnin/features/auth/data/user_remote_datasource.dart';
+import 'package:runnin/features/run/data/datasources/run_remote_datasource.dart';
+import 'package:runnin/features/run/domain/entities/run.dart';
 import 'package:runnin/shared/widgets/figma/figma_top_nav.dart';
 
-class AccountPage extends StatelessWidget {
+/// Aggregated profile data shown in PERFIL root. Computed once on page load.
+class _AccountData {
+  final UserProfile? profile;
+  final List<Run> runs;
+  final int totalXp;
+  final LevelProgress level;
+  final int streakDays;
+  final double totalKm;
+  final int runsCount;
+
+  _AccountData({
+    required this.profile,
+    required this.runs,
+    required this.totalXp,
+    required this.level,
+    required this.streakDays,
+    required this.totalKm,
+    required this.runsCount,
+  });
+
+  factory _AccountData.empty() => _AccountData(
+        profile: null,
+        runs: const [],
+        totalXp: 0,
+        level: computeLevel(0),
+        streakDays: 0,
+        totalKm: 0,
+        runsCount: 0,
+      );
+}
+
+int _computeStreak(List<Run> runs) {
+  final runDays = runs.map((r) {
+    final d = DateTime.tryParse(r.createdAt)?.toLocal();
+    if (d == null) return null;
+    return DateTime(d.year, d.month, d.day);
+  }).whereType<DateTime>().toSet();
+  int streak = 0;
+  DateTime day = DateTime.now();
+  day = DateTime(day.year, day.month, day.day);
+  while (runDays.contains(day)) {
+    streak++;
+    day = day.subtract(const Duration(days: 1));
+  }
+  return streak;
+}
+
+class AccountPage extends StatefulWidget {
   const AccountPage({super.key});
 
   @override
+  State<AccountPage> createState() => _AccountPageState();
+}
+
+class _AccountPageState extends State<AccountPage> {
+  final _userDs = UserRemoteDatasource();
+  final _runDs = RunRemoteDatasource();
+  _AccountData? _data;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final results = await Future.wait([
+        _userDs.getMe(),
+        _runDs.listRuns(limit: 90),
+      ]);
+      final profile = results[0] as UserProfile?;
+      final allRuns = results[1] as List<Run>;
+      final runs = allRuns.where((r) => r.status == 'completed').toList();
+      final totalXp = runs.fold<int>(0, (s, r) => s + (r.xpEarned ?? 0));
+      final totalKm = runs.fold<double>(0, (s, r) => s + r.distanceM) / 1000;
+      if (!mounted) return;
+      setState(() {
+        _data = _AccountData(
+          profile: profile,
+          runs: runs,
+          totalXp: totalXp,
+          level: computeLevel(totalXp),
+          streakDays: _computeStreak(runs),
+          totalKm: totalKm,
+          runsCount: runs.length,
+        );
+        _loading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _data = _AccountData.empty();
+        _loading = false;
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final data = _data ?? _AccountData.empty();
     return Scaffold(
       backgroundColor: FigmaColors.bgBase,
       body: Column(
         children: [
           const _TopNav(),
           Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(AppSpacing.xxl, 0, AppSpacing.xxl, AppSpacing.xl),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const SizedBox(height: AppSpacing.xl),
-                  const _ProfileHeader(),
-                  const SizedBox(height: AppSpacing.xl),
-                  const _StatsCards(),
-                  const SizedBox(height: AppSpacing.md),
-                  const _UserInfoCards(),
-                  const SizedBox(height: AppSpacing.xxl),
-                  const _SkinSection(),
-                  const SizedBox(height: AppSpacing.xxl),
-                  const _MenuSection(),
-                  const SizedBox(height: AppSpacing.xxl),
-                  _BottomActions(),
-                  const SizedBox(height: AppSpacing.sm),
-                ],
-              ),
-            ),
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(AppSpacing.xxl, 0, AppSpacing.xxl, AppSpacing.xl),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const SizedBox(height: AppSpacing.xl),
+                        _ProfileHeader(data: data),
+                        const SizedBox(height: AppSpacing.xl),
+                        _StatsCards(data: data),
+                        const SizedBox(height: AppSpacing.md),
+                        _UserInfoCards(data: data),
+                        const SizedBox(height: AppSpacing.xxl),
+                        const _SkinSection(),
+                        const SizedBox(height: AppSpacing.xxl),
+                        const _MenuSection(),
+                        const SizedBox(height: AppSpacing.xxl),
+                        _BottomActions(),
+                        const SizedBox(height: AppSpacing.sm),
+                      ],
+                    ),
+                  ),
           ),
         ],
       ),
@@ -64,15 +167,24 @@ class _TopNav extends StatelessWidget {
 // ── Profile Header ──────────────────────────────────────────────────────────
 
 class _ProfileHeader extends StatelessWidget {
-  const _ProfileHeader();
+  final _AccountData data;
+  const _ProfileHeader({required this.data});
 
   @override
   Widget build(BuildContext context) {
+    final name = (data.profile?.name.trim().isNotEmpty ?? false)
+        ? data.profile!.name.trim()
+        : 'Atleta';
+    final initial = name.isNotEmpty ? name[0].toUpperCase() : 'A';
+    final isPremium = data.profile?.premium ?? false;
+    final runsLabel = data.runsCount == 0
+        ? 'Nenhuma corrida ainda'
+        : '${data.runsCount} corrida${data.runsCount == 1 ? '' : 's'} · ${data.totalKm.toStringAsFixed(1)}km total';
+
     return Column(
       children: [
         Row(
           children: [
-            // Avatar
             Container(
               width: 64,
               height: 64,
@@ -82,7 +194,7 @@ class _ProfileHeader extends StatelessWidget {
               ),
               alignment: Alignment.center,
               child: Text(
-                'L',
+                initial,
                 style: GoogleFonts.jetBrainsMono(
                   color: FigmaColors.bgBase,
                   fontSize: 32,
@@ -91,13 +203,12 @@ class _ProfileHeader extends StatelessWidget {
               ),
             ),
             const SizedBox(width: AppSpacing.md),
-            // Name and level
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Lucas',
+                    name,
                     style: GoogleFonts.jetBrainsMono(
                       color: FigmaColors.textPrimary,
                       fontSize: 20,
@@ -108,33 +219,35 @@ class _ProfileHeader extends StatelessWidget {
                   Row(
                     children: [
                       Text(
-                        'Nível 7 · ·',
+                        'Nível ${data.level.currentLevel} · ${data.level.currentName}',
                         style: GoogleFonts.jetBrainsMono(
                           color: FigmaColors.textSecondary,
                           fontSize: 11,
                           fontWeight: FontWeight.w500,
                         ),
                       ),
-                      const SizedBox(width: AppSpacing.sm),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: FigmaColors.brandCyan,
-                          borderRadius: FigmaBorderRadius.zero,
-                        ),
-                        child: Text(
-                          'PREMIUM',
-                          style: GoogleFonts.jetBrainsMono(
-                            color: FigmaColors.bgBase,
-                            fontSize: 8,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: 0.8,
+                      if (isPremium) ...[
+                        const SizedBox(width: AppSpacing.sm),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: FigmaColors.brandCyan,
+                            borderRadius: FigmaBorderRadius.zero,
+                          ),
+                          child: Text(
+                            'PREMIUM',
+                            style: GoogleFonts.jetBrainsMono(
+                              color: FigmaColors.bgBase,
+                              fontSize: 8,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 0.8,
+                            ),
                           ),
                         ),
-                      ),
+                      ],
                     ],
                   ),
                 ],
@@ -146,7 +259,7 @@ class _ProfileHeader extends StatelessWidget {
         Align(
           alignment: Alignment.centerLeft,
           child: Text(
-            '24 corridas · 98.5km total',
+            runsLabel,
             style: GoogleFonts.jetBrainsMono(
               color: FigmaColors.textMuted,
               fontSize: 11,
@@ -162,16 +275,20 @@ class _ProfileHeader extends StatelessWidget {
 // ── Stats Cards ─────────────────────────────────────────────────────────────
 
 class _StatsCards extends StatelessWidget {
-  const _StatsCards();
+  final _AccountData data;
+  const _StatsCards({required this.data});
 
   @override
   Widget build(BuildContext context) {
+    final xpLabel = data.level.isMax
+        ? 'MAX'
+        : '${data.level.xpIntoLevel}/${data.level.xpForNextLevel}';
     return Row(
       children: [
         Expanded(
           child: _StatCard(
             label: 'STREAK',
-            value: '12',
+            value: '${data.streakDays}',
             valueColor: FigmaColors.brandCyan,
           ),
         ),
@@ -179,15 +296,15 @@ class _StatsCards extends StatelessWidget {
         Expanded(
           child: _StatCard(
             label: 'XP',
-            value: '340/500',
+            value: xpLabel,
             valueColor: FigmaColors.brandOrange,
           ),
         ),
         const SizedBox(width: AppSpacing.sm),
         Expanded(
           child: _StatCard(
-            label: 'BADGES',
-            value: '7/21',
+            label: 'NÍVEL',
+            value: '${data.level.currentLevel}',
             valueColor: FigmaColors.textPrimary,
           ),
         ),
@@ -248,27 +365,70 @@ class _StatCard extends StatelessWidget {
 // ── User Info Cards ─────────────────────────────────────────────────────────
 
 class _UserInfoCards extends StatelessWidget {
-  const _UserInfoCards();
+  final _AccountData data;
+  const _UserInfoCards({required this.data});
+
+  static int? _ageFromBirthDate(String? birthDate) {
+    if (birthDate == null || birthDate.isEmpty) return null;
+    // expected "dd/mm/yyyy"
+    final m = RegExp(r'^(\d{2})/(\d{2})/(\d{4})$').firstMatch(birthDate);
+    if (m == null) return null;
+    final birth = DateTime(int.parse(m.group(3)!), int.parse(m.group(2)!), int.parse(m.group(1)!));
+    final now = DateTime.now();
+    var age = now.year - birth.year;
+    if (now.month < birth.month || (now.month == birth.month && now.day < birth.day)) age--;
+    return age;
+  }
+
+  static String _stripUnit(String? raw) {
+    if (raw == null || raw.isEmpty) return '—';
+    return raw.replaceAll(RegExp(r'[^0-9.]'), '');
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Row(
+    final profile = data.profile;
+    final age = _ageFromBirthDate(profile?.birthDate);
+    final hasAnyEmpty = profile == null ||
+        (profile.weight == null || profile.weight!.isEmpty) ||
+        (profile.height == null || profile.height!.isEmpty) ||
+        age == null;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Expanded(
-          child: _InfoCard(label: 'PESO', value: '—', unit: 'kg'),
+        Row(
+          children: [
+            Expanded(
+              child: _InfoCard(label: 'PESO', value: _stripUnit(profile?.weight), unit: 'kg'),
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(
+              child: _InfoCard(label: 'ALTURA', value: _stripUnit(profile?.height), unit: 'cm'),
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(
+              child: _InfoCard(label: 'IDADE', value: age?.toString() ?? '—', unit: 'anos'),
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(
+              child: _InfoCard(label: 'FREQ', value: '${profile?.frequency ?? 3}x', unit: '/sem'),
+            ),
+          ],
         ),
-        const SizedBox(width: AppSpacing.sm),
-        Expanded(
-          child: _InfoCard(label: 'ALTURA', value: '—', unit: 'cm'),
-        ),
-        const SizedBox(width: AppSpacing.sm),
-        Expanded(
-          child: _InfoCard(label: 'IDADE', value: '—', unit: 'anos'),
-        ),
-        const SizedBox(width: AppSpacing.sm),
-        Expanded(
-          child: _InfoCard(label: 'FREQ', value: '3x', unit: '/sem'),
-        ),
+        if (hasAnyEmpty) ...[
+          const SizedBox(height: AppSpacing.sm),
+          GestureDetector(
+            onTap: () => context.push('/profile/edit'),
+            child: Text(
+              'Preencher dados →',
+              style: GoogleFonts.jetBrainsMono(
+                color: FigmaColors.brandCyan,
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
       ],
     );
   }
