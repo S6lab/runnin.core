@@ -94,7 +94,7 @@ class _Avatar extends StatelessWidget {
       height: 56,
       decoration: BoxDecoration(
         color: palette.primary,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.zero,
       ),
       alignment: Alignment.center,
       child: Text(
@@ -120,7 +120,7 @@ class _PremiumBadge extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
         color: palette.surface,
-        borderRadius: BorderRadius.circular(4),
+        borderRadius: BorderRadius.zero,
         border: Border.all(color: palette.primary.withValues(alpha: 0.4)),
       ),
       child: Text(

@@ -7,12 +7,14 @@ class FigmaOtpTextField extends StatelessWidget {
   final TextEditingController? controller;
   final int length;
   final ValueChanged<String>? onChanged;
+  final bool enabled;
 
   const FigmaOtpTextField({
     super.key,
     this.controller,
     this.length = 6,
     this.onChanged,
+    this.enabled = true,
   });
 
   @override
@@ -23,6 +25,7 @@ class FigmaOtpTextField extends StatelessWidget {
       height: 48.5,
       child: TextField(
         controller: controller,
+        enabled: enabled,
         keyboardType: TextInputType.number,
         maxLength: length,
         onChanged: onChanged,

@@ -35,7 +35,7 @@ class CardWidget extends StatelessWidget {
       decoration: BoxDecoration(
         color: color ?? palette.surface,
         border: Border.all(color: borderColor ?? palette.border),
-        borderRadius: BorderRadius.circular(borderRadius ?? 0),
+        borderRadius: BorderRadius.zero,
         boxShadow: elevation
             ? [
                 BoxShadow(

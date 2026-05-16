@@ -21,7 +21,7 @@ class ProgressBar extends StatelessWidget {
       decoration: BoxDecoration(
         color: appearance.backgroundColor ??
             palette.border.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(appearance.borderRadius ?? 4),
+        borderRadius: BorderRadius.zero,
       ),
       child: Stack(
         clipBehavior: Clip.none,
@@ -30,7 +30,7 @@ class ProgressBar extends StatelessWidget {
             width: double.infinity * progress,
             decoration: BoxDecoration(
               color: appearance.barColor ?? palette.primary,
-              borderRadius: BorderRadius.circular(appearance.borderRadius ?? 4),
+              borderRadius: BorderRadius.zero,
             ),
           ),
         ],

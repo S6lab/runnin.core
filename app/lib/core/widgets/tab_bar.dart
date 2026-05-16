@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:runnin/core/theme/app_palette.dart';
+import 'package:runnin/core/theme/design_system_tokens.dart';
 
 class TabBarWidget extends StatelessWidget {
   final List<TabData> tabs;
@@ -23,7 +24,7 @@ class TabBarWidget extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         border: Border.all(color: appearance.borderColor ?? palette.border),
-        borderRadius: BorderRadius.circular(appearance.borderRadius ?? 8),
+        borderRadius: BorderRadius.zero,
       ),
       child: Row(
         children: List.generate(tabs.length, (i) {
@@ -42,13 +43,13 @@ class TabBarWidget extends StatelessWidget {
                       : Colors.transparent,
                   borderRadius: i == 0
                       ? BorderRadius.only(
-                          topLeft: Radius.circular(appearance.borderRadius ?? 8),
-                          bottomLeft: Radius.circular(appearance.borderRadius ?? 8),
+                          topLeft: Radius.circular(borderRadiusValue),
+                          bottomLeft: Radius.circular(borderRadiusValue),
                         )
                       : i == tabs.length - 1
                           ? BorderRadius.only(
-                              topRight: Radius.circular(appearance.borderRadius ?? 8),
-                              bottomRight: Radius.circular(appearance.borderRadius ?? 8),
+                              topRight: Radius.circular(borderRadiusValue),
+                              bottomRight: Radius.circular(borderRadiusValue),
                             )
                           : BorderRadius.zero,
                 ),
@@ -97,3 +98,5 @@ class TabBarAppearance {
     this.fontSize,
   });
 }
+
+final borderRadiusValue = AppDimensions.borderRadiusPill;
