@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
+import 'package:runnin/features/subscriptions/presentation/subscription_controller.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/theme_controller.dart';
@@ -38,6 +39,8 @@ void main() async {
     } catch (_) {
       // O app continua mesmo se a sincronização inicial falhar.
     }
+    // Carrega plano + features em background — não bloqueia o boot.
+    subscriptionController.refresh();
   }
 
   if (!kIsWeb) {

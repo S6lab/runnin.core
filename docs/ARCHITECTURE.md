@@ -610,8 +610,184 @@ Em ordem de retorno por esforço:
 
 ---
 
+## Biometrics — implementação atual
+
+### Status: ✅ Backend deployado (sem UI mobile ainda)
+
+Módulo completo em `server/src/modules/biometrics/`:
+
+```
+modules/biometrics/
+├── domain/
+│   ├── biometric-sample.entity.ts      # 12 tipos (bpm, hrv, sleep, etc.) + 9 sources
+│   └── biometric-sample.repository.ts
+├── infra/firestore-biometric-sample.repository.ts
+├── use-cases/
+│   ├── ingest-samples.use-case.ts      # batch ingest (até 500 samples/req)
+│   ├── get-summary.use-case.ts         # rollup N dias on-demand
+│   └── seed-test-user.use-case.ts      # ~50 samples realistas em 7d
+└── http/biometric.{controller,routes}.ts
+```
+
+### Endpoints
+
+| Método | Path | Auth | Descrição |
+|---|---|---|---|
+| POST | `/v1/biometrics/samples` | bearer | Batch ingest (até 500 samples) — chamado pelo plugin `health` no app |
+| GET | `/v1/biometrics/latest/:type` | bearer | Último sample de um tipo |
+| GET | `/v1/biometrics/summary?windowDays=7` | bearer | Rollup (avgRestingBpm, maxBpm, avgSleepHours, totalSteps, avgHrv, latestWeight) |
+| POST | `/v1/biometrics/seed-test-user` | admin | Idempotente — popula 7d realistas pra `nalin@s6lab.com` (ou outro email no body) |
+
+### Como testar (3 caminhos)
+
+#### 1) Seed pro user de teste (mais rápido pra ver dados)
+```bash
+# Logue como admin (eduardokaizer@gmail.com — claim já setada)
+TOKEN=$(firebase auth:export ... | jq -r '...')  # ou pegue do browser DevTools (window.firebase.auth.currentUser.getIdToken())
+
+curl -X POST https://runnin-api-staging-rogiz7losq-rj.a.run.app/v1/biometrics/seed-test-user \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"email": "nalin@s6lab.com"}'
+# → { ok: true, email: "nalin@s6lab.com", uid: "...", seeded: 50 }
+```
+
+Depois, logando como `nalin@s6lab.com`:
+```bash
+curl https://runnin-api-staging-rogiz7losq-rj.a.run.app/v1/biometrics/summary?windowDays=7 \
+  -H "Authorization: Bearer $NALIN_TOKEN"
+```
+
+Deve retornar algo como:
+```json
+{
+  "windowDays": 7,
+  "avgRestingBpm": 56,
+  "maxBpm": 174,
+  "avgSleepHours": 7.4,
+  "totalSteps": 70250,
+  "avgHrv": 48,
+  "latestWeight": 71.5,
+  "sampleCount": 50
+}
+```
+
+#### 2) Ingest manual (curl simula app enviando)
+```bash
+curl -X POST https://runnin-api-staging-rogiz7losq-rj.a.run.app/v1/biometrics/samples \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "samples": [
+      {"type":"resting_bpm","value":55,"unit":"bpm","source":"manual","recordedAt":"2026-05-16T07:30:00Z"},
+      {"type":"sleep_hours","value":7.8,"unit":"hours","source":"manual","recordedAt":"2026-05-15T23:00:00Z"}
+    ]
+  }'
+```
+
+#### 3) Integração real (próximo passo, NÃO implementado)
+Adicionar `health: ^11.0.0` no `pubspec.yaml`. Plugin abstrai Apple HealthKit (iOS) + Google Health Connect (Android). Snippet:
+
+```dart
+import 'package:health/health.dart';
+
+final types = [HealthDataType.HEART_RATE, HealthDataType.SLEEP_ASLEEP, HealthDataType.STEPS];
+final granted = await Health().requestAuthorization(types);
+if (!granted) return;
+
+final samples = await Health().getHealthDataFromTypes(
+  startTime: lastSyncAt,
+  endTime: DateTime.now(),
+  types: types,
+);
+
+// Mapeia pro schema do server e POST /v1/biometrics/samples
+final payload = samples.map((s) => {
+  'type': _mapType(s.type),
+  'value': s.value.toDouble(),
+  'unit': s.unit,
+  'source': Platform.isIOS ? 'apple_health' : 'health_connect',
+  'recordedAt': s.dateFrom.toUtc().toIso8601String(),
+}).toList();
+await dio.post('/biometrics/samples', data: {'samples': payload});
+```
+
+**iOS**: `Info.plist` com `NSHealthShareUsageDescription`.
+**Android**: `AndroidManifest` com `android.permission.health.READ_*` + Health Connect app instalado.
+
+---
+
+## Coach — migração para Gemini Live multimodal + Neural 2
+
+### Estado atual
+- **Coach text chat** (`/v1/coach/chat`): Gemini 2.5 Flash REST. Funciona, mas é request/response sem streaming.
+- **Coach voice durante corrida** (`/v1/coach/message`): mesmo Gemini REST, texto retornado é tocado via `audioplayers` no app — sem TTS nativo do Gemini, app usa Web Speech API (browser) ou plataforma.
+- **Coach Live** (`/v1/coach/live` WebSocket): Gemini Live API (`gemini-2.0-flash-exp`), apenas texto MVP. Audio multimodal configurado no service mas não wired.
+
+### Opções de migração
+
+| Stack | Latência | Custo (10k DAU) | Qualidade voz | Complexidade |
+|---|---|---|---|---|
+| **A. Manter atual** (Gemini text + Web Speech TTS) | 200-500ms texto + 100ms TTS local | $0 TTS | TTS robótico do browser | Baixa (já funciona) |
+| **B. Gemini text + Google Cloud TTS Neural2** | +200-400ms TTS round-trip | ~$16/1M chars (~$5/mês a 10k DAU) | Excelente (vozes naturais pt-BR `pt-BR-Neural2-A/B/C`) | Média (1 endpoint TTS) |
+| **C. Gemini Live multimodal** (input audio → output audio bidirecional) | <300ms full duplex | Token de Live é mais caro (~3x texto) | Excelente (voice Charon, Aoede, Puck nativas) | Alta (WebSocket complexo, ainda preview API) |
+| **D. ElevenLabs / OpenAI TTS** | +400-800ms | $5-22/1M chars | Excelente, voices customizadas | Média + custo |
+
+### Recomendação por uso
+
+**Coach durante corrida (cues curtos)**: **B — Google Cloud TTS Neural2**
+- Latência aceitável (cue chega 1-2s depois do trigger, OK)
+- Custo controlado (cue tem <100 chars → ~5k chars/usuário/mês → ~$0.08/user/mês)
+- Vozes pt-BR Neural2 são excelentes (já testadas em apps fitness)
+- Reutiliza o pipeline atual (Gemini gera texto → TTS converte → app toca .mp3 base64)
+
+**Coach Chat (conversa texto)**: **manter A** — não vale a pena TTS em chat
+- User lê na tela; voz é desnecessária
+- Custo extra sem ganho de UX
+
+**Coach Live (conversa por voz, sem corrida)**: **C — Gemini Live multimodal**
+- Já tem infra: [`gemini-live.service.ts`](server/src/shared/infra/llm/gemini-live.service.ts) + WebSocket proxy
+- Full duplex < 300ms é game-changer pra UX de "conversa"
+- API ainda é preview → assumir risco de breaking changes em ~2026
+
+### Plano de implementação (B — TTS Neural2 pra coach voice durante corrida)
+
+**Esforço: ~6h**
+
+1. **Backend**: novo adapter `shared/infra/tts/google-tts.adapter.ts`
+   ```typescript
+   class GoogleTtsAdapter {
+     async synthesize(text: string, voiceName = 'pt-BR-Neural2-B'): Promise<string> {
+       // Returns base64 audio/mp3
+     }
+   }
+   ```
+
+2. **Modificar** `coach.controller.postCoachMessage`: depois de gerar texto via Gemini, chama TTS e retorna `{ text, audioBase64, audioMimeType: 'audio/mpeg' }`.
+
+3. **App**: já existe `playCoachAudio` no `coach_audio_player.dart`. Recebe os campos `coachAudioBase64` + `coachAudioMimeType` no `RunState`. **Zero mudança de UI.**
+
+4. **Config**: setar `GCP_TTS_API_KEY` no Cloud Run (ou usar service account já existente).
+
+5. **Custo**: enable Cloud Text-to-Speech API no projeto `runnin-494520`. Billing já ativo.
+
+### Plano (C — Gemini Live multimodal pra coach live)
+
+**Esforço: ~16h** — fica pra depois que B estiver validado em produção.
+
+1. Modificar [`coach-live.ws.ts`](server/src/modules/coach/http/coach-live.ws.ts) pra abrir sessão Live com `responseModalities: ['AUDIO']`.
+2. App: usar `MediaRecorder` (Web) ou `record` package (mobile) pra capturar mic em chunks PCM 16khz, enviar via WebSocket.
+3. Tocar audio chunks de volta usando Web Audio API ou `audioplayers`.
+
+### Decisão recomendada
+- **AGORA**: implementar B (TTS Neural2) — ganho de UX claro, custo controlado, baixo risco.
+- **DEPOIS de billing Gemini estável**: planejar C pra coach live como feature premium destacada.
+
+---
+
 ## Histórico
 
 | Data | Mudança |
 |---|---|
 | 2026-05-16 | Doc inicial. Módulo Subscriptions + Container DI + Feature Flags + login fix + plan quota |
+| 2026-05-16 (later) | Biometrics module backend (entity + repo + ingest/summary/seed use cases + 4 endpoints). Health/readyz. Coach TTS Neural2 + Gemini Live multimodal analysis. App refresh subscription no boot. |
