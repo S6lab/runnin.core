@@ -1,8 +1,10 @@
 import 'dart:async';
 
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 
 /// Splash screen per `docs/figma/screens/SPLASH.md` (Figma node 1:4283).
@@ -44,12 +46,21 @@ class _SplashPageState extends State<SplashPage>
     super.dispose();
   }
 
-  void _advance() {
+  Future<void> _advance() async {
     if (!mounted) return;
-    _fadeController.forward().then((_) {
-      if (!mounted) return;
-      context.go('/onboarding');
-    });
+    await _fadeController.forward();
+    if (!mounted) return;
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      context.go('/home');
+      return;
+    }
+    final box = Hive.isBoxOpen('runnin_settings')
+        ? Hive.box<dynamic>('runnin_settings')
+        : await Hive.openBox<dynamic>('runnin_settings');
+    final introSeen = (box.get('intro_seen') as bool?) ?? false;
+    if (!mounted) return;
+    context.go(introSeen ? '/login' : '/intro');
   }
 
   @override

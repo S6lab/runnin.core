@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:runnin/features/admin/presentation/pages/admin_page.dart';
 import 'package:runnin/features/admin/presentation/pages/prompts_admin_page.dart';
+import 'package:runnin/features/intro/presentation/pages/intro_page.dart';
 import 'package:runnin/features/auth/presentation/pages/login_page.dart';
 import 'package:runnin/features/coach_intro/presentation/pages/coach_intro_page.dart';
 import 'package:runnin/features/home/presentation/pages/home_page.dart';
@@ -123,6 +124,7 @@ final appRouter = GoRouter(
     GoRoute(path: '/splash', builder: (_, _) => const SplashPage()),
     GoRoute(path: '/admin', builder: (_, _) => const AdminPage()),
     GoRoute(path: '/admin/prompts', builder: (_, _) => const PromptsAdminPage()),
+    GoRoute(path: '/intro', builder: (_, _) => const IntroPage()),
     GoRoute(path: '/login', builder: (_, _) => const LoginPage()),
     GoRoute(path: '/onboarding', builder: (_, _) => const OnboardingPage()),
     GoRoute(path: '/plan-loading', builder: (_, _) => const PlanLoadingPage()),

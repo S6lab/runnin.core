@@ -386,11 +386,17 @@ class _DataView extends StatelessWidget {
       int z1 = 0, z2 = 0, z3 = 0, z4 = 0, z5 = 0;
       for (final r in runsWithBpm) {
         final bpm = r.avgBpm!;
-        if (bpm < 100) z1++;
-        else if (bpm < 120) z2++;
-        else if (bpm < 145) z3++;
-        else if (bpm < 170) z4++;
-        else z5++;
+        if (bpm < 100) {
+          z1++;
+        } else if (bpm < 120) {
+          z2++;
+        } else if (bpm < 145) {
+          z3++;
+        } else if (bpm < 170) {
+          z4++;
+        } else {
+          z5++;
+        }
       }
       final total = runsWithBpm.length;
       zoneDistribution = [
@@ -428,7 +434,9 @@ class _DataView extends StatelessWidget {
       if (prev == null || prev.difference(day).inDays == 1) {
         streak++;
         prev = day;
-      } else { break; }
+      } else {
+        break;
+      }
     }
 
     final totalMin = totalS ~/ 60;

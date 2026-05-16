@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:flutter/services.dart';
+import 'package:runnin/shared/widgets/runnin_app_bar.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 import 'package:runnin/features/onboarding/presentation/steps/onboarding_shared.dart';
@@ -207,6 +208,7 @@ class _LoginPageState extends State<LoginPage> {
 
     return Scaffold(
       backgroundColor: palette.background,
+      appBar: const RunninAppBar(title: 'ENTRAR'),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(23.992),
@@ -214,7 +216,7 @@ class _LoginPageState extends State<LoginPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const SizedBox(height: 80),
+                const SizedBox(height: 12),
                 Text(
                   '// LOGIN',
                   style: context.runninType.labelMd.copyWith(color: palette.primary),

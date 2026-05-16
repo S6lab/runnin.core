@@ -9,6 +9,7 @@ import 'package:runnin/core/warmup/warmup_exercises.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 import 'package:runnin/features/run/data/datasources/run_coach_remote_datasource.dart';
 import 'package:runnin/features/run/presentation/bloc/run_bloc.dart';
+import 'package:runnin/shared/widgets/runnin_app_bar.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class PrepPage extends StatelessWidget {
@@ -222,19 +223,7 @@ class _PrepViewState extends State<_PrepView> {
       },
       child: Scaffold(
         backgroundColor: palette.background,
-        appBar: AppBar(
-          title: const Text('PREPARAR CORRIDA'),
-          leading: IconButton(
-            icon: const Icon(Icons.close),
-            onPressed: () {
-              if (context.canPop()) {
-                context.pop();
-              } else {
-                context.go('/home');
-              }
-            },
-          ),
-        ),
+        appBar: const RunninAppBar(title: 'PREPARAR CORRIDA'),
         body: Padding(
           padding: const EdgeInsets.all(24),
           child: Column(
