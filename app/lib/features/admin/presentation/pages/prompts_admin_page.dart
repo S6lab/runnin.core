@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:dio/dio.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
@@ -61,6 +62,17 @@ class _PromptsAdminPageState extends State<PromptsAdminPage> with SingleTickerPr
       setState(() {
         _doc = snap.data() ?? {};
         _defaults = defaults;
+        _loading = false;
+      });
+    } on DioException catch (e) {
+      final status = e.response?.statusCode;
+      final hint = status == 403
+          ? 'Sua conta não tem permissão de admin. Faça logout e login de novo (após admin claim ser concedida).'
+          : status == 401
+              ? 'Sessão expirada. Faça logout e login.'
+              : 'HTTP $status — ${e.message ?? "erro desconhecido"}';
+      setState(() {
+        _error = 'Falha ao carregar: $hint';
         _loading = false;
       });
     } catch (e) {

@@ -11,12 +11,15 @@ class AppTextStyles {
   final TextStyle dataXl;
   final TextStyle dataMd;
   final TextStyle dataSm;
+  final TextStyle dataXs; // 22px — display secundário
 
   final TextStyle bodyMd;
   final TextStyle bodySm;
+  final TextStyle bodyXs; // 11px — body compacto/legenda
 
   final TextStyle labelCaps;
   final TextStyle labelMd;
+  final TextStyle labelMicro; // 9px — micro labels (CARDIACO, PACE TREND, etc)
 
   // Figma typography styles (JetBrains Mono)
   final TextStyle figmaDisplayLevel;
@@ -63,10 +66,13 @@ class AppTextStyles {
     required this.dataXl,
     required this.dataMd,
     required this.dataSm,
+    required this.dataXs,
     required this.bodyMd,
     required this.bodySm,
+    required this.bodyXs,
     required this.labelCaps,
     required this.labelMd,
+    required this.labelMicro,
     required this.figmaDisplayLevel,
     required this.figmaDisplayHero,
     required this.figmaDisplayBrand,
@@ -149,6 +155,13 @@ class AppTextStyles {
         height: 1.2,
         color: textColor,
       ),
+      dataXs: GoogleFonts.jetBrainsMono(
+        fontSize: 22,
+        fontWeight: FontWeight.w700,
+        letterSpacing: -0.3,
+        height: 1.1,
+        color: textColor,
+      ),
       bodyMd: GoogleFonts.jetBrainsMono(
         fontSize: 14,
         fontWeight: FontWeight.w400,
@@ -158,6 +171,13 @@ class AppTextStyles {
       ),
       bodySm: GoogleFonts.jetBrainsMono(
         fontSize: 12,
+        fontWeight: FontWeight.w400,
+        letterSpacing: 0.0,
+        height: 1.4,
+        color: mutedColor,
+      ),
+      bodyXs: GoogleFonts.jetBrainsMono(
+        fontSize: 11,
         fontWeight: FontWeight.w400,
         letterSpacing: 0.0,
         height: 1.4,
@@ -176,6 +196,13 @@ class AppTextStyles {
         letterSpacing: 0.04,
         height: 1.3,
         color: textColor,
+      ),
+      labelMicro: GoogleFonts.jetBrainsMono(
+        fontSize: 9,
+        fontWeight: FontWeight.w700,
+        letterSpacing: 0.1,
+        height: 1.2,
+        color: mutedColor,
       ),
       // Figma typography styles
       figmaDisplayLevel: GoogleFonts.jetBrainsMono(
