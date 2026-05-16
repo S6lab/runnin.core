@@ -2,12 +2,42 @@ import { Request, Response, NextFunction } from 'express';
 import { CoachMessageUseCase, CoachContextSchema } from '../use-cases/coach-message.use-case';
 import { CoachChatSchema, CoachChatUseCase } from '../use-cases/coach-chat.use-case';
 import { GetCoachReportUseCase } from '../use-cases/get-coach-report.use-case';
+import { GenerateReportUseCase } from '../use-cases/generate-report.use-case';
 import { FirestoreCoachReportRepository } from '../infra/firestore-coach-report.repository';
+import { FirestoreRunRepository } from '@modules/runs/infra/firestore-run.repository';
+import { NotFoundError } from '@shared/errors/app-error';
+import { logger } from '@shared/logger/logger';
 
 const reportRepo = new FirestoreCoachReportRepository();
+const runRepoForReports = new FirestoreRunRepository();
 const coachMessage = new CoachMessageUseCase();
 const coachChat = new CoachChatUseCase();
 const getReport = new GetCoachReportUseCase(reportRepo);
+const generateReport = new GenerateReportUseCase(reportRepo, runRepoForReports);
+
+export async function postGenerateReport(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const runId = req.params['runId'] as string;
+    const run = await runRepoForReports.findById(runId, req.uid);
+    if (!run) throw new NotFoundError('Run');
+
+    const reportId = await generateReport.execute(run, req.uid);
+    res.status(202).json({ status: 'ready', reportId });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export function triggerReportGeneration(runId: string, userId: string): void {
+  runRepoForReports.findById(runId, userId).then(run => {
+    if (!run) return;
+    generateReport.execute(run, userId).catch(err => {
+      logger.warn('coach.report.background_failed', { runId, err: String(err) });
+    });
+  }).catch(err => {
+    logger.warn('coach.report.lookup_failed', { runId, err: String(err) });
+  });
+}
 
 export async function postCoachMessage(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {

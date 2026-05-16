@@ -4,6 +4,7 @@ import { CreateRunUseCase, CreateRunSchema } from '../domain/use-cases/create-ru
 import { AddGpsBatchUseCase, AddGpsBatchSchema } from '../domain/use-cases/add-gps-batch.use-case';
 import { CompleteRunUseCase, CompleteRunSchema } from '../domain/use-cases/complete-run.use-case';
 import { NotFoundError } from '@shared/errors/app-error';
+import { triggerReportGeneration } from '@modules/coach/http/coach.controller';
 
 const repo = new FirestoreRunRepository();
 const createRun = new CreateRunUseCase(repo);
@@ -30,6 +31,7 @@ export async function patchComplete(req: Request, res: Response, next: NextFunct
   try {
     const input = CompleteRunSchema.parse(req.body);
     const run = await completeRun.execute(req.params['id'] as string, req.uid, input);
+    triggerReportGeneration(run.id, req.uid);
     res.json(run);
   } catch (err) { next(err); }
 }
