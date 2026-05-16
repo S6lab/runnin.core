@@ -50,7 +50,7 @@ class RowItem extends StatelessWidget {
         ? compareValues(row.userValue, row.cohortValue) < 0
         : compareValues(row.userValue, row.cohortValue) > 0;
     final color = isBetter
-        ? const Color(0xFF22C55E)
+        ? FigmaColors.textPrimary
         : FigmaColors.brandCyan;
 
     return Padding(

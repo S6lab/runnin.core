@@ -61,7 +61,7 @@ export 'figma_post_run_stat_card.dart';
 export 'figma_device_card.dart';
 
 // Benchmarks
-// export 'figma_benchmark_table.dart'; // file missing
+export 'figma_benchmark_table.dart';
 
 // Gamification wrappers
 export '../gamification/badge_card.dart';

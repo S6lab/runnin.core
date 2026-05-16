@@ -39,6 +39,7 @@ class Run {
   final int? elapsedSeconds;
   final double? elevationGain;
   final String? deviceInfo;
+  final String? planSessionId;
 
   const Run({
     required this.id,
@@ -56,6 +57,7 @@ class Run {
     this.elapsedSeconds,
     this.elevationGain,
     this.deviceInfo,
+    this.planSessionId,
   });
 
   factory Run.fromJson(Map<String, dynamic> j) => Run(
@@ -74,5 +76,6 @@ class Run {
     elapsedSeconds: j['elapsedSeconds'] as int?,
     elevationGain: (j['elevationGain'] as num?)?.toDouble(),
     deviceInfo: j['deviceInfo'] as String?,
+    planSessionId: j['planSessionId'] as String?,
   );
 }

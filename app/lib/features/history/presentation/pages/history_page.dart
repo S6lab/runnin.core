@@ -458,13 +458,6 @@ class _DataView extends StatelessWidget {
         '${s.streakDays > 2 ? "Excelente consistência de ${s.streakDays} dias! " : ""}'
         'Continue mantendo a progressão de volume semanal para evoluir no ciclo.';
   }
-
-  String _computeEficiencia(double totalKm, int totalS, int runningCount) {
-    if (runningCount == 0 || totalS == 0) return '--';
-    final hours = totalS / 3600;
-    final kmh = totalKm / hours;
-    return '${kmh.toStringAsFixed(1)}';
-  }
 }
 
 class _HistoryStats {
