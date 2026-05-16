@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:runnin/features/admin/presentation/pages/admin_page.dart';
 import 'package:runnin/features/auth/presentation/pages/login_page.dart';
+import 'package:runnin/features/coach_intro/presentation/pages/coach_intro_page.dart';
 import 'package:runnin/features/home/presentation/pages/home_page.dart';
 import 'package:runnin/features/onboarding/presentation/pages/onboarding_page.dart';
 import 'package:runnin/features/run/presentation/bloc/run_bloc.dart';
@@ -107,6 +108,7 @@ final appRouter = GoRouter(
     GoRoute(path: '/login', builder: (_, _) => const LoginPage()),
     GoRoute(path: '/onboarding', builder: (_, _) => const OnboardingPage()),
     GoRoute(path: '/plan-loading', builder: (_, _) => const PlanLoadingPage()),
+    GoRoute(path: '/coach-intro', builder: (_, _) => const CoachIntroPage()),
 
     // Fluxo de corrida — RunBloc compartilhado entre prep → run → report
     ShellRoute(
