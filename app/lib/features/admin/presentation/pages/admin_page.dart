@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/features/admin/data/admin_file_picker.dart';
 
@@ -1025,8 +1026,6 @@ class _DrivePanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final palette = context.runninPalette;
-
     return Column(
       children: [
         _CoachPromptPanel(
@@ -1048,67 +1047,203 @@ class _DrivePanel extends StatelessWidget {
         ),
         const SizedBox(height: 14),
         Expanded(
-          child: Container(
-            decoration: BoxDecoration(
-              color: palette.surface,
-              border: Border.all(color: palette.border),
-            ),
-            child: Column(
+          child: _FilesSection(
+            files: files,
+            session: session,
+            loadingFiles: loadingFiles,
+            uploading: uploading,
+            uploadProgress: uploadProgress,
+            onUpload: onUpload,
+            onRefresh: onRefresh,
+            onDelete: onDelete,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ───────────────────────────── Files (Drive-style) ─────────────────────────
+
+class _FilesSection extends StatefulWidget {
+  final List<RagStorageFile> files;
+  final AdminSession session;
+  final bool loadingFiles;
+  final bool uploading;
+  final double? uploadProgress;
+  final VoidCallback onUpload;
+  final VoidCallback onRefresh;
+  final ValueChanged<RagStorageFile> onDelete;
+
+  const _FilesSection({
+    required this.files,
+    required this.session,
+    required this.loadingFiles,
+    required this.uploading,
+    required this.uploadProgress,
+    required this.onUpload,
+    required this.onRefresh,
+    required this.onDelete,
+  });
+
+  @override
+  State<_FilesSection> createState() => _FilesSectionState();
+}
+
+class _FilesSectionState extends State<_FilesSection> {
+  final _searchCtrl = TextEditingController();
+  String _query = '';
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  List<RagStorageFile> get _filtered {
+    if (_query.isEmpty) return widget.files;
+    final q = _query.toLowerCase();
+    return widget.files
+        .where((f) =>
+            f.name.toLowerCase().contains(q) ||
+            (f.uploadedByEmail ?? '').toLowerCase().contains(q) ||
+            (f.ragStatus ?? '').toLowerCase().contains(q))
+        .toList();
+  }
+
+  int get _totalBytes =>
+      widget.files.fold<int>(0, (acc, f) => acc + (f.size ?? 0));
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    final filtered = _filtered;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: palette.surface,
+        border: Border.all(color: palette.border),
+      ),
+      child: Column(
+        children: [
+          // Toolbar header
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
+            child: Row(
               children: [
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          'Base de conhecimento',
-                          style: Theme.of(context).textTheme.titleMedium
-                              ?.copyWith(fontWeight: FontWeight.w800),
-                        ),
+                Icon(Icons.folder_outlined, color: palette.primary, size: 22),
+                const SizedBox(width: 10),
+                Text(
+                  'Base RAG',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w800,
                       ),
-                      IconButton(
-                        tooltip: 'Atualizar lista',
-                        onPressed: loadingFiles ? null : onRefresh,
-                        icon: const Icon(Icons.refresh),
-                      ),
-                      const SizedBox(width: 8),
-                      ElevatedButton.icon(
-                        onPressed: uploading || !session.canUpload
-                            ? null
-                            : onUpload,
-                        icon: const Icon(Icons.upload_file),
-                        label: const Text('UPLOAD'),
-                      ),
-                    ],
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  '${widget.files.length} ${widget.files.length == 1 ? "arquivo" : "arquivos"} · ${_formatBytes(_totalBytes)}',
+                  style: TextStyle(color: palette.muted, fontSize: 12),
+                ),
+                const Spacer(),
+                SizedBox(
+                  width: 240,
+                  child: TextField(
+                    controller: _searchCtrl,
+                    onChanged: (v) => setState(() => _query = v.trim()),
+                    decoration: InputDecoration(
+                      hintText: 'Filtrar por nome, autor, status…',
+                      prefixIcon: const Icon(Icons.search, size: 18),
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 10),
+                      suffixIcon: _query.isEmpty
+                          ? null
+                          : IconButton(
+                              icon: const Icon(Icons.close, size: 16),
+                              onPressed: () {
+                                _searchCtrl.clear();
+                                setState(() => _query = '');
+                              },
+                            ),
+                    ),
                   ),
                 ),
-                if (uploading)
-                  LinearProgressIndicator(value: uploadProgress, minHeight: 2),
-                Divider(height: 1, color: palette.border),
-                Expanded(
-                  child: loadingFiles && files.isEmpty
-                      ? const Center(child: CircularProgressIndicator())
-                      : files.isEmpty
-                      ? _EmptyFiles(onUpload: onUpload)
-                      : ListView.separated(
-                          itemCount: files.length,
-                          separatorBuilder: (_, _) =>
-                              Divider(height: 1, color: palette.border),
-                          itemBuilder: (context, index) {
-                            final file = files[index];
-                            return _FileRow(
-                              file: file,
-                              canDelete: session.canDelete,
-                              onDelete: () => onDelete(file),
-                            );
-                          },
-                        ),
+                const SizedBox(width: 8),
+                IconButton(
+                  tooltip: 'Atualizar lista',
+                  onPressed: widget.loadingFiles ? null : widget.onRefresh,
+                  icon: const Icon(Icons.refresh),
+                ),
+                const SizedBox(width: 4),
+                ElevatedButton.icon(
+                  onPressed:
+                      widget.uploading || !widget.session.canUpload ? null : widget.onUpload,
+                  icon: const Icon(Icons.upload_file),
+                  label: const Text('UPLOAD'),
                 ),
               ],
             ),
           ),
-        ),
-      ],
+          if (widget.uploading)
+            LinearProgressIndicator(value: widget.uploadProgress, minHeight: 2),
+          Divider(height: 1, color: palette.border),
+          // List or empty
+          Expanded(
+            child: widget.loadingFiles && widget.files.isEmpty
+                ? const Center(child: CircularProgressIndicator())
+                : widget.files.isEmpty
+                    ? _EmptyFiles(onUpload: widget.onUpload)
+                    : filtered.isEmpty
+                        ? _NoSearchResults(query: _query)
+                        : ListView.separated(
+                            itemCount: filtered.length,
+                            separatorBuilder: (_, _) =>
+                                Divider(height: 1, color: palette.border),
+                            itemBuilder: (context, index) {
+                              final file = filtered[index];
+                              return _FileRow(
+                                file: file,
+                                canDelete: widget.session.canDelete,
+                                onDelete: () => widget.onDelete(file),
+                              );
+                            },
+                          ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+String _formatBytes(int? size) {
+  if (size == null) return '—';
+  if (size < 1024) return '$size B';
+  if (size < 1024 * 1024) return '${(size / 1024).toStringAsFixed(1)} KB';
+  if (size < 1024 * 1024 * 1024) {
+    return '${(size / (1024 * 1024)).toStringAsFixed(1)} MB';
+  }
+  return '${(size / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
+}
+
+class _NoSearchResults extends StatelessWidget {
+  final String query;
+  const _NoSearchResults({required this.query});
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.search_off, size: 36, color: palette.muted),
+          const SizedBox(height: 8),
+          Text(
+            'Nenhum arquivo encontrado para "$query"',
+            style: TextStyle(color: palette.muted),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -1370,7 +1505,7 @@ class _CoachPromptPanelState extends State<_CoachPromptPanel> {
   }
 }
 
-class _FileRow extends StatelessWidget {
+class _FileRow extends StatefulWidget {
   final RagStorageFile file;
   final bool canDelete;
   final VoidCallback onDelete;
@@ -1382,66 +1517,269 @@ class _FileRow extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    final palette = context.runninPalette;
+  State<_FileRow> createState() => _FileRowState();
+}
 
-    return ListTile(
-      leading: Icon(
-        _iconFor(file.contentType, file.name),
-        color: palette.primary,
-      ),
-      title: Text(
-        file.name,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: const TextStyle(fontWeight: FontWeight.w700),
-      ),
-      subtitle: Text(
-        [
-          _formatBytes(file.size),
-          if (file.ragStatus != null) 'RAG: ${file.ragStatus}',
-          if (file.uploadedByEmail?.isNotEmpty == true) file.uploadedByEmail!,
-          if (file.updatedAt != null) _formatDate(file.updatedAt!),
-        ].where((item) => item != null && item.isNotEmpty).join('  |  '),
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(color: palette.muted, fontSize: 12),
-      ),
-      trailing: canDelete
-          ? IconButton(
-              tooltip: 'Remover arquivo',
-              onPressed: onDelete,
-              icon: const Icon(Icons.delete_outline),
-            )
-          : null,
+class _FileRowState extends State<_FileRow> {
+  bool _hover = false;
+  bool _busy = false;
+
+  Future<void> _copyPath() async {
+    await Clipboard.setData(ClipboardData(text: widget.file.path));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Caminho copiado'), duration: Duration(seconds: 2)),
     );
   }
 
-  IconData _iconFor(String? contentType, String name) {
-    final lower = name.toLowerCase();
-    if (contentType == 'application/pdf' || lower.endsWith('.pdf')) {
-      return Icons.picture_as_pdf_outlined;
+  Future<void> _openInTab() async {
+    setState(() => _busy = true);
+    try {
+      final url = await FirebaseStorage.instance.ref(widget.file.path).getDownloadURL();
+      await Clipboard.setData(ClipboardData(text: url));
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('URL de download copiada (cole no navegador)')),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Falha ao gerar URL.')),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
-    if (lower.endsWith('.csv') || lower.endsWith('.json')) {
-      return Icons.table_chart_outlined;
-    }
-    return Icons.description_outlined;
   }
 
-  String? _formatBytes(int? size) {
-    if (size == null) return null;
-    if (size < 1024) return '$size B';
-    if (size < 1024 * 1024) return '${(size / 1024).toStringAsFixed(1)} KB';
-    return '${(size / (1024 * 1024)).toStringAsFixed(1)} MB';
+  Future<void> _confirmDelete() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Remover arquivo?'),
+        content: Text(
+          '${widget.file.name}\n\nEsta ação não pode ser desfeita. Os chunks já indexados continuarão no RAG até a próxima rebuild.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+          TextButton(
+            style: TextButton.styleFrom(foregroundColor: context.runninPalette.error),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Remover'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) widget.onDelete();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    final file = widget.file;
+    final fileKind = _fileKindOf(file.contentType, file.name);
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: Container(
+        color: _hover ? palette.surfaceAlt.withValues(alpha: 0.5) : null,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        child: Row(
+          children: [
+            _FileIcon(kind: fileKind),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          file.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      if (file.ragStatus != null) _StatusPill(status: file.ragStatus!),
+                    ],
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    _subtitleLine(file),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: palette.muted, fontSize: 11),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            // Inline actions — só visíveis no hover
+            AnimatedOpacity(
+              opacity: _hover ? 1 : 0.0,
+              duration: const Duration(milliseconds: 120),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    tooltip: 'Copiar caminho do Storage',
+                    onPressed: _copyPath,
+                    icon: const Icon(Icons.link, size: 18),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  IconButton(
+                    tooltip: 'Obter URL de download',
+                    onPressed: _busy ? null : _openInTab,
+                    icon: _busy
+                        ? const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(strokeWidth: 1.6),
+                          )
+                        : const Icon(Icons.open_in_new, size: 18),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  if (widget.canDelete)
+                    IconButton(
+                      tooltip: 'Remover arquivo',
+                      onPressed: _confirmDelete,
+                      icon: Icon(Icons.delete_outline, size: 18, color: palette.error),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _subtitleLine(RagStorageFile file) {
+    final parts = <String>[
+      _formatBytes(file.size),
+      if (file.updatedAt != null) _formatDate(file.updatedAt!),
+      if (file.uploadedByEmail?.isNotEmpty == true) file.uploadedByEmail!,
+    ].whereType<String>().toList();
+    return parts.join(' · ');
   }
 
   String _formatDate(DateTime date) {
     final local = date.toLocal();
+    final now = DateTime.now();
+    final diff = now.difference(local);
+    if (diff.inMinutes < 1) return 'agora';
+    if (diff.inHours < 1) return '${diff.inMinutes}min atrás';
+    if (diff.inHours < 24) return '${diff.inHours}h atrás';
+    if (diff.inDays < 7) return '${diff.inDays}d atrás';
     return '${local.day.toString().padLeft(2, '0')}/'
         '${local.month.toString().padLeft(2, '0')}/'
-        '${local.year} '
-        '${local.hour.toString().padLeft(2, '0')}:'
-        '${local.minute.toString().padLeft(2, '0')}';
+        '${local.year}';
+  }
+}
+
+enum _FileKind { pdf, doc, sheet, json, markdown, text, generic }
+
+_FileKind _fileKindOf(String? contentType, String name) {
+  final lower = name.toLowerCase();
+  if (contentType == 'application/pdf' || lower.endsWith('.pdf')) return _FileKind.pdf;
+  if (lower.endsWith('.doc') || lower.endsWith('.docx')) return _FileKind.doc;
+  if (lower.endsWith('.csv')) return _FileKind.sheet;
+  if (lower.endsWith('.json')) return _FileKind.json;
+  if (lower.endsWith('.md') || lower.endsWith('.markdown')) return _FileKind.markdown;
+  if (lower.endsWith('.txt')) return _FileKind.text;
+  return _FileKind.generic;
+}
+
+class _FileIcon extends StatelessWidget {
+  final _FileKind kind;
+  const _FileIcon({required this.kind});
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    final (color, icon, label) = switch (kind) {
+      _FileKind.pdf =>
+        (const Color(0xFFEF4444), Icons.picture_as_pdf_outlined, 'PDF'),
+      _FileKind.doc =>
+        (const Color(0xFF3B82F6), Icons.description_outlined, 'DOC'),
+      _FileKind.sheet =>
+        (const Color(0xFF22C55E), Icons.table_chart_outlined, 'CSV'),
+      _FileKind.json =>
+        (palette.primary, Icons.data_object, 'JSON'),
+      _FileKind.markdown =>
+        (const Color(0xFF8B5CF6), Icons.notes_outlined, 'MD'),
+      _FileKind.text =>
+        (palette.muted, Icons.text_snippet_outlined, 'TXT'),
+      _FileKind.generic =>
+        (palette.muted, Icons.insert_drive_file_outlined, ''),
+    };
+
+    return Container(
+      width: 40,
+      height: 40,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.14),
+        border: Border.all(color: color.withValues(alpha: 0.4), width: 1.2),
+      ),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Icon(icon, color: color, size: 20),
+          if (label.isNotEmpty)
+            Positioned(
+              bottom: 1,
+              right: 2,
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 7,
+                  fontWeight: FontWeight.w900,
+                  color: color,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StatusPill extends StatelessWidget {
+  final String status;
+  const _StatusPill({required this.status});
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    final (color, label) = switch (status.toLowerCase()) {
+      'pending' => (const Color(0xFFFB923C), 'PENDENTE'),
+      'processed' || 'indexed' || 'done' || 'ready' =>
+        (const Color(0xFF22C55E), 'INDEXADO'),
+      'error' || 'failed' => (palette.error, 'ERRO'),
+      _ => (palette.muted, status.toUpperCase()),
+    };
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.16),
+        border: Border.all(color: color.withValues(alpha: 0.55), width: 1),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 9,
+          fontWeight: FontWeight.w900,
+          color: color,
+          letterSpacing: 0.4,
+        ),
+      ),
+    );
   }
 }
 
@@ -1453,26 +1791,78 @@ class _EmptyFiles extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final palette = context.runninPalette;
+    const formats = ['PDF', 'DOCX', 'DOC', 'TXT', 'MD', 'CSV', 'JSON'];
 
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(28),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.folder_open, size: 48, color: palette.muted),
-            const SizedBox(height: 14),
-            Text(
-              'Nenhum arquivo enviado',
-              style: Theme.of(
-                context,
-              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+            Container(
+              width: 88,
+              height: 88,
+              decoration: BoxDecoration(
+                color: palette.primary.withValues(alpha: 0.10),
+                border: Border.all(
+                  color: palette.primary.withValues(alpha: 0.3),
+                  width: 1.5,
+                ),
+              ),
+              child: Icon(
+                Icons.cloud_upload_outlined,
+                size: 44,
+                color: palette.primary,
+              ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 18),
+            Text(
+              'Base RAG vazia',
+              style: Theme.of(context)
+                  .textTheme
+                  .titleLarge
+                  ?.copyWith(fontWeight: FontWeight.w900),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Faça upload de papers, protocolos ou guias.\nO Coach.AI usa esse conhecimento em todas as respostas.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: palette.muted, height: 1.5),
+            ),
+            const SizedBox(height: 20),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              alignment: WrapAlignment.center,
+              children: formats
+                  .map((f) => Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: palette.surfaceAlt,
+                          border: Border.all(color: palette.border),
+                        ),
+                        child: Text(
+                          f,
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w900,
+                            color: palette.muted,
+                            letterSpacing: 0.6,
+                          ),
+                        ),
+                      ))
+                  .toList(),
+            ),
+            const SizedBox(height: 22),
             ElevatedButton.icon(
               onPressed: onUpload,
               icon: const Icon(Icons.upload_file),
-              label: const Text('ENVIAR ARQUIVO'),
+              label: const Text('SELECIONAR ARQUIVO'),
+              style: ElevatedButton.styleFrom(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
+              ),
             ),
           ],
         ),
