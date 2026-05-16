@@ -79,7 +79,7 @@ class _HomeViewState extends State<_HomeView> {
         child: BlocBuilder<HomeCubit, HomeState>(
           builder: (context, state) {
             return SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(17.7, 17.7, 17.7, 32),
+              padding: const EdgeInsets.fromLTRB(AppSpacing.px20, AppSpacing.px20, AppSpacing.px20, 32),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
