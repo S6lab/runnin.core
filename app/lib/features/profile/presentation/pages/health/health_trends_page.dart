@@ -228,6 +228,13 @@ _Stats _buildStats(List<Run> runs) {
     );
 }
 
+int _recoveryScore(_Stats stats, UserProfile? profile) {
+  if (!stats.hasRunData || profile?.hasWearable != true) return 0;
+  final freq = stats.runCount >= 3 ? 10 : (stats.runCount * 3);
+  final cons = stats.weeklyDistKm >= 10 ? 10 : (stats.weeklyDistKm ~/ 2);
+  return freq + cons;
+}
+
 class _Body extends StatelessWidget {
   const _Body({required this.runs, required this.userProfile});
   final List<Run> runs;
@@ -266,17 +273,21 @@ class _Body extends StatelessWidget {
                 valueColor: FigmaColors.brandCyan,
               ),
               _HealthCard(
-                label: 'Pace médio',
-                value: stats.avgPace.isNotEmpty ? stats.avgPace : '—',
-                unit: '/km',
-                valueColor: FigmaColors.brandOrange,
+                label: 'Sono médio',
+                value: '—',
+                unit: '',
+                secondaryLabel: userProfile?.hasWearable == true
+                    ? null
+                    : 'Sem dados — conecte wearable',
+                valueColor: FigmaColors.brandGreen,
               ),
               _HealthCard(
-                label: 'Dist. semanal',
-                value: stats.weeklyDistKm > 0
-                    ? stats.weeklyDistKm.toStringAsFixed(1)
-                    : '—',
-                unit: 'km',
+                label: 'Recovery score',
+                value: _recoveryScore(stats, userProfile).toString(),
+                unit: '',
+                secondaryLabel: _recoveryScore(stats, userProfile) > 0
+                    ? null
+                    : 'Sem dados — frequência+consistência',
                 valueColor: FigmaColors.brandOrange,
               ),
             ],

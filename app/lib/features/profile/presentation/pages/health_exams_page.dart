@@ -102,6 +102,8 @@ class _HealthExamsPageState extends State<HealthExamsPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const SizedBox(height: AppSpacing.xxl),
+                    _UploadCounter(used: _examsThisMonth(), max: 5),
+                    const SizedBox(height: AppSpacing.md),
                     FigmaExamUploadCTA(
                       onTap: _uploading ? () {} : _pickAndUpload,
                       label: _uploading
@@ -141,6 +143,15 @@ class _HealthExamsPageState extends State<HealthExamsPage> {
                           ),
                         ),
                       ),
+                    const SizedBox(height: AppSpacing.xxl),
+                    _FieldLabel(label: 'EXAMES RECOMENDADOS'),
+                    const SizedBox(height: AppSpacing.md),
+                    ..._kRecommendedExams.map(
+                      (rec) => Padding(
+                        padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                        child: _RecommendedExamCard(spec: rec),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -149,6 +160,15 @@ class _HealthExamsPageState extends State<HealthExamsPage> {
         ],
       ),
     );
+  }
+
+  int _examsThisMonth() {
+    if (_exams == null) return 0;
+    final now = DateTime.now();
+    return _exams!.where((e) {
+      final dt = DateTime.tryParse(e.uploadedAt);
+      return dt != null && dt.year == now.year && dt.month == now.month;
+    }).length;
   }
 
   String _formatBytes(int bytes) {
@@ -253,6 +273,104 @@ class _ErrorBanner extends StatelessWidget {
           fontSize: 11,
           color: FigmaColors.brandOrange,
         ),
+      ),
+    );
+  }
+}
+
+class _UploadCounter extends StatelessWidget {
+  final int used;
+  final int max;
+  const _UploadCounter({required this.used, required this.max});
+
+  @override
+  Widget build(BuildContext context) {
+    final reached = used >= max;
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          '$used/$max uploads este mês',
+          style: GoogleFonts.jetBrainsMono(
+            fontSize: 11,
+            fontWeight: FontWeight.w500,
+            color: reached ? FigmaColors.brandOrange : FigmaColors.textMuted,
+          ),
+        ),
+        if (reached)
+          Text(
+            'Premium = ilimitado',
+            style: GoogleFonts.jetBrainsMono(
+              fontSize: 10,
+              fontWeight: FontWeight.w500,
+              color: FigmaColors.brandCyan,
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _RecommendedExamSpec {
+  final String name;
+  final String priority; // ALTO | MÉDIO
+  const _RecommendedExamSpec({required this.name, required this.priority});
+}
+
+const _kRecommendedExams = <_RecommendedExamSpec>[
+  _RecommendedExamSpec(name: 'Hemograma completo', priority: 'ALTO'),
+  _RecommendedExamSpec(name: 'Ferritina + Ferro sérico', priority: 'ALTO'),
+  _RecommendedExamSpec(name: 'Vitamina D (25-OH)', priority: 'ALTO'),
+  _RecommendedExamSpec(name: 'TSH + T4 livre', priority: 'MÉDIO'),
+  _RecommendedExamSpec(name: 'Glicose + HbA1c', priority: 'MÉDIO'),
+];
+
+class _RecommendedExamCard extends StatelessWidget {
+  final _RecommendedExamSpec spec;
+  const _RecommendedExamCard({required this.spec});
+
+  @override
+  Widget build(BuildContext context) {
+    final priorityColor =
+        spec.priority == 'ALTO' ? FigmaColors.brandOrange : FigmaColors.textMuted;
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.lg,
+        vertical: AppSpacing.md,
+      ),
+      decoration: BoxDecoration(
+        color: FigmaColors.surfaceCard,
+        border: Border.all(color: FigmaColors.borderDefault, width: 1.0),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              spec.name,
+              style: GoogleFonts.jetBrainsMono(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: FigmaColors.textPrimary,
+              ),
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: priorityColor.withValues(alpha: 0.15),
+              border: Border.all(color: priorityColor, width: 1.0),
+            ),
+            child: Text(
+              spec.priority,
+              style: GoogleFonts.jetBrainsMono(
+                fontSize: 9,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.8,
+                color: priorityColor,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
