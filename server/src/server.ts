@@ -13,6 +13,7 @@ import { zoneRouter } from '@modules/health/http/zone.routes';
 import { examRouter } from '@modules/exams/http/exam.routes';
 import { adminRouter } from '@modules/admin/http/admin.routes';
 import { benchmarkRoutes } from '@modules/benchmark/http/benchmark.routes';
+import { subscriptionRouter } from '@modules/subscriptions/http/subscription.routes';
 
 export function createServer(): express.Application {
   const app = express();
@@ -38,6 +39,7 @@ export function createServer(): express.Application {
   app.use('/v1/exams', examRouter);
   app.use('/v1/admin', adminRouter);
   app.use('/v1/benchmark', benchmarkRoutes);
+  app.use('/v1/subscriptions', subscriptionRouter);
 
   app.use(errorMiddleware);
 

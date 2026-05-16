@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { authMiddleware } from '@shared/infra/http/middlewares/auth.middleware';
-import { requirePremium } from '@shared/infra/http/middlewares/require-premium.middleware';
+import { requireFeature } from '@shared/infra/http/middlewares/require-feature.middleware';
 import { getCurrentPlan, postGeneratePlan, getPlanById, getPlanKnowledge } from './plan.controller';
 import { requestRevisionHandler, listRevisionsHandler } from './plan-revision.controller';
 import {
@@ -20,6 +20,6 @@ planRouter.get('/:id/revisions', listRevisionsHandler);
 planRouter.get('/:id/weekly-reports', listWeeklyReportsHandler);
 planRouter.get('/:id/weekly-reports/:weekNumber', getWeeklyReportHandler);
 // POST endpoints (geração + revisão): premium-gated
-planRouter.post('/generate', requirePremium, postGeneratePlan);
-planRouter.post('/:id/request-revision', requirePremium, requestRevisionHandler);
-planRouter.post('/:id/weekly-reports/:weekNumber/generate', requirePremium, generateWeeklyReportHandler);
+planRouter.post('/generate', requireFeature('generatePlan'), postGeneratePlan);
+planRouter.post('/:id/request-revision', requireFeature('planRevisions'), requestRevisionHandler);
+planRouter.post('/:id/weekly-reports/:weekNumber/generate', requireFeature('weeklyReports'), generateWeeklyReportHandler);

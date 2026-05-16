@@ -58,6 +58,15 @@ export interface UserProfile {
   // Exams monthly counter
   examsCount?: number;
 
+  // Subscription (novo modelo — fonte de verdade)
+  subscriptionPlanId?: 'freemium' | 'pro';
+  subscriptionStatus?: 'active' | 'cancelled' | 'expired' | 'trial';
+  subscriptionStartedAt?: string;
+  subscriptionRenewsAt?: string;
+  trialEndsAt?: string;
+
+  // Legado (mantido pra retrocompat — get-user-features lê isso se
+  // subscriptionPlanId ausente)
   premium: boolean;
   premiumUntil?: string;
   lastOnboardingAt?: string;

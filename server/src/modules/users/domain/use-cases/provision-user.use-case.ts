@@ -28,6 +28,10 @@ export class ProvisionUserUseCase {
       hasWearable: false,
       medicalConditions: [],
       coachVoiceId: undefined,
+      // Subscription: todo novo user nasce freemium
+      subscriptionPlanId: 'freemium',
+      subscriptionStatus: 'active',
+      subscriptionStartedAt: now,
       premium: false,
       operatorId: undefined,
       onboarded: false,

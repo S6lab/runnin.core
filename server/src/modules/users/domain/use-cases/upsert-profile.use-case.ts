@@ -47,6 +47,12 @@ export const UpsertProfileSchema = z.object({
   paceFormat: z.enum(['min_per_km', 'min_per_mi']).optional(),
   timeFormat: z.enum(['24h', '12h']).optional(),
 
+  // Subscription (paywall manda subscriptionPlanId='pro' ao assinar)
+  subscriptionPlanId: z.enum(['freemium', 'pro']).optional(),
+  subscriptionStatus: z.enum(['active', 'cancelled', 'expired', 'trial']).optional(),
+  // Legacy: paywall atual ainda manda `premium: true` — aceita e espelha no plan
+  premium: z.boolean().optional(),
+
   onboarded: z.boolean().optional(),
 });
 
@@ -114,7 +120,17 @@ export class UpsertProfileUseCase {
       paceFormat: input.paceFormat ?? existing?.paceFormat,
       timeFormat: input.timeFormat ?? existing?.timeFormat,
       
-      premium: existing?.premium ?? false,
+      // Subscription handling — espelha legacy `premium` no plan novo
+      subscriptionPlanId: (() => {
+        if (input.subscriptionPlanId) return input.subscriptionPlanId;
+        if (input.premium === true) return 'pro';
+        return existing?.subscriptionPlanId ?? 'freemium';
+      })(),
+      subscriptionStatus: input.subscriptionStatus ?? existing?.subscriptionStatus ?? 'active',
+      subscriptionStartedAt: existing?.subscriptionStartedAt ?? now,
+      subscriptionRenewsAt: existing?.subscriptionRenewsAt,
+      trialEndsAt: existing?.trialEndsAt,
+      premium: input.premium ?? existing?.premium ?? false,
       premiumUntil: existing?.premiumUntil,
       lastOnboardingAt: existing?.lastOnboardingAt,
       operatorId: existing?.operatorId,
