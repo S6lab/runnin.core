@@ -1096,7 +1096,7 @@ class _WeeklyPlanView extends StatelessWidget {
                       : WeekPlanRowState.future;
           return Padding(
             padding: const EdgeInsets.only(bottom: 4),
-            child: FigmaWeekPlanRow(
+            child: WeekPlanRow(
               dayLabel: _kDayLabels[day] ?? 'DIA',
               state: rowState,
               type: sessionForDay?.type,
@@ -1181,7 +1181,7 @@ class _MonthlyPlanView extends StatelessWidget {
                   : FigmaColors.textDim;
           return Padding(
             padding: const EdgeInsets.only(bottom: 8),
-            child: FigmaMonthWeekCard(
+            child: MonthWeekCard(
               weekLabel: 'SEM ${week.weekNumber}',
               focus: _deriveWeekFocus(week).toUpperCase(),
               volumeKm: isCompleted || isCurrent ? weekDistance : 0,
@@ -1226,7 +1226,7 @@ class _ReportsTab extends StatelessWidget {
           final report = entry.value;
           return Padding(
             padding: const EdgeInsets.only(bottom: 8),
-            child: FigmaReportCard(
+            child: ReportCard(report:
               dateLabel: _weekRangeLabel(report.run.createdAt),
               weekLabel: 'SEM ${(i + 1).toString().padLeft(2, '0')}',
               adherencePct: 100,

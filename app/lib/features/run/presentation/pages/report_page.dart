@@ -6,6 +6,7 @@ import 'package:runnin/features/run/data/datasources/run_remote_datasource.dart'
 import 'package:runnin/features/run/domain/entities/run.dart';
 import 'package:runnin/shared/widgets/post_run_stat_card.dart';
 import 'package:runnin/shared/widgets/coach_ai_card.dart';
+import 'package:runnin/core/theme/app_palette.dart';
 
 class ReportPage extends StatefulWidget {
   final String runId;
