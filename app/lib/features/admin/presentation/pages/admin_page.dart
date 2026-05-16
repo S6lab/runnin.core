@@ -1028,6 +1028,8 @@ class _DrivePanel extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
+        _PromptsConsoleEntry(canRead: session.canRead),
+        const SizedBox(height: 8),
         _CoachPromptPanel(
           config: coachConfig,
           promptCtrl: coachPromptCtrl,
@@ -1059,6 +1061,28 @@ class _DrivePanel extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+// ───────────────────────────── Prompts console entry ──────────────────────
+
+class _PromptsConsoleEntry extends StatelessWidget {
+  final bool canRead;
+  const _PromptsConsoleEntry({required this.canRead});
+
+  @override
+  Widget build(BuildContext context) {
+    if (!canRead) return const SizedBox.shrink();
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 0, vertical: 0),
+      child: ListTile(
+        leading: const Icon(Icons.tune),
+        title: const Text('Prompts & Personas'),
+        subtitle: const Text('Editar prompts dos 7 momentos LLM, personas do coach, knobs do decision layer'),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => Navigator.of(context).pushNamed('/admin/prompts'),
+      ),
     );
   }
 }

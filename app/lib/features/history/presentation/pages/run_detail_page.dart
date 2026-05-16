@@ -212,7 +212,7 @@ class _RunDetailPageState extends State<RunDetailPage> {
                               SizedBox(
                                 width: double.infinity,
                                 child: OutlinedButton.icon(
-                                  onPressed: () {},
+                                  onPressed: () => context.push('/share', extra: {'runId': widget.runId}),
                                   icon: Icon(Icons.share_outlined, size: 16, color: palette.primary),
                                   label: Text('COMPARTILHAR', style: type.labelCaps.copyWith(color: palette.primary)),
                                   style: OutlinedButton.styleFrom(

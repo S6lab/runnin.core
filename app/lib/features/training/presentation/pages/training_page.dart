@@ -1,6 +1,8 @@
 import 'dart:async';
 
+import 'package:go_router/go_router.dart';
 import 'package:flutter/material.dart';
+import 'dart:convert';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:runnin/features/coach/data/datasources/coach_report_remote_datasource.dart';
@@ -1243,6 +1245,10 @@ class _WeeklyReportCard extends StatelessWidget {
 
   const _WeeklyReportCard({required this.report});
 
+  void _navigateToDetail(BuildContext context) {
+    GoRouter.of(context).push('/training/report/${report.weekStart}');
+  }
+
   @override
   Widget build(BuildContext context) {
     final palette = context.runninPalette;
@@ -1276,18 +1282,21 @@ class _WeeklyReportCard extends StatelessWidget {
               ],
             ),
           ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: palette.primary,
-              borderRadius: BorderRadius.circular(4),
-            ),
-            child: Text(
-              '${report.adherencePercent}%',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w800,
-                color: palette.background,
+          GestureDetector(
+            onTap: () => _navigateToDetail(context),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: palette.primary,
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                '${report.adherencePercent}%',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                  color: palette.background,
+                ),
               ),
             ),
           ),
