@@ -27,7 +27,7 @@ class RunStepIndicator extends StatelessWidget {
               height: 4,
               decoration: BoxDecoration(
                 color: isActive ? palette.primary : palette.border,
-                borderRadius: BorderRadius.circular(2),
+                borderRadius: BorderRadius.zero,
               ),
             ),
           ),

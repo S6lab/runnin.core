@@ -99,7 +99,6 @@ class _GamificationPageState extends State<GamificationPage> {
   }
 
   int _countUnlockedBadges(List<Run> runs) {
-    final totalKm = runs.fold<double>(0.0, (s, r) => s + r.distanceM) / 1000;
     final unlocked = <bool>[];
     
     unlocked.add(runs.isNotEmpty);
@@ -326,7 +325,6 @@ class _BadgesTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final type = context.runninType;
-    final totalKm = runs.fold<double>(0.0, (s, r) => s + r.distanceM) / 1000;
 
     int _countStreak(List<Run> runs) {
       final runDays = runs.map((r) {
@@ -399,10 +397,6 @@ class _BadgesTab extends StatelessWidget {
       return false;
     }
 
-    bool _hasHillRun(Run r) {
-      return r.elevationGain != null && r.elevationGain! > 100;
-    }
-
     bool _isPerfectMonth() {
       final now = DateTime.now();
       final monthRuns = runs.where((r) {
@@ -415,11 +409,6 @@ class _BadgesTab extends StatelessWidget {
     bool _isLabRat() {
       return runs.any((r) => r.deviceInfo?.contains('prototype') == true ||
                           r.distanceM >= 42195);
-    }
-
-    bool _isEarlyMorning(Run r) {
-      final d = DateTime.tryParse(r.createdAt)?.toLocal();
-      return d != null && d.hour < 7;
     }
 
     final badges = [

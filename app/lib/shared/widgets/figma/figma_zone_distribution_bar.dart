@@ -19,7 +19,7 @@ class FigmaZoneDistributionBar extends StatelessWidget {
 
     return Column(
       children: [
-        Container(
+        SizedBox(
           height: height,
           child: Row(
             children: List.generate(zonePercentages.length, (i) {

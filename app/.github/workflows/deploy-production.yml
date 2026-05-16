@@ -1,0 +1,32 @@
+name: Deploy Production
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy-production:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.19.x'
+          channel: 'stable'
+      
+      - name: Install dependencies
+        run: flutter pub get
+      
+      - name: Build web
+        run: flutter build web
+      
+      - name: Deploy to Firebase
+        uses: firebase-actions/deploy@v4
+        with:
+          firebase_token: ${{ secrets.FIREBASE_PROD_TOKEN }}
+          project_dir: .
+          hosting_site: runnin-494520

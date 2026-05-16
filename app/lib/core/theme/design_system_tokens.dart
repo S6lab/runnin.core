@@ -146,3 +146,74 @@ abstract final class AppShadow {
         ),
       ];
 }
+
+/// Figma color tokens (DESIGN_SYSTEM.md §2).
+abstract final class FigmaColors {
+  // --- Background ---
+  static const Color bgBase = Color(0xFF050510);
+
+  // --- Brand ---
+  static const Color brandCyan = Color(0xFF00D4FF);
+  static const Color brandOrange = Color(0xFFFF6B35);
+
+  // --- Text ---
+  static const Color textPrimary = Color(0xFFFFFFFF);
+  static const Color textSecondary = Color(0x8CFFFFFF); // rgba(255,255,255,0.55)
+  static const Color textMuted = Color(0x73FFFFFF); // rgba(255,255,255,0.45)
+  static const Color textDim = Color(0x4DFFFFFF); // rgba(255,255,255,0.30)
+  static const Color textGhost = Color(0x33FFFFFF); // rgba(255,255,255,0.20)
+  static const Color textSeparator = Color(0x1FFFFFFF); // rgba(255,255,255,0.12)
+  static const Color textPlaceholder = Color(0x7FFFFFFF); // rgba(255,255,255,0.50)
+
+  // --- Surface ---
+  static const Color surfaceCard = Color(0x08FFFFFF); // rgba(255,255,255,0.03)
+  static const Color surfaceCardCyan = Color(0x0800D4FF); // rgba(0,212,255,0.03)
+  static const Color surfaceCardOrange = Color(0x08FF6B35); // rgba(255,107,53,0.03)
+  static const Color surfaceInput = Color(0x08FFFFFF); // rgba(255,255,255,0.03)
+
+  // --- Border ---
+  static const Color borderDefault = Color(0x14FFFFFF); // rgba(255,255,255,0.08)
+  static const Color borderCyan = Color(0x2400D4FF); // rgba(0,212,255,0.14)
+  static const Color borderCyanStrong = Color(0x3000D4FF); // rgba(0,212,255,0.19)
+  static const Color borderCyanActive = Color(0xFF00D4FF);
+  static const Color borderOrange = Color(0xFFFF6B35);
+  static const Color borderInput = Color(0x14FFFFFF); // rgba(255,255,255,0.08)
+  static const Color borderBackBtn = Color(0x1AFFFFFF); // rgba(255,255,255,0.10)
+  static const Color borderUploadDashed = Color(0x4F00D4FF); // rgba(0,212,255,0.31)
+
+  // --- Navigation ---
+  static const Color navTopbarBg = Color(0xE9050510); // rgba(5,5,16,0.92)
+  static const Color navBottombarBg = Color(0xF5050510); // rgba(5,5,16,0.96)
+  static const Color navBorder = Color(0x0FFFFFFF); // rgba(255,255,255,0.06)
+  static const Color navRunShadow = Color(0x4F00D4FF); // rgba(0,212,255,0.31)
+
+  // --- Progress ---
+  static const Color progressTrack = Color(0x0DFFFFFF); // rgba(255,255,255,0.05)
+  static const Color progressFill = Color(0xFF00D4FF);
+
+  // --- Zones ---
+  static const Color zone1 = Color(0xFF3B82F6);
+  static const Color zone2 = Color(0xFF22C55E);
+  static const Color zone3 = Color(0xFFEAB308);
+  static const Color zone4 = Color(0xFFF97316);
+  static const Color zone5 = Color(0xFFEF4444);
+
+  // --- Skin Palettes ---
+  static const Color skinSanguinePrimary = Color(0xFFFF2D2D);
+  static const Color skinSanguineSecondary = Color(0x4EA8FFFF); // rgba(78,168,255,1.0)
+  static const Color skinMagentaPrimary = Color(0xFFFF0066);
+  static const Color skinMagentaSecondary = Color(0x00E5FFFF); // rgba(0,229,255,1.0)
+  static const Color skinVoltPrimary = Color(0xFFCCFF00);
+  static const Color skinVoltSecondary = Color(0x8B5CF6FF); // rgba(139,92,246,1.0)
+  static const Color skinArcticPrimary = Color(0xFF00D4FF);
+  static const Color skinArcticSecondary = Color(0xFFFF6B35);
+
+  // --- Interactive States ---
+  static const Color selectionActiveBg = Color(0x1900D4FF);
+  static const Color selectionActiveBorder = Color(0x4D00D4FF);
+  static const Color infoBg = Color(0x2400D4FF);
+  static const Color skinActiveBg = Color(0x0F00D4FF);
+  static const Color dotActive = Color(0xFF00D4FF);
+  static const Color dotVisited = Color(0x33FFFFFF);
+  static const Color dotInactive = Color(0x0FFFFFFF);
+}

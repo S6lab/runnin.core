@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:runnin/core/theme/app_palette.dart';
-import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/core/theme/theme_controller.dart';
 
 class AccountPage extends StatelessWidget {

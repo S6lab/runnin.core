@@ -61,7 +61,7 @@ class AchievementCard extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(description, style: type.bodySm),
-             if (!isUnlocked && progress != null) ...[
+             if (!isUnlocked && progress > 0) ...[
                const SizedBox(height: 10),
                ClipRect(
                  child: Container(
