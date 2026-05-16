@@ -410,6 +410,10 @@ class _ProfilePageState extends State<ProfilePage> {
                             totalRuns: totalRuns,
                             totalDistanceKm: totalDistKm,
                           ),
+                          if (firebaseUser?.isAnonymous ?? false) ...[
+                            const SizedBox(height: 12),
+                            _AnonPromoBanner(onTap: () => context.push('/account-access')),
+                          ],
                           const SizedBox(height: 8),
                           Row(
                             children: [
@@ -1184,6 +1188,57 @@ class _RedoOnboardingRow extends StatelessWidget {
           canRedo
               ? 'REFAZER ONBOARDING'
               : 'REFAZER EM $daysLeft DIA${daysLeft == 1 ? '' : 'S'}',
+        ),
+      ),
+    );
+  }
+}
+
+class _AnonPromoBanner extends StatelessWidget {
+  final VoidCallback onTap;
+  const _AnonPromoBanner({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
+        decoration: BoxDecoration(
+          color: FigmaColors.brandCyan.withValues(alpha: 0.08),
+          border: Border.all(color: FigmaColors.brandCyan, width: 1.735),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.account_circle_outlined, color: FigmaColors.brandCyan, size: 22),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'CRIE SUA CONTA',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 11, fontWeight: FontWeight.w800,
+                      color: FigmaColors.brandCyan, letterSpacing: 1.0,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Você está como visitante. Conecte e-mail, telefone ou Google para não perder seus dados.',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 11, fontWeight: FontWeight.w400,
+                      color: palette.text.withValues(alpha: 0.75),
+                      height: 1.5,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(Icons.arrow_forward, color: palette.text.withValues(alpha: 0.5), size: 18),
+          ],
         ),
       ),
     );

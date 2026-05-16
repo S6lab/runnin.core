@@ -1,6 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/shared/widgets/app_page_header.dart';
 import 'package:runnin/shared/widgets/app_panel.dart';
@@ -98,6 +99,57 @@ class _AccountAccessPageState extends State<AccountAccessPage> {
           _submitting = false;
         });
       }
+    }
+  }
+
+  Future<void> _connectGoogle() async {
+    setState(() {
+      _submitting = true;
+      _error = null;
+      _message = null;
+    });
+    try {
+      final auth = FirebaseAuth.instance;
+      final user = auth.currentUser;
+      OAuthCredential? credential;
+
+      if (kIsWeb) {
+        final provider = GoogleAuthProvider();
+        if (user != null && user.isAnonymous) {
+          await user.linkWithPopup(provider);
+        } else {
+          await auth.signInWithPopup(provider);
+        }
+      } else {
+        final googleUser = await GoogleSignIn().signIn();
+        if (googleUser == null) {
+          setState(() => _submitting = false);
+          return;
+        }
+        final auth_ = await googleUser.authentication;
+        credential = GoogleAuthProvider.credential(
+          accessToken: auth_.accessToken,
+          idToken: auth_.idToken,
+        );
+        if (user != null && user.isAnonymous) {
+          await user.linkWithCredential(credential);
+        } else {
+          await FirebaseAuth.instance.signInWithCredential(credential);
+        }
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _message = user?.isAnonymous == true
+            ? 'Conta Google vinculada. Seus dados foram preservados.'
+            : 'Login com Google concluído.';
+      });
+    } on FirebaseAuthException catch (e) {
+      if (mounted) setState(() => _error = _friendlyAuthError(e));
+    } catch (_) {
+      if (mounted) setState(() => _error = 'Não foi possível conectar com Google agora.');
+    } finally {
+      if (mounted) setState(() => _submitting = false);
     }
   }
 
@@ -442,6 +494,20 @@ class _AccountAccessPageState extends State<AccountAccessPage> {
                                         ? 'VINCULAR E-MAIL E SENHA'
                                         : 'ENTRAR / CRIAR COM E-MAIL',
                                   ),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        SizedBox(
+                          width: double.infinity,
+                          height: 48,
+                          child: OutlinedButton.icon(
+                            onPressed: _submitting ? null : _connectGoogle,
+                            icon: const Icon(Icons.account_circle_outlined, size: 18),
+                            label: Text(isAnonymous ? 'VINCULAR CONTA GOOGLE' : 'ENTRAR COM GOOGLE'),
+                            style: OutlinedButton.styleFrom(
+                              side: BorderSide(color: palette.border, width: 1.735),
+                              shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+                            ),
                           ),
                         ),
                       ],
