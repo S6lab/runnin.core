@@ -25,16 +25,7 @@ class HealthExamsPage extends StatelessWidget {
                   const SizedBox(height: 24),
                   _FieldLabel(label: 'EXAMES'),
                   const SizedBox(height: 8),
-                  if (_mockExams.isEmpty)
-                    _EmptyState()
-                  else
-                    ..._mockExams.map((exam) => ExamCard(
-                          examName: exam.examName,
-                          fileName: exam.fileName,
-                          sizeLabel: exam.sizeLabel,
-                          dateLabel: exam.dateLabel,
-                          coachAnalysis: exam.coachAnalysis,
-                        )),
+                  _EmptyState(),
                   const SizedBox(height: 24),
                 ],
               ),
@@ -151,49 +142,3 @@ class _EmptyState extends StatelessWidget {
   }
 }
 
-// ── Mock Data ───────────────────────────────────────────────────────────────
-
-class _MockExam {
-  final String examName;
-  final String fileName;
-  final String sizeLabel;
-  final String dateLabel;
-  final String? coachAnalysis;
-
-  const _MockExam({
-    required this.examName,
-    required this.fileName,
-    required this.sizeLabel,
-    required this.dateLabel,
-    this.coachAnalysis,
-  });
-}
-
-const List<_MockExam> _mockExams = [];
-
-class ExamCard extends StatelessWidget {
-  final String examName;
-  final String fileName;
-  final String sizeLabel;
-  final String dateLabel;
-  final String? coachAnalysis;
-
-  const ExamCard({
-    required this.examName,
-    required this.fileName,
-    required this.sizeLabel,
-    required this.dateLabel,
-    this.coachAnalysis,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return FigmaExamCard(
-      examName: examName,
-      fileName: fileName,
-      sizeLabel: sizeLabel,
-      dateLabel: dateLabel,
-      coachAnalysis: coachAnalysis,
-    );
-  }
-}

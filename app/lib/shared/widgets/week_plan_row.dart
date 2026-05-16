@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/features/training/domain/entities/plan.dart';
 import 'package:runnin/shared/widgets/app_panel.dart';
