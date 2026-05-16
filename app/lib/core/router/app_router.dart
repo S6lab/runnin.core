@@ -96,18 +96,25 @@ final appRouter = GoRouter(
       return null;
     }
 
-    // Allow splash to render briefly on cold start; SplashPage advances itself.
-    if (loc == '/splash') return null;
-
-    if (!loggedIn) {
-      if (loc != '/onboarding' && loc != '/login') return '/onboarding';
+    // Public routes (no auth needed). SplashPage advances itself.
+    const publicRoutes = {'/splash', '/intro', '/login'};
+    if (publicRoutes.contains(loc)) {
+      // Se já logado e cair em login/intro → home
+      if (loggedIn && (loc == '/login' || loc == '/intro')) return '/home';
       return null;
     }
 
-    // Logado mas ainda não fez onboarding
+    // Daqui em diante, rotas privadas: precisa estar logado.
+    if (!loggedIn) {
+      // Logout ou acesso direto sem auth → manda pra login (não pra onboarding).
+      return '/login';
+    }
+
+    // Logado mas ainda não fez onboarding → assessment
     if (onboardingStatus == false &&
         loc != '/onboarding' &&
-        loc != '/plan-loading') {
+        loc != '/plan-loading' &&
+        loc != '/paywall') {
       return '/onboarding';
     }
 
@@ -117,7 +124,6 @@ final appRouter = GoRouter(
       return '/home';
     }
 
-    if (loc == '/login') return '/home';
     return null;
   },
   refreshListenable: _AuthChangeNotifier(),
