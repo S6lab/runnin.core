@@ -32,8 +32,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
   final _medicalOtherCtrl = TextEditingController();
   final Set<String> _medicalConditions = {};
 
-  static const _totalSteps = 14;
-  static const _loadingStep = _totalSteps - 1;
+  static const _totalSteps = 13;
   static const _loginStep = 3;
   static const _firstAssessmentStep = 4;
 
@@ -424,7 +423,6 @@ class _OnboardingPageState extends State<OnboardingPage> {
     }
 
     setState(() {
-      _step = _loadingStep;
       _error = null;
       _submitting = true;
     });
@@ -457,7 +455,6 @@ class _OnboardingPageState extends State<OnboardingPage> {
       if (mounted) {
         setState(() {
           _error = 'Erro ao salvar perfil. Tente novamente.';
-          _step = _loadingStep - 1;
           _submitting = false;
         });
       }
@@ -500,7 +497,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
 
   Widget _buildHeader(BuildContext context) {
     final palette = context.runninPalette;
-    final canGoBack = _step > 0 && _step != _loadingStep;
+    final canGoBack = _step > 0;
     final showSkip = _step < _loginStep;
 
     return Row(
@@ -619,8 +616,6 @@ class _OnboardingPageState extends State<OnboardingPage> {
           selected: _hasWearable,
           onSelect: (value) => setState(() => _hasWearable = value),
         );
-      case _loadingStep:
-        return const _StepGeneratingPlan();
       default:
         return const SizedBox.shrink();
     }
@@ -628,9 +623,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
 
   Widget _buildNav(BuildContext context) {
     final palette = context.runninPalette;
-    if (_step == _loadingStep) return const SizedBox.shrink();
-
-    final isLastDataStep = _step == _loadingStep - 1;
+    final isLastDataStep = _step == _totalSteps - 1;
     final isLogin = _step == _loginStep;
     final label = isLogin
         ? (_phoneConfirmationResult != null || _phoneVerificationId != null
@@ -1809,44 +1802,6 @@ class _StepWearableV2 extends StatelessWidget {
                 ],
               ),
             ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _StepGeneratingPlan extends StatelessWidget {
-  const _StepGeneratingPlan();
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.runninPalette;
-    final type = context.runninType;
-
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          SizedBox(
-            width: 56,
-            height: 56,
-            child: CircularProgressIndicator(
-              color: palette.primary,
-              strokeWidth: 2,
-            ),
-          ),
-          const SizedBox(height: 32),
-          Text(
-            'GERANDO SEU PLANO',
-            style: type.displaySm,
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 12),
-          Text(
-            'O Coach esta montando sua periodizacao\ncom base no seu perfil.',
-            style: type.bodyMd.copyWith(color: palette.muted, height: 1.6),
-            textAlign: TextAlign.center,
           ),
         ],
       ),
