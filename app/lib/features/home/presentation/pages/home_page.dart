@@ -749,9 +749,419 @@ class _CoachNotifications extends StatelessWidget {
     return BlocBuilder<NotificationsCubit, NotificationsState>(
       builder: (context, state) {
         if (state is! NotificationsLoaded) return const SizedBox.shrink();
-        if (state.items.isEmpty) return const SizedBox.shrink();
-        return _CoachNotificationsList(items: state.items);
+        return _NotificationsHub(items: state.items);
       },
+    );
+  }
+}
+
+/// Central de notificações da home — dropdown colapsável, 5 grupos fixos
+/// na ordem definida pelo board (SUP).
+///
+/// Cada grupo lê do mesmo NotificationsCubit (wired) e filtra por tipo:
+/// - Hidratação      → type 'hidratacao' (+ ação especial: registrar copo)
+/// - Preparo nutric. → type 'preparo_nutricional'
+/// - Sono+performance→ types 'sono_performance' + 'bpm_real'
+/// - Coach (alertas) → types 'melhor_horario' + 'checklist_pre_easy_run'
+/// - Outras          → demais types ('fechamento_mensal' etc)
+class _NotificationsHub extends StatefulWidget {
+  final List<AppNotification> items;
+  const _NotificationsHub({required this.items});
+
+  @override
+  State<_NotificationsHub> createState() => _NotificationsHubState();
+}
+
+class _NotificationsHubState extends State<_NotificationsHub> {
+  // Apenas a primeira (hidratação) começa aberta; demais colapsadas.
+  final Set<int> _expanded = {0};
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    final hidratacao = widget.items.where((n) => n.type == 'hidratacao').toList();
+    final nutricional = widget.items.where((n) => n.type == 'preparo_nutricional').toList();
+    final sonoPerf = widget.items.where((n) => n.type == 'sono_performance' || n.type == 'bpm_real').toList();
+    final coachMsgs = widget.items.where((n) => n.type == 'melhor_horario' || n.type == 'checklist_pre_easy_run').toList();
+    final outras = widget.items.where((n) {
+      const claimed = {'hidratacao', 'preparo_nutricional', 'sono_performance', 'bpm_real', 'melhor_horario', 'checklist_pre_easy_run'};
+      return !claimed.contains(n.type);
+    }).toList();
+
+    final groups = <_NotifGroup>[
+      _NotifGroup(
+        label: 'HIDRATAÇÃO',
+        icon: Icons.water_drop_outlined,
+        accent: FigmaColors.brandCyan,
+        items: hidratacao,
+        special: _NotifSpecial.hydrationLog,
+      ),
+      _NotifGroup(
+        label: 'PREPARO NUTRICIONAL',
+        icon: Icons.restaurant_outlined,
+        accent: const Color(0xFFFFC857),
+        items: nutricional,
+      ),
+      _NotifGroup(
+        label: 'SONO → PERFORMANCE',
+        icon: Icons.bedtime_outlined,
+        accent: const Color(0xFF6E8AFA),
+        items: sonoPerf,
+      ),
+      _NotifGroup(
+        label: 'MENSAGENS DO COACH',
+        icon: Icons.chat_bubble_outline,
+        accent: const Color(0xFFE85D2A),
+        items: coachMsgs,
+      ),
+      _NotifGroup(
+        label: 'OUTRAS',
+        icon: Icons.inbox_outlined,
+        accent: const Color(0xFFB37BFA),
+        items: outras,
+      ),
+    ];
+
+    final totalCount = widget.items.length;
+    final cubit = context.read<NotificationsCubit>();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SectionHeading(
+          label: 'CENTRAL DE NOTIFICAÇÕES',
+          dotColor: FigmaColors.brandCyan,
+          badge: '$totalCount',
+          action: totalCount > 0 ? 'LIMPAR' : null,
+          onAction: totalCount > 0 ? cubit.clear : null,
+        ),
+        const SizedBox(height: 12),
+        Container(
+          decoration: BoxDecoration(
+            color: palette.surface,
+            border: Border.all(color: palette.border, width: 1.735),
+          ),
+          child: Column(
+            children: [
+              for (int i = 0; i < groups.length; i++) ...[
+                if (i > 0) Divider(height: 1, color: palette.border),
+                _NotifGroupTile(
+                  group: groups[i],
+                  expanded: _expanded.contains(i),
+                  onToggle: () => setState(() {
+                    if (_expanded.contains(i)) {
+                      _expanded.remove(i);
+                    } else {
+                      _expanded.add(i);
+                    }
+                  }),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+enum _NotifSpecial { none, hydrationLog }
+
+class _NotifGroup {
+  final String label;
+  final IconData icon;
+  final Color accent;
+  final List<AppNotification> items;
+  final _NotifSpecial special;
+  const _NotifGroup({
+    required this.label,
+    required this.icon,
+    required this.accent,
+    required this.items,
+    this.special = _NotifSpecial.none,
+  });
+}
+
+class _NotifGroupTile extends StatelessWidget {
+  final _NotifGroup group;
+  final bool expanded;
+  final VoidCallback onToggle;
+
+  const _NotifGroupTile({
+    required this.group,
+    required this.expanded,
+    required this.onToggle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    final count = group.items.length;
+    final hasContent = count > 0 || group.special != _NotifSpecial.none;
+
+    return Column(
+      children: [
+        InkWell(
+          onTap: hasContent ? onToggle : null,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+            child: Row(
+              children: [
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(color: group.accent, shape: BoxShape.circle),
+                ),
+                const SizedBox(width: 10),
+                Icon(group.icon, size: 18, color: palette.text.withValues(alpha: 0.75)),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    group.label,
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: palette.text,
+                      letterSpacing: 1.0,
+                    ),
+                  ),
+                ),
+                if (count > 0)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: group.accent.withValues(alpha: 0.18),
+                    ),
+                    child: Text(
+                      '$count',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                        color: group.accent,
+                      ),
+                    ),
+                  ),
+                const SizedBox(width: 8),
+                AnimatedRotation(
+                  turns: expanded ? 0.5 : 0,
+                  duration: const Duration(milliseconds: 180),
+                  child: Icon(
+                    Icons.expand_more,
+                    color: hasContent ? palette.text.withValues(alpha: 0.6) : palette.text.withValues(alpha: 0.2),
+                    size: 20,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        AnimatedSize(
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeInOut,
+          alignment: Alignment.topCenter,
+          child: !expanded
+              ? const SizedBox.shrink()
+              : Padding(
+                  padding: const EdgeInsets.fromLTRB(38, 0, 14, 14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      for (final n in group.items) ...[
+                        _NotifItemRow(notification: n, accent: group.accent),
+                        const SizedBox(height: 8),
+                      ],
+                      if (group.special == _NotifSpecial.hydrationLog) _HydrationLogger(accent: group.accent),
+                      if (group.items.isEmpty && group.special == _NotifSpecial.none)
+                        Text(
+                          'Sem alertas neste grupo agora.',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 11,
+                            color: palette.text.withValues(alpha: 0.45),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+        ),
+      ],
+    );
+  }
+}
+
+class _NotifItemRow extends StatelessWidget {
+  final AppNotification notification;
+  final Color accent;
+  const _NotifItemRow({required this.notification, required this.accent});
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    return GestureDetector(
+      onTap: notification.ctaRoute == null ? null : () => context.push(notification.ctaRoute!),
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+        decoration: BoxDecoration(
+          color: palette.surfaceAlt,
+          border: Border(left: BorderSide(color: accent, width: 1.735)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text(
+                    notification.title,
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: palette.text,
+                      letterSpacing: 0.8,
+                    ),
+                  ),
+                ),
+                if (notification.timeLabel != null)
+                  Text(
+                    notification.timeLabel!,
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w600,
+                      color: palette.muted,
+                      letterSpacing: 0.6,
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              notification.body,
+              style: GoogleFonts.jetBrainsMono(
+                fontSize: 11,
+                fontWeight: FontWeight.w400,
+                color: palette.text.withValues(alpha: 0.7),
+                height: 1.55,
+              ),
+            ),
+            if (notification.ctaLabel != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                '${notification.ctaLabel!} →',
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                  color: accent,
+                  letterSpacing: 1.0,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _HydrationLogger extends StatefulWidget {
+  final Color accent;
+  const _HydrationLogger({required this.accent});
+
+  @override
+  State<_HydrationLogger> createState() => _HydrationLoggerState();
+}
+
+class _HydrationLoggerState extends State<_HydrationLogger> {
+  static const _hydrationBoxName = 'runnin_settings';
+  static const _hydrationKey = 'hydration_ml_today';
+  static const _hydrationDateKey = 'hydration_date';
+
+  int _todayMl = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<Box<dynamic>> _box() async {
+    if (Hive.isBoxOpen(_hydrationBoxName)) return Hive.box<dynamic>(_hydrationBoxName);
+    return Hive.openBox<dynamic>(_hydrationBoxName);
+  }
+
+  Future<void> _load() async {
+    final b = await _box();
+    final storedDate = b.get(_hydrationDateKey) as String?;
+    final today = DateTime.now().toIso8601String().substring(0, 10);
+    if (storedDate != today) {
+      await b.put(_hydrationDateKey, today);
+      await b.put(_hydrationKey, 0);
+    }
+    if (mounted) setState(() => _todayMl = (b.get(_hydrationKey) as int?) ?? 0);
+  }
+
+  Future<void> _add(int ml) async {
+    final b = await _box();
+    final newTotal = _todayMl + ml;
+    await b.put(_hydrationKey, newTotal);
+    if (mounted) setState(() => _todayMl = newTotal);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+      decoration: BoxDecoration(
+        color: palette.surfaceAlt,
+        border: Border(left: BorderSide(color: widget.accent, width: 1.735)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'REGISTRAR HOJE',
+            style: GoogleFonts.jetBrainsMono(
+              fontSize: 10,
+              fontWeight: FontWeight.w800,
+              color: palette.text,
+              letterSpacing: 0.8,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            '${(_todayMl / 1000).toStringAsFixed(2)} L consumidos hoje',
+            style: GoogleFonts.jetBrainsMono(
+              fontSize: 11,
+              color: palette.text.withValues(alpha: 0.7),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 6,
+            children: [
+              for (final ml in const [200, 350, 500, 750])
+                OutlinedButton(
+                  onPressed: () => _add(ml),
+                  style: OutlinedButton.styleFrom(
+                    side: BorderSide(color: widget.accent),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+                    minimumSize: const Size(0, 32),
+                  ),
+                  child: Text(
+                    '+${ml}ml',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: widget.accent,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }
