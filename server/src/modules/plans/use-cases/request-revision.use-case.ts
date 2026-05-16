@@ -155,6 +155,7 @@ export class RequestRevisionUseCase {
 
     const revisionId = uuid();
     const appliedAt = new Date().toISOString();
+    const createdAt = appliedAt;
     const revision: PlanRevision = {
       id: revisionId,
       planId: plan.id,
@@ -167,7 +168,7 @@ export class RequestRevisionUseCase {
       newWeeksSnapshot: updatedPlan.weeks.slice(currentWeekIndex),
       coachExplanation,
       status: 'applied',
-      createdAt: now,
+      createdAt,
       appliedAt,
     };
 
