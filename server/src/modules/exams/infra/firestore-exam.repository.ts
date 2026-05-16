@@ -1,6 +1,7 @@
 import { getFirestore } from '@shared/infra/firebase/firebase.client';
 import { Exam } from '../domain/exam.entity';
 import { ExamRepository } from '../domain/exam.repository';
+import { ExamExtractedData } from '../domain/exam-extracted-data.entity';
 
 function stripUndefined<T extends object>(data: T): Partial<T> {
   return Object.fromEntries(
@@ -44,5 +45,11 @@ export class FirestoreExamRepository implements ExamRepository {
 
   async softDelete(id: string, userId: string): Promise<void> {
     await this.col(userId).doc(id).update({ deletedAt: new Date().toISOString() });
+  }
+
+  async updateExtractedData(examId: string, userId: string, extractedData: ExamExtractedData): Promise<void> {
+    await this.col(userId).doc(examId).update({
+      extractedData,
+    });
   }
 }

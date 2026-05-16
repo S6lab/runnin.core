@@ -21,18 +21,29 @@ export interface CoachRuntimeContext {
     avgBpm?: number;
     completedAt?: string;
   }>;
+  recentExams?: Array<{
+    summary: string;
+    keyFindings: string[];
+    recommendations: string[];
+    uploadedAt?: string;
+  }>;
 }
 
 export class CoachRuntimeContextService {
   async getContext(userId: string): Promise<CoachRuntimeContext> {
     try {
       const db = getFirestore();
-      const [profileDoc, plansSnap, runsSnap] = await Promise.all([
+      const [profileDoc, plansSnap, runsSnap, examsSnap] = await Promise.all([
         db.collection('users').doc(userId).get(),
         db.collection(`users/${userId}/plans`).get(),
         db.collection(`users/${userId}/runs`)
           .orderBy('createdAt', 'desc')
           .limit(8)
+          .get(),
+        db.collection(`users/${userId}/exams`)
+          .where('deletedAt', '==', null)
+          .orderBy('uploadedAt', 'desc')
+          .limit(3)
           .get(),
       ]);
 
@@ -54,6 +65,15 @@ export class CoachRuntimeContextService {
         }) as Run)
         .filter(run => run.status === 'completed')
         .slice(0, 5);
+
+      const exams = examsSnap.docs
+        .map(doc => ({
+          id: doc.id,
+          userId,
+          ...doc.data(),
+        }) as any)
+        .filter((exam: any) => exam.extractedData?.summary)
+        .slice(0, 3);
 
       return {
         profile: profile
@@ -83,13 +103,19 @@ export class CoachRuntimeContextService {
           avgBpm: run.avgBpm,
           completedAt: run.completedAt ?? run.createdAt,
         })),
+        recentExams: exams.map(exam => ({
+          summary: exam.extractedData.summary,
+          keyFindings: exam.extractedData.keyFindings || [],
+          recommendations: exam.extractedData.recommendations || [],
+          uploadedAt: exam.uploadedAt,
+        })),
       };
     } catch (err) {
       logger.warn('coach.runtime_context.unavailable', {
         userId,
         err: err instanceof Error ? err.message : String(err),
       });
-      return { profile: null, currentPlan: null, recentRuns: [] };
+      return { profile: null, currentPlan: null, recentRuns: [], recentExams: [] };
     }
   }
 }

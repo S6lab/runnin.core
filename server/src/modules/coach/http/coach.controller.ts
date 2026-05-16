@@ -3,6 +3,7 @@ import { CoachMessageUseCase, CoachContextSchema } from '../use-cases/coach-mess
 import { CoachChatSchema, CoachChatUseCase } from '../use-cases/coach-chat.use-case';
 import { GetCoachReportUseCase } from '../use-cases/get-coach-report.use-case';
 import { GenerateReportUseCase } from '../use-cases/generate-report.use-case';
+import { GeneratePeriodAnalysisUseCase } from '../use-cases/generate-period-analysis.use-case';
 import { FirestoreCoachReportRepository } from '../infra/firestore-coach-report.repository';
 import { FirestoreRunRepository } from '@modules/runs/infra/firestore-run.repository';
 import { NotFoundError } from '@shared/errors/app-error';
@@ -14,6 +15,7 @@ const coachMessage = new CoachMessageUseCase();
 const coachChat = new CoachChatUseCase();
 const getReport = new GetCoachReportUseCase(reportRepo);
 const generateReport = new GenerateReportUseCase(reportRepo, runRepoForReports);
+const generatePeriodAnalysis = new GeneratePeriodAnalysisUseCase(runRepoForReports);
 
 export async function postGenerateReport(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
@@ -91,6 +93,17 @@ export async function getCoachReport(req: Request, res: Response, next: NextFunc
       summary: report.summary,
       generatedAt: report.generatedAt,
     });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function getPeriodAnalysis(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const limit = parseInt(req.query['limit'] as string) || 10;
+    const cursor = req.query['cursor'] as string | undefined;
+    const result = await generatePeriodAnalysis.execute(req.uid, limit, cursor);
+    res.json(result);
   } catch (err) {
     next(err);
   }

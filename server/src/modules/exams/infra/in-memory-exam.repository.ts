@@ -1,6 +1,7 @@
 import { ExamRepository } from '../domain/exam.repository';
 import { NotFoundError } from '@shared/errors/app-error';
 import { Exam } from '../domain/exam.entity';
+import { ExamExtractedData } from '../domain/exam-extracted-data.entity';
 
 export class InMemoryExamRepository implements ExamRepository {
   private exams: Map<string, Exam> = new Map();
@@ -37,5 +38,11 @@ export class InMemoryExamRepository implements ExamRepository {
     const exam = await this.findById(id, userId);
     if (!exam) throw new NotFoundError('Exam');
     await this.update(id, userId, { deletedAt: new Date().toISOString() });
+  }
+
+  async updateExtractedData(examId: string, userId: string, extractedData: ExamExtractedData): Promise<void> {
+    const exam = await this.findById(examId, userId);
+    if (!exam) throw new NotFoundError('Exam');
+    await this.update(examId, userId, { extractedData });
   }
 }

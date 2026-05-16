@@ -35,6 +35,9 @@ export const UpsertProfileSchema = z.object({
   // PREP alerts
   preRunAlerts: z.record(z.string(), z.boolean()).optional(),
 
+  // Plan revisions quota
+  planRevisions: z.object({ usedThisWeek: z.number(), max: z.number(), resetAt: z.string() }).optional(),
+
   // Notifications
   notificationsEnabled: z.any(),
   dndWindow: z.object({ start: z.string(), end: z.string() }).optional(),
@@ -92,8 +95,18 @@ export class UpsertProfileUseCase {
       notificationsEnabled: (input.notificationsEnabled as Record<string, boolean> | undefined) ?? existing?.notificationsEnabled,
       dndWindow: input.dndWindow ?? existing?.dndWindow,
 
-      // Preserved
-      planRevisions: existing?.planRevisions,
+      // Plan revisions quota handling
+      planRevisions: (() => {
+        const existingRevisions = existing?.planRevisions;
+        if (!existingRevisions) return input.planRevisions;
+        
+        const now = new Date().toISOString();
+        if (existingRevisions.resetAt && new Date(existingRevisions.resetAt) < new Date()) {
+          return { usedThisWeek: 0, max: existingRevisions.max ?? 1, resetAt: now };
+        }
+        
+        return input.planRevisions ?? existingRevisions;
+      })(),
       examsCount: existing?.examsCount,
       
       // Units and formatting

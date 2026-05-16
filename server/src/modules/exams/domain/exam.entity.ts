@@ -1,3 +1,5 @@
+import { ExamExtractedData } from './exam-extracted-data.entity';
+
 export interface Exam {
   id: string;
   userId: string;
@@ -7,5 +9,6 @@ export interface Exam {
   storageUrl: string;
   uploadedAt: string;
   coachAnalysis?: string | null;
+  extractedData?: ExamExtractedData;
   deletedAt?: string;
 }
