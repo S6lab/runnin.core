@@ -2,9 +2,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:runnin/core/network/api_client.dart';
-import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/features/run/data/datasources/run_remote_datasource.dart';
 import 'package:runnin/features/run/domain/entities/run.dart';
+import 'package:runnin/shared/widgets/post_run_stat_card.dart';
+import 'package:runnin/shared/widgets/coach_ai_card.dart';
 
 class ReportPage extends StatefulWidget {
   final String runId;
@@ -47,7 +48,7 @@ class _ReportPageState extends State<ReportPage> {
         return;
       }
       try {
-        final res = await apiClient.get('/coach/report/${widget.runId}');
+        final res = apiClient.get('/coach/report/${widget.runId}');
         final data = res.data as Map<String, dynamic>;
         if (data['status'] == 'ready') {
           timer.cancel();
@@ -70,183 +71,132 @@ class _ReportPageState extends State<ReportPage> {
         title: const Text('RELATÓRIO'),
         leading: IconButton(icon: const Icon(Icons.close), onPressed: () => context.go('/home')),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'CORRIDA CONCLUÍDA',
-              style: context.runninType.labelCaps.copyWith(color: palette.primary),
-            ),
-            const SizedBox(height: 24),
-
-            if (_loadingRun)
-              Center(child: CircularProgressIndicator(color: palette.primary, strokeWidth: 2))
-            else if (_run != null)
-              _StatsRow(run: _run!),
-
-            const SizedBox(height: 24),
-
-            if (_run?.xpEarned != null && _run!.xpEarned! > 0)
-              _XpBadge(xp: _run!.xpEarned!),
-
-            if (_run?.xpEarned != null && _run!.xpEarned! > 0)
+      body: Scrollbar(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'CORRIDA CONCLUÍDA',
+                style: TextStyle(
+                  fontFamily: 'JetBrains Mono',
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.12,
+                  height: 1.2,
+                  color: Color(0xFF00D4FF),
+                ),
+              ),
               const SizedBox(height: 24),
 
-            // Coach narrative card
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                border: Border(left: BorderSide(color: palette.secondary, width: 3)),
-                color: palette.secondary.withValues(alpha: 0.05),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'COACH.AI',
-                    style: context.runninType.labelCaps.copyWith(color: palette.secondary),
-                  ),
-                  const SizedBox(height: 8),
-                  _loadingReport
-                    ? Row(children: [
-                        SizedBox(
-                          width: 12, height: 12,
-                          child: CircularProgressIndicator(strokeWidth: 1.5, color: palette.muted),
-                        ),
-                        const SizedBox(width: 10),
-                        Text(
-                          'Analisando sua corrida...',
-                          style: context.runninType.bodySm,
-                        ),
-                      ])
-                    : Text(
-                        _summary ?? 'Relatório não disponível.',
-                        style: context.runninType.bodyMd.copyWith(height: 1.6),
-                      ),
-                ],
-              ),
-            ),
+              if (_loadingRun)
+                Center(child: CircularProgressIndicator(color: palette.primary, strokeWidth: 2))
+              else if (_run != null)
+                PostRunStatCard(
+                  label: 'DISTÂNCIA',
+                  value: (_run!.distanceM / 1000).toStringAsFixed(2),
+                  unit: 'km',
+                ),
+              
+              if (_run != null) const SizedBox(height: 8),
+              
+              if (_run != null)
+                PostRunStatCard(
+                  label: 'TEMPO',
+                  value: _fmt(_run!.durationS),
+                  unit: '',
+                ),
+              
+              if (_run != null) const SizedBox(height: 8),
+              
+              if (_run!.avgPace != null)
+                PostRunStatCard(
+                  label: 'PACE MÉD.',
+                  value: _run!.avgPace!,
+                  unit: '/km',
+                ),
 
-            const SizedBox(height: 32),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () => context.go('/home'),
-                child: const Text('VOLTAR PARA HOME'),
+              if (_run?.xpEarned != null && _run!.xpEarned! > 0)
+                const SizedBox(height: 24),
+
+              if (_run?.xpEarned != null && _run!.xpEarned! > 0)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: palette.primary.withValues(alpha: 0.1),
+                    border: Border.all(color: palette.primary.withValues(alpha: 0.3)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.bolt, size: 14, color: Color(0xFF00D4FF)),
+                      const SizedBox(width: 6),
+                      Text(
+                        '+${_run!.xpEarned!} XP',
+                        style: const TextStyle(
+                          fontFamily: 'JetBrains Mono',
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF00D4FF),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+              if (_run?.xpEarned != null && _run!.xpEarned! > 0)
+                const SizedBox(height: 24),
+
+              if (_summary != null || _loadingReport)
+                CoachAICard(
+                  title: 'COACH.AI',
+                  borderColor: palette.secondary,
+                  children: [
+                    _loadingReport
+                      ? Row(children: [
+                          SizedBox(
+                            width: 12, height: 12,
+                            child: CircularProgressIndicator(strokeWidth: 1.5, color: palette.muted),
+                          ),
+                          const SizedBox(width: 10),
+                          const Text(
+                            'Analisando sua corrida...',
+                            style: TextStyle(
+                              fontFamily: 'JetBrains Mono',
+                              fontSize: 12,
+                            ),
+                          ),
+                        ])
+                      : Text(
+                          _summary ?? 'Relatório não disponível.',
+                          style: const TextStyle(
+                            fontFamily: 'JetBrains Mono',
+                            fontSize: 14,
+                            height: 1.6,
+                          ),
+                        ),
+                  ],
+                ),
+
+              const SizedBox(height: 32),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () => context.go('/home'),
+                  child: const Text('VOLTAR PARA HOME'),
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
-}
-
-class _StatsRow extends StatelessWidget {
-  final Run run;
-  const _StatsRow({required this.run});
 
   String _fmt(int seconds) {
-    final m = seconds ~/ 60; final s = seconds % 60;
+    final m = seconds ~/ 60;
+    final s = seconds % 60;
     return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.runninPalette;
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: palette.surface,
-        border: Border.all(color: palette.border),
-      ),
-      child: Row(
-        children: [
-          _StatCell(
-            label: 'DISTÂNCIA',
-            value: (run.distanceM / 1000).toStringAsFixed(2),
-            unit: 'km',
-          ),
-          _Divider(),
-          _StatCell(
-            label: 'TEMPO',
-            value: _fmt(run.durationS),
-            unit: '',
-          ),
-          _Divider(),
-          _StatCell(
-            label: 'PACE MÉD.',
-            value: run.avgPace ?? '--:--',
-            unit: '/km',
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _StatCell extends StatelessWidget {
-  final String label, value, unit;
-  const _StatCell({required this.label, required this.value, required this.unit});
-
-  @override
-  Widget build(BuildContext context) {
-    final type = context.runninType;
-    return Expanded(
-      child: Column(
-        children: [
-          Text(label, style: type.labelCaps),
-          const SizedBox(height: 6),
-          RichText(text: TextSpan(
-            text: value,
-            style: type.dataMd,
-            children: [if (unit.isNotEmpty) TextSpan(
-              text: ' $unit',
-              style: type.bodySm,
-            )],
-          )),
-        ],
-      ),
-    );
-  }
-}
-
-class _Divider extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) => Container(
-    width: 1, height: 40, color: context.runninPalette.border,
-  );
-}
-
-class _XpBadge extends StatelessWidget {
-  final int xp;
-  const _XpBadge({required this.xp});
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.runninPalette;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-      decoration: BoxDecoration(
-        color: palette.primary.withValues(alpha: 0.1),
-        border: Border.all(color: palette.primary.withValues(alpha: 0.3)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.bolt, size: 14, color: palette.primary),
-          const SizedBox(width: 6),
-          Text(
-            '+$xp XP',
-            style: context.runninType.labelMd.copyWith(
-              color: palette.primary,
-              fontSize: 13,
-            ),
-          ),
-        ],
-      ),
-    );
   }
 }

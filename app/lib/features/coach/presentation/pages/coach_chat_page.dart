@@ -14,21 +14,13 @@ class CoachChatPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return BlocProvider(
       create: (_) => CoachChatCubit(),
-      child: const _CoachChatView(),
+      child: const _CoachView(),
     );
   }
 }
 
-class _CoachChatView extends StatefulWidget {
-  const _CoachChatView();
-
-  @override
-  State<_CoachChatView> createState() => _CoachChatViewState();
-}
-
-class _CoachChatViewState extends State<_CoachChatView> {
-  final _controller = TextEditingController();
-  final _scrollController = ScrollController();
+class _CoachView extends StatelessWidget {
+  const _CoachView();
 
   static const _quickPrompts = [
     _QuickPrompt(
@@ -50,39 +42,6 @@ class _CoachChatViewState extends State<_CoachChatView> {
   ];
 
   @override
-  void dispose() {
-    _controller.dispose();
-    _scrollController.dispose();
-    super.dispose();
-  }
-
-  void _submit(CoachChatCubit cubit, {String? text}) {
-    final message = (text ?? _controller.text).trim();
-    if (message.isEmpty) return;
-    _controller.clear();
-    cubit.sendMessage(message);
-    _scrollToBottom();
-  }
-
-  void _fillPrompt(String prompt) {
-    _controller
-      ..text = prompt
-      ..selection = TextSelection.collapsed(offset: prompt.length);
-  }
-
-  void _scrollToBottom() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scrollController.hasClients) {
-        _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOut,
-        );
-      }
-    });
-  }
-
-  @override
   Widget build(BuildContext context) {
     final palette = context.runninPalette;
 
@@ -98,12 +57,12 @@ class _CoachChatViewState extends State<_CoachChatView> {
             const SizedBox(height: 20),
             Expanded(
               child: BlocConsumer<CoachChatCubit, CoachChatState>(
-                listenWhen: (prev, curr) =>
+                listener: (context, state) => _scrollToBottom(context),
+                listenerWhen: (prev, curr) =>
                     curr.messages.length > prev.messages.length,
-                listener: (context, state) => _scrollToBottom(),
                 builder: (context, state) {
                   return CustomScrollView(
-                    controller: _scrollController,
+                    controller: _getScrollController(context),
                     slivers: [
                       SliverPadding(
                         padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -113,11 +72,8 @@ class _CoachChatViewState extends State<_CoachChatView> {
                             const SizedBox(height: 12),
                             _QuickPromptRail(
                               prompts: _quickPrompts,
-                              onFillPrompt: _fillPrompt,
-                              onSendPrompt: (prompt) => _submit(
-                                context.read<CoachChatCubit>(),
-                                text: prompt,
-                              ),
+                              onFillPrompt: (prompt) => _fillPrompt(context, prompt),
+                              onSendPrompt: (prompt) => context.read<CoachChatCubit>().sendMessage(prompt),
                             ),
                             const SizedBox(height: 12),
                             _InsightsPanel(),
@@ -191,14 +147,27 @@ class _CoachChatViewState extends State<_CoachChatView> {
                 );
               },
             ),
-            _CoachComposer(
-              controller: _controller,
-              onSubmit: () => _submit(context.read<CoachChatCubit>()),
-            ),
+            _CoachComposer(),
           ],
         ),
       ),
     );
+  }
+
+  void _scrollToBottom(BuildContext context) {
+    final scrollable = findScrollable(context);
+    if (scrollable != null && scrollable.hasClients) {
+      scrollable.position.animateTo(
+        scrollable.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+      );
+    }
+  }
+
+  ScrollController _getScrollController(BuildContext context) {
+    final key = UniqueKey();
+    return ScrollController();
   }
 }
 
@@ -425,13 +394,13 @@ class _PromptCard extends StatelessWidget {
                 InkWell(
                   onTap: onSend,
                   child: Text(
-                    'ENVIAR',
-                    style: TextStyle(
-                      color: palette.primary,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
+                        'ENVIAR',
+                        style: TextStyle(
+                          color: palette.primary,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
                 ),
               ],
             ),
@@ -714,11 +683,31 @@ class _TypingIndicator extends StatelessWidget {
   }
 }
 
-class _CoachComposer extends StatelessWidget {
-  final TextEditingController controller;
-  final VoidCallback onSubmit;
+class _CoachComposer extends StatefulWidget {
+  const _CoachComposer();
 
-  const _CoachComposer({required this.controller, required this.onSubmit});
+  @override
+  State<_CoachComposer> createState() => _CoachComposerState();
+}
+
+class _CoachComposerState extends State<_CoachComposer> {
+  final _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  String get _text => _controller.text.trim();
+
+  boolget _isEmpty => _text.isEmpty;
+
+  void _submit() {
+    if (_isEmpty) return;
+    context.read<CoachChatCubit>().sendMessage(_text);
+    _controller.clear();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -738,7 +727,7 @@ class _CoachComposer extends StatelessWidget {
             children: [
               Expanded(
                 child: TextField(
-                  controller: controller,
+                  controller: _controller,
                   enabled: !state.sending,
                   style: TextStyle(color: palette.text, fontSize: 14),
                   decoration: InputDecoration(
@@ -749,13 +738,13 @@ class _CoachComposer extends StatelessWidget {
                     contentPadding: const EdgeInsets.symmetric(vertical: 10),
                   ),
                   textInputAction: TextInputAction.send,
-                  onSubmitted: (_) => onSubmit(),
+                  onSubmitted: (_) => _submit(),
                   maxLines: null,
                 ),
               ),
               const SizedBox(width: 8),
               InkWell(
-                onTap: state.sending ? null : onSubmit,
+                onTap: state.sending ? null : _submit,
                 child: Container(
                   width: 42,
                   height: 42,
@@ -797,4 +786,53 @@ class _CoachInsight {
   final String body;
 
   const _CoachInsight({required this.title, required this.body});
+}
+
+void _scrollToBottom(BuildContext context) {
+  final scrollable = findScrollable(context);
+  if (scrollable != null && scrollable.hasClients) {
+    scrollable.position.animateTo(
+      scrollable.position.maxScrollExtent,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOut,
+    );
+  }
+}
+
+void _fillPrompt(BuildContext context, String prompt) {
+  final state = context.findWidgetOfType<_CoachComposerState>();
+  if (state != null) {
+    state._controller
+      ..text = prompt
+      ..selection = TextSelection.collapsed(offset: prompt.length);
+  }
+}
+
+ScrollableState? findScrollable(BuildContext context) {
+  final elements = context.largestDescendantOf<ScrollableState>();
+  return elements;
+}
+
+extension on BuildContext {
+  ScrollableState? largestDescendantOf<T extends ScrollableState>() {
+    final matcher = _ScrollableTypeMatcher<T>();
+    return findAncestorWidgetOfExactType<Scrollable>()?.ancestorMatched(
+      this,
+      matcher,
+    );
+  }
+}
+
+class _ScrollableTypeMatcher<T extends ScrollableState> 
+    extends TypeMatcher<ScrollableState> {
+  @override
+  bool isMatch(SliverChildListDelegate delegate) => true;
+
+  T? ancestorMatched(BuildContext context, TypeMatcher<ScrollableState> matcher) {
+    final element = context.findAncestorWidgetOfExactType<Scrollable>();
+    if (element != null) {
+      return element.state as T?;
+    }
+    return null;
+  }
 }

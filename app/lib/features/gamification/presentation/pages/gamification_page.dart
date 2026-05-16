@@ -4,6 +4,7 @@ import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/features/run/data/datasources/run_remote_datasource.dart';
 import 'package:runnin/features/run/domain/entities/run.dart';
 import 'package:runnin/shared/widgets/figma/export.dart';
+import 'package:runnin/shared/widgets/gamification/export.dart';
 import 'package:runnin/shared/widgets/segmented_tab_bar.dart';
 
 enum _GamTab { badges, xp, streak }
@@ -89,7 +90,7 @@ class _GamificationPageState extends State<GamificationPage> {
             const SizedBox(height: 16),
             Expanded(
               child: _loading
-                  ? Center(child: CircularProgressIndicator(color: palette.primary, strokeWidth: 2))
+                  ? const Center(child: CircularProgressIndicator())
                   : _buildTab(),
             ),
           ],
@@ -98,14 +99,9 @@ class _GamificationPageState extends State<GamificationPage> {
     );
   }
 
-  Widget _buildTab() {
-    final runs = _runs ?? [];
-    return switch (_tab) {
-      _GamTab.badges => _BadgesTab(runs: runs),
-      _GamTab.xp     => _XpTab(runs: runs),
-      _GamTab.streak => _StreakTab(runs: runs),
-    };
-  }
+              child: _loading
+                  ? const Center(child: CircularProgressIndicator())
+                  : _buildTab(),
 }
 
 // ── Badges tab ───────────────────────────────────────────────────────────────

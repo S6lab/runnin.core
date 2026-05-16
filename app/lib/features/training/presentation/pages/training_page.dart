@@ -3,6 +3,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:intl/intl.dart';
+import 'package:runnin/shared/widgets/week_plan_row.dart';
+import 'package:runnin/shared/widgets/month_week_card.dart';
+import 'package:runnin/shared/widgets/report_card.dart';
+import 'package:runnin/shared/widgets/run_feedback.dart';
 import 'package:runnin/features/coach/data/datasources/coach_report_remote_datasource.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
@@ -40,7 +44,7 @@ class _TrainingPageState extends State<TrainingPage> {
   final _userDs = UserRemoteDatasource();
   UserProfile? _profile;
   Plan? _plan;
-  List<_RunFeedback> _reports = const [];
+  List<RunFeedback> _reports = const [];
   bool _loading = true;
   bool _generating = false;
   bool _checkingPlan = false;
@@ -80,7 +84,7 @@ class _TrainingPageState extends State<TrainingPage> {
       ]);
       final profile = results[0] as UserProfile?;
       var plan = results[1] as Plan?;
-      final reports = results[2] as List<_RunFeedback>;
+      final reports = results[2] as List<RunFeedback>;
 
       if (plan == null && savedPendingPlanId != null) {
         try {
@@ -139,7 +143,7 @@ class _TrainingPageState extends State<TrainingPage> {
     await (await _settingsBox()).delete(_pendingPlanIdKey);
   }
 
-  Future<List<_RunFeedback>> _loadRunFeedback() async {
+  Future<List<RunFeedback>> _loadRunFeedback() async {
     final runs = await _runDs.listRuns(limit: 12);
     final completedRuns =
         runs
@@ -149,13 +153,13 @@ class _TrainingPageState extends State<TrainingPage> {
             .toList()
           ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
-    final reports = <_RunFeedback>[];
+    final reports = <RunFeedback>[];
     for (final run in completedRuns) {
       try {
         final report = await _reportDs.getReport(run.id);
         if (!report.isReady) continue;
         reports.add(
-          _RunFeedback(
+          RunFeedback(
             run: run,
             summary: report.summary!,
             generatedAt: report.generatedAt,
@@ -348,11 +352,11 @@ class _TrainingPageState extends State<TrainingPage> {
       return _PlanFailedState(generating: _generating, onGenerate: _generate);
     }
 
-    return _TrainingWorkspace(
-      plan: _plan!,
-      profile: _profile,
-      reports: _reports,
-      generating: _generating,
+      return _TrainingWorkspace(
+        plan: _plan!,
+        profile: _profile,
+        reports: reports,
+        generating: _generating,
       onRegenerate: _generate,
       selectedWeek: _selectedWeek,
       selectedTab: _selectedTab,
@@ -631,7 +635,7 @@ class _PlanFailedState extends StatelessWidget {
 class _TrainingWorkspace extends StatelessWidget {
   final Plan plan;
   final UserProfile? profile;
-  final List<_RunFeedback> reports;
+  final List<RunFeedback> reports;
   final bool generating;
   final VoidCallback onRegenerate;
   final int selectedWeek;
@@ -644,7 +648,7 @@ class _TrainingWorkspace extends StatelessWidget {
   const _TrainingWorkspace({
     required this.plan,
     required this.profile,
-    required this.reports,
+    required reports,
     required this.generating,
     required this.onRegenerate,
     required this.selectedWeek,
@@ -1193,7 +1197,7 @@ class _MonthlyPlanView extends StatelessWidget {
 }
 
 class _ReportsTab extends StatelessWidget {
-  final List<_RunFeedback> reports;
+  final List<RunFeedback> reports;
 
   const _ReportsTab({required this.reports});
 

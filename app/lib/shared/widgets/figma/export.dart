@@ -52,3 +52,8 @@ export 'figma_split_card.dart';
 export 'figma_split_row.dart';
 export 'figma_post_run_stat_card.dart';
 export 'figma_device_card.dart';
+
+// Gamification wrappers
+export '../gamification/badge_card.dart';
+export '../gamification/xp_level_card.dart';
+export '../gamification/streak_grid.dart';

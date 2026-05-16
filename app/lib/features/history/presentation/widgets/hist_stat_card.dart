@@ -58,15 +58,25 @@ class HistStatCard extends StatelessWidget {
                   : FigmaColors.textPrimary,
             ),
           ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: FigmaHistStatCard(
-              label: 'XP',
-              value: '${stats.totalXp}',
-              valueColor: FigmaColors.brandCyan,
-            ),
-          ),
-        ]),
+           const SizedBox(width: 8),
+           Expanded(
+             child: FigmaHistStatCard(
+               label: 'XP',
+               value: '${stats.totalXp}',
+               valueColor: FigmaColors.brandCyan,
+             ),
+           ),
+         ]),
+         const SizedBox(height: 8),
+         Row(children: [
+           Expanded(
+             child: FigmaHistStatCard(
+               label: 'BPM MÉD.',
+               value: stats.avgBpm?.toString() ?? '--',
+               unit: 'BPM',
+             ),
+           ),
+         ]),
       ],
     );
   }
@@ -118,6 +128,8 @@ class HistStatCard extends StatelessWidget {
     final totalTimeLabel =
         h > 0 ? '${h}h${m.toString().padLeft(2, '0')}m' : '${m}m';
 
+    final avgBpm = _computeAvgBpm(runs);
+
     return _HistoryStats(
       count: runs.length,
       totalKm: totalDistM / 1000,
@@ -125,7 +137,33 @@ class HistStatCard extends StatelessWidget {
       avgPaceLabel: avgPaceLabel,
       streakDays: streak,
       totalXp: totalXp,
+      avgBpm: avgBpm,
+      benchmarkPercentile: _computeBenchmarkPercentile(runs),
     );
+  }
+
+  static int? _computeAvgBpm(List<Run> runs) {
+    final runsWithBpm = runs.where((r) => r.avgBpm != null).toList();
+    if (runsWithBpm.isEmpty) return null;
+    final totalBpm = runsWithBpm.fold<int>(0, (s, r) => s + (r.avgBpm ?? 0));
+    return totalBpm ~/ runsWithBpm.length;
+  }
+
+  static double _computeBenchmarkPercentile(List<Run> runs) {
+    if (runs.isEmpty) return 0;
+    
+    final totalDistM = runs.fold<double>(0.0, (s, r) => s + r.distanceM);
+    final totalS = runs.fold<int>(0, (s, r) => s + r.durationS);
+    
+    final avgSpeedMps = totalDistM / totalS;
+    final avgKmph = avgSpeedMps * 3.6;
+    
+    if (avgKmph < 8) return 10;
+    if (avgKmph < 9) return 25;
+    if (avgKmph < 10) return 45;
+    if (avgKmph < 11) return 65;
+    if (avgKmph < 12) return 80;
+    return 95;
   }
 }
 
@@ -136,6 +174,8 @@ class _HistoryStats {
   final String avgPaceLabel;
   final int streakDays;
   final int totalXp;
+  final int? avgBpm;
+  final double benchmarkPercentile;
 
   const _HistoryStats({
     required this.count,
@@ -144,6 +184,8 @@ class _HistoryStats {
     required this.avgPaceLabel,
     required this.streakDays,
     required this.totalXp,
+    required this.avgBpm,
+    required this.benchmarkPercentile,
   });
 
   factory _HistoryStats.empty() => const _HistoryStats(
@@ -153,5 +195,7 @@ class _HistoryStats {
         avgPaceLabel: '--:--',
         streakDays: 0,
         totalXp: 0,
+        avgBpm: null,
+        benchmarkPercentile: 0,
       );
 }

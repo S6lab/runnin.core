@@ -8,6 +8,7 @@ import 'package:runnin/core/audio/coach_audio_player.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/features/run/domain/entities/run.dart' show GpsPoint;
 import 'package:runnin/features/run/presentation/bloc/run_bloc.dart';
+import 'package:runnin/features/run/presentation/widgets/export.dart';
 
 class ActiveRunPage extends StatelessWidget {
   final String runId;
@@ -299,7 +300,6 @@ class _StatsOverlay extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final palette = context.runninPalette;
-    final type = context.runninType;
 
     return Container(
       decoration: BoxDecoration(
@@ -318,7 +318,7 @@ class _StatsOverlay extends StatelessWidget {
         children: [
           Text(
             state.formattedDistance,
-            style: type.dataXl.copyWith(fontSize: 72),
+            style: context.runninType.dataXl.copyWith(fontSize: 72),
           ).animate().fadeIn(),
 
           const SizedBox(height: 16),
@@ -326,15 +326,19 @@ class _StatsOverlay extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              _StatChip(label: 'PACE', value: state.formattedPace, unit: '/km'),
-              const SizedBox(width: 32),
-              _StatChip(
-                label: 'TEMPO',
-                value: state.formattedElapsed,
-                unit: '',
-              ),
+              RunMetricCell(label: 'PACE', value: state.formattedPace, unit: '/km'),
+              const SizedBox(width: 16),
+              RunMetricCell(label: 'TEMPO', value: state.formattedElapsed, unit: ''),
             ],
           ),
+
+          const SizedBox(height: 32),
+
+          ZoneBar(proportions: [0.2, 0.2, 0.2, 0.2, 0.2]),
+
+          const SizedBox(height: 16),
+
+          SplitCard(kmLabel: 'KM01', time: '5:48'),
 
           const SizedBox(height: 32),
 
@@ -348,7 +352,7 @@ class _StatsOverlay extends StatelessWidget {
                   },
                   child: Text(
                     'ABANDONAR',
-                    style: type.labelCaps.copyWith(color: palette.muted),
+                    style: context.runninType.labelCaps.copyWith(color: palette.muted),
                   ),
                 ),
               ),
@@ -415,39 +419,6 @@ class _StatsOverlay extends StatelessWidget {
         context.go('/home');
         break;
     }
-  }
-}
-
-enum _ZeroDistanceChoice { save, discard }
-
-class _StatChip extends StatelessWidget {
-  final String label, value, unit;
-  const _StatChip({
-    required this.label,
-    required this.value,
-    required this.unit,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.runninPalette;
-    final type = context.runninType;
-
-    return Column(
-      children: [
-        Text(label, style: type.labelCaps),
-        const SizedBox(height: 4),
-        RichText(
-          text: TextSpan(
-            text: value,
-            style: type.dataMd.copyWith(color: palette.primary),
-            children: [
-              if (unit.isNotEmpty) TextSpan(text: unit, style: type.bodySm),
-            ],
-          ),
-        ),
-      ],
-    );
   }
 }
 

@@ -4,10 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:runnin/core/audio/coach_audio_player.dart';
-import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 import 'package:runnin/features/run/data/datasources/run_coach_remote_datasource.dart';
 import 'package:runnin/features/run/presentation/bloc/run_bloc.dart';
+import 'package:runnin/shared/widgets/coach_ai_card.dart';
+import 'package:runnin/shared/widgets/exercise_card.dart';
 
 class PrepPage extends StatelessWidget {
   const PrepPage({super.key});
@@ -40,22 +41,22 @@ class _PrepViewState extends State<_PrepView> {
       'Ideal para dias de base, recuperacao ativa e ajuste tecnico sem subir demais a carga.',
       ['Ritmo solto', 'Respiracao controlada', 'Foco em economia'],
     ),
-    'Intervalado': (
+      'Intervalado': (
       'Blocos fortes com recuperacao entre tiros',
       'Boa opcao para velocidade e VO2. Vale chegar com aquecimento caprichado.',
       ['Tiros curtos', 'Recuperacao guiada', 'Alta intensidade'],
     ),
-    'Tempo Run': (
+      'Tempo Run': (
       'Ritmo sustentado para limiar e consistencia',
       'Pede concentracao e estabilidade. O objetivo e correr forte sem quebrar no final.',
       ['Ritmo estavel', 'Esforco controlado', 'Mental firme'],
     ),
-    'Long Run': (
+      'Long Run': (
       'Volume para resistencia e adaptacao',
       'Sessao boa para base aerobica. Hidratacao e paciencia fazem diferenca aqui.',
       ['Duracao maior', 'Pace conservador', 'Foco em resistencia'],
     ),
-    'Free Run': (
+      'Free Run': (
       'Corrida livre para registrar o momento',
       'Quando quiser apenas sair para correr, o app acompanha sem travar voce num protocolo.',
       ['Sem meta fixa', 'Leitura livre', 'Bom para explorar'],
@@ -224,71 +225,21 @@ class _PrepViewState extends State<_PrepView> {
                         }).toList(),
                       ),
                       const SizedBox(height: 20),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(18),
-                        decoration: BoxDecoration(
-                          color: palette.surface,
-                          border: Border.all(color: palette.border),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              detail.$1.toUpperCase(),
-                              style: type.labelCaps.copyWith(
-                                color: palette.primary,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                            const SizedBox(height: 10),
-                            Text(detail.$2, style: type.bodyMd),
-                            const SizedBox(height: 16),
-                            ...detail.$3.map(
-                              (item) => Padding(
-                                padding: const EdgeInsets.only(bottom: 8),
-                                child: Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Padding(
-                                      padding: const EdgeInsets.only(top: 5),
-                                      child: Icon(
-                                        Icons.circle,
-                                        size: 6,
-                                        color: palette.primary,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 10),
-                                    Expanded(
-                                      child: Text(
-                                        item,
-                                        style: type.bodySm.copyWith(
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
+                      ExerciseCard(
+                        title: detail.$1,
+                        description: detail.$2,
+                        features: detail.$3,
                       ),
                       const SizedBox(height: 14),
-                      if (_isPro == false)
-                        _PreRunCoachLockedCard(
-                          onTap: () => context.push('/profile'),
-                        )
-                      else
-                        _PreRunCoachCard(
-                          loading: _coachLoading,
-                          cue: _coachCue,
-                          muted: _coachMuted,
-                          onToggleMute: () =>
-                              setState(() => _coachMuted = !_coachMuted),
-                          onRefresh: _requestPreRunCue,
-                        ),
+                      CoachAICard(
+                        loading: _coachLoading,
+                        cue: _coachCue,
+                        muted: _coachMuted,
+                        onToggleMute: () =>
+                            setState(() => _coachMuted = !_coachMuted),
+                        onRefresh: _isPro == true ? _requestPreRunCue : null,
+                        locked: _isPro == false,
+                      ),
                     ],
                   ),
                 ),
@@ -318,136 +269,6 @@ class _PrepViewState extends State<_PrepView> {
               const SizedBox(height: 12),
             ],
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _PreRunCoachCard extends StatelessWidget {
-  final bool loading;
-  final String? cue;
-  final bool muted;
-  final VoidCallback onToggleMute;
-  final VoidCallback onRefresh;
-
-  const _PreRunCoachCard({
-    required this.loading,
-    required this.cue,
-    required this.muted,
-    required this.onToggleMute,
-    required this.onRefresh,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.runninPalette;
-    final type = context.runninType;
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: palette.surfaceAlt,
-        border: Border.all(color: palette.primary.withValues(alpha: 0.28)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(Icons.record_voice_over_outlined, color: palette.primary),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('COACH', style: type.labelCaps),
-                const SizedBox(height: 8),
-                if (loading)
-                  Row(
-                    children: [
-                      SizedBox(
-                        width: 14,
-                        height: 14,
-                        child: CircularProgressIndicator(
-                          color: palette.muted,
-                          strokeWidth: 1.5,
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Text('Analisando seu contexto...', style: type.bodySm),
-                    ],
-                  )
-                else
-                  Text(
-                    cue ??
-                        'Vou cruzar seu objetivo, plano e histórico para orientar a largada.',
-                    style: type.bodySm.copyWith(height: 1.45),
-                  ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          IconButton(
-            tooltip: muted ? 'Ativar voz' : 'Mutar voz',
-            onPressed: onToggleMute,
-            icon: Icon(
-              muted ? Icons.volume_off_outlined : Icons.volume_up_outlined,
-            ),
-          ),
-          IconButton(
-            tooltip: 'Atualizar orientação',
-            onPressed: loading ? null : onRefresh,
-            icon: const Icon(Icons.refresh),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _PreRunCoachLockedCard extends StatelessWidget {
-  final VoidCallback onTap;
-
-  const _PreRunCoachLockedCard({required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.runninPalette;
-    final type = context.runninType;
-
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: palette.surfaceAlt,
-          border: Border.all(color: palette.border),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(Icons.lock_outline, color: palette.muted),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('COACH', style: type.labelCaps),
-                  const SizedBox(height: 8),
-                  Text(
-                    'O Coach AI guia você antes da largada com base no seu plano e histórico. Disponível no plano Pro.',
-                    style: type.bodySm.copyWith(height: 1.45),
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    'ASSINAR PRO →',
-                    style: type.labelCaps.copyWith(color: palette.primary),
-                  ),
-                ],
-              ),
-            ),
-          ],
         ),
       ),
     );
