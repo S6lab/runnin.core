@@ -2337,30 +2337,38 @@ class _HeroSection extends StatelessWidget {
         : '${session.type.toUpperCase()} • ${session.targetPace ?? 'livre'}';
 
     final photoUrl = user?.photoURL;
-    // Rotate between 2 hero photos by day-of-year so it feels alive without being random
     final dayOfYear = now.difference(DateTime(now.year, 1, 1)).inDays;
     final heroAsset = dayOfYear.isEven
         ? 'assets/img/hero/runner_1.jpg'
         : 'assets/img/hero/runner_2.jpg';
 
+    final weekdayLabel = _weekdayLabel(now.weekday).toUpperCase();
+    final weekNumber = _isoWeekNumber(now);
+    final sessionType = (session?.type ?? 'LIVRE').toUpperCase();
+    final distanceLabel = session != null
+        ? '${session.distanceKm.toStringAsFixed(session.distanceKm % 1 == 0 ? 0 : 1)}K'
+        : '—';
+    final paceLabel = session?.targetPace ?? '—:—';
+    final etaLabel = session != null
+        ? '~${(session.distanceKm * _paceSecPerKm(session.targetPace) / 60).round()}min'
+        : '';
+    // Session ordinal: assume single session today; could pull from plan in future
+    const sessionOrdinal = '01';
+
     return Container(
-      height: 380,
+      height: 540,
       width: double.infinity,
       decoration: BoxDecoration(
         color: const Color(0xFF0A0A1A),
         image: DecorationImage(
           image: photoUrl != null ? NetworkImage(photoUrl) as ImageProvider : AssetImage(heroAsset),
           fit: BoxFit.cover,
-          colorFilter: ColorFilter.mode(
-            Colors.black.withValues(alpha: 0.55),
-            BlendMode.darken,
-          ),
         ),
         borderRadius: FigmaBorderRadius.zero,
       ),
       child: Stack(
         children: [
-          // Bottom gradient pra garantir legibilidade do COACH.AI por cima da foto
+          // Vinheta sutil pra texto não competir com a foto
           Positioned.fill(
             child: DecoratedBox(
               decoration: BoxDecoration(
@@ -2368,91 +2376,257 @@ class _HeroSection extends StatelessWidget {
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
+                    Colors.black.withValues(alpha: 0.45),
                     Colors.transparent,
-                    palette.background.withValues(alpha: 0.85),
+                    Colors.black.withValues(alpha: 0.55),
                   ],
-                  stops: const [0.45, 1.0],
+                  stops: const [0.0, 0.4, 1.0],
                 ),
               ),
             ),
           ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Greeting + data
-              Padding(
-                padding: const EdgeInsets.fromLTRB(24, 30, 24, 0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Top: bullet ciano + data — GREETING
+                Row(
                   children: [
-                    Text(
-                      dateLabel,
-                      style: GoogleFonts.jetBrainsMono(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w500,
-                        color: Colors.white.withValues(alpha: 0.7),
-                        letterSpacing: 1.0,
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: palette.primary,
+                        shape: BoxShape.circle,
                       ),
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '$greeting, ${firstName.toUpperCase()}',
-                      style: GoogleFonts.jetBrainsMono(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.white,
-                        letterSpacing: 1.4,
+                    const SizedBox(width: 10),
+                    Flexible(
+                      child: Text(
+                        '${dateLabel.toUpperCase()} — $greeting, ${firstName.toUpperCase()}',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                          letterSpacing: 1.0,
+                        ),
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ],
                 ),
-              ),
-              const Spacer(),
-              // COACH.AI brief (única ocorrência — sem duplicação)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
-                child: Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.5),
-                    border: Border(left: BorderSide(color: palette.secondary, width: 1.735)),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'COACH.AI',
+                const SizedBox(height: 14),
+                // Chips: WATCH + AUDIO
+                Row(
+                  children: [
+                    _HeroChip(
+                      icon: Icons.watch_outlined,
+                      label: 'WATCH',
+                      dotColor: palette.primary,
+                    ),
+                    const SizedBox(width: 10),
+                    _HeroChip(
+                      icon: Icons.headphones_outlined,
+                      label: 'AUDIO',
+                      dotColor: Colors.white.withValues(alpha: 0.45),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 18),
+                // HOJE + ordinal
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'HOJE',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 64,
+                        fontWeight: FontWeight.w900,
+                        color: Colors.white,
+                        letterSpacing: -1.5,
+                        height: 1.0,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        sessionOrdinal,
                         style: GoogleFonts.jetBrainsMono(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w500,
-                          color: palette.secondary,
-                          letterSpacing: 1.1,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
+                          letterSpacing: 0.6,
                         ),
                       ),
-                      const SizedBox(height: 8),
-                      Text(
-                        session == null
-                            ? sessionInfo == 'Nenhuma sessao planejada para hoje'
-                                ? 'Nenhuma sessao planejada para hoje. Use uma corrida livre ou revise a distribuicao da semana no modulo de treino.'
-                                : sessionInfo
-                            : 'Easy Run hoje — pace controlado entre ${session.targetPace ?? "livre"} e foco em cadencia e respiracao. Nao acelere nos ultimos 2km.',
+                    ),
+                  ],
+                ),
+                const Spacer(),
+                // EASY RUN pill + dia · semana
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      color: palette.primary,
+                      child: Text(
+                        sessionType,
                         style: GoogleFonts.jetBrainsMono(
                           fontSize: 13,
-                          fontWeight: FontWeight.w400,
-                          color: Colors.white.withValues(alpha: 0.92),
-                          height: 21.45 / 13,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.black,
+                          letterSpacing: 1.2,
                         ),
                       ),
-                    ],
-                  ),
+                    ),
+                    const SizedBox(width: 12),
+                    Text(
+                      '$weekdayLabel · SEM $weekNumber',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white.withValues(alpha: 0.75),
+                        letterSpacing: 1.0,
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-            ],
+                const SizedBox(height: 10),
+                // Stats: 5K + 6:30/km + ~32min
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      distanceLabel,
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 64,
+                        fontWeight: FontWeight.w900,
+                        color: Colors.white,
+                        letterSpacing: -1.5,
+                        height: 1.0,
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          RichText(
+                            text: TextSpan(
+                              children: [
+                                TextSpan(
+                                  text: paceLabel,
+                                  style: GoogleFonts.jetBrainsMono(
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.w800,
+                                    color: const Color(0xFFE85D2A),
+                                    letterSpacing: -0.5,
+                                  ),
+                                ),
+                                TextSpan(
+                                  text: '/km',
+                                  style: GoogleFonts.jetBrainsMono(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: const Color(0xFFE85D2A).withValues(alpha: 0.85),
+                                    letterSpacing: 0.4,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          if (etaLabel.isNotEmpty)
+                            Text(
+                              etaLabel,
+                              style: GoogleFonts.jetBrainsMono(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white.withValues(alpha: 0.6),
+                                letterSpacing: 0.6,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ],
       ),
     );
   }
+}
+
+class _HeroChip extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color dotColor;
+
+  const _HeroChip({required this.icon, required this.label, required this.dotColor});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.55),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.15), width: 1.0),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 8),
+          Icon(icon, size: 14, color: Colors.white.withValues(alpha: 0.85)),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: GoogleFonts.jetBrainsMono(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+              letterSpacing: 1.0,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+String _weekdayLabel(int weekday) {
+  switch (weekday) {
+    case DateTime.monday:    return 'segunda';
+    case DateTime.tuesday:   return 'terca';
+    case DateTime.wednesday: return 'quarta';
+    case DateTime.thursday:  return 'quinta';
+    case DateTime.friday:    return 'sexta';
+    case DateTime.saturday:  return 'sabado';
+    case DateTime.sunday:    return 'domingo';
+    default: return '';
+  }
+}
+
+int _isoWeekNumber(DateTime date) {
+  final firstDay = DateTime(date.year, 1, 1);
+  final dayOfYear = date.difference(firstDay).inDays + 1;
+  return ((dayOfYear - date.weekday + 10) / 7).floor();
+}
+
+double _paceSecPerKm(String? pace) {
+  if (pace == null) return 360; // 6:00/km default
+  final parts = pace.split(':');
+  if (parts.length != 2) return 360;
+  final m = int.tryParse(parts[0]) ?? 6;
+  final s = int.tryParse(parts[1]) ?? 0;
+  return (m * 60 + s).toDouble();
 }
 
 class _HeroStatIcon extends StatelessWidget {
