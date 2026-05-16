@@ -47,8 +47,8 @@ class _UnitsSettingsPageState extends State<UnitsSettingsPage> {
   Future<void> _saveToHive() async {
     if (!Hive.isBoxOpen(_hiveBox)) return;
     final box = Hive.box<dynamic>(_hiveBox);
-    await box.put(_hiveKeyUnitsSystem, _unitsSystem.name);
-    await box.put(_hiveKeyPaceFormat, _paceFormat.name);
+    await box.put(_hiveKeyUnitsSystem, _unitsSystem.index);
+    await box.put(_hiveKeyPaceFormat, _paceFormat.index);
     await box.put(_hiveKeyTimeFormat, _timeFormat);
   }
 

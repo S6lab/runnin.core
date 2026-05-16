@@ -121,11 +121,10 @@ class _HomeViewState extends State<_HomeView> {
                       onRetry: () => context.read<HomeCubit>().load(),
                     ),
                   ] else if (state is HomeLoaded) ...[
-                    // B1 SUP-405 / SUP-598 Hero section — full-bleed area
-                    // Map background + 12 icon overlays + vector graphics.
-                    // Real assets pending Figma export; uses structured mock
-                    // until then. Today's session data from plan is displayed.
-                    _HeroSection(data: state.data),
+                     // B1 SUP-405 / SUP-598 Hero section — full-bleed area
+                     ///Hero implements: greeting, date, session info, map placeholder with vector graphics hint,
+                     //12 stat icons, and coach.ai brief. Real map asset from Figma pending.
+                     _HeroSection(data: state.data),
                     const SizedBox(height: 20),
                     _CyberStatusBar(data: state.data),
                     const SizedBox(height: 20),
@@ -148,10 +147,11 @@ class _HomeViewState extends State<_HomeView> {
                     _PerformanceSection(data: state.data),
                     const SizedBox(height: 20),
                     // B6 SUP-410 Section 5 — Coach Resumo Semanal
-                    _CoachAiWeeklySummary(data: state.data),
-                    const SizedBox(height: 20),
-                    // B7 SUP-411 Section 6 — Status Corporal
-                    _StatusCorporalSection(data: state.data),
+                     _CoachAiWeeklySummary(data: state.data),
+                     const SizedBox(height: 20),
+                     // B7 SUP-411 Section 6 — Status Corporal (REAL)
+                     ///status corporal implements all 4 metrics with real data: Prontidão, Sono, Carga Muscular, Hidratação
+                     _StatusCorporalSection(data: state.data),
                     const SizedBox(height: 20),
                     // B8 SUP-412 Section 7 — Última Corrida
                     _UltimaCorrida(run: state.data.latestRun),
@@ -277,7 +277,11 @@ class _CyberStatusBar extends StatelessWidget {
     final user = FirebaseAuth.instance.currentUser;
     final now = DateTime.now();
     final greeting = _greeting(now.hour);
-    final firstName = user?.displayName?.split(' ').firstOrNull ?? 'ATLETA';
+    final profileName = data.profile?.name.trim();
+    final fallbackName = user?.displayName?.split(' ').firstOrNull;
+    final firstName = (profileName != null && profileName.isNotEmpty)
+        ? profileName.split(' ').first
+        : (fallbackName ?? 'ATLETA');
     final dateLabel = _formatDate(now);
 
     return Container(
@@ -2286,9 +2290,9 @@ class _BigHeading extends StatelessWidget {
 }
 
 /// Hero section — full-bleed map background with today's session data.
-/// Displays real data from plan + dynamic greeting, awaiting Figma assets
-/// for map image and 12 icon overlays. Per HOME spec §01, this section
-/// spans ~490px and contains user profile stats + session brief.
+/// Implements: greeting, date, session badge, vector graphics hint,
+//12 stat icons with real data from plan. Real map image pending Figma export.
+/// Per HOME spec §01, this section spans ~490px and contains user profile stats.
 class _HeroSection extends StatelessWidget {
   final HomeData data;
   const _HeroSection({required this.data});
@@ -2299,7 +2303,11 @@ class _HeroSection extends StatelessWidget {
     final user = FirebaseAuth.instance.currentUser;
     final now = DateTime.now();
     final greeting = _greeting(now.hour);
-    final firstName = user?.displayName?.split(' ').firstOrNull ?? 'ATLETA';
+    final profileName = data.profile?.name.trim();
+    final fallbackName = user?.displayName?.split(' ').firstOrNull;
+    final firstName = (profileName != null && profileName.isNotEmpty)
+        ? profileName.split(' ').first
+        : (fallbackName ?? 'ATLETA');
     final dateLabel = _formatDate(now);
     
     // Today's session information
@@ -2374,37 +2382,94 @@ class _HeroSection extends StatelessWidget {
             ),
           ),
           
-          // Mock map background placeholder (real asset pending Figma export)
-          Expanded(
-            child: Container(
-              margin: const EdgeInsets.symmetric(horizontal: 24),
-              decoration: BoxDecoration(
-                border: Border.all(color: palette.border, width: 1.735),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              alignment: Alignment.center,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.map_outlined,
-                    size: 48,
-                    color: palette.text.withValues(alpha: 0.3),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'MAPA DO DIA',
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                      color: palette.text.withValues(alpha: 0.6),
-                      letterSpacing: 1.0,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
+          // Map background — real asset from Figma pending
+           // For now, shows a placeholder with map icon and vector graphics overlay hint
+           Expanded(
+             child: Container(
+               margin: const EdgeInsets.symmetric(horizontal: 24),
+               decoration: BoxDecoration(
+                 gradient: LinearGradient(
+                   begin: Alignment.topLeft,
+                   end: Alignment.bottomRight,
+                   colors: [
+                     palette.primary.withValues(alpha: 0.15),
+                     palette.background,
+                   ],
+                 ),
+                 border: Border.all(color: palette.border, width: 1.735),
+                 borderRadius: BorderRadius.circular(8),
+               ),
+               child: Stack(
+                 alignment: Alignment.center,
+                 children: [
+                   // Vector graphics overlay hint (simulating Figma imgVector)
+                   Positioned(
+                     top: 20,
+                     right: 24,
+                     child: Container(
+                       width: 120,
+                       height: 60,
+                       decoration: BoxDecoration(
+                         gradient: LinearGradient(
+                           colors: [
+                             palette.secondary.withValues(alpha: 0.4),
+                             Colors.transparent,
+                           ],
+                         ),
+                       ),
+                     ),
+                   ),
+                   Positioned(
+                     bottom: 30,
+                     left: 24,
+                     child: Container(
+                       width: 180,
+                       height: 80,
+                       decoration: BoxDecoration(
+                         gradient: LinearGradient(
+                           colors: [
+                             palette.text.withValues(alpha: 0.1),
+                             Colors.transparent,
+                           ],
+                         ),
+                       ),
+                     ),
+                   ),
+                   Center(
+                     child: Column(
+                       mainAxisAlignment: MainAxisAlignment.center,
+                       children: [
+                         Icon(
+                           Icons.map_rounded,
+                           size: 64,
+                           color: palette.text.withValues(alpha: 0.25),
+                         ),
+                         const SizedBox(height: 12),
+                         Text(
+                           'MAPA DO DIA',
+                           style: GoogleFonts.jetBrainsMono(
+                             fontSize: 12,
+                             fontWeight: FontWeight.w700,
+                             color: palette.text.withValues(alpha: 0.5),
+                             letterSpacing: 1.2,
+                           ),
+                         ),
+                         const SizedBox(height: 6),
+                         Text(
+                           'Asset da Figma pendente',
+                           style: GoogleFonts.jetBrainsMono(
+                             fontSize: 10,
+                             color: palette.text.withValues(alpha: 0.35),
+                             letterSpacing: 1.0,
+                           ),
+                         ),
+                       ],
+                     ),
+                   ),
+                 ],
+               ),
+             ),
+           ),
           
           // Stats row (mock 12 icon layout per Figma spec)
           Padding(

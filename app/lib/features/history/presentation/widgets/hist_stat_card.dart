@@ -223,7 +223,7 @@ class _HistoryStats {
     }
     
     if (km >= 1) {
-      return '${km.toStringAsFixed(1)}';
+      return km.toStringAsFixed(1);
     }
     return '${(km * 1000).round()} m';
   }

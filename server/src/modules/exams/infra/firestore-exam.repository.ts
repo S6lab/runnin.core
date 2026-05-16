@@ -41,4 +41,8 @@ export class FirestoreExamRepository implements ExamRepository {
       .doc(id)
       .update(stripUndefined(data as Record<string, unknown>));
   }
+
+  async softDelete(id: string, userId: string): Promise<void> {
+    await this.col(userId).doc(id).update({ deletedAt: new Date().toISOString() });
+  }
 }

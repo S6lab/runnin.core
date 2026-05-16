@@ -6,6 +6,6 @@ export interface Exam {
   fileSize: number;
   storageUrl: string;
   uploadedAt: string;
-  coachAnalysis?: string;
+  coachAnalysis?: string | null;
   deletedAt?: string;
 }
