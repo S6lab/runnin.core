@@ -4,4 +4,5 @@ export interface UserRepository {
   findById(id: string): Promise<UserProfile | null>;
   upsert(profile: UserProfile): Promise<void>;
   archiveOnboarding(userId: string, snapshot: UserProfile): Promise<void>;
+  list(limit?: number): Promise<UserProfile[]>;
 }

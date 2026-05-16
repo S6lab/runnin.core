@@ -64,3 +64,39 @@ export async function markRead(req: Request, res: Response, next: NextFunction):
     next(err);
   }
 }
+
+export async function ensureDailyNotifications(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const batchSize = 100;
+    let cursor: string | undefined;
+    let processedCount = 0;
+    
+    while (true) {
+      const users = cursor ? await userRepo.list(batchSize) : await userRepo.list(batchSize);
+      
+      if (users.length === 0) {
+        break;
+      }
+      
+      const promises = users.map(user => {
+        return ensureDaily.execute(user.id).catch(err => {
+          logger.warn('notifications.ensure_daily_user_failed', { uid: user.id, err: String(err) });
+        });
+      });
+      
+      await Promise.all(promises);
+      processedCount += users.length;
+      
+      if (users.length < batchSize) {
+        break;
+      }
+      
+      cursor = users[users.length - 1].id;
+    }
+    
+    logger.info('notifications.ensure_daily_complete', { count: processedCount });
+    res.json({ processed: processedCount });
+  } catch (err) {
+    next(err);
+  }
+}

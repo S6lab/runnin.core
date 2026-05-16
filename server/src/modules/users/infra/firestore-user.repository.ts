@@ -24,4 +24,14 @@ export class FirestoreUserRepository implements UserRepository {
       .doc(archivedAt)
       .set({ ...data, archivedAt });
   }
+
+  async list(limit?: number): Promise<UserProfile[]> {
+    const query = this.col().limit(limit || 100);
+    const snapshot = await query.get();
+    const users: UserProfile[] = [];
+    snapshot.forEach(doc => {
+      users.push({ id: doc.id, ...doc.data() } as UserProfile);
+    });
+    return users;
+  }
 }

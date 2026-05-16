@@ -13,6 +13,28 @@ export const UpsertProfileSchema = z.object({
   hasWearable: z.boolean().optional(),
   medicalConditions: z.array(z.string()).optional(),
   coachVoiceId: z.enum(['coach-bruno', 'coach-clara', 'coach-luna']).optional(),
+  
+  // Health metrics
+  restingBpm: z.number().optional(),
+  maxBpm: z.number().optional(),
+  
+  // Coach preferences
+  coachPersonality: z.enum(['motivador', 'tecnico', 'sereno']).optional(),
+  coachMessageFrequency: z.enum(['per_km', 'per_2km', 'alerts_only', 'silent']).optional(),
+  // TODO: coachFeedbackEnabled and notificationsEnabled record types currently have
+  // a type mismatch with zod v4 record() which requires 2 args (keySchema, valueSchema)
+  // Re-enable validation when zod upgrade to v5 or type is resolved
+ coachFeedbackEnabled: z.any(),
+  
+  // Notifications
+  notificationsEnabled: z.any(),
+  dndWindow: z.object({ start: z.string(), end: z.string() }).optional(),
+  
+  // Units and formatting
+  unitsSystem: z.enum(['metric', 'imperial']).optional(),
+  paceFormat: z.enum(['min_per_km', 'min_per_mi']).optional(),
+  timeFormat: z.enum(['24h', '12h']).optional(),
+  
   onboarded: z.boolean().optional(),
 });
 
@@ -37,6 +59,25 @@ export class UpsertProfileUseCase {
       hasWearable: input.hasWearable ?? existing?.hasWearable ?? false,
       medicalConditions: input.medicalConditions ?? existing?.medicalConditions ?? [],
       coachVoiceId: input.coachVoiceId ?? existing?.coachVoiceId,
+      
+      // Health metrics
+      restingBpm: input.restingBpm ?? existing?.restingBpm,
+      maxBpm: input.maxBpm ?? existing?.maxBpm,
+      
+      // Coach preferences
+      coachPersonality: input.coachPersonality ?? existing?.coachPersonality,
+      coachMessageFrequency: input.coachMessageFrequency ?? existing?.coachMessageFrequency,
+      coachFeedbackEnabled: (input.coachFeedbackEnabled as Record<string, boolean> | undefined) ?? existing?.coachFeedbackEnabled,
+      
+      // Notifications
+      notificationsEnabled: (input.notificationsEnabled as Record<string, boolean> | undefined) ?? existing?.notificationsEnabled,
+      dndWindow: input.dndWindow ?? existing?.dndWindow,
+      
+      // Units and formatting
+      unitsSystem: input.unitsSystem ?? existing?.unitsSystem,
+      paceFormat: input.paceFormat ?? existing?.paceFormat,
+      timeFormat: input.timeFormat ?? existing?.timeFormat,
+      
       premium: existing?.premium ?? false,
       premiumUntil: existing?.premiumUntil,
       lastOnboardingAt: existing?.lastOnboardingAt,
