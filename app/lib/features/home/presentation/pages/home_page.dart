@@ -1638,13 +1638,6 @@ class _CoachAiWeeklySummary extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                '> RESUMO SEMANAL',
-                style: context.runninType.labelCaps.copyWith(
-                  color: palette.secondary,
-                ),
-              ),
-                const SizedBox(height: 20),
                 _CoachSummaryBlock(
                   title: 'PROGRESSO',
                   body: hasPlan

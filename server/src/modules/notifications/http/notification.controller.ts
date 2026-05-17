@@ -26,7 +26,7 @@ const listUseCase = new ListNotificationsUseCase(repo);
 const dismissUseCase = new DismissNotificationUseCase(repo);
 const clearUseCase = new ClearNotificationsUseCase(repo);
 const markReadUseCase = new MarkReadUseCase(repo);
-const ensureDaily = new EnsureDailyInsightsUseCase(create, userRepo, planRepo, runRepo);
+const ensureDaily = new EnsureDailyInsightsUseCase(create, userRepo, planRepo, runRepo, repo);
 const dailyPush = new SendDailyPushUseCase(userRepo, planRepo);
 
 export async function listNotifications(req: Request, res: Response, next: NextFunction): Promise<void> {

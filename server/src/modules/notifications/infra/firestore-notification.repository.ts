@@ -43,6 +43,32 @@ export class FirestoreNotificationRepository implements NotificationRepository {
     });
   }
 
+  async upsertPreserveUserState(
+    notification: Notification,
+  ): Promise<Notification> {
+    const { id, userId, ...data } = notification;
+    const ref = this.col(userId).doc(id);
+    const db = getFirestore();
+
+    return db.runTransaction(async tx => {
+      const snap = await tx.get(ref);
+      if (!snap.exists) {
+        tx.set(ref, stripUndefined(data));
+        return notification;
+      }
+      const existing = snap.data() as Partial<Notification>;
+      // Mantém estado do user (lido, dispensado) e merge do conteúdo novo.
+      const merged = {
+        ...stripUndefined(data),
+        ...(existing.dismissedAt ? { dismissedAt: existing.dismissedAt } : {}),
+        ...(existing.readAt ? { readAt: existing.readAt } : {}),
+        ...(existing.createdAt ? { createdAt: existing.createdAt } : {}),
+      };
+      tx.set(ref, merged);
+      return { id, userId, ...merged } as Notification;
+    });
+  }
+
   async dismiss(userId: string, id: string, at: string): Promise<void> {
     await this.col(userId).doc(id).update({ dismissedAt: at });
   }

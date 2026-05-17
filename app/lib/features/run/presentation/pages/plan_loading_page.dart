@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
@@ -12,14 +13,11 @@ import 'package:runnin/shared/widgets/coach_ai_breadcrumb.dart';
 
 /// Tela "Criando seu plano" pós-onboarding.
 ///
-/// Fluxo:
-///  1. Se plano já existe → /home.
-///  2. Senão dispara POST /plans/generate (server processa async).
-///  3. Polling a cada 3s. Quando ready → /home.
-///  4. Após 30s mostra "+X segundos · análise criteriosa demora".
-///  5. Após 90s mostra botão "IR PRA HOME (plano segue gerando em background)".
-///  6. Ícone TREINO (directions_run) animado deslizando horizontalmente
-///     como se estivesse correndo.
+/// Estratégia atual (curta):
+///  - dispara POST /plans/generate em background (fire-and-forget)
+///  - mostra relógio com countdown de 10s no design system
+///  - avisa que o plano vai aparecer em TREINO quando pronto
+///  - após 10s → /home (não bloqueia o user esperando o LLM)
 class PlanLoadingPage extends StatefulWidget {
   final String? startDate;
   const PlanLoadingPage({super.key, this.startDate});
@@ -30,122 +28,78 @@ class PlanLoadingPage extends StatefulWidget {
 
 class _PlanLoadingPageState extends State<PlanLoadingPage>
     with TickerProviderStateMixin {
-  static const _expectedSeconds = 30;
-  static const _showSkipAfter = 90;
+  static const _countdownSeconds = 10;
 
-  Timer? _pollTimer;
   Timer? _tickTimer;
   int _elapsedSeconds = 0;
-  bool _planReady = false;
+  bool _redirected = false;
   String? _error;
   final _userDs = UserRemoteDatasource();
   final _planDs = PlanRemoteDatasource();
 
-  late final AnimationController _runAnim;
+  late final AnimationController _clockAnim;
 
   @override
   void initState() {
     super.initState();
     markOnboardingDone();
-    _runAnim = AnimationController(
+    _clockAnim = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1100),
-    )..repeat();
+      duration: const Duration(seconds: _countdownSeconds),
+    )..forward();
+
     _tickTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted) setState(() => _elapsedSeconds++);
+      if (!mounted) return;
+      setState(() => _elapsedSeconds++);
+      if (_elapsedSeconds >= _countdownSeconds && !_redirected) {
+        _redirected = true;
+        context.go('/home');
+      }
     });
+
     _kickoff();
   }
 
+  /// Fire-and-forget: dispara generate no server (que processa async) e
+  /// não bloqueia a UI esperando o resultado. Erros 409 (plano já existe)
+  /// são silenciados — é race condition normal.
   Future<void> _kickoff() async {
     try {
       final existing = await _planDs.getCurrentPlan();
-      if (existing != null && existing.isReady) {
-        if (mounted) context.go('/home');
-        return;
-      }
+      if (existing != null) return; // já tem plano (ready ou generating)
 
-      // Só dispara generate se NÃO existe plano. Se já está 'generating'
-      // só fica polling.
-      if (existing == null) {
-        final profile = await _userDs.getMe();
-        if (profile == null) {
-          if (mounted) context.go('/home');
-          return;
-        }
-        try {
-          await _planDs.generatePlan(
-            goal: profile.goal,
-            level: profile.level,
-            frequency: profile.frequency,
-            startDate: widget.startDate,
-          );
-        } on DioException catch (e) {
-          // 409 PLAN_ALREADY_EXISTS = race condition (outro device
-          // disparou). Não é erro real — só seguir polling.
-          if (e.response?.statusCode != 409) rethrow;
-        }
-      }
+      final profile = await _userDs.getMe();
+      if (profile == null) return;
 
-      _pollTimer = Timer.periodic(const Duration(seconds: 3), _poll);
-    } on DioException catch (e) {
-      if (mounted) {
-        final code = e.response?.statusCode;
-        final msg = e.response?.data is Map
-            ? (e.response!.data as Map)['message']?.toString()
-            : null;
-        setState(() => _error = code == 422
-            ? (msg ?? 'Onboarding incompleto. Volta pra TREINO e termine os dados.')
-            : 'Falha temporária ($code). Vou pra home e você gera de novo em TREINO.');
+      try {
+        await _planDs.generatePlan(
+          goal: profile.goal,
+          level: profile.level,
+          frequency: profile.frequency,
+          startDate: widget.startDate,
+        );
+      } on DioException catch (e) {
+        if (e.response?.statusCode != 409) rethrow;
       }
     } catch (e) {
       if (mounted) {
-        setState(() => _error = 'Erro inesperado: ${e.runtimeType}');
+        setState(() => _error =
+            'Não consegui iniciar geração. Tenta de novo em TREINO > GERAR PLANO.');
       }
     }
-  }
-
-  Future<void> _poll(Timer t) async {
-    try {
-      final plan = await _planDs.getCurrentPlan();
-      if (plan != null && plan.isReady) {
-        t.cancel();
-        if (mounted) {
-          setState(() => _planReady = true);
-        }
-        // pequeno atraso pra user ver a confirmação
-        await Future.delayed(const Duration(milliseconds: 600));
-        if (mounted) context.go('/home');
-      } else if (plan != null && plan.status == 'failed') {
-        t.cancel();
-        if (mounted) {
-          setState(() => _error =
-              'Falha ao gerar plano. Tente novamente em TREINO > GERAR PLANO.');
-        }
-      }
-    } catch (_) {
-      // tolera erros de network — segue polling
-    }
-  }
-
-  void _skipToHome() {
-    _pollTimer?.cancel();
-    if (mounted) context.go('/home');
   }
 
   @override
   void dispose() {
-    _pollTimer?.cancel();
     _tickTimer?.cancel();
-    _runAnim.dispose();
+    _clockAnim.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final remaining = (_expectedSeconds - _elapsedSeconds).clamp(0, _expectedSeconds);
-    final overtime = _elapsedSeconds > _expectedSeconds;
-    final canSkip = _elapsedSeconds >= _showSkipAfter;
+    final remaining =
+        (_countdownSeconds - _elapsedSeconds).clamp(0, _countdownSeconds);
 
     return Scaffold(
       backgroundColor: const Color(0xFF050510),
@@ -156,15 +110,19 @@ class _PlanLoadingPageState extends State<PlanLoadingPage>
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const CoachAIBreadcrumb(action: 'GERANDO PLANO'),
-              const SizedBox(height: 32),
+              const SizedBox(height: 40),
 
-              // Runner animado
-              _RunnerAnimation(animation: _runAnim),
+              Center(
+                child: _ClockCountdown(
+                  animation: _clockAnim,
+                  remaining: remaining,
+                ),
+              ),
 
               const SizedBox(height: 40),
 
               Text(
-                _planReady ? 'Plano pronto.' : 'Criando seu plano',
+                'Gerando seu plano',
                 style: GoogleFonts.jetBrainsMono(
                   fontSize: 28,
                   fontWeight: FontWeight.w500,
@@ -173,7 +131,7 @@ class _PlanLoadingPageState extends State<PlanLoadingPage>
                   color: Colors.white,
                 ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 16),
 
               if (_error != null)
                 Container(
@@ -193,110 +151,49 @@ class _PlanLoadingPageState extends State<PlanLoadingPage>
                     ),
                   ),
                 )
-              else if (_planReady)
-                Text(
-                  'Mesociclo de ${widget.startDate != null ? "" : ""}semanas pronto. Levando você pra TREINO.',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: Colors.white.withValues(alpha: 0.7),
-                    height: 1.5,
-                  ),
-                )
               else
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      overtime
-                          ? 'Análise criteriosa de TODOS os seus dados (perfil + condições + objetivo + horários). Demora porque é personalizado.'
-                          : 'Lendo seu perfil, condições médicas, objetivo e horários. Calculando zonas e progressão.',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: Colors.white.withValues(alpha: 0.7),
-                        height: 1.55,
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    // Countdown / contador
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.baseline,
-                      textBaseline: TextBaseline.alphabetic,
-                      children: [
-                        Text(
-                          overtime ? '+${_elapsedSeconds - _expectedSeconds}s' : '${remaining}s',
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: 56,
-                            fontWeight: FontWeight.w500,
-                            color: overtime
-                                ? FigmaColors.brandCyan
-                                : Colors.white,
-                            letterSpacing: -1.2,
-                            height: 1.0,
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 8),
-                          child: Text(
-                            overtime ? 'além do estimado' : 'estimado',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.white.withValues(alpha: 0.5),
-                              letterSpacing: 1.0,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
+                Text(
+                  'O plano vai ser gerado em background pelo coach AI. '
+                  'Pode demorar um pouco — assim que estiver pronto, '
+                  'aparece em TREINO.',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.white.withValues(alpha: 0.72),
+                    height: 1.55,
+                  ),
                 ),
 
               const Spacer(),
 
-              // Progress bar visual
-              if (!_planReady && _error == null) ...[
-                _LinearProgress(
-                  fraction: (_elapsedSeconds / _expectedSeconds).clamp(0, 1),
-                  isOvertime: overtime,
-                ),
-                const SizedBox(height: 16),
-              ],
-
-              if (canSkip && !_planReady && _error == null)
-                SizedBox(
-                  width: double.infinity,
-                  height: 48,
-                  child: OutlinedButton(
-                    onPressed: _skipToHome,
-                    style: OutlinedButton.styleFrom(
-                      side: BorderSide(
-                        color: FigmaColors.brandCyan.withValues(alpha: 0.6),
-                        width: 1.0,
-                      ),
-                      shape: const RoundedRectangleBorder(
-                        borderRadius: BorderRadius.zero,
-                      ),
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: OutlinedButton(
+                  onPressed: () {
+                    if (_redirected) return;
+                    _redirected = true;
+                    context.go('/home');
+                  },
+                  style: OutlinedButton.styleFrom(
+                    side: BorderSide(
+                      color: FigmaColors.brandCyan.withValues(alpha: 0.6),
+                      width: 1.0,
                     ),
-                    child: const Text(
-                      'IR PRA HOME · plano gera em background',
-                      style: TextStyle(
-                        color: FigmaColors.brandCyan,
-                        fontSize: 11,
-                        letterSpacing: 0.8,
-                        fontWeight: FontWeight.w500,
-                      ),
+                    shape: const RoundedRectangleBorder(
+                      borderRadius: BorderRadius.zero,
+                    ),
+                  ),
+                  child: const Text(
+                    'IR PRA HOME AGORA',
+                    style: TextStyle(
+                      color: FigmaColors.brandCyan,
+                      fontSize: 11,
+                      letterSpacing: 0.8,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
                 ),
-              if (_error != null)
-                SizedBox(
-                  width: double.infinity,
-                  height: 48,
-                  child: ElevatedButton(
-                    onPressed: _skipToHome,
-                    child: const Text('IR PRA HOME'),
-                  ),
-                ),
+              ),
             ],
           ),
         ),
@@ -305,24 +202,36 @@ class _PlanLoadingPageState extends State<PlanLoadingPage>
   }
 }
 
-/// Stick figure correndo estilo Pitfall (Atari). Pernas + braços
-/// alternam em 4 frames durante o ciclo, cabeça com leve bobble e
-/// chão com tracinhos passando pra sensação de velocidade.
-class _RunnerAnimation extends StatelessWidget {
+/// Relógio com arco de countdown e segundo restante centralizado.
+/// Segue o design system (mono, cyan brand, sem cantos arredondados além
+/// do círculo natural).
+class _ClockCountdown extends StatelessWidget {
   final Animation<double> animation;
-  const _RunnerAnimation({required this.animation});
+  final int remaining;
+  const _ClockCountdown({required this.animation, required this.remaining});
 
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: double.infinity,
-      height: 110,
+      width: 160,
+      height: 160,
       child: AnimatedBuilder(
         animation: animation,
         builder: (context, _) {
           return CustomPaint(
-            painter: _PitfallRunnerPainter(t: animation.value),
-            child: const SizedBox.expand(),
+            painter: _ClockPainter(progress: animation.value),
+            child: Center(
+              child: Text(
+                '$remaining',
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 56,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.white,
+                  letterSpacing: -1.4,
+                  height: 1.0,
+                ),
+              ),
+            ),
           );
         },
       ),
@@ -330,137 +239,52 @@ class _RunnerAnimation extends StatelessWidget {
   }
 }
 
-/// Desenha o runner stick figure + chão com perspectiva.
-/// `t` ∈ [0,1] é a fase do ciclo de corrida.
-class _PitfallRunnerPainter extends CustomPainter {
-  final double t;
-  _PitfallRunnerPainter({required this.t});
+class _ClockPainter extends CustomPainter {
+  final double progress; // 0 → 1
+  _ClockPainter({required this.progress});
 
   @override
   void paint(Canvas canvas, Size size) {
-    final cyan = FigmaColors.brandCyan;
-    final muted = FigmaColors.borderDefault;
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = math.min(size.width, size.height) / 2 - 4;
 
-    // Chão com tracinhos passando (sensação de movimento)
-    final groundY = size.height - 14;
-    final groundPaint = Paint()
-      ..color = muted.withValues(alpha: 0.4)
-      ..strokeWidth = 1.2;
-    canvas.drawLine(
-      Offset(0, groundY + 8),
-      Offset(size.width, groundY + 8),
-      groundPaint,
-    );
-    final tickPaint = Paint()
-      ..color = cyan.withValues(alpha: 0.55)
-      ..strokeWidth = 2.4
+    final track = Paint()
+      ..color = FigmaColors.borderDefault
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.0;
+    canvas.drawCircle(center, radius, track);
+
+    final arc = Paint()
+      ..color = FigmaColors.brandCyan
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.5
       ..strokeCap = StrokeCap.round;
-    final offset = (t * 60) % 60;
-    for (double x = -offset; x < size.width; x += 60) {
-      canvas.drawLine(
-        Offset(x, groundY + 12),
-        Offset(x + 22, groundY + 12),
-        tickPaint,
-      );
-    }
+    final sweep = -2 * math.pi * progress;
+    canvas.drawArc(
+      Rect.fromCircle(center: center, radius: radius),
+      -math.pi / 2,
+      sweep,
+      false,
+      arc,
+    );
 
-    // Posição do runner: centro horizontal, bobble vertical
-    final cx = size.width / 2;
-    final bobble = (1 - (2 * t - 1).abs()) * 3.0; // 0→3→0 (pico no meio)
-    final hipY = groundY - 28 - bobble;
-
-    // Stick figure
-    final body = Paint()
-      ..color = cyan
-      ..strokeWidth = 3
+    // Ponteiro: linha do centro até o ponto na borda
+    final angle = -math.pi / 2 + sweep;
+    final tip = Offset(
+      center.dx + radius * 0.78 * math.cos(angle),
+      center.dy + radius * 0.78 * math.sin(angle),
+    );
+    final handPaint = Paint()
+      ..color = FigmaColors.brandCyan.withValues(alpha: 0.9)
+      ..strokeWidth = 2.0
       ..strokeCap = StrokeCap.round;
-    final headPaint = Paint()..color = cyan;
+    canvas.drawLine(center, tip, handPaint);
 
-    // Cabeça
-    canvas.drawCircle(Offset(cx, hipY - 28), 6, headPaint);
-    // Tronco (leve inclinação à frente)
-    canvas.drawLine(
-      Offset(cx + 1, hipY - 22),
-      Offset(cx - 1, hipY),
-      body,
-    );
-
-    // Pernas + braços alternam baseado em t (2 ciclos por loop)
-    // Ângulo das pernas: ciclo seno
-    final legCycle = (t * 2 * 3.14159 * 2); // 2 ciclos
-    final legA = legCycle;
-    final legB = legCycle + 3.14159;
-    final legLen = 14.0;
-
-    Offset legFoot(double phase) {
-      final dx = legLen * 0.7 *
-          (phase > 3.14159 ? 1 : -1) *
-          (1 - (phase % 3.14159 / 3.14159 - 0.5).abs() * 1.4).clamp(0, 1);
-      final dy = legLen *
-          (0.4 + 0.6 * (phase % 3.14159 / 3.14159));
-      return Offset(cx + dx, hipY + dy);
-    }
-
-    final footA = legFoot(legA % (2 * 3.14159));
-    final footB = legFoot(legB % (2 * 3.14159));
-    canvas.drawLine(Offset(cx, hipY), footA, body);
-    canvas.drawLine(Offset(cx, hipY), footB, body);
-
-    // Braços contralateral (movem oposto às pernas)
-    final shoulderY = hipY - 18;
-    Offset armHand(double phase) {
-      final dx = 10 *
-          (phase > 3.14159 ? -1 : 1) *
-          (1 - (phase % 3.14159 / 3.14159 - 0.5).abs() * 1.4).clamp(0, 1);
-      final dy = 8 - 4 * (phase % 3.14159 / 3.14159);
-      return Offset(cx + dx, shoulderY + dy);
-    }
-
-    canvas.drawLine(
-      Offset(cx, shoulderY),
-      armHand(legB % (2 * 3.14159)),
-      body,
-    );
-    canvas.drawLine(
-      Offset(cx, shoulderY),
-      armHand(legA % (2 * 3.14159)),
-      body,
-    );
+    final hub = Paint()..color = FigmaColors.brandCyan;
+    canvas.drawCircle(center, 3.5, hub);
   }
 
   @override
-  bool shouldRepaint(covariant _PitfallRunnerPainter oldDelegate) =>
-      oldDelegate.t != t;
-}
-
-class _LinearProgress extends StatelessWidget {
-  final double fraction;
-  final bool isOvertime;
-  const _LinearProgress({required this.fraction, required this.isOvertime});
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: double.infinity,
-      height: 4,
-      child: Stack(
-        children: [
-          const SizedBox.expand(
-            child: ColoredBox(color: FigmaColors.borderDefault),
-          ),
-          LayoutBuilder(
-            builder: (context, constraints) => AnimatedContainer(
-              duration: const Duration(milliseconds: 400),
-              curve: Curves.easeOut,
-              width: constraints.maxWidth * fraction,
-              height: 4,
-              color: isOvertime
-                  ? FigmaColors.brandCyan.withValues(alpha: 0.6)
-                  : FigmaColors.brandCyan,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  bool shouldRepaint(covariant _ClockPainter oldDelegate) =>
+      oldDelegate.progress != progress;
 }

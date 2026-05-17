@@ -1051,7 +1051,15 @@ class _PlanTab extends StatelessWidget {
             selectedWeek: selectedWeek,
             onWeekChanged: onWeekChanged,
           ),
-          _PlanMode.monthly => _MonthlyPlanView(plan: plan),
+          _PlanMode.monthly => _MonthlyPlanView(
+            plan: plan,
+            onWeekTap: (weekNumber) {
+              // Volta pra visão SEMANAL com a semana clicada selecionada.
+              // weekNumber é 1-based; selectedWeek é 0-based.
+              onWeekChanged((weekNumber - 1).clamp(0, plan.weeks.length - 1));
+              onPlanModeChanged(_PlanMode.weekly);
+            },
+          ),
         },
       ],
     );
@@ -1255,8 +1263,9 @@ class _WeeklyPlanView extends StatelessWidget {
 
 class _MonthlyPlanView extends StatelessWidget {
   final Plan plan;
+  final ValueChanged<int> onWeekTap;
 
-  const _MonthlyPlanView({required this.plan});
+  const _MonthlyPlanView({required this.plan, required this.onWeekTap});
 
   @override
   Widget build(BuildContext context) {
@@ -1326,6 +1335,7 @@ class _MonthlyPlanView extends StatelessWidget {
                 : isCurrent
                 ? context.runninPalette.secondary
                 : context.runninPalette.muted,
+            onTap: () => onWeekTap(week.weekNumber),
           );
         }),
       ],
@@ -1821,6 +1831,7 @@ class _MonthlyWeekCard extends StatelessWidget {
   final double totalDistance;
   final String status;
   final Color statusColor;
+  final VoidCallback onTap;
 
   const _MonthlyWeekCard({
     required this.weekNumber,
@@ -1829,6 +1840,7 @@ class _MonthlyWeekCard extends StatelessWidget {
     required this.totalDistance,
     required this.status,
     required this.statusColor,
+    required this.onTap,
   });
 
   @override
@@ -1840,9 +1852,9 @@ class _MonthlyWeekCard extends StatelessWidget {
     final phaseLabel = _phaseFromFocus(focus);
 
     return InkWell(
-      // Clique na week vai pra plan-detail focando essa semana.
-      // (plan-detail tem _jumpToWeek via GlobalKey)
-      onTap: () => context.push('/training/plan-detail?focusWeek=$weekNumber'),
+      // Clique troca pra visão SEMANAL com essa semana selecionada
+      // (handler em _PlanTab faz onWeekChanged + onPlanModeChanged).
+      onTap: onTap,
       child: AppPanel(
         margin: const EdgeInsets.only(bottom: 8),
         borderColor: status == 'ATUAL'

@@ -3,6 +3,7 @@ import { PlanRepository } from '@modules/plans/domain/plan.repository';
 import { RunRepository } from '@modules/runs/domain/run.repository';
 import { CreateNotificationInput, CreateNotificationUseCase } from './create-notification.use-case';
 import { PlanSession } from '@modules/plans/domain/plan.entity';
+import { NotificationRepository } from '../notification.repository';
 
 const DAY_NAMES = ['', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SAB', 'DOM'];
 
@@ -102,6 +103,13 @@ export class EnsureDailyInsightsUseCase {
     private readonly userRepo: UserRepository,
     private readonly planRepo: PlanRepository,
     private readonly runRepo: RunRepository,
+    /**
+     * Repo direto pra `hidratacao`: usa upsert (preserva dismiss/read)
+     * em vez de createIfAbsent, pra que correção de bug de cap (ex:
+     * 6.3L em deploy antigo) se autocorrige no próximo cron sem ter
+     * que esperar o próximo dia.
+     */
+    private readonly notifRepo: NotificationRepository,
   ) {}
 
   async execute(userId: string): Promise<void> {
@@ -256,6 +264,27 @@ export class EnsureDailyInsightsUseCase {
       },
     ];
 
-    await Promise.all(inputs.map(input => this.create.execute(input)));
+    await Promise.all(
+      inputs.map(input => {
+        if (input.type === 'hidratacao') {
+          // hidratacao usa upsert pra que correção de cap se autocorrige
+          // sem aguardar mudança do dedupeKey (próximo dia).
+          return this.notifRepo.upsertPreserveUserState({
+            id: `${input.type}_${input.dedupeKey}`,
+            userId: input.userId,
+            type: input.type,
+            title: input.title,
+            body: input.body,
+            icon: input.icon,
+            timeLabel: input.timeLabel,
+            ctaLabel: input.ctaLabel,
+            ctaRoute: input.ctaRoute,
+            data: input.data,
+            createdAt: new Date().toISOString(),
+          });
+        }
+        return this.create.execute(input);
+      }),
+    );
   }
 }
