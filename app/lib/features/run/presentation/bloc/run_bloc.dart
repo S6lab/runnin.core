@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
@@ -127,14 +128,20 @@ class RunBloc extends Bloc<RunEvent, RunState> {
   final _local = RunLocalDatasource();
 
   StreamSubscription<Position>? _gpsSub;
+  /// Web only: timer de polling pra getCurrentPosition (browser nao
+  /// emite stream sem movimento real). Native usa _gpsSub direto.
+  Timer? _gpsPollTimer;
   Timer? _timer;
   Timer? _flushTimer;
   int _pendingFlushCount = 0;
   bool _coachRequestInFlight = false;
   int _lastCoachKm = 0;
 
-  static const _accuracyThreshold = 15.0; // metros
-  static const _displayAccuracyThreshold = 150.0; // metros
+  // Native: GPS preciso, rejeita pontos ruins.
+  // Web: browser usa WiFi/IP triangulation com accuracy 100-5000m+ —
+  // se rejeitarmos com base no native threshold, mapa nunca abre.
+  static final double _accuracyThreshold = kIsWeb ? 5000.0 : 15.0;
+  static final double _displayAccuracyThreshold = kIsWeb ? 10000.0 : 150.0;
   static const stationaryDistanceThresholdM = 10.0;
   static const _flushBatchSize = 30;
   static const _flushIntervalS = 30;
@@ -220,23 +227,47 @@ class RunBloc extends Bloc<RunEvent, RunState> {
         (_) => add(_TimerTick()),
       );
 
-      // Stream de GPS
-      _gpsSub = Geolocator.getPositionStream(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high,
-          distanceFilter: 5, // só atualiza se moveu > 5m
-        ),
-      ).listen((pos) => add(_GpsUpdate(pos)));
-
-      Geolocator.getCurrentPosition(
+      // GPS: web browser não emite stream confiável (depende de
+      // movimento real >5m, e WiFi-based geolocation tem accuracy 1000m+
+      // que o filter rejeita). Em web usamos polling getCurrentPosition
+      // a cada 3s — sempre entrega um ponto, mesmo parado. Native
+      // mantém stream com distanceFilter (mais eficiente, sem bateria
+      // extra).
+      if (kIsWeb) {
+        // Primeiro ponto imediato
+        Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.high,
+          ),
+        ).then((pos) {
+          if (!isClosed) add(_GpsUpdate(pos));
+        }).catchError((_) {});
+        // Polling a cada 3s
+        _gpsPollTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+          Geolocator.getCurrentPosition(
             locationSettings: const LocationSettings(
               accuracy: LocationAccuracy.high,
             ),
-          )
-          .then((pos) {
+          ).then((pos) {
             if (!isClosed) add(_GpsUpdate(pos));
-          })
-          .catchError((_) {});
+          }).catchError((_) {});
+        });
+      } else {
+        _gpsSub = Geolocator.getPositionStream(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.high,
+            distanceFilter: 5,
+          ),
+        ).listen((pos) => add(_GpsUpdate(pos)));
+
+        Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.high,
+          ),
+        ).then((pos) {
+          if (!isClosed) add(_GpsUpdate(pos));
+        }).catchError((_) {});
+      }
 
       // Flush periódico
       _flushTimer = Timer.periodic(
@@ -421,9 +452,11 @@ class RunBloc extends Bloc<RunEvent, RunState> {
 
   void _stop() {
     _gpsSub?.cancel();
+    _gpsPollTimer?.cancel();
     _timer?.cancel();
     _flushTimer?.cancel();
     _gpsSub = null;
+    _gpsPollTimer = null;
     _timer = null;
     _flushTimer = null;
     _coachRequestInFlight = false;
