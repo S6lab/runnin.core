@@ -1,8 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:google_sign_in/google_sign_in.dart';
 import 'package:runnin/core/router/app_router.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
@@ -13,13 +11,11 @@ import 'package:runnin/features/onboarding/presentation/steps/onboarding_step_go
 import 'package:runnin/features/onboarding/presentation/steps/onboarding_step_identity.dart';
 import 'package:runnin/features/onboarding/presentation/steps/onboarding_step_intro.dart';
 import 'package:runnin/features/onboarding/presentation/steps/onboarding_step_level.dart';
-import 'package:runnin/features/onboarding/presentation/steps/onboarding_step_login.dart';
 import 'package:runnin/features/onboarding/presentation/steps/onboarding_step_medical.dart';
 import 'package:runnin/features/onboarding/presentation/steps/onboarding_step_pace.dart';
 import 'package:runnin/features/onboarding/presentation/steps/onboarding_step_routine.dart';
 import 'package:runnin/features/onboarding/presentation/steps/onboarding_step_wearable.dart';
 import 'package:runnin/shared/widgets/figma/export.dart';
-import 'package:runnin/shared/widgets/otp_resend_button.dart';
 
 class OnboardingPage extends StatefulWidget {
   const OnboardingPage({super.key});
@@ -34,14 +30,12 @@ class _OnboardingPageState extends State<OnboardingPage> {
   final _birthDateCtrl = TextEditingController();
   final _weightCtrl = TextEditingController(text: '70');
   final _heightCtrl = TextEditingController(text: '175');
-  final _phoneCtrl = TextEditingController();
-  final _smsCodeCtrl = TextEditingController();
   final _medicalOtherCtrl = TextEditingController();
   final Set<String> _medicalConditions = {};
 
-  static const _totalSteps = 14; // 3 intro + login + 10 assessment (incl. gender)
-  static const _loginStep = 3;
-  static const _firstAssessmentStep = 4;
+  // 3 intro slides + 10 assessment steps. Login mora em /login (antes do onboarding).
+  static const _totalSteps = 13;
+  static const _firstAssessmentStep = 3;
 
   int _step = 0;
   String _level = 'iniciante';
@@ -53,14 +47,8 @@ class _OnboardingPageState extends State<OnboardingPage> {
   String? _sleepTime;
   String? _gender; // 'male' | 'female' | 'other' | 'na'
   bool _hasWearable = false;
-  bool _authLoading = false;
   bool _submitting = false;
-  String? _phoneVerificationId;
-  int? _phoneResendToken;
-  ConfirmationResult? _phoneConfirmationResult;
   String? _error;
-  String? _message;
-  final _resendCtrl = OtpResendController();
 
   @override
   void initState() {
@@ -69,8 +57,6 @@ class _OnboardingPageState extends State<OnboardingPage> {
     _birthDateCtrl.addListener(_handleFieldChange);
     _weightCtrl.addListener(_handleFieldChange);
     _heightCtrl.addListener(_handleFieldChange);
-    _phoneCtrl.addListener(_handleFieldChange);
-    _smsCodeCtrl.addListener(_handleFieldChange);
   }
 
   @override
@@ -79,228 +65,19 @@ class _OnboardingPageState extends State<OnboardingPage> {
     _birthDateCtrl.removeListener(_handleFieldChange);
     _weightCtrl.removeListener(_handleFieldChange);
     _heightCtrl.removeListener(_handleFieldChange);
-    _phoneCtrl.removeListener(_handleFieldChange);
-    _smsCodeCtrl.removeListener(_handleFieldChange);
     _nameCtrl.dispose();
     _birthDateCtrl.dispose();
     _weightCtrl.dispose();
     _heightCtrl.dispose();
-    _phoneCtrl.dispose();
-    _smsCodeCtrl.dispose();
     _medicalOtherCtrl.dispose();
     super.dispose();
-  }
-
-  Future<void> _signInWithGoogle() async {
-    setState(() {
-      _authLoading = true;
-      _error = null;
-      _message = null;
-    });
-
-    try {
-      if (kIsWeb) {
-        await FirebaseAuth.instance.signInWithPopup(GoogleAuthProvider());
-      } else {
-        final googleUser = await GoogleSignIn().signIn();
-        if (googleUser == null) {
-          if (mounted) setState(() => _authLoading = false);
-          return;
-        }
-        final googleAuth = await googleUser.authentication;
-        final credential = GoogleAuthProvider.credential(
-          accessToken: googleAuth.accessToken,
-          idToken: googleAuth.idToken,
-        );
-        await FirebaseAuth.instance.signInWithCredential(credential);
-      }
-      await _afterAuthenticated();
-    } on FirebaseAuthException catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _error = _friendlyAuthError(e);
-        _authLoading = false;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _error = 'Nao foi possivel entrar com Google agora.';
-        _authLoading = false;
-      });
-    }
-  }
-
-  Future<void> _handlePhonePrimary() async {
-    if (_phoneConfirmationResult != null || _phoneVerificationId != null) {
-      await _confirmPhoneCode();
-    } else {
-      await _sendPhoneCode();
-    }
-  }
-
-  Future<void> _sendPhoneCode({bool resend = false}) async {
-    final phoneNumber = _normalizePhoneNumber(_phoneCtrl.text.trim());
-    if (phoneNumber == null) {
-      setState(() {
-        _error = 'Informe um telefone valido com DDD. Ex.: 11999999999';
-        _message = null;
-      });
-      return;
-    }
-
-    setState(() {
-      _authLoading = true;
-      _error = null;
-      _message = null;
-      if (!resend) {
-        _phoneVerificationId = null;
-        _phoneConfirmationResult = null;
-        _phoneResendToken = null;
-      }
-    });
-
-    try {
-      final auth = FirebaseAuth.instance;
-      if (kIsWeb) {
-        _phoneConfirmationResult = await auth.signInWithPhoneNumber(
-          phoneNumber,
-        );
-        if (!mounted) return;
-        setState(() {
-          _message = resend ? 'Novo codigo enviado por SMS.' : 'Codigo enviado por SMS.';
-          _authLoading = false;
-        });
-        if (resend) _resendCtrl.restart();
-      } else {
-        await auth.verifyPhoneNumber(
-          phoneNumber: phoneNumber,
-          forceResendingToken: _phoneResendToken,
-          verificationCompleted: (credential) async {
-            try {
-              await auth.signInWithCredential(credential);
-              await _afterAuthenticated();
-            } on FirebaseAuthException catch (e) {
-              if (!mounted) return;
-              setState(() {
-                _error = _friendlyAuthError(e);
-                _authLoading = false;
-              });
-            }
-          },
-          verificationFailed: (e) {
-            if (!mounted) return;
-            setState(() {
-              _error = _friendlyAuthError(e);
-              _authLoading = false;
-            });
-          },
-          codeSent: (verificationId, resendToken) {
-            if (!mounted) return;
-            setState(() {
-              _phoneVerificationId = verificationId;
-              _phoneResendToken = resendToken;
-              _message = resend ? 'Novo codigo enviado por SMS.' : 'Codigo enviado por SMS.';
-              _authLoading = false;
-            });
-            _resendCtrl.restart();
-          },
-          codeAutoRetrievalTimeout: (verificationId) {
-            _phoneVerificationId = verificationId;
-          },
-        );
-      }
-    } on FirebaseAuthException catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _error = _friendlyAuthError(e);
-        _authLoading = false;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _error = 'Nao foi possivel enviar o codigo agora.';
-        _authLoading = false;
-      });
-    }
-  }
-
-  Future<void> _confirmPhoneCode() async {
-    final code = _smsCodeCtrl.text.trim();
-    if (code.length < 6) {
-      setState(() {
-        _error = 'Digite o codigo de 6 digitos recebido por SMS.';
-        _message = null;
-      });
-      return;
-    }
-
-    setState(() {
-      _authLoading = true;
-      _error = null;
-      _message = null;
-    });
-
-    try {
-      final auth = FirebaseAuth.instance;
-      if (kIsWeb) {
-        final confirmation = _phoneConfirmationResult;
-        if (confirmation == null) {
-          throw FirebaseAuthException(code: 'invalid-verification-id');
-        }
-        await confirmation.confirm(code);
-      } else {
-        final verificationId = _phoneVerificationId;
-        if (verificationId == null) {
-          throw FirebaseAuthException(code: 'invalid-verification-id');
-        }
-        final credential = PhoneAuthProvider.credential(
-          verificationId: verificationId,
-          smsCode: code,
-        );
-        await auth.signInWithCredential(credential);
-      }
-      await _afterAuthenticated();
-    } on FirebaseAuthException catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _error = _friendlyAuthError(e);
-        _authLoading = false;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _error = 'Nao foi possivel validar o codigo agora.';
-        _authLoading = false;
-      });
-    }
-  }
-
-  Future<void> _afterAuthenticated() async {
-    final profile = await _ds.provisionMe();
-    if (!mounted) return;
-
-    if (profile.onboarded) {
-      markOnboardingDone();
-      context.go('/home');
-      return;
-    }
-
-    markOnboardingPending();
-    setState(() {
-      _step = _firstAssessmentStep;
-      _authLoading = false;
-      _message = null;
-      _error = null;
-    });
   }
 
   Future<void> _submit() async {
     if (!_canProceed() || _submitting) return;
     if (FirebaseAuth.instance.currentUser == null) {
-      setState(() {
-        _step = _loginStep;
-        _error = 'Entre para salvar seu plano.';
-      });
+      // Router guard já garante que estamos logados ao chegar aqui; defensivo.
+      context.go('/login');
       return;
     }
 
@@ -310,15 +87,11 @@ class _OnboardingPageState extends State<OnboardingPage> {
     });
     _doSubmit();
     if (!mounted) return;
-    // Gate freemium: anônimo ou não-premium vai pro paywall.
-    // Se assinar (ou continuar grátis), próximo destino é /home (sem plano AI).
-    // Premium real → plan-loading e geração do plano.
-    final user = FirebaseAuth.instance.currentUser;
-    final isAnon = user?.isAnonymous ?? false;
+    // Gate freemium: não-premium vai pro paywall. Premium → plan-loading.
     final profile = await _ds.getMe().catchError((_) => null);
     final premium = profile?.premium ?? false;
     if (!mounted) return;
-    if (isAnon || !premium) {
+    if (!premium) {
       context.go('/paywall?next=/home');
     } else {
       context.push('/plan-loading');
@@ -398,15 +171,13 @@ class _OnboardingPageState extends State<OnboardingPage> {
   Widget _buildHeader(BuildContext context) {
     final palette = context.runninPalette;
     final canGoBack = _step > 0;
-    final showSkip = _step < _loginStep;
+    final showSkip = _step < _firstAssessmentStep;
 
     return Row(
       children: [
         if (canGoBack)
           OutlinedButton(
-            onPressed: _authLoading || _submitting
-                ? null
-                : () => setState(() => _step--),
+            onPressed: _submitting ? null : () => setState(() => _step--),
             style: OutlinedButton.styleFrom(
               minimumSize: const Size(86, 38),
               padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -433,7 +204,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
         if (showSkip) ...[
           const SizedBox(width: 18),
           TextButton(
-            onPressed: _authLoading || _submitting ? null : _skipIntro,
+            onPressed: _submitting ? null : _skipIntro,
             child: const Text('PULAR'),
           ),
         ] else
@@ -448,62 +219,49 @@ class _OnboardingPageState extends State<OnboardingPage> {
       case 1:
       case 2:
         return OnboardingStepIntro(slide: kOnboardingIntroSlides[_step]);
-      case _loginStep:
-        return OnboardingStepLogin(
-          phoneController: _phoneCtrl,
-          smsCodeController: _smsCodeCtrl,
-          codeRequested:
-              _phoneConfirmationResult != null || _phoneVerificationId != null,
-          loading: _authLoading,
-          onGoogleSignIn: _signInWithGoogle,
-          resendController: _resendCtrl,
-          onResendCode: () => _sendPhoneCode(resend: true),
-          error: _error,
-          message: _message,
-        );
-      case 4:
+      case 3:
         return OnboardingStepLevel(
           selected: _level,
           onSelect: (value) => setState(() => _level = value),
         );
-      case 5:
+      case 4:
         return OnboardingStepIdentity(
           nameController: _nameCtrl,
           birthDateController: _birthDateCtrl,
         );
-      case 6:
+      case 5:
         return OnboardingStepGender(
           selected: _gender,
           onSelect: (value) => setState(() => _gender = value),
         );
-      case 7:
+      case 6:
         return OnboardingStepBody(
           weightController: _weightCtrl,
           heightController: _heightCtrl,
         );
-      case 8:
+      case 7:
         return OnboardingStepMedical(
           selected: _medicalConditions,
           otherController: _medicalOtherCtrl,
           onToggle: _toggleMedicalCondition,
           onAddOther: _addOtherMedicalCondition,
         );
-      case 9:
+      case 8:
         return OnboardingStepGoal(
           selectedGoal: _goal,
           onGoalSelect: (value) => setState(() => _goal = value),
         );
-      case 10:
+      case 9:
         return OnboardingStepFrequency(
           frequency: _frequency,
           onFreqChange: (value) => setState(() => _frequency = value),
         );
-      case 11:
+      case 10:
         return OnboardingStepPace(
           selected: _pace,
           onSelect: (value) => setState(() => _pace = value),
         );
-      case 12:
+      case 11:
         return OnboardingStepRoutine(
           selectedPeriod: _runPeriod,
           selectedWakeTime: _wakeTime,
@@ -512,7 +270,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
           onWakeTimeSelect: (v) => setState(() => _wakeTime = v),
           onSleepTimeSelect: (v) => setState(() => _sleepTime = v),
         );
-      case 13:
+      case 12:
         return OnboardingStepWearable(
           selected: _hasWearable,
           onSelect: (value) => setState(() => _hasWearable = value),
@@ -525,14 +283,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
   Widget _buildNav(BuildContext context) {
     final palette = context.runninPalette;
     final isLastDataStep = _step == _totalSteps - 1;
-    final isLogin = _step == _loginStep;
-    final label = isLogin
-        ? (_phoneConfirmationResult != null || _phoneVerificationId != null
-              ? 'VALIDAR CODIGO'
-              : 'ENVIAR CODIGO')
-        : isLastDataStep
-        ? 'CRIAR MEU PLANO'
-        : 'CONTINUAR';
+    final label = isLastDataStep ? 'CRIAR MEU PLANO' : 'CONTINUAR';
 
     return Column(
       children: [
@@ -541,13 +292,9 @@ class _OnboardingPageState extends State<OnboardingPage> {
           height: 52,
           child: ElevatedButton(
             onPressed: _canProceed()
-                ? (isLogin
-                      ? _handlePhonePrimary
-                      : isLastDataStep
-                      ? _submit
-                      : _nextStep)
+                ? (isLastDataStep ? _submit : _nextStep)
                 : null,
-            child: _authLoading || _submitting
+            child: _submitting
                 ? SizedBox(
                     width: 18,
                     height: 18,
@@ -559,7 +306,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
                 : Text('$label /'),
           ),
         ),
-        if (_step == 8)
+        if (_step == 7)
           Padding(
             padding: const EdgeInsets.only(top: 8),
             child: Text(
@@ -568,25 +315,29 @@ class _OnboardingPageState extends State<OnboardingPage> {
               textAlign: TextAlign.center,
             ),
           ),
+        if (_error != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(
+              _error!,
+              style: context.runninType.bodySm.copyWith(color: palette.error),
+              textAlign: TextAlign.center,
+            ),
+          ),
       ],
     );
   }
 
   bool _canProceed() {
-    if (_authLoading || _submitting) return false;
+    if (_submitting) return false;
 
     switch (_step) {
-      case _loginStep:
-        if (_phoneConfirmationResult != null || _phoneVerificationId != null) {
-          return _smsCodeCtrl.text.trim().length >= 6;
-        }
-        return _normalizePhoneNumber(_phoneCtrl.text.trim()) != null;
-      case 5:
+      case 4:
         return _nameCtrl.text.trim().isNotEmpty &&
             _isValidBirthDate(_birthDateCtrl.text.trim());
-      case 6:
+      case 5:
         return _gender != null;
-      case 7:
+      case 6:
         return _weightCtrl.text.trim().isNotEmpty &&
             _heightCtrl.text.trim().isNotEmpty;
       default:
@@ -618,34 +369,6 @@ class _OnboardingPageState extends State<OnboardingPage> {
     }
   }
 
-  String? _normalizePhoneNumber(String input) {
-    final digits = input.replaceAll(RegExp(r'[^0-9+]'), '');
-    if (digits.isEmpty) return null;
-    if (digits.startsWith('+') && digits.length >= 12) return digits;
-    if (digits.startsWith('55') && digits.length >= 12) return '+$digits';
-    if (digits.length >= 10 && digits.length <= 11) return '+55$digits';
-    return null;
-  }
-
-  String _friendlyAuthError(FirebaseAuthException e) {
-    switch (e.code) {
-      case 'invalid-phone-number':
-        return 'O numero de telefone nao e valido.';
-      case 'session-expired':
-        return 'O codigo expirou. Solicite um novo SMS.';
-      case 'invalid-verification-code':
-        return 'O codigo informado esta incorreto.';
-      case 'operation-not-allowed':
-        return 'Esse metodo de login ainda nao esta habilitado no Firebase.';
-      case 'too-many-requests':
-        return 'Muitas tentativas. Aguarde um pouco e tente de novo.';
-      case 'popup-closed-by-user':
-        return 'Login cancelado antes de concluir.';
-      default:
-        return 'Nao foi possivel concluir o login agora.';
-    }
-  }
-
   void _toggleMedicalCondition(String value) {
     setState(() {
       if (_medicalConditions.contains(value)) {
@@ -673,22 +396,15 @@ class _OnboardingPageState extends State<OnboardingPage> {
   }
 
   void _skipIntro() {
-    setState(() {
-      _step = FirebaseAuth.instance.currentUser == null
-          ? _loginStep
-          : _firstAssessmentStep;
-    });
+    setState(() => _step = _firstAssessmentStep);
   }
 
   void _handleSwipe(DragEndDetails details) {
-    if (_authLoading || _submitting) return;
+    if (_submitting) return;
     final velocity = details.primaryVelocity ?? 0;
     if (velocity > 300 && _step > 0) {
       setState(() => _step--);
-    } else if (velocity < -300 &&
-        _step != _loginStep &&
-        _step < _totalSteps - 1 &&
-        _canProceed()) {
+    } else if (velocity < -300 && _step < _totalSteps - 1 && _canProceed()) {
       _nextStep();
     }
   }

@@ -31,6 +31,61 @@ function nextSessionFromToday(sessions: PlanSession[]): PlanSession | null {
   );
 }
 
+type SessionKind = 'long' | 'tempo' | 'interval' | 'easy' | 'rest';
+
+function classifySession(session: PlanSession | null): SessionKind {
+  if (!session) return 'rest';
+  const t = (session.type ?? '').toLowerCase();
+  if (t.includes('long')) return 'long';
+  if (t.includes('tempo')) return 'tempo';
+  if (t.includes('interval')) return 'interval';
+  if (t.includes('easy') || t.includes('regenerativ') || t.includes('recovery')) return 'easy';
+  return 'easy';
+}
+
+function nutritionBodyFor(session: PlanSession | null, kind: SessionKind): string {
+  if (!session) {
+    return 'Sem sessão marcada hoje — foco em recuperação: refeição leve, vegetais, proteína magra e bastante água ao longo do dia.';
+  }
+  const km = session.distanceKm ? `${session.distanceKm}km` : 'a sessão';
+  switch (kind) {
+    case 'long':
+      return `Hoje é Long Run (${km}). Faça refeição rica em carbo 2-3h antes (arroz/batata/aveia + fruta), evite gordura e fibra pesada. Leve gel ou banana se passar de 60min.`;
+    case 'tempo':
+      return `Tempo Run hoje (${km}). Carbo de fácil digestão 90min antes (pão branco + mel, banana com aveia). Evite proteína pesada — você vai trabalhar em ritmo forte.`;
+    case 'interval':
+      return `Intervalado hoje (${km}). Carbo simples 45-60min antes (banana, tâmaras ou pão com geleia). Hidrate bem antes — você vai precisar de glicogênio disponível.`;
+    case 'easy':
+    default:
+      return `Easy Run hoje (${km}). Refeição leve 45-60min antes, evite gordura e fibra exagerada. Pode ser fruta + iogurte ou pão com queijo branco.`;
+  }
+}
+
+function hydrationBodyFor(
+  session: PlanSession | null,
+  kind: SessionKind,
+  goalLiters: number | null,
+): string {
+  if (goalLiters == null) {
+    return 'Informe seu peso no perfil para o app calcular sua meta diária de hidratação.';
+  }
+  const goal = goalLiters.toFixed(1);
+  if (!session) {
+    return `Meta diária: ${goal}L. Sem treino hoje — distribua o consumo ao longo do dia e registre os copos.`;
+  }
+  switch (kind) {
+    case 'long':
+      return `Meta hoje: ${goal}L + 500ml extra antes do Long Run e 150-200ml a cada 20min em corrida. Eletrólito ao final ajuda recuperação.`;
+    case 'tempo':
+      return `Meta hoje: ${goal}L. Pré-load de 400ml 60-90min antes do Tempo Run, mais 250ml 15min antes. Evite encher o estômago no aquecimento.`;
+    case 'interval':
+      return `Meta hoje: ${goal}L. Beba 300ml 30min antes do intervalado e mantenha gole pequeno entre tiros. Reidrate forte no pós.`;
+    case 'easy':
+    default:
+      return `Meta diária: ${goal}L. Para o Easy Run, 250ml 30min antes basta. Registre os copos durante o dia.`;
+  }
+}
+
 /**
  * Garante que as 7 notificações diárias do coach existem para o usuário no dia atual.
  * Idempotente: cada notificação tem id `${type}_${YYYY-MM-DD}` — chamadas repetidas
@@ -90,10 +145,11 @@ export class EnsureDailyInsightsUseCase {
         dedupeKey,
         title: 'PREPARO NUTRICIONAL',
         icon: 'restaurant_outlined',
-        timeLabel: todaySession ? 'ANTES' : 'PENDENTE',
-        body: todaySession
-          ? `Para ${todaySession.type}, faça uma refeição leve 45-60 minutos antes e evite exagerar em fibra ou gordura.`
-          : 'Sem sessão marcada hoje. Para corrida livre, mantenha refeição leve e evite testar alimentos novos.',
+        timeLabel: todaySession ? 'ANTES' : 'RECUP.',
+        body: nutritionBodyFor(todaySession, classifySession(todaySession)),
+        data: todaySession
+          ? { sessionType: todaySession.type, sessionDistanceKm: todaySession.distanceKm }
+          : undefined,
       },
       {
         userId,
@@ -101,13 +157,19 @@ export class EnsureDailyInsightsUseCase {
         dedupeKey,
         title: 'HIDRATACAO',
         icon: 'water_drop_outlined',
-        timeLabel: hydrationGoalLiters == null ? 'SEM META' : 'HOJE',
-        body: hydrationGoalLiters == null
-          ? 'Informe seu peso para o app calcular uma meta diária de hidratação.'
-          : `Meta estimada: ${hydrationGoalLiters.toFixed(1)}L hoje. Registre consumo para o coach acompanhar.`,
+        timeLabel: hydrationGoalLiters == null
+          ? 'SEM META'
+          : todaySession ? 'TREINO' : 'HOJE',
+        body: hydrationBodyFor(todaySession, classifySession(todaySession), hydrationGoalLiters),
         ctaLabel: hydrationGoalLiters == null ? 'INFORMAR PESO' : undefined,
         ctaRoute: hydrationGoalLiters == null ? '/profile/edit' : undefined,
-        data: hydrationGoalLiters == null ? undefined : { hydrationGoalLiters },
+        data: hydrationGoalLiters == null
+          ? undefined
+          : {
+              hydrationGoalLiters,
+              sessionType: todaySession?.type,
+              sessionDistanceKm: todaySession?.distanceKm,
+            },
       },
       {
         userId,

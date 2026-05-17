@@ -802,12 +802,13 @@ class _NotificationsHubState extends State<_NotificationsHub> {
       return !claimed.contains(n.type);
     }).toList();
 
-    // Hidratação aparece só no STATUS CORPORAL (wired com log de copo).
-    // Removido daqui pra evitar duplicação. `hidratacao` notifications são
-    // ignoradas no display — quando o user precisar agir, vê no STATUS.
-    // ignore: unused_local_variable
-    final _ = hidratacao;
     final groups = <_NotifGroup>[
+      _NotifGroup(
+        label: 'HIDRATAÇÃO',
+        icon: Icons.water_drop_outlined,
+        accent: const Color(0xFF4FB3F0),
+        items: hidratacao,
+      ),
       _NotifGroup(
         label: 'PREPARO NUTRICIONAL',
         icon: Icons.restaurant_outlined,

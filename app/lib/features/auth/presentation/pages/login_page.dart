@@ -101,20 +101,6 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
-  Future<void> _signInAnonymously() async {
-    setState(() { _loading = true; _error = null; });
-    try {
-      await FirebaseAuth.instance.signInAnonymously();
-      await UserRemoteDatasource().provisionMe();
-      await _navigateAfterAuth();
-    } catch (_) {
-      setState(() {
-        _error = 'Não foi possível entrar no modo anônimo.';
-        _loading = false;
-      });
-    }
-  }
-
   Future<void> _beginPhoneAuth() async {
     setState(() { _loading = true; _error = null; });
     final phoneNumber = _normalizePhoneNumber(_phoneController.text.trim());
@@ -286,16 +272,6 @@ class _LoginPageState extends State<LoginPage> {
                 if (!_phoneMode) ...[
                   FigmaGoogleSignInButton(
                     onPressed: _loading ? null : _signInWithGoogle,
-                  ),
-                  const SizedBox(height: 12),
-                  OutlinedButton(
-                    onPressed: _loading ? null : _signInAnonymously,
-                    style: OutlinedButton.styleFrom(
-                      minimumSize: const Size(double.infinity, 52),
-                      side: BorderSide(color: palette.border, width: 1.041),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-                    ),
-                    child: const Text('CONTINUAR ANONIMAMENTE'),
                   ),
                   const SizedBox(height: 28),
                   const FigmaFormFieldLabel(text: 'OU DIGITE SEU TELEFONE'),

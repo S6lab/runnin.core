@@ -27,14 +27,6 @@ void main() async {
   final isAdminEntry =
       Uri.base.path == '/admin' || Uri.base.path.startsWith('/admin/');
 
-  if (!isAdminEntry && FirebaseAuth.instance.currentUser == null) {
-    try {
-      await FirebaseAuth.instance.signInAnonymously();
-    } catch (_) {
-      // Fallback para fluxo explícito de login caso o auth anônimo falhe.
-    }
-  }
-
   if (!isAdminEntry && FirebaseAuth.instance.currentUser != null) {
     try {
       await UserRemoteDatasource().provisionMe();

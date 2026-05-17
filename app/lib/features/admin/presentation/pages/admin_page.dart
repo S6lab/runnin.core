@@ -1029,45 +1029,49 @@ class _DrivePanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        _PromptsConsoleEntry(canRead: session.canRead),
-        const SizedBox(height: 8),
-        _CoachPromptPanel(
-          config: coachConfig,
-          promptCtrl: coachPromptCtrl,
-          voiceCtrl: coachVoiceCtrl,
-          languageCtrl: coachLanguageCtrl,
-          speakingRateCtrl: coachSpeakingRateCtrl,
-          elevenLabsModelCtrl: elevenLabsModelCtrl,
-          elevenLabsOutputCtrl: elevenLabsOutputCtrl,
-          elevenLabsBrunoCtrl: elevenLabsBrunoCtrl,
-          elevenLabsClaraCtrl: elevenLabsClaraCtrl,
-          elevenLabsLunaCtrl: elevenLabsLunaCtrl,
-          loading: loadingCoachConfig,
-          saving: savingCoachConfig,
-          canEdit: session.canUpload,
-          onReload: onReloadCoachConfig,
-          onSave: onSaveCoachConfig,
-        ),
-        const SizedBox(height: 14),
-        _UsersPanel(canEdit: session.canUpload),
-        const SizedBox(height: 14),
-        const _RagStatusPanel(),
-        const SizedBox(height: 14),
-        Expanded(
-          child: _FilesSection(
-            files: files,
-            session: session,
-            loadingFiles: loadingFiles,
-            uploading: uploading,
-            uploadProgress: uploadProgress,
-            onUpload: onUpload,
-            onRefresh: onRefresh,
-            onDelete: onDelete,
+    return SingleChildScrollView(
+      padding: const EdgeInsets.only(bottom: 24),
+      child: Column(
+        children: [
+          _PromptsConsoleEntry(canRead: session.canRead),
+          const SizedBox(height: 8),
+          _CoachPromptPanel(
+            config: coachConfig,
+            promptCtrl: coachPromptCtrl,
+            voiceCtrl: coachVoiceCtrl,
+            languageCtrl: coachLanguageCtrl,
+            speakingRateCtrl: coachSpeakingRateCtrl,
+            elevenLabsModelCtrl: elevenLabsModelCtrl,
+            elevenLabsOutputCtrl: elevenLabsOutputCtrl,
+            elevenLabsBrunoCtrl: elevenLabsBrunoCtrl,
+            elevenLabsClaraCtrl: elevenLabsClaraCtrl,
+            elevenLabsLunaCtrl: elevenLabsLunaCtrl,
+            loading: loadingCoachConfig,
+            saving: savingCoachConfig,
+            canEdit: session.canUpload,
+            onReload: onReloadCoachConfig,
+            onSave: onSaveCoachConfig,
           ),
-        ),
-      ],
+          const SizedBox(height: 14),
+          _UsersPanel(canEdit: session.canUpload),
+          const SizedBox(height: 14),
+          const _RagStatusPanel(),
+          const SizedBox(height: 14),
+          SizedBox(
+            height: 520,
+            child: _FilesSection(
+              files: files,
+              session: session,
+              loadingFiles: loadingFiles,
+              uploading: uploading,
+              uploadProgress: uploadProgress,
+              onUpload: onUpload,
+              onRefresh: onRefresh,
+              onDelete: onDelete,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
