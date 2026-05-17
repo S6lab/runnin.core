@@ -469,43 +469,19 @@ class _ProfilePageState extends State<ProfilePage> {
                             ),
                           ),
                           const SizedBox(height: 24),
-                          const _FieldLabel(label: 'PERFIL'),
+                          const _FieldLabel(label: 'INFORMAÇÕES PESSOAIS'),
                           const SizedBox(height: 8),
-                          _ProfileEditor(
+                          // Editor enxuto: só nome, peso, altura, telefone, email.
+                          // Demais campos (nível, objetivo, freq, gênero, BPM,
+                          // wearable, rotina) ficam em /onboarding (redo=1)
+                          // pra refazer a personalização completa do plano.
+                          _ProfileEditorMinimal(
                             nameController: _nameCtrl,
-                            birthDateController: _birthDateCtrl,
                             weightController: _weightCtrl,
                             heightController: _heightCtrl,
-                            restingBpmController: _restingBpmCtrl,
-                            maxBpmController: _maxBpmCtrl,
-                            selectedLevel: _level,
-                            selectedGoal: _goal,
-                            frequency: _frequency,
-                            hasWearable: _hasWearable,
-                            gender: _gender,
-                            runPeriod: _runPeriod,
-                            wakeTime: _wakeTime,
-                            sleepTime: _sleepTime,
-                            levels: _levels,
-                            goals: _goals,
-                            frequencyOptions: _frequencyOptions,
+                            phone: FirebaseAuth.instance.currentUser?.phoneNumber,
+                            email: FirebaseAuth.instance.currentUser?.email,
                             enabled: _editing,
-                            onLevelChanged: (value) =>
-                                setState(() => _level = value),
-                            onGoalChanged: (value) =>
-                                setState(() => _goal = value),
-                            onFrequencyChanged: (value) =>
-                                setState(() => _frequency = value),
-                            onWearableChanged: (value) =>
-                                setState(() => _hasWearable = value),
-                            onGenderChanged: (value) =>
-                                setState(() => _gender = value),
-                            onRunPeriodChanged: (value) =>
-                                setState(() => _runPeriod = value),
-                            onWakeTimeChanged: (value) =>
-                                setState(() => _wakeTime = value),
-                            onSleepTimeChanged: (value) =>
-                                setState(() => _sleepTime = value),
                           ),
                           if (_saveMessage != null ||
                               (_error != null && _profile != null)) ...[
@@ -562,37 +538,10 @@ class _ProfilePageState extends State<ProfilePage> {
                               ],
                             ),
                           ],
-                          // PLANO, SKIN, TAMANHO DA FONTE foram movidos:
-                          // - PLANO/upgrade vive no /paywall (acesso via menu).
-                          // - SKIN + TAMANHO DA FONTE viraram settings em
-                          //   /profile/settings/units (a expor depois).
-                          // Edit profile mantém só dados pessoais + conta.
-                          const SizedBox(height: 32),
-                          const _FieldLabel(label: 'CONTA'),
-                          const SizedBox(height: 8),
-                          GestureDetector(
-                            onTap: () => FirebaseAuth.instance.signOut(),
-                            child: AppPanel(
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    Icons.logout,
-                                    size: 16,
-                                    color: palette.error,
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Text(
-                                    'SAIR',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w500,
-                                      color: palette.error,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
+                          // Conta+acesso, sair e excluir conta vivem em
+                          // /profile/access. Wearable + dados de treino
+                          // foram tirados daqui (ficam em onboarding ou
+                          // settings dedicadas).
                           const SizedBox(height: 24),
                         ],
                       ),
@@ -1171,3 +1120,124 @@ class _AnonPromoBanner extends StatelessWidget {
   }
 }
 
+
+/// Editor enxuto de perfil — só dados pessoais (nome, peso, altura) +
+/// telefone e email (read-only, gerenciados em /profile/access).
+class _ProfileEditorMinimal extends StatelessWidget {
+  final TextEditingController nameController;
+  final TextEditingController weightController;
+  final TextEditingController heightController;
+  final String? phone;
+  final String? email;
+  final bool enabled;
+
+  const _ProfileEditorMinimal({
+    required this.nameController,
+    required this.weightController,
+    required this.heightController,
+    this.phone,
+    this.email,
+    this.enabled = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    Widget readOnlyRow(String label, String? value, String hint) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            FigmaFormFieldLabel(text: label),
+            const SizedBox(height: 6),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+              decoration: BoxDecoration(
+                color: palette.surface,
+                border: Border.all(color: palette.border, width: 1.041),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      value?.isNotEmpty == true ? value! : hint,
+                      style: TextStyle(
+                        color: value?.isNotEmpty == true
+                            ? palette.text
+                            : palette.muted,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                  Icon(Icons.lock_outline, size: 14, color: palette.muted),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const FigmaFormFieldLabel(text: 'NOME'),
+        const SizedBox(height: 6),
+        FigmaFormTextField(
+          controller: nameController,
+          enabled: enabled,
+          placeholder: 'Seu nome',
+          textCapitalization: TextCapitalization.words,
+        ),
+        const SizedBox(height: 14),
+        Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const FigmaFormFieldLabel(text: 'PESO (kg)'),
+                  const SizedBox(height: 6),
+                  FigmaFormTextField(
+                    controller: weightController,
+                    enabled: enabled,
+                    keyboardType: TextInputType.number,
+                    placeholder: '70',
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const FigmaFormFieldLabel(text: 'ALTURA (cm)'),
+                  const SizedBox(height: 6),
+                  FigmaFormTextField(
+                    controller: heightController,
+                    enabled: enabled,
+                    keyboardType: TextInputType.number,
+                    placeholder: '175',
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        readOnlyRow('TELEFONE', phone, 'sem telefone — altere em conta & acesso'),
+        readOnlyRow('EMAIL', email, 'sem email — altere em conta & acesso'),
+        const SizedBox(height: 12),
+        Text(
+          'Outras informações que afetam seu plano (objetivo, frequência, condições médicas, horários) ficam no onboarding — refazer ali se quiser mudar.',
+          style: context.runninType.bodySm.copyWith(
+            color: palette.muted,
+            height: 1.5,
+          ),
+        ),
+      ],
+    );
+  }
+}
