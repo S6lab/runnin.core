@@ -6,8 +6,11 @@ const GEMINI_LIVE_URL = 'wss://generativelanguage.googleapis.com/ws/google.ai.ge
 // modelos Live ativos: gemini-2.5-flash-preview-native-audio-dialog
 // (audio nativo) ou gemini-live-2.5-flash-preview. Mantemos via env pra
 // flipar sem deploy se Google mudar de novo.
+// Modelo Live estável v1beta/bidiGenerateContent: gemini-2.0-flash-live-001.
+// Anteriormente tentamos gemini-live-2.5-flash-preview (404 not found) e
+// gemini-2.0-flash-exp (limitado). Override via GEMINI_LIVE_MODEL env.
 const DEFAULT_MODEL = process.env['GEMINI_LIVE_MODEL']?.trim()
-  || 'models/gemini-live-2.5-flash-preview';
+  || 'models/gemini-2.0-flash-live-001';
 
 export interface GeminiLiveConfig {
   model?: string;

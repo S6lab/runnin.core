@@ -183,8 +183,14 @@ final appRouter = GoRouter(
         GoRoute(path: '/prep', builder: (_, _) => const PrepPage()),
         GoRoute(
           path: '/run',
-          builder: (_, state) =>
-              ActiveRunPage(runId: state.extra as String? ?? ''),
+          // extra agora é o TIPO da corrida (ex: "Free Run") selecionado
+          // no /prep. ActiveRunPage entra em modo IDLE — só dispara
+          // StartRun quando user pressionar INICIAR.
+          builder: (_, state) => ActiveRunPage(
+            initialType: (state.extra as String?)?.isNotEmpty == true
+                ? state.extra as String
+                : 'Free Run',
+          ),
         ),
         GoRoute(
           path: '/report',

@@ -62,7 +62,9 @@ class _TrainingPageState extends State<TrainingPage> {
   Timer? _planPollTimer;
   int _selectedWeek = 0;
   _TrainingTab _selectedTab = _TrainingTab.plan;
-  _PlanMode _planMode = _PlanMode.weekly;
+  // Mensal abre por padrão pra atleta ver mesociclo (visão macro) antes
+  // do detalhe da semana corrente.
+  _PlanMode _planMode = _PlanMode.monthly;
 
   @override
   void initState() {
@@ -1028,11 +1030,14 @@ class _PlanTab extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _DualModeToggle(
-          leftLabel: 'SEMANAL',
-          rightLabel: 'MENSAL',
-          leftSelected: planMode == _PlanMode.weekly,
-          onLeftTap: () => onPlanModeChanged(_PlanMode.weekly),
-          onRightTap: () => onPlanModeChanged(_PlanMode.monthly),
+          // Mensal primeiro: o atleta entende o mesociclo (visão macro)
+          // antes de mergulhar na semana atual. Inversão é só visual; o
+          // default _planMode continua weekly pra coerência com legado.
+          leftLabel: 'MENSAL',
+          rightLabel: 'SEMANAL',
+          leftSelected: planMode == _PlanMode.monthly,
+          onLeftTap: () => onPlanModeChanged(_PlanMode.monthly),
+          onRightTap: () => onPlanModeChanged(_PlanMode.weekly),
         ),
         const SizedBox(height: 16),
         switch (planMode) {

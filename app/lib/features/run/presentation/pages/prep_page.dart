@@ -12,7 +12,9 @@ import 'package:runnin/features/run/data/datasources/run_coach_remote_datasource
 import 'package:runnin/features/run/presentation/bloc/run_bloc.dart';
 import 'package:runnin/features/training/data/datasources/plan_remote_datasource.dart';
 import 'package:runnin/features/training/domain/entities/plan.dart';
+import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/shared/widgets/runnin_app_bar.dart';
+import 'package:runnin/shared/widgets/section_heading.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class PrepPage extends StatelessWidget {
@@ -50,10 +52,13 @@ class _PrepViewState extends State<_PrepView> {
   List<WarmupExercise> _exercises = const [];
 
   /// Wizard step: 0=Config (alertas+música+coach), 1=Tipo, 2=Aquecimento.
-  /// Tela 4 (corrida ativa) é /run após INICIAR. Step persistido nada;
-  /// volta sempre pra 0 ao abrir prep.
+  /// Tela 4 (corrida ativa) é /run após INICIAR.
   int _step = 0;
-  static const _stepLabels = ['CONFIG', 'TIPO', 'AQUECIMENTO'];
+
+  /// Status do GPS no warm-up. unknown=ainda checando, ok=permissão+pos
+  /// cacheada, denied=permissão recusada, off=serviço desligado. Renderizado
+  /// como badge no header do step config.
+  _GpsStatus _gpsStatus = _GpsStatus.unknown;
 
   final Map<String, bool> _alerts = {
     'kmAlert': true,
@@ -87,21 +92,26 @@ class _PrepViewState extends State<_PrepView> {
   Future<void> _warmGps() async {
     try {
       final enabled = await Geolocator.isLocationServiceEnabled();
-      if (!enabled) return;
+      if (!enabled) {
+        if (mounted) setState(() => _gpsStatus = _GpsStatus.off);
+        return;
+      }
       var perm = await Geolocator.checkPermission();
       if (perm == LocationPermission.denied) {
         perm = await Geolocator.requestPermission();
       }
       if (perm == LocationPermission.denied ||
           perm == LocationPermission.deniedForever) {
+        if (mounted) setState(() => _gpsStatus = _GpsStatus.denied);
         return;
       }
-      // Posição inicial cacheada pelo OS — corta primeiro fix do stream
-      // na tela ativa em ~2-5s.
       await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
       );
-    } catch (_) {/* warm-up best-effort */}
+      if (mounted) setState(() => _gpsStatus = _GpsStatus.ok);
+    } catch (_) {
+      if (mounted) setState(() => _gpsStatus = _GpsStatus.off);
+    }
   }
 
   Future<void> _loadTodaySessionFromPlan() async {
@@ -238,15 +248,11 @@ class _PrepViewState extends State<_PrepView> {
     // detail card removido — descrição agora vem direto do _RunModeCard.
 
     return BlocListener<RunBloc, RunState>(
-      listenWhen: (prev, curr) =>
-          prev.status != curr.status || prev.error != curr.error,
+      // PrepPage não dispara mais StartRun — só navega pra /run com o tipo
+      // selecionado. Mantemos só o handler de erro caso algo dispare bloc
+      // por engano (defensivo).
+      listenWhen: (prev, curr) => prev.error != curr.error,
       listener: (context, state) {
-        if (state.runId != null) {
-          if (state.status == RunStatus.active) {
-            context.pushReplacement('/run', extra: state.runId);
-          }
-        }
-
         if (state.status == RunStatus.error && state.error != null) {
           ScaffoldMessenger.of(
             context,
@@ -256,7 +262,7 @@ class _PrepViewState extends State<_PrepView> {
       child: Scaffold(
         backgroundColor: palette.background,
         appBar: RunninAppBar(
-          title: 'PREPARAR · ${_step + 1}/3 ${_stepLabels[_step]}',
+          title: 'PREPARAR · ${_step + 1}/3',
         ),
         body: Padding(
           padding: const EdgeInsets.all(24),
@@ -289,7 +295,7 @@ class _PrepViewState extends State<_PrepView> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('COACH', style: type.labelCaps),
+        const SectionHeading(label: '> COACH'),
         const SizedBox(height: 12),
         if (_isPro == false)
           _PreRunCoachLockedCard(onTap: () => context.push('/profile'))
@@ -302,7 +308,15 @@ class _PrepViewState extends State<_PrepView> {
             onRefresh: _requestPreRunCue,
           ),
         const SizedBox(height: 24),
-        Text('ALERTAS PRÉ-CORRIDA', style: type.labelCaps),
+        Row(
+          children: [
+            const SectionHeading(label: '> GPS'),
+            const SizedBox(width: 10),
+            _GpsStatusChip(status: _gpsStatus, onRetry: _warmGps),
+          ],
+        ),
+        const SizedBox(height: 24),
+        const SectionHeading(label: '> ALERTAS PRÉ-CORRIDA'),
         const SizedBox(height: 8),
         ..._alerts.entries.map(
           (e) => _AlertToggleRow(
@@ -312,7 +326,7 @@ class _PrepViewState extends State<_PrepView> {
           ),
         ),
         const SizedBox(height: 24),
-        Text('MÚSICA', style: type.labelCaps),
+        const SectionHeading(label: '> MÚSICA'),
         const SizedBox(height: 12),
         Row(
           children: _MusicProvider.values.map((p) {
@@ -338,7 +352,7 @@ class _PrepViewState extends State<_PrepView> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('COMO VOCÊ VAI CORRER HOJE?', style: type.labelCaps),
+        const SectionHeading(label: '> COMO VOCÊ VAI CORRER HOJE'),
         const SizedBox(height: 12),
         if (_planTodaySession != null && _isPro == true) ...[
           _RunModeCard(
@@ -387,7 +401,7 @@ class _PrepViewState extends State<_PrepView> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('AQUECIMENTO', style: type.labelCaps),
+        const SectionHeading(label: '> AQUECIMENTO'),
         const SizedBox(height: 12),
         if (_exercises.isEmpty)
           Padding(
@@ -410,53 +424,92 @@ class _PrepViewState extends State<_PrepView> {
   // ─── Bottom navigation ──────────────────────────────────────────
   Widget _buildStepNav(BuildContext context, RunninPalette palette) {
     final isLast = _step == 2;
-    return BlocBuilder<RunBloc, RunState>(
-      builder: (context, state) {
-        final starting = state.status == RunStatus.starting;
-        return Row(
-          children: [
-            if (_step > 0) ...[
-              Expanded(
-                child: SizedBox(
-                  height: 52,
-                  child: OutlinedButton(
-                    onPressed: starting ? null : () => setState(() => _step--),
-                    style: OutlinedButton.styleFrom(
-                      side: BorderSide(color: palette.border),
-                      shape: const RoundedRectangleBorder(
-                        borderRadius: BorderRadius.zero,
-                      ),
-                    ),
-                    child: Text('VOLTAR', style: TextStyle(color: palette.muted)),
+    return Row(
+      children: [
+        if (_step > 0) ...[
+          Expanded(
+            child: SizedBox(
+              height: 52,
+              child: OutlinedButton(
+                onPressed: () => setState(() => _step--),
+                style: OutlinedButton.styleFrom(
+                  side: BorderSide(color: palette.border),
+                  shape: const RoundedRectangleBorder(
+                    borderRadius: BorderRadius.zero,
                   ),
                 ),
+                child: Text('VOLTAR', style: TextStyle(color: palette.muted)),
               ),
-              const SizedBox(width: 10),
-            ],
-            Expanded(
-              flex: _step == 0 ? 1 : 2,
-              child: SizedBox(
-                height: 52,
-                child: ElevatedButton(
-                  onPressed: starting
-                      ? null
-                      : isLast
-                          ? () => context.read<RunBloc>().add(
-                                StartRun(type: _selectedType),
-                              )
-                          : () => setState(() => _step++),
-                  child: starting
-                      ? CircularProgressIndicator(
-                          color: palette.background,
-                          strokeWidth: 2,
-                        )
-                      : Text(isLast ? 'INICIAR CORRIDA' : 'CONTINUAR'),
-                ),
+            ),
+          ),
+          const SizedBox(width: 10),
+        ],
+        Expanded(
+          flex: _step == 0 ? 1 : 2,
+          child: SizedBox(
+            height: 52,
+            child: ElevatedButton(
+              onPressed: isLast
+                  // Última tela do wizard → vai pra /run em modo IDLE.
+                  // INICIAR de verdade acontece na /run (vide ActiveRunPage)
+                  // pra dar tempo do user revisar tudo antes do timer rodar.
+                  ? () => context.push('/run', extra: _selectedType)
+                  : () => setState(() => _step++),
+              child: Text(isLast ? 'CONTINUAR' : 'CONTINUAR'),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Status visual do GPS exibido no step Config.
+enum _GpsStatus { unknown, ok, denied, off }
+
+class _GpsStatusChip extends StatelessWidget {
+  final _GpsStatus status;
+  final VoidCallback onRetry;
+  const _GpsStatusChip({required this.status, required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    final (label, color) = switch (status) {
+      _GpsStatus.unknown => ('CONECTANDO', palette.muted),
+      _GpsStatus.ok => ('OK', palette.primary),
+      _GpsStatus.denied => ('PERMISSÃO NEGADA', FigmaColors.brandOrange),
+      _GpsStatus.off => ('SERVIÇO DESLIGADO', FigmaColors.brandOrange),
+    };
+    return InkWell(
+      onTap: status == _GpsStatus.ok ? null : onRetry,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.15),
+          border: Border.all(color: color.withValues(alpha: 0.5), width: 1),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 6,
+              height: 6,
+              decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w500,
+                color: color,
+                letterSpacing: 1.0,
               ),
             ),
           ],
-        );
-      },
+        ),
+      ),
     );
   }
 }
