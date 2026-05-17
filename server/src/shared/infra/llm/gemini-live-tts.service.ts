@@ -48,18 +48,19 @@ export class GeminiLiveTtsService {
       resolveDone = res;
       rejectDone = rej;
     });
+    // Swallow late rejections — se a promise virar rejected DEPOIS que já
+    // retornamos do try/catch (ex: WS close depois do timeout), evita
+    // UnhandledPromiseRejection que crasha o request com 503.
+    done.catch(() => {});
 
     const session = new GeminiLiveSession({
       config: {
-        // Modelo Live com áudio nativo. Mantém em sync com gemini-live.service
-        // default. Outputmodality precisa ser AUDIO pra TTS funcionar.
+        // Modelo Live com áudio nativo. Config minimal: sem systemInstruction
+        // (poderia disparar safety filter → close 1008) e sem voice prebuilt
+        // que pode não estar mais disponível pra free tier. Texto vai cru,
+        // o modelo usa voz default.
         responseModalities: ['AUDIO'],
-        voice,
-        systemInstruction:
-          'Você é o coach AI do runnin falando ao vivo durante uma corrida. ' +
-          'Fale o texto recebido como se estivesse passando a mensagem AO VIVO ' +
-          'pro atleta correndo — tom direto, energético quando apropriado, ' +
-          'sem floreios. PT-BR. Não acrescente nem reformule — fale o texto.',
+        ...(voice ? { voice } : {}),
       },
       onMessage: (msg) => {
         if (msg.kind !== 'content') return;
@@ -88,11 +89,11 @@ export class GeminiLiveTtsService {
       await Promise.race([
         done,
         new Promise<void>((_, rej) =>
-          setTimeout(() => rej(new Error('gemini_live_tts_timeout_12s')), 12000),
+          setTimeout(() => rej(new Error('gemini_live_tts_timeout_8s')), 8000),
         ),
       ]);
 
-      session.close();
+      try { session.close(); } catch {}
 
       if (chunks.length === 0) return null;
       const pcm = Buffer.concat(chunks);
@@ -108,9 +109,7 @@ export class GeminiLiveTtsService {
         textLen: text.length,
         voice,
       });
-      try {
-        session.close();
-      } catch {}
+      try { session.close(); } catch {}
       return null;
     }
   }

@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:runnin/core/network/api_client.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/features/coach_live/data/live_audio_service.dart';
 import 'package:runnin/shared/widgets/runnin_app_bar.dart';
@@ -28,7 +29,8 @@ class CoachLivePage extends StatefulWidget {
 }
 
 class _CoachLivePageState extends State<CoachLivePage> {
-  static const _defaultProdWs = 'wss://runnin-api-rogiz7losq-rj.a.run.app/v1/coach/live';
+  // Override opcional via env (testes locais). Senão deriva do API_BASE_URL
+  // já configurado — staging usa staging, prod usa prod, sem hardcode.
   static const _wsFromEnv = String.fromEnvironment('COACH_LIVE_WS', defaultValue: '');
 
   WebSocketChannel? _channel;
@@ -66,7 +68,7 @@ class _CoachLivePageState extends State<CoachLivePage> {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) throw Exception('Login necessário');
       final token = await user.getIdToken();
-      final baseWs = _wsFromEnv.isEmpty ? _defaultProdWs : _wsFromEnv;
+      final baseWs = _wsFromEnv.isEmpty ? resolveCoachLiveWsUrl() : _wsFromEnv;
       final qs = <String, String>{'token': token ?? ''};
       if (widget.runId != null && widget.runId!.isNotEmpty) {
         qs['runId'] = widget.runId!;
