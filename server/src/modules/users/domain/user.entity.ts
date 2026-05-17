@@ -58,8 +58,10 @@ export interface UserProfile {
   // Exams monthly counter
   examsCount?: number;
 
-  // Subscription (novo modelo — fonte de verdade)
-  subscriptionPlanId?: 'freemium' | 'pro';
+  // Subscription (novo modelo — fonte de verdade). Catálogo aberto: aceita ids
+  // de planos de operadoras (ex: claro_basic). Resolver valida contra
+  // Firestore antes de servir features.
+  subscriptionPlanId?: string;
   subscriptionStatus?: 'active' | 'cancelled' | 'expired' | 'trial';
   subscriptionStartedAt?: string;
   subscriptionRenewsAt?: string;

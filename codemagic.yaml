@@ -1,0 +1,122 @@
+# Codemagic CI/CD — runnin.core (monorepo)
+#
+# A app Flutter mora em ./app — todos os workflows usam working_directory: app.
+# A presença deste arquivo na raiz é o que destrava o "doesn't seem to contain
+# a mobile application" no Codemagic UI quando o repo é monorepo.
+#
+# Workflows:
+#  - android-debug   → APK de smoke pra QA, sem signing, dispara em qualquer push em PRs
+#  - android-release → AAB assinado + deploy interno na Play Store (track=internal)
+#  - ios-release     → STUB (desativado até APNs key + signing identity estarem no Codemagic)
+#
+# Pré-requisitos (Codemagic UI > Settings > Code signing / Integrations):
+#  - Google Play service account JSON conectado como `google_play_credentials`
+#  - Android keystore upload (alias + senha) referenciado abaixo como `runnin_keystore`
+#  - iOS: pular por enquanto
+
+workflows:
+  android-debug:
+    name: Android Debug APK
+    instance_type: mac_mini_m2
+    max_build_duration: 30
+    environment:
+      flutter: 3.41.9
+      java: 17
+      vars:
+        # API base do staging. Sem isso, app bate em produção desatualizada.
+        API_BASE_URL: "https://runnin-api-staging-rogiz7losq-rj.a.run.app"
+        # VAPID Web Push (sem efeito em build Android; reservado pra cross-build futuro).
+        FIREBASE_VAPID_KEY: "BE1oX84SuJLSCWO-JqYSyIFEtCEPj8d4ol3xWlwPHmBp_ncd372Fsau6Fr5mYxIjzpWKfg5KZcM8ueoMQu78P5Q"
+    triggering:
+      events:
+        - pull_request
+      branch_patterns:
+        - pattern: 'main'
+          include: true
+          source: false
+    scripts:
+      - name: Flutter pub get
+        working_directory: app
+        script: flutter pub get
+      - name: Flutter analyze
+        working_directory: app
+        script: flutter analyze --no-fatal-infos
+      - name: Build Android APK (debug)
+        working_directory: app
+        script: |
+          flutter build apk --debug \
+            --dart-define=API_BASE_URL=$API_BASE_URL \
+            --dart-define=FIREBASE_VAPID_KEY=$FIREBASE_VAPID_KEY
+    artifacts:
+      - app/build/**/outputs/**/*.apk
+
+  android-release:
+    name: Android Release (Play Internal)
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    environment:
+      flutter: 3.41.9
+      java: 17
+      groups:
+        # Define no Codemagic UI > Environment variables > Groups:
+        # - google_play_credentials.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON (file, base64)
+        - google_play
+      vars:
+        API_BASE_URL: "https://runnin-api-rogiz7losq-rj.a.run.app"  # PROD
+        FIREBASE_VAPID_KEY: "BE1oX84SuJLSCWO-JqYSyIFEtCEPj8d4ol3xWlwPHmBp_ncd372Fsau6Fr5mYxIjzpWKfg5KZcM8ueoMQu78P5Q"
+        PACKAGE_NAME: "com.reniuslab.runnin"
+        GOOGLE_PLAY_TRACK: "internal"
+      android_signing:
+        - runnin_keystore  # upload do .jks via Codemagic UI > Code signing
+    triggering:
+      events:
+        - tag
+      tag_patterns:
+        - pattern: 'v*'
+          include: true
+    scripts:
+      - name: Flutter pub get
+        working_directory: app
+        script: flutter pub get
+      - name: Auto-bump versionCode (+CM_BUILD_NUMBER)
+        working_directory: app
+        script: |
+          BUILD_NUMBER=$(($(grep -o "version: [0-9.]*+[0-9]*" pubspec.yaml | awk -F'+' '{print $2}') + $PROJECT_BUILD_NUMBER))
+          echo "Using build number $BUILD_NUMBER"
+      - name: Build Android AAB (release, signed)
+        working_directory: app
+        script: |
+          flutter build appbundle --release \
+            --build-number=$PROJECT_BUILD_NUMBER \
+            --dart-define=API_BASE_URL=$API_BASE_URL \
+            --dart-define=FIREBASE_VAPID_KEY=$FIREBASE_VAPID_KEY
+    artifacts:
+      - app/build/**/outputs/**/*.aab
+      - app/build/**/outputs/**/mapping.txt
+    publishing:
+      google_play:
+        # Connect at Codemagic > Settings > Integrations > Google Play
+        credentials: $GOOGLE_PLAY_SERVICE_ACCOUNT_JSON
+        track: $GOOGLE_PLAY_TRACK
+        submit_as_draft: false
+        in_app_update_priority: 3
+
+  ios-release:
+    # STUB — habilitar depois que tiver: APNs key no Firebase + Apple
+    # Developer signing identity + provisioning profile no Codemagic.
+    name: iOS Release (TestFlight) [DISABLED]
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    environment:
+      flutter: 3.41.9
+      xcode: latest
+    triggering:
+      events: []  # manual only — sem trigger automático até estar configurado
+    scripts:
+      - name: Placeholder
+        script: |
+          echo "iOS workflow desativado. Habilitar:"
+          echo "1. Upload APNs key no Firebase Console > Cloud Messaging"
+          echo "2. Codemagic UI > Code signing > iOS > Apple Developer integration"
+          echo "3. Trocar events: [] -> events: [tag] e copiar passos do android-release"
+          exit 0

@@ -164,8 +164,10 @@ const ListUsersQuery = z.object({
   limit: z.coerce.number().int().min(1).max(200).optional().default(50),
 });
 
+// Catálogo aberto: aceita qualquer id de plano (validado contra Firestore
+// depois). Limita string pra evitar abuse.
 const SetUserPlanSchema = z.object({
-  plan: z.enum(['freemium', 'pro']),
+  plan: z.string().min(2).max(40),
 });
 
 export async function getUsersList(req: Request, res: Response, next: NextFunction): Promise<void> {

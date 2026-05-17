@@ -1227,10 +1227,14 @@ class _UsersPanelState extends State<_UsersPanel> {
                               )
                             else
                               DropdownButton<String>(
-                                value: u.subscriptionPlanId,
+                                value: const ['freemium', 'pro', 'claro_basic']
+                                        .contains(u.subscriptionPlanId)
+                                    ? u.subscriptionPlanId
+                                    : 'freemium',
                                 items: const [
                                   DropdownMenuItem(value: 'freemium', child: Text('freemium')),
-                                  DropdownMenuItem(value: 'pro', child: Text('pro')),
+                                  DropdownMenuItem(value: 'pro', child: Text('pro · s6lab')),
+                                  DropdownMenuItem(value: 'claro_basic', child: Text('claro_basic · claro')),
                                 ],
                                 onChanged: widget.canEdit
                                     ? (v) {

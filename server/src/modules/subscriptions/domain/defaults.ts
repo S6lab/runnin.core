@@ -53,6 +53,8 @@ export const PRO_LIMITS: PlanLimits = {
 
 export const FREEMIUM_PLAN: SubscriptionPlan = {
   id: 'freemium',
+  provider: 's6lab',
+  serviceId: '', // plano interno — sem service id externo
   name: 'Gratuito',
   priceLabel: 'Grátis',
   periodLabel: '',
@@ -65,6 +67,8 @@ export const FREEMIUM_PLAN: SubscriptionPlan = {
 
 export const PRO_PLAN: SubscriptionPlan = {
   id: 'pro',
+  provider: 's6lab',
+  serviceId: 'runnin_pro_monthly', // SKU usado em Apple/Play storefront
   name: 'Pro',
   priceLabel: 'R$ 19,90',
   periodLabel: '/mês',
@@ -75,4 +79,27 @@ export const PRO_PLAN: SubscriptionPlan = {
   updatedAt: NOW,
 };
 
-export const DEFAULT_PLANS: SubscriptionPlan[] = [FREEMIUM_PLAN, PRO_PLAN];
+/**
+ * Plano oferecido pela operadora Claro — features = PRO + billing/cobrança
+ * via Claro (sem App Store fee). Service id placeholder; ajustar ao receber
+ * o code definitivo do parceiro Claro.
+ */
+export const CLARO_BASIC_PLAN: SubscriptionPlan = {
+  id: 'claro_basic',
+  provider: 'claro',
+  serviceId: 'claro_runnin_basic', // ajustar quando integrar billing Claro
+  name: 'Pro by Claro',
+  priceLabel: 'Incluso',
+  periodLabel: 'no plano Claro',
+  features: PRO_FEATURES,
+  limits: PRO_LIMITS,
+  active: true,
+  createdAt: NOW,
+  updatedAt: NOW,
+};
+
+export const DEFAULT_PLANS: SubscriptionPlan[] = [
+  FREEMIUM_PLAN,
+  PRO_PLAN,
+  CLARO_BASIC_PLAN,
+];

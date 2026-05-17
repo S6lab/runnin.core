@@ -47,8 +47,10 @@ export const UpsertProfileSchema = z.object({
   paceFormat: z.enum(['min_per_km', 'min_per_mi']).optional(),
   timeFormat: z.enum(['24h', '12h']).optional(),
 
-  // Subscription (paywall manda subscriptionPlanId='pro' ao assinar)
-  subscriptionPlanId: z.enum(['freemium', 'pro']).optional(),
+  // Subscription (paywall manda subscriptionPlanId='pro' ao assinar; operadoras
+  // mandam ids como 'claro_basic'). Catálogo aberto — validação contra
+  // Firestore acontece no resolver de features.
+  subscriptionPlanId: z.string().min(2).max(40).optional(),
   subscriptionStatus: z.enum(['active', 'cancelled', 'expired', 'trial']).optional(),
   // Legacy: paywall atual ainda manda `premium: true` — aceita e espelha no plan
   premium: z.boolean().optional(),
