@@ -261,7 +261,7 @@ class _RationaleAccordion extends StatelessWidget {
 }
 
 class _RevisionsSection extends StatelessWidget {
-  final List<PlanRevision> revisions;
+  final List<PlanRevisionLog> revisions;
   const _RevisionsSection({required this.revisions});
 
   @override

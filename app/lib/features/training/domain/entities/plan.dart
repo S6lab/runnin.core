@@ -58,14 +58,17 @@ class PlanRestDayTip {
       );
 }
 
-class PlanRevision {
+/// Snapshot de uma revisão semanal do plano (renomeado pra não colidir
+/// com `PlanRevision` legada em [plan_revision.dart] que representa o
+/// pedido manual de revisão).
+class PlanRevisionLog {
   final int weekNumber;
   final String revisedAt;
   final String trigger;
   final String summary;
   final String? details;
 
-  const PlanRevision({
+  const PlanRevisionLog({
     required this.weekNumber,
     required this.revisedAt,
     required this.trigger,
@@ -73,7 +76,7 @@ class PlanRevision {
     this.details,
   });
 
-  factory PlanRevision.fromJson(Map<String, dynamic> j) => PlanRevision(
+  factory PlanRevisionLog.fromJson(Map<String, dynamic> j) => PlanRevisionLog(
         weekNumber: j['weekNumber'] as int,
         revisedAt: j['revisedAt'] as String,
         trigger: j['trigger'] as String? ?? 'manual',
@@ -125,7 +128,7 @@ class Plan {
   final String? coachRationale;
   /// Texto curto (3-4 frases) sobre estratégia do mesociclo todo.
   final String? mesocycleNarrative;
-  final List<PlanRevision> revisions;
+  final List<PlanRevisionLog> revisions;
 
   const Plan({
     required this.id,
@@ -153,7 +156,7 @@ class Plan {
         coachRationale: j['coachRationale'] as String?,
         mesocycleNarrative: j['mesocycleNarrative'] as String?,
         revisions: ((j['revisions'] as List?) ?? [])
-            .map((r) => PlanRevision.fromJson(r as Map<String, dynamic>))
+            .map((r) => PlanRevisionLog.fromJson(r as Map<String, dynamic>))
             .toList(),
       );
 
