@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:runnin/core/theme/design_system_tokens.dart';
+import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/features/run/domain/entities/run.dart';
 import 'package:runnin/shared/widgets/figma/figma_chart_line_spark.dart';
 
@@ -18,33 +18,42 @@ class FigmaShareCardPreview extends StatelessWidget {
   final ShareTheme theme;
   final Color? skinAccent;
 
-  Color get _bg {
+  Color _bg(RunninPalette palette) {
     switch (theme) {
       case ShareTheme.dark:
-        return FigmaColors.bgBase;
+        return palette.background;
       case ShareTheme.color:
-        return const Color(0xFF0A1628);
+        return Color.lerp(palette.background, palette.primary, 0.06)!;
       case ShareTheme.minimal:
         return Colors.black;
     }
   }
 
-  Color get _accent {
+  Color _accent(RunninPalette palette) {
     switch (theme) {
       case ShareTheme.dark:
-        return FigmaColors.brandCyan;
       case ShareTheme.color:
-        return skinAccent ?? FigmaColors.brandCyan;
+        return skinAccent ?? palette.primary;
       case ShareTheme.minimal:
         return Colors.white;
     }
   }
 
-  Color get _textMain {
+  Color _textMain(RunninPalette palette) {
     switch (theme) {
       case ShareTheme.dark:
       case ShareTheme.color:
-        return FigmaColors.textPrimary;
+        return palette.text;
+      case ShareTheme.minimal:
+        return Colors.white;
+    }
+  }
+
+  Color _accentSecondary(RunninPalette palette) {
+    switch (theme) {
+      case ShareTheme.dark:
+      case ShareTheme.color:
+        return palette.secondary;
       case ShareTheme.minimal:
         return Colors.white;
     }
@@ -52,6 +61,11 @@ class FigmaShareCardPreview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    final bg = _bg(palette);
+    final accent = _accent(palette);
+    final textMain = _textMain(palette);
+    final accentSecondary = _accentSecondary(palette);
     final distKm = (run.distanceM / 1000).toStringAsFixed(1);
     final duration = _fmtDuration(run.durationS);
     final pace = run.avgPace ?? '--:--';
@@ -62,8 +76,8 @@ class FigmaShareCardPreview extends StatelessWidget {
       aspectRatio: 4 / 5,
       child: Container(
         decoration: BoxDecoration(
-          color: _bg,
-          border: Border.all(color: _accent.withValues(alpha: 0.2), width: 1),
+          color: bg,
+          border: Border.all(color: accent.withValues(alpha: 0.2), width: 1),
         ),
         padding: const EdgeInsets.all(24),
         child: Column(
@@ -76,7 +90,7 @@ class FigmaShareCardPreview extends StatelessWidget {
                 fontSize: 10,
                 fontWeight: FontWeight.w500,
                 letterSpacing: 2,
-                color: _accent,
+                color: accent,
               ),
             ),
             const Spacer(flex: 1),
@@ -87,7 +101,7 @@ class FigmaShareCardPreview extends StatelessWidget {
               style: GoogleFonts.jetBrainsMono(
                 fontSize: 48,
                 fontWeight: FontWeight.w500,
-                color: _textMain,
+                color: textMain,
                 height: 1.0,
               ),
             ),
@@ -101,7 +115,7 @@ class FigmaShareCardPreview extends StatelessWidget {
                   style: GoogleFonts.jetBrainsMono(
                     fontSize: 20,
                     fontWeight: FontWeight.w600,
-                    color: FigmaColors.brandOrange,
+                    color: accentSecondary,
                   ),
                 ),
                 const SizedBox(width: 16),
@@ -110,7 +124,7 @@ class FigmaShareCardPreview extends StatelessWidget {
                   style: GoogleFonts.jetBrainsMono(
                     fontSize: 13,
                     fontWeight: FontWeight.w400,
-                    color: _textMain.withValues(alpha: 0.7),
+                    color: textMain.withValues(alpha: 0.7),
                   ),
                 ),
               ],
@@ -123,7 +137,7 @@ class FigmaShareCardPreview extends StatelessWidget {
               child: FigmaChartLineSpark(
                 values: splitValues,
                 height: 60,
-                lineColor: _accent,
+                lineColor: accent,
               ),
             ),
             const SizedBox(height: 8),
@@ -138,7 +152,7 @@ class FigmaShareCardPreview extends StatelessWidget {
                     '${i + 1}K',
                     style: GoogleFonts.jetBrainsMono(
                       fontSize: 9,
-                      color: _textMain.withValues(alpha: 0.4),
+                      color: textMain.withValues(alpha: 0.4),
                     ),
                   ),
                 ),
@@ -146,28 +160,14 @@ class FigmaShareCardPreview extends StatelessWidget {
 
             const Spacer(flex: 1),
 
-            // Tagline
-            Text(
-              _buildTagline(),
-              style: GoogleFonts.jetBrainsMono(
-                fontSize: 11,
-                fontWeight: FontWeight.w400,
-                color: _textMain.withValues(alpha: 0.6),
-                height: 1.4,
-              ),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-            const SizedBox(height: 16),
-
             // Stats footer
             Row(
               children: [
                 if (run.avgBpm != null)
-                  _StatChip(label: '${run.avgBpm} BPM', color: _accent),
+                  _StatChip(label: '${run.avgBpm} BPM', color: accent),
                 if (run.xpEarned != null && run.xpEarned! > 0) ...[
                   const SizedBox(width: 8),
-                  _StatChip(label: '+${run.xpEarned} XP', color: _accent),
+                  _StatChip(label: '+${run.xpEarned} XP', color: accent),
                 ],
               ],
             ),
@@ -185,11 +185,6 @@ class FigmaShareCardPreview extends StatelessWidget {
       final variation = (i.isEven ? 1.02 : 0.98) + (i * 0.005);
       return basePace * variation;
     });
-  }
-
-  String _buildTagline() {
-    final type = run.type.isNotEmpty ? run.type : 'corrida';
-    return 'Corrida $type concluída';
   }
 
   static String _fmtDuration(int seconds) {

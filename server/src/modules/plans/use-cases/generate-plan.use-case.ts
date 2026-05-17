@@ -159,6 +159,9 @@ export class GeneratePlanUseCase {
       // Fire-and-forget: gera narrativa longa pra página de detalhe sem
       // bloquear a resposta. Se falhar, o plano segue funcional sem texto.
       void this._generateCoachRationale(plan, weeks, runtime.profile);
+      // Gera narrativas curtas per-week + mesocycle. Roda em paralelo
+      // ao rationale longo. Falha silenciosa.
+      void this._generateWeekNarratives(plan, weeks, runtime.profile);
     } catch (err) {
       logger.error('plan.generate.failed', {
         planId: plan.id,
@@ -246,6 +249,111 @@ NUNCA invente dados que não estão no perfil. Se um campo está vazio, ignore. 
       });
       // não falha — plano segue válido sem rationale
     }
+  }
+
+  /**
+   * Gera 1 narrativa curta (1-2 frases) por semana + 1 narrativa de
+   * mesociclo (3-4 frases) personalizada pelo perfil do user. 1 chamada
+   * LLM produz tudo em JSON pra evitar N chamadas. Fire-and-forget.
+   */
+  private async _generateWeekNarratives(
+    plan: Plan,
+    weeks: PlanWeek[],
+    profile: import('@modules/coach/use-cases/coach-runtime-context.service').CoachRuntimeProfile | null,
+  ): Promise<void> {
+    if (weeks.length === 0) return;
+    try {
+      const weeksDigest = weeks.map((w, i) => {
+        const sessions = w.sessions
+          .map(s => `${this._dowName(s.dayOfWeek)} ${s.type} ${s.distanceKm.toFixed(1)}km`)
+          .join(' · ');
+        const km = w.sessions.reduce((a, x) => a + x.distanceKm, 0).toFixed(1);
+        return `Semana ${i + 1}: ${w.sessions.length} sessões, ${km}km — ${sessions}`;
+      }).join('\n');
+
+      const profileLine = profile
+        ? `Perfil: ${profile.level}, objetivo "${profile.goal}", ${profile.frequency ?? '?'}x/sem, FC máx ${profile.maxBpm ?? '?'}, persona "${profile.coachPersonality ?? 'motivador'}"`
+        : 'Perfil indisponível';
+
+      const userPrompt = `Você é o Coach AI do runnin. Produza narrativas curtas e personalizadas pra cada semana do plano + 1 narrativa de mesociclo. Responda APENAS JSON estritamente neste schema:
+
+{
+  "mesocycle": "string (3-4 frases sobre estratégia geral do mesociclo de ${plan.weeksCount} semanas, conectando ao perfil/objetivo)",
+  "weeks": [
+    { "weekNumber": 1, "narrative": "string (1-2 frases sobre foco específico da semana 1 e como ela serve o objetivo do user)" },
+    { "weekNumber": 2, "narrative": "string idem" },
+    ...
+  ]
+}
+
+Regras:
+- weeks tem exatamente ${weeks.length} elementos (1 por semana do plano).
+- Narrativas SÃO personalizadas (nunca template "vamos combinar..."). Cite o ${profile?.level ?? 'nível'} e objetivo quando relevante.
+- Use linguagem direta, "você", português BR.
+- Sem emojis, sem markdown.
+- Mesociclo: por que essas ${plan.weeksCount} semanas nessa ordem? Quando intensifica? Quando recupera?
+- Cada semana: foco da semana + sessão-chave + o que muda da anterior. Conciso.
+
+${profileLine}
+
+Estrutura do plano:
+${weeksDigest}`;
+
+      const raw = await this.llm.generate(userPrompt, {
+        systemPrompt: 'Você é o Coach AI do runnin. Retorne SOMENTE JSON válido. Sem comentários, sem texto fora do JSON.',
+        maxTokens: 1500,
+        temperature: 0.4,
+      });
+
+      const parsed = this._parseNarrativesJson(raw);
+      if (!parsed) return;
+
+      const enriched: PlanWeek[] = weeks.map((w) => {
+        const match = parsed.weeks.find((x) => x.weekNumber === w.weekNumber);
+        return match ? { ...w, narrative: match.narrative } : w;
+      });
+
+      await this.repo.update(plan.id, plan.userId, {
+        weeks: enriched,
+        mesocycleNarrative: parsed.mesocycle,
+        updatedAt: new Date().toISOString(),
+      });
+      logger.info('plan.narratives.generated', {
+        planId: plan.id,
+        weeks: parsed.weeks.length,
+      });
+    } catch (err) {
+      logger.warn('plan.narratives.failed', {
+        planId: plan.id,
+        err: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  private _parseNarrativesJson(raw: string): { mesocycle: string; weeks: { weekNumber: number; narrative: string }[] } | null {
+    try {
+      // Strip fenced code blocks se vierem
+      const cleaned = raw.replace(/^```(?:json)?\s*|\s*```\s*$/g, '').trim();
+      const start = cleaned.indexOf('{');
+      const end = cleaned.lastIndexOf('}');
+      if (start < 0 || end <= start) return null;
+      const json = cleaned.slice(start, end + 1);
+      const obj = JSON.parse(json) as { mesocycle?: unknown; weeks?: unknown };
+      if (typeof obj.mesocycle !== 'string') return null;
+      if (!Array.isArray(obj.weeks)) return null;
+      const weeks = obj.weeks.filter((x): x is { weekNumber: number; narrative: string } => {
+        return !!x && typeof (x as { weekNumber?: unknown }).weekNumber === 'number'
+          && typeof (x as { narrative?: unknown }).narrative === 'string';
+      });
+      return { mesocycle: obj.mesocycle, weeks };
+    } catch {
+      return null;
+    }
+  }
+
+  private _dowName(d: number): string {
+    const i = Math.max(1, Math.min(7, d));
+    return ['', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'][i] ?? '?';
   }
 
   private async _parseWeeks(raw: string, weeksCount: number): Promise<PlanWeek[]> {

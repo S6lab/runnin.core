@@ -76,6 +76,11 @@ class _PlanDetailPageState extends State<PlanDetailPage> {
                         padding: const EdgeInsets.fromLTRB(20, 24, 20, 40),
                         children: [
                           _Header(plan: _plan!, profile: _profile),
+                          if (_plan!.mesocycleNarrative != null &&
+                              _plan!.mesocycleNarrative!.trim().isNotEmpty) ...[
+                            const SizedBox(height: 24),
+                            _MesocycleCard(text: _plan!.mesocycleNarrative!),
+                          ],
                           const SizedBox(height: 24),
                           _CoachRationaleCard(plan: _plan!),
                           const SizedBox(height: 24),
@@ -158,6 +163,41 @@ class _PillStat extends StatelessWidget {
               color: palette.text, fontSize: 13, fontWeight: FontWeight.w500,
             )),
       ],
+    );
+  }
+}
+
+class _MesocycleCard extends StatelessWidget {
+  final String text;
+  const _MesocycleCard({required this.text});
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: palette.primary.withValues(alpha: 0.05),
+        border: Border.all(color: palette.primary.withValues(alpha: 0.4), width: 1.0),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.timeline, size: 18, color: palette.primary),
+              const SizedBox(width: 8),
+              Text('ESTRATÉGIA DO MESOCICLO',
+                  style: GoogleFonts.jetBrainsMono(
+                    color: palette.primary, fontSize: 11, letterSpacing: 1.2,
+                    fontWeight: FontWeight.w500,
+                  )),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(text,
+              style: TextStyle(color: palette.text, fontSize: 13, height: 1.55)),
+        ],
+      ),
     );
   }
 }
@@ -420,6 +460,17 @@ class _WeeksBreakdown extends StatelessWidget {
                         style: TextStyle(color: palette.primary, fontSize: 12)),
                   ],
                 ),
+                if (w.narrative != null && w.narrative!.trim().isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    w.narrative!.trim(),
+                    style: TextStyle(
+                      color: palette.text.withValues(alpha: 0.78),
+                      fontSize: 11.5,
+                      height: 1.5,
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 8),
                 ...sorted.map((s) => Padding(
                       padding: const EdgeInsets.symmetric(vertical: 3),

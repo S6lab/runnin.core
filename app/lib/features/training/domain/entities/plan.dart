@@ -28,14 +28,25 @@ class PlanSession {
 class PlanWeek {
   final int weekNumber;
   final List<PlanSession> sessions;
+  /// Texto curto (1-2 frases) gerado pela IA, personalizado para essa
+  /// semana específica do user. Null se ainda não gerado.
+  final String? narrative;
+  final String? focus;
 
-  const PlanWeek({required this.weekNumber, required this.sessions});
+  const PlanWeek({
+    required this.weekNumber,
+    required this.sessions,
+    this.narrative,
+    this.focus,
+  });
 
   factory PlanWeek.fromJson(Map<String, dynamic> j) => PlanWeek(
     weekNumber: j['weekNumber'] as int,
     sessions: (j['sessions'] as List)
         .map((s) => PlanSession.fromJson(s as Map<String, dynamic>))
         .toList(),
+    narrative: j['narrative'] as String?,
+    focus: j['focus'] as String?,
   );
 }
 
@@ -50,6 +61,8 @@ class Plan {
   /// Markdown longo escrito pelo coach AI (gerado em background no server).
   /// Pode estar null se ainda não foi gerado ou se a chamada LLM falhou.
   final String? coachRationale;
+  /// Texto curto (3-4 frases) sobre estratégia do mesociclo todo.
+  final String? mesocycleNarrative;
 
   const Plan({
     required this.id,
@@ -60,6 +73,7 @@ class Plan {
     required this.weeks,
     required this.createdAt,
     this.coachRationale,
+    this.mesocycleNarrative,
   });
 
   factory Plan.fromJson(Map<String, dynamic> j) => Plan(
@@ -73,6 +87,7 @@ class Plan {
         .toList(),
     createdAt: j['createdAt'] as String,
     coachRationale: j['coachRationale'] as String?,
+    mesocycleNarrative: j['mesocycleNarrative'] as String?,
   );
 
   bool get isReady => status == 'ready';

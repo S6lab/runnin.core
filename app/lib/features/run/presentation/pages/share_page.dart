@@ -9,6 +9,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:share_plus/share_plus.dart';
 
+import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/features/run/data/datasources/run_remote_datasource.dart';
 import 'package:runnin/features/run/domain/entities/run.dart';
@@ -149,7 +150,7 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
         centerTitle: true,
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator(color: FigmaColors.brandCyan, strokeWidth: 2))
+          ? Center(child: CircularProgressIndicator(color: context.runninPalette.primary, strokeWidth: 2))
           : _run == null
               ? Center(
                   child: Text(
@@ -184,7 +185,7 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
       child: TabBar(
         controller: _tabController,
         indicatorSize: TabBarIndicatorSize.tab,
-        indicator: const BoxDecoration(color: FigmaColors.brandCyan),
+        indicator: BoxDecoration(color: context.runninPalette.primary),
         labelColor: FigmaColors.bgBase,
         unselectedLabelColor: FigmaColors.textSecondary,
         labelStyle: GoogleFonts.jetBrainsMono(
@@ -270,9 +271,9 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
               height: 38,
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: active ? FigmaColors.brandCyan : Colors.transparent,
+                color: active ? context.runninPalette.primary : Colors.transparent,
                 border: Border.all(
-                  color: active ? FigmaColors.brandCyan : FigmaColors.borderDefault,
+                  color: active ? context.runninPalette.primary : FigmaColors.borderDefault,
                   width: 1.041,
                 ),
               ),
@@ -366,11 +367,11 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
                     fontSize: 11,
                     fontWeight: FontWeight.w500,
                     letterSpacing: 1.1,
-                    color: FigmaColors.brandCyan,
+                    color: context.runninPalette.primary,
                   ),
                 ),
                 const SizedBox(width: 4),
-                const Icon(Icons.north_east, size: 14, color: FigmaColors.brandCyan),
+                Icon(Icons.north_east, size: 14, color: context.runninPalette.primary),
               ],
             ),
           ),
@@ -405,9 +406,9 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   decoration: BoxDecoration(
-                    color: active ? FigmaColors.brandCyan : Colors.transparent,
+                    color: active ? context.runninPalette.primary : Colors.transparent,
                     border: Border.all(
-                      color: active ? FigmaColors.brandCyan : FigmaColors.borderDefault,
+                      color: active ? context.runninPalette.primary : FigmaColors.borderDefault,
                       width: 1.041,
                     ),
                   ),
@@ -507,7 +508,7 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
                     fontSize: 9,
                     fontWeight: FontWeight.w500,
                     letterSpacing: 2,
-                    color: FigmaColors.brandCyan,
+                    color: context.runninPalette.primary,
                   ),
                 ),
               ),
@@ -525,7 +526,7 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
                   child: FigmaChartLineSpark(
                     values: _run != null ? _generateSplits() : [1, 1],
                     height: 40,
-                    lineColor: FigmaColors.brandCyan,
+                    lineColor: context.runninPalette.primary,
                   ),
                 ),
               ),
@@ -657,7 +658,7 @@ class _OverlayChip extends StatelessWidget {
         style: GoogleFonts.jetBrainsMono(
           fontSize: 10,
           fontWeight: FontWeight.w500,
-          color: FigmaColors.brandCyan,
+          color: context.runninPalette.primary,
         ),
       ),
     );

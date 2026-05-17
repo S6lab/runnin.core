@@ -3,7 +3,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:latlong2/latlong.dart';
 
-import 'package:runnin/core/theme/design_system_tokens.dart';
+import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/features/run/domain/entities/run.dart';
 
 /// Card de share com mapa da rota no fundo e stats sobrepostos.
@@ -16,6 +16,7 @@ class ShareMapCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.runninPalette;
     final latLng = points
         .map((p) => LatLng(p.lat, p.lng))
         .toList(growable: false);
@@ -57,7 +58,7 @@ class ShareMapCard extends StatelessWidget {
                     polylines: [
                       Polyline(
                         points: latLng,
-                        color: FigmaColors.brandCyan,
+                        color: palette.primary,
                         strokeWidth: 5,
                       ),
                     ],
@@ -90,7 +91,7 @@ class ShareMapCard extends StatelessWidget {
                   Text(
                     'RUNNIN.AI',
                     style: GoogleFonts.jetBrainsMono(
-                      color: FigmaColors.brandCyan,
+                      color: palette.primary,
                       fontSize: 12,
                       fontWeight: FontWeight.w500,
                       letterSpacing: 2,

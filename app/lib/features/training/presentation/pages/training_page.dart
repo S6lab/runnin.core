@@ -2052,13 +2052,16 @@ String _buildWeekHeadline(PlanWeek? week) {
   return 'Semana ${week.weekNumber} · ${week.sessions.length} sessoes · ${totalKm.toStringAsFixed(1)} km';
 }
 
-/// Summary per-week derivado dos dados reais — distância total, intensidade
-/// dominante, sessão-chave da semana. Mantém o foco em informação concreta
-/// em vez do template anterior que repetia "vamos combinar easy run..." em
-/// toda semana sem distinção.
+/// Summary per-week — prioriza narrative gerada pela IA (personalizada pelo
+/// perfil do user) se disponível; senão fallback determinístico com volume +
+/// sessão-chave + foco.
 String _buildWeekSummary(PlanWeek? week) {
   if (week == null || week.sessions.isEmpty) {
     return 'Sem sessões nesta semana — descanso ativo recomendado.';
+  }
+  // Se LLM já preencheu narrativa personalizada, usa essa
+  if (week.narrative != null && week.narrative!.trim().isNotEmpty) {
+    return week.narrative!.trim();
   }
   final ordered = [...week.sessions]
     ..sort((a, b) => a.dayOfWeek.compareTo(b.dayOfWeek));

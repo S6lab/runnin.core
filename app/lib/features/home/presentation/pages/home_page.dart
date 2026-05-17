@@ -1634,23 +1634,14 @@ class _CoachAiWeeklySummary extends StatelessWidget {
                   title: 'RECOMENDACAO',
                   body: _weeklyRecommendation(data),
                 ),
-                if (!hasPlan || !hasRuns) ...[
+                // Botão "GERAR PLANO" removido — geração de plano é restrita
+                // (cooldown 1×/semana). Resumo semanal só mostra estado, sem
+                // CTA de regerar. Para iniciar corrida ainda mostramos atalho.
+                if (!hasRuns) ...[
                   const SizedBox(height: 20),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      if (!hasPlan)
-                        OutlinedButton(
-                          onPressed: () => context.push('/training'),
-                          child: const Text('GERAR PLANO'),
-                        ),
-                      if (!hasRuns)
-                        ElevatedButton(
-                          onPressed: () => context.push('/prep'),
-                          child: const Text('REGISTRAR CORRIDA'),
-                        ),
-                    ],
+                  ElevatedButton(
+                    onPressed: () => context.push('/prep'),
+                    child: const Text('REGISTRAR CORRIDA'),
                   ),
                 ],
               ],
