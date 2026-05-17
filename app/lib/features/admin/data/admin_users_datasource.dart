@@ -42,4 +42,17 @@ class AdminUsersDatasource {
   Future<void> setPlan({required String userId, required String plan}) async {
     await apiClient.patch<void>('/admin/users/$userId/plan', data: {'plan': plan});
   }
+
+  /// mode: 'plan' (só zera plano + onboarded=false) ou 'full' (zera tudo).
+  /// Sempre revoga refresh tokens — user precisa re-logar.
+  Future<Map<String, dynamic>> reset({
+    required String userId,
+    required String mode,
+  }) async {
+    final res = await apiClient.post<Map<String, dynamic>>(
+      '/admin/users/$userId/reset',
+      queryParameters: {'mode': mode},
+    );
+    return res.data ?? {};
+  }
 }

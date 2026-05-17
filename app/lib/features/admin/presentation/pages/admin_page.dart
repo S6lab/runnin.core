@@ -1105,6 +1105,42 @@ class _UsersPanelState extends State<_UsersPanel> {
     }
   }
 
+  Future<void> _confirmReset(AdminUserSummary u, String mode) async {
+    final isFull = mode == 'full';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(isFull ? 'Reset FULL de ${u.email ?? u.id}?' : 'Reset plano de ${u.email ?? u.id}?'),
+        content: Text(
+          isFull
+              ? 'Apaga TUDO: planos, corridas, biométricos, mensagens do coach, exames OCR, devices. Revoga sessões. Histórico fica vazio. Irreversível.'
+              : 'Apaga apenas o plano atual + reseta onboarded=false. Histórico de corridas e dados preservados. Revoga sessões (precisa re-logar). User passa onboarding novamente.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('CANCELAR')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(isFull ? 'RESETAR FULL' : 'RESETAR PLANO'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    setState(() { _savingUserId = u.id; _error = null; });
+    try {
+      final result = await _ds.reset(userId: u.id, mode: mode);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Reset $mode OK · ${result['deletedCounts']}')),
+        );
+      }
+    } catch (e) {
+      if (mounted) setState(() => _error = '$e');
+    } finally {
+      if (mounted) setState(() => _savingUserId = null);
+    }
+  }
+
   Future<void> _setPlan(AdminUserSummary u, String plan) async {
     setState(() => _savingUserId = u.id);
     try {
@@ -1247,6 +1283,26 @@ class _UsersPanelState extends State<_UsersPanel> {
                                 style: TextStyle(color: palette.text, fontSize: 12),
                                 dropdownColor: palette.surface,
                               ),
+                            const SizedBox(width: 6),
+                            PopupMenuButton<String>(
+                              icon: Icon(Icons.more_vert, size: 18, color: palette.muted),
+                              tooltip: 'Reset user',
+                              color: palette.surface,
+                              enabled: widget.canEdit && !saving,
+                              onSelected: (mode) => _confirmReset(u, mode),
+                              itemBuilder: (_) => [
+                                PopupMenuItem(
+                                  value: 'plan',
+                                  child: Text('Reset plano (manter histórico)',
+                                      style: TextStyle(color: palette.text, fontSize: 12)),
+                                ),
+                                PopupMenuItem(
+                                  value: 'full',
+                                  child: Text('Reset FULL (zerar tudo)',
+                                      style: TextStyle(color: palette.error, fontSize: 12)),
+                                ),
+                              ],
+                            ),
                           ],
                         ),
                       );

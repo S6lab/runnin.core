@@ -11,6 +11,10 @@ import {
   postSeedTester,
   postRagReindex,
   getRagStatus,
+  getDiagnoseUser,
+  postDiagnoseRegeneratePlan,
+  postDiagnoseResetJourney,
+  postUserReset,
 } from './admin.controller';
 
 export const adminRouter = Router();
@@ -19,6 +23,9 @@ export const adminRouter = Router();
 // testers sem precisar de ID token de admin pré-existente. Útil em setup
 // inicial de testers; idempotente.
 adminRouter.post('/tester/seed', cronTokenMiddleware, postSeedTester);
+adminRouter.get('/diagnose/user', cronTokenMiddleware, getDiagnoseUser);
+adminRouter.post('/diagnose/regenerate-plan', cronTokenMiddleware, postDiagnoseRegeneratePlan);
+adminRouter.post('/diagnose/reset-journey', cronTokenMiddleware, postDiagnoseResetJourney);
 
 adminRouter.use(authMiddleware);
 adminRouter.use(requireAdmin);
@@ -27,5 +34,6 @@ adminRouter.get('/prompts/defaults', getPromptDefaults);
 adminRouter.post('/prompts/invalidate-cache', postInvalidateCache);
 adminRouter.get('/users', getUsersList);
 adminRouter.patch('/users/:userId/plan', patchUserPlan);
+adminRouter.post('/users/:userId/reset', postUserReset);
 adminRouter.get('/rag/status', getRagStatus);
 adminRouter.post('/rag/reindex', postRagReindex);
