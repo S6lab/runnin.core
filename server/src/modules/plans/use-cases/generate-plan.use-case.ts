@@ -231,20 +231,34 @@ ${repaired}`,
     const parsedJson = this._parseJsonLenient(raw);
     const parsed = PlanWeeksSchema.parse(this._extractWeeksCandidate(parsedJson));
 
-    return parsed.map((week, weekIndex) => ({
-      weekNumber: week.weekNumber || weekIndex + 1,
-      sessions: week.sessions.map(session => ({
+    // Week 1 só conta dias a partir de HOJE. Se a IA agendou sessão pra
+    // segunda e o user gerou na quarta, a sessão de segunda é descartada
+    // (em vez de aparecer como "perdida" no app).
+    // Mon=1...Sun=7 (Date.getDay() retorna 0=Sun → tratamos como 7).
+    const todayDow = new Date().getDay() || 7;
+
+    return parsed.map((week, weekIndex) => {
+      const allSessions = week.sessions.map(session => ({
         id: uuid(),
         dayOfWeek: session.dayOfWeek,
         type: session.type,
         distanceKm: Number(session.distanceKm.toFixed(1)),
         targetPace: session.targetPace,
         notes: session.notes,
-      }) satisfies PlanSession).sort((a, b) => {
-        if (a.dayOfWeek !== b.dayOfWeek) return a.dayOfWeek - b.dayOfWeek;
-        return a.id.localeCompare(b.id);
-      }),
-    }));
+      }) satisfies PlanSession);
+
+      const filtered = weekIndex === 0
+        ? allSessions.filter(s => s.dayOfWeek >= todayDow)
+        : allSessions;
+
+      return {
+        weekNumber: week.weekNumber || weekIndex + 1,
+        sessions: filtered.sort((a, b) => {
+          if (a.dayOfWeek !== b.dayOfWeek) return a.dayOfWeek - b.dayOfWeek;
+          return a.id.localeCompare(b.id);
+        }),
+      };
+    });
   }
 
   private _parseJsonLenient(raw: string): unknown {

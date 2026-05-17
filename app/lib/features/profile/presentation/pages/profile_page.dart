@@ -409,7 +409,7 @@ class _ProfilePageState extends State<ProfilePage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const FigmaTopNav(breadcrumb: 'Perfil', showBackButton: false),
+            const FigmaTopNav(breadcrumb: 'Perfil / Editar', showBackButton: true),
             const SizedBox(height: 24),
             Expanded(
               child: _loading

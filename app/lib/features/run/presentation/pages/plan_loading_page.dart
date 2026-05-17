@@ -5,9 +5,20 @@ import 'package:go_router/go_router.dart';
 import 'package:runnin/core/router/app_router.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
+import 'package:runnin/features/training/data/datasources/plan_remote_datasource.dart';
 import 'package:runnin/shared/widgets/coach_ai_breadcrumb.dart';
 import 'package:runnin/shared/widgets/plan_task_row.dart';
 
+/// Etapa final do onboarding/pós-paywall: garante que o user tem um plano
+/// gerado pela IA antes de cair em /home.
+///
+/// Fluxo:
+///  1. Marca onboarding como concluído (cache + Firestore via /users/me).
+///  2. Checa /plans/current — se já existe plano (não 'failed'), pula
+///     animação e vai direto pra /home. Evita re-gerar em cache clear.
+///  3. Se não existe, dispara POST /plans/generate (assíncrono no server) e
+///     fica polling /plans/current até status 'ready' (ou fallback timeout).
+///  4. Animação dos 8 passos só serve pra preencher o tempo da chamada.
 class PlanLoadingPage extends StatefulWidget {
   const PlanLoadingPage({super.key});
 
@@ -28,31 +39,70 @@ class _PlanLoadingPageState extends State<PlanLoadingPage> {
   ];
 
   int _completedCount = 0;
-  late final Timer _timer;
-  final _ds = UserRemoteDatasource();
+  Timer? _timer;
+  String? _error;
+  final _userDs = UserRemoteDatasource();
+  final _planDs = PlanRemoteDatasource();
 
   @override
   void initState() {
     super.initState();
-    _timer = Timer.periodic(const Duration(milliseconds: 750), _tick);
+    markOnboardingDone();
+    _kickoff();
+  }
+
+  Future<void> _kickoff() async {
+    try {
+      // Plano já existe? Pula animação inteira.
+      final existing = await _planDs.getCurrentPlan();
+      if (existing != null) {
+        if (mounted) context.go('/home');
+        return;
+      }
+
+      // Dispara generate (server vai criar status='generating' e processa async)
+      final profile = await _userDs.getMe();
+      if (profile == null) {
+        if (mounted) context.go('/home');
+        return;
+      }
+      await _planDs.generatePlan(
+        goal: profile.goal,
+        level: profile.level,
+        frequency: profile.frequency,
+      );
+
+      // Roda animação enquanto faz polling de /plans/current
+      _timer = Timer.periodic(const Duration(milliseconds: 800), _tick);
+    } catch (e) {
+      if (mounted) setState(() => _error = '$e');
+      // Mesmo em erro vai pra /home — user pode gerar manualmente em training
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted) context.go('/home');
+      });
+    }
   }
 
   Future<void> _tick(Timer timer) async {
-    if (_completedCount >= _taskEntries.length) {
-      timer.cancel();
-      markOnboardingDone();
-      if (!mounted) return;
-      // Após gerar o plano sempre vai pra home. O briefing do Coach (coach-intro)
-      // só aparece quando o user toca INICIAR pela primeira vez, antes do prep.
-      context.go('/home');
-      return;
+    if (_completedCount < _taskEntries.length) {
+      setState(() => _completedCount++);
     }
-    setState(() => _completedCount++);
+    // A cada tick checa se o plano ficou pronto
+    try {
+      final plan = await _planDs.getCurrentPlan();
+      final ready = plan != null && plan.isReady;
+      if (ready || _completedCount >= _taskEntries.length) {
+        timer.cancel();
+        if (mounted) context.go('/home');
+      }
+    } catch (_) {
+      // Ignora erros temporários de network — segue animação
+    }
   }
 
   @override
   void dispose() {
-    _timer.cancel();
+    _timer?.cancel();
     super.dispose();
   }
 
@@ -80,14 +130,16 @@ class _PlanLoadingPageState extends State<PlanLoadingPage> {
                 ),
               ),
               const SizedBox(height: 34.37),
-              const Text(
-                'Analisando perfil para criar seu plano',
+              Text(
+                _error ?? 'Analisando perfil para criar seu plano',
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w400,
                   letterSpacing: 0,
                   height: 1.5,
-                  color: Color(0x8CFFFFFF),
+                  color: _error != null
+                      ? const Color(0xFFFF6B35)
+                      : const Color(0x8CFFFFFF),
                 ),
               ),
               const SizedBox(height: 51.51),

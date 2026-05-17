@@ -69,7 +69,12 @@ export class RequestRevisionUseCase {
     private readonly users: UserRepository,
   ) {}
 
-  async execute(userId: string, planId: string, input: RequestRevisionInput): Promise<{
+  async execute(
+    userId: string,
+    planId: string,
+    input: RequestRevisionInput,
+    opts: { bypassQuota?: boolean } = {},
+  ): Promise<{
     revision: PlanRevision;
     updatedPlan: Plan;
   }> {
@@ -90,7 +95,9 @@ export class RequestRevisionUseCase {
       quota = { usedThisWeek: 0, max: quota.max ?? 1, resetAt: now };
     }
 
-    if (quota.usedThisWeek >= quota.max) {
+    // bypassQuota usado por adaptações automáticas pós-run / missed day —
+    // não consomem a cota mensal do usuário.
+    if (!opts.bypassQuota && quota.usedThisWeek >= quota.max) {
       throw new QuotaExhaustedError(quota.usedThisWeek, quota.max, quota.resetAt);
     }
 
@@ -174,17 +181,20 @@ export class RequestRevisionUseCase {
 
     await this.revisions.save(revision);
 
-    const newQuota = {
-      usedThisWeek: quota.usedThisWeek + 1,
-      max: quota.max,
-      resetAt: quota.resetAt,
-    };
+    // Adaptações automáticas não consomem cota do usuário.
+    if (!opts.bypassQuota) {
+      const newQuota = {
+        usedThisWeek: quota.usedThisWeek + 1,
+        max: quota.max,
+        resetAt: quota.resetAt,
+      };
 
-    await this.users.upsert({
-      ...profile,
-      planRevisions: newQuota,
-      updatedAt: now,
-    });
+      await this.users.upsert({
+        ...profile,
+        planRevisions: newQuota,
+        updatedAt: now,
+      });
+    }
 
     return { revision, updatedPlan };
   }

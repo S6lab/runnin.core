@@ -12,6 +12,7 @@ import { MarkReadUseCase } from '../domain/use-cases/mark-read.use-case';
 import { CreateNotificationUseCase } from '../domain/use-cases/create-notification.use-case';
 import { EnsureDailyInsightsUseCase } from '../domain/use-cases/ensure-daily-insights.use-case';
 import { SendDailyPushUseCase } from '../domain/use-cases/send-daily-push.use-case';
+import { container } from '@shared/container';
 import { logger } from '@shared/logger/logger';
 
 const repo = new FirestoreNotificationRepository();
@@ -104,6 +105,11 @@ export async function ensureDailyNotifications(req: Request, res: Response, next
         });
         await dailyPush.executeForUser(user.id).catch(err => {
           logger.warn('notifications.daily_push_failed', { uid: user.id, err: String(err) });
+        });
+        // Se o user tinha sessão planejada ontem e não rodou, IA realoca a
+        // carga perdida nas próximas sessões. No-op pra quem está em dia.
+        await container.useCases.adaptPlan.executeMissedDay(user.id).catch(err => {
+          logger.warn('notifications.adapt_missed_day_failed', { uid: user.id, err: String(err) });
         });
       });
 
