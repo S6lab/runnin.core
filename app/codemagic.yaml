@@ -1,18 +1,20 @@
-# Codemagic CI/CD — runnin.core (monorepo)
+# Codemagic CI/CD — runnin Flutter app
 #
-# A app Flutter mora em ./app — todos os workflows usam working_directory: app.
-# A presença deste arquivo na raiz é o que destrava o "doesn't seem to contain
-# a mobile application" no Codemagic UI quando o repo é monorepo.
+# Este arquivo mora em /app/codemagic.yaml. No Codemagic UI o "Project path"
+# precisa estar setado como `app` (a app Flutter é monorepo dentro de
+# runnin.core/app). Com isso o Codemagic acha pubspec.yaml + android/ + ios/
+# e os scripts rodam direto na pasta certa — sem precisar de working_directory.
 #
 # Workflows:
-#  - android-debug   → APK de smoke pra QA, sem signing, dispara em qualquer push em PRs
-#  - android-release → AAB assinado + deploy interno na Play Store (track=internal)
-#  - ios-release     → STUB (desativado até APNs key + signing identity estarem no Codemagic)
+#  - android-debug   → APK de smoke, sem signing, dispara em PRs pra main
+#  - android-release → AAB assinado + deploy interno na Play Store em tag v*
+#  - ios-release     → STUB (desativado até APNs key + signing identity)
 #
-# Pré-requisitos (Codemagic UI > Settings > Code signing / Integrations):
-#  - Google Play service account JSON conectado como `google_play_credentials`
-#  - Android keystore upload (alias + senha) referenciado abaixo como `runnin_keystore`
-#  - iOS: pular por enquanto
+# Pré-requisitos no Codemagic UI:
+#  - Settings > Integrations > Google Play → conectar SA JSON do GCP
+#    (a mesma que você já criou com permissão no Play Console)
+#  - Variable group `google_play` com env var GOOGLE_PLAY_SERVICE_ACCOUNT_JSON
+#  - Code signing > Android → upload do keystore .jks com alias `runnin_keystore`
 
 workflows:
   android-debug:
@@ -25,7 +27,7 @@ workflows:
       vars:
         # API base do staging. Sem isso, app bate em produção desatualizada.
         API_BASE_URL: "https://runnin-api-staging-rogiz7losq-rj.a.run.app"
-        # VAPID Web Push (sem efeito em build Android; reservado pra cross-build futuro).
+        # VAPID Web Push (sem efeito em build Android; reservado pra cross-build).
         FIREBASE_VAPID_KEY: "BE1oX84SuJLSCWO-JqYSyIFEtCEPj8d4ol3xWlwPHmBp_ncd372Fsau6Fr5mYxIjzpWKfg5KZcM8ueoMQu78P5Q"
     triggering:
       events:
@@ -36,19 +38,16 @@ workflows:
           source: false
     scripts:
       - name: Flutter pub get
-        working_directory: app
         script: flutter pub get
       - name: Flutter analyze
-        working_directory: app
         script: flutter analyze --no-fatal-infos
       - name: Build Android APK (debug)
-        working_directory: app
         script: |
           flutter build apk --debug \
             --dart-define=API_BASE_URL=$API_BASE_URL \
             --dart-define=FIREBASE_VAPID_KEY=$FIREBASE_VAPID_KEY
     artifacts:
-      - app/build/**/outputs/**/*.apk
+      - build/**/outputs/**/*.apk
 
   android-release:
     name: Android Release (Play Internal)
@@ -59,7 +58,7 @@ workflows:
       java: 17
       groups:
         # Define no Codemagic UI > Environment variables > Groups:
-        # - google_play_credentials.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON (file, base64)
+        # - google_play.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON (secure)
         - google_play
       vars:
         API_BASE_URL: "https://runnin-api-rogiz7losq-rj.a.run.app"  # PROD
@@ -76,26 +75,18 @@ workflows:
           include: true
     scripts:
       - name: Flutter pub get
-        working_directory: app
         script: flutter pub get
-      - name: Auto-bump versionCode (+CM_BUILD_NUMBER)
-        working_directory: app
-        script: |
-          BUILD_NUMBER=$(($(grep -o "version: [0-9.]*+[0-9]*" pubspec.yaml | awk -F'+' '{print $2}') + $PROJECT_BUILD_NUMBER))
-          echo "Using build number $BUILD_NUMBER"
       - name: Build Android AAB (release, signed)
-        working_directory: app
         script: |
           flutter build appbundle --release \
             --build-number=$PROJECT_BUILD_NUMBER \
             --dart-define=API_BASE_URL=$API_BASE_URL \
             --dart-define=FIREBASE_VAPID_KEY=$FIREBASE_VAPID_KEY
     artifacts:
-      - app/build/**/outputs/**/*.aab
-      - app/build/**/outputs/**/mapping.txt
+      - build/**/outputs/**/*.aab
+      - build/**/outputs/**/mapping.txt
     publishing:
       google_play:
-        # Connect at Codemagic > Settings > Integrations > Google Play
         credentials: $GOOGLE_PLAY_SERVICE_ACCOUNT_JSON
         track: $GOOGLE_PLAY_TRACK
         submit_as_draft: false
