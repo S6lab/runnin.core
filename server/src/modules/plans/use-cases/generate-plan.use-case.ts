@@ -437,13 +437,14 @@ ${repaired}`,
     const parsedJson = this._parseJsonLenient(raw);
     const parsed = PlanWeeksSchema.parse(this._extractWeeksCandidate(parsedJson));
 
-    // Week 1 só conta dias a partir de HOJE. Se a IA agendou sessão pra
-    // segunda e o user gerou na quarta, a sessão de segunda é descartada
-    // (em vez de aparecer como "perdida" no app).
+    // Week 1 prioriza dias ≥ hoje. Se isso esvazia a semana inteira (caso
+    // típico: user gera no fim de semana e a IA não pôs sessão pra hoje),
+    // mantém todas as sessões pra não entregar semana vazia. O app exibe
+    // sessões passadas como "perdidas" — melhor que nenhuma sessão.
     // Mon=1...Sun=7 (Date.getDay() retorna 0=Sun → tratamos como 7).
     const todayDow = new Date().getDay() || 7;
 
-    return parsed.map((week, weekIndex) => {
+    const normalized = parsed.map((week, weekIndex) => {
       const allSessions = week.sessions.map(session => ({
         id: uuid(),
         dayOfWeek: session.dayOfWeek,
@@ -453,9 +454,14 @@ ${repaired}`,
         notes: session.notes,
       }) satisfies PlanSession);
 
-      const filtered = weekIndex === 0
-        ? allSessions.filter(s => s.dayOfWeek >= todayDow)
-        : allSessions;
+      let filtered = allSessions;
+      if (weekIndex === 0) {
+        const futureOnly = allSessions.filter(s => s.dayOfWeek >= todayDow);
+        // Só aplica o filtro se ainda sobrar pelo menos 1 sessão futura.
+        // Caso contrário, mantém tudo (atleta ficará com sessões "perdidas"
+        // visualmente — preferível a uma semana 1 vazia que parece bug).
+        filtered = futureOnly.length > 0 ? futureOnly : allSessions;
+      }
 
       return {
         weekNumber: week.weekNumber || weekIndex + 1,
@@ -465,6 +471,21 @@ ${repaired}`,
         }),
       };
     });
+
+    const totalSessions = normalized.reduce(
+      (sum, w) => sum + w.sessions.length,
+      0,
+    );
+    if (totalSessions === 0) {
+      // Plano com 0 sessões no total é parse failure mascarado (LLM
+      // devolveu weeks com sessions: []). Joga pro retry/repair loop em
+      // vez de salvar plano vazio no Firestore.
+      throw new Error(
+        `Plan parsed with 0 total sessions across ${normalized.length} weeks — treating as parse failure`,
+      );
+    }
+
+    return normalized;
   }
 
   private _parseJsonLenient(raw: string): unknown {

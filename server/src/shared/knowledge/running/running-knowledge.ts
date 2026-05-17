@@ -229,17 +229,36 @@ async function markDocumentsIndexed(chunks: RunningKnowledgeChunk[]): Promise<vo
     const now = new Date().toISOString();
     await Promise.all(
       Array.from(byPath.entries()).map(async ([path, count]) => {
-        // rag_documents tem doc id = sanitized path or random — tentamos
-        // achar por field storagePath. Update bulk via query.
+        // 1) Doc novo escreve storagePath; 2) Doc legado escreveu só `path`.
+        // 3) Doc id determinístico = path.replace('/', '__'). Tentamos os
+        // três caminhos antes de desistir.
         try {
-          const snap = await col.where('storagePath', '==', path).limit(1).get();
+          // Tentativa 1: query pelo novo campo storagePath
+          let snap = await col.where('storagePath', '==', path).limit(1).get();
+          // Tentativa 2: query pelo campo legado path
+          if (snap.empty) {
+            snap = await col.where('path', '==', path).limit(1).get();
+          }
           if (!snap.empty) {
             await snap.docs[0].ref.set(
-              { ragStatus: 'indexed', chunkCount: count, indexedAt: now },
+              { ragStatus: 'indexed', chunkCount: count, indexedAt: now, storagePath: path },
               { merge: true },
             );
+            return;
           }
-        } catch (_) {/* ignore per-doc errors */}
+          // Tentativa 3: doc id determinístico
+          const deterministicId = path.replace(/\//g, '__');
+          const docRef = col.doc(deterministicId);
+          await docRef.set(
+            { ragStatus: 'indexed', chunkCount: count, indexedAt: now, storagePath: path },
+            { merge: true },
+          );
+        } catch (err) {
+          logger.warn('knowledge.storage.mark_indexed_one_failed', {
+            path,
+            err: err instanceof Error ? err.message : String(err),
+          });
+        }
       }),
     );
   } catch (err) {

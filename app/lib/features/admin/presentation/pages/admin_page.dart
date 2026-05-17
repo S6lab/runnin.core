@@ -453,14 +453,17 @@ class _AdminPageState extends State<AdminPage> {
           .collection('rag_documents')
           .doc(path.replaceAll('/', '__'))
           .set({
-            'path': path,
-            'name': name,
+            // Campos esperados pelo server (markDocumentsIndexed faz
+            // where('storagePath', '==', path) + lê ragStatus). Versões
+            // antigas escreviam path/status, que ficavam órfãos no doc.
+            'storagePath': path,
+            'originalName': name,
             'size': size,
-            'status': 'pending',
+            'ragStatus': 'pending',
             'uploadedByUid': session.uid,
             'uploadedByEmail': session.email,
             'uploadedByRole': session.role,
-            'createdAt': FieldValue.serverTimestamp(),
+            'uploadedAt': FieldValue.serverTimestamp(),
             'updatedAt': FieldValue.serverTimestamp(),
           }, SetOptions(merge: true));
     } catch (_) {

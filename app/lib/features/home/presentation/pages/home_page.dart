@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -2793,8 +2795,6 @@ class _HeroSection extends StatelessWidget {
     final etaLabel = session != null
         ? '~${(session.distanceKm * _paceSecPerKm(session.targetPace) / 60).round()}min'
         : '';
-    // Session ordinal: # sessões já completadas + 1 (a de hoje)
-    final sessionOrdinal = (data.completedSessions + 1).toString().padLeft(2, '0');
 
     return Container(
       height: 540,
@@ -2880,9 +2880,9 @@ class _HeroSection extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 18),
-                // HOJE + ordinal
+                // HOJE + data/relógio live
                 Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Text(
                       'HOJE',
@@ -2894,18 +2894,10 @@ class _HeroSection extends StatelessWidget {
                         height: 1.0,
                       ),
                     ),
-                    const SizedBox(width: 4),
+                    const SizedBox(width: 12),
                     Padding(
-                      padding: const EdgeInsets.only(top: 4),
-                      child: Text(
-                        sessionOrdinal,
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                          color: palette.primary,
-                          letterSpacing: 0.6,
-                        ),
-                      ),
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: _HeroLiveClock(accent: palette.primary),
                     ),
                   ],
                 ),
@@ -3151,6 +3143,71 @@ class _PremiumUpsellBanner extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Relógio "live" no hero da home: exibe data dd/mm e hora HH:MM:SS,
+/// rebuilda a cada 1s. Substitui o ordinal "01" antigo.
+class _HeroLiveClock extends StatefulWidget {
+  final Color accent;
+  const _HeroLiveClock({required this.accent});
+
+  @override
+  State<_HeroLiveClock> createState() => _HeroLiveClockState();
+}
+
+class _HeroLiveClockState extends State<_HeroLiveClock> {
+  Timer? _timer;
+  DateTime _now = DateTime.now();
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() => _now = DateTime.now());
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  String _two(int n) => n.toString().padLeft(2, '0');
+
+  @override
+  Widget build(BuildContext context) {
+    final date = '${_two(_now.day)}/${_two(_now.month)}';
+    final time = '${_two(_now.hour)}:${_two(_now.minute)}:${_two(_now.second)}';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          date,
+          style: GoogleFonts.jetBrainsMono(
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+            color: widget.accent,
+            letterSpacing: 0.6,
+            height: 1.1,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          time,
+          style: GoogleFonts.jetBrainsMono(
+            fontSize: 13,
+            fontWeight: FontWeight.w400,
+            color: Colors.white.withValues(alpha: 0.75),
+            letterSpacing: 0.4,
+            height: 1.0,
+          ),
+        ),
+      ],
     );
   }
 }
