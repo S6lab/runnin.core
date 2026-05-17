@@ -96,7 +96,11 @@ class _PrepViewState extends State<_PrepView> {
 
   Future<void> _warmGps({bool showModalIfNeeded = false}) async {
     try {
+      // ignore: avoid_print
+      print('gps.prep.warm start showModal=$showModalIfNeeded');
       final enabled = await Geolocator.isLocationServiceEnabled();
+      // ignore: avoid_print
+      print('gps.prep.service_enabled=$enabled');
       if (!enabled) {
         if (mounted) setState(() => _gpsStatus = _GpsStatus.off);
         if (showModalIfNeeded && mounted) {
@@ -105,6 +109,8 @@ class _PrepViewState extends State<_PrepView> {
         return;
       }
       var perm = await Geolocator.checkPermission();
+      // ignore: avoid_print
+      print('gps.prep.permission_initial=$perm');
       // Se ainda não decidiu E user quer modal: abre modal educacional
       // ANTES do prompt nativo. User vê contexto e clica ATIVAR GPS,
       // o que dispara o requestPermission do browser.
@@ -140,13 +146,23 @@ class _PrepViewState extends State<_PrepView> {
             )
           : const LocationSettings(accuracy: LocationAccuracy.high);
       try {
-        await Geolocator.getCurrentPosition(locationSettings: settings);
-      } catch (_) {
-        // Timeout/erro do getCurrentPosition: tenta lastKnown como cache.
-        await Geolocator.getLastKnownPosition();
+        final p = await Geolocator.getCurrentPosition(locationSettings: settings);
+        // ignore: avoid_print
+        print('gps.prep.first_fix accuracy=${p.accuracy.toStringAsFixed(0)}m');
+      } catch (err) {
+        // ignore: avoid_print
+        print('gps.prep.first_fix_failed: $err — tentando lastKnown');
+        try {
+          await Geolocator.getLastKnownPosition();
+        } catch (e2) {
+          // ignore: avoid_print
+          print('gps.prep.cache_failed: $e2');
+        }
       }
       if (mounted) setState(() => _gpsStatus = _GpsStatus.ok);
-    } catch (_) {
+    } catch (err) {
+      // ignore: avoid_print
+      print('gps.prep.warm_failed: $err');
       if (mounted) setState(() => _gpsStatus = _GpsStatus.off);
     }
   }

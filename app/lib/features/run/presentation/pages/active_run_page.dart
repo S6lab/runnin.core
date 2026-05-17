@@ -107,12 +107,21 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
   void initState() {
     super.initState();
     _refreshGpsStatus();
-    // Modal de GPS abre AUTOMATICAMENTE em TODA entrada idle (decisão
-    // do user pra garantir testes). Pode gate-ar por status depois.
+    // Modal de GPS só abre AUTOMATICAMENTE se status != ok. Antes abria
+    // em TODA entrada idle, criando UX hostil (modal repetido, possível
+    // loop em rebuild). Chip retry continua disponível pra abrir manual.
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
-      final granted = await GpsPermissionModal.show(context);
-      if (granted) await _refreshGpsStatus();
+      // Aguarda _refreshGpsStatus terminar — sem isso o status ainda
+      // é unknown e o modal abriria sempre.
+      await Future.delayed(const Duration(milliseconds: 300));
+      if (!mounted) return;
+      if (_gpsStatus == _GpsStatus.ok) return;
+      final granted = await GpsPermissionModal.show(
+        context,
+        blocked: _gpsStatus == _GpsStatus.denied || _gpsStatus == _GpsStatus.off,
+      );
+      if (granted && mounted) await _refreshGpsStatus();
     });
   }
 

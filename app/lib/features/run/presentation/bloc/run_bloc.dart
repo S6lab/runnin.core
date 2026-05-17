@@ -234,32 +234,54 @@ class RunBloc extends Bloc<RunEvent, RunState> {
       // mantém stream com distanceFilter (mais eficiente, sem bateria
       // extra).
       if (kIsWeb) {
-        // Settings web: medium + timeLimit 8s. High força tentativa de
-        // GPS-de-hardware (não existe em desktop) e demora 10-30s pra
-        // cair pra WiFi. Medium usa WiFi direto em 1-3s.
+        // Settings web: medium + timeLimit 20s. 8s era curto demais —
+        // browser WiFi-triangulation pode levar 10s+ no cold-start
+        // (especialmente em corp net/VPN). Polling continua 5s mas
+        // cada call tem 20s pra responder.
         const webSettings = LocationSettings(
           accuracy: LocationAccuracy.medium,
-          timeLimit: Duration(seconds: 8),
+          timeLimit: Duration(seconds: 20),
         );
         // Primeiro ponto: tenta getCurrentPosition; se timeout, cai no
         // cache do browser via getLastKnownPosition.
         () async {
           try {
             final pos = await Geolocator.getCurrentPosition(locationSettings: webSettings);
+            // ignore: avoid_print
+            print('gps.web.first_fix accuracy=${pos.accuracy.toStringAsFixed(0)}m '
+                'lat=${pos.latitude.toStringAsFixed(4)} lng=${pos.longitude.toStringAsFixed(4)}');
             if (!isClosed) add(_GpsUpdate(pos));
-          } catch (_) {
+          } catch (err) {
+            // ignore: avoid_print
+            print('gps.web.first_fix_failed: $err — tentando cache lastKnown');
             try {
               final cached = await Geolocator.getLastKnownPosition();
-              if (cached != null && !isClosed) add(_GpsUpdate(cached));
-            } catch (_) {/* sem cache nem fresh — polling tenta depois */}
+              if (cached != null && !isClosed) {
+                // ignore: avoid_print
+                print('gps.web.first_fix.cache_hit accuracy=${cached.accuracy.toStringAsFixed(0)}m');
+                add(_GpsUpdate(cached));
+              } else {
+                // ignore: avoid_print
+                print('gps.web.first_fix.cache_miss — polling vai tentar');
+              }
+            } catch (e2) {
+              // ignore: avoid_print
+              print('gps.web.cache_failed: $e2');
+            }
           }
         }();
-        // Polling 3s — cada chamada respeita timeLimit (não pendura).
-        _gpsPollTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+        // Polling 5s — antes era 3s + timeLimit 8s, conflitava (poll
+        // dispara antes do timeout). Agora 5s + timeLimit 20s.
+        _gpsPollTimer = Timer.periodic(const Duration(seconds: 5), (_) {
           Geolocator.getCurrentPosition(locationSettings: webSettings)
               .then((pos) {
+            // ignore: avoid_print
+            print('gps.web.poll.success accuracy=${pos.accuracy.toStringAsFixed(0)}m');
             if (!isClosed) add(_GpsUpdate(pos));
-          }).catchError((_) {});
+          }).catchError((err) {
+            // ignore: avoid_print
+            print('gps.web.poll.failed: $err');
+          });
         });
       } else {
         _gpsSub = Geolocator.getPositionStream(

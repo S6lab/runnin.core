@@ -40,18 +40,27 @@ export class CreateLiveEphemeralTokenUseCase {
     const to = setTimeout(() => ctrl.abort(), 6000);
     let res: Response;
     try {
+      // Formato CORRETO da AuthToken REST API (Google AI docs):
+      // wrapper `authToken`, NÃO `config`. Campos `bidiGenerateContentSetup`
+      // (não liveConnectConstraints), `generationConfig` (não config).
+      // uses: 0 = unlimited (token reutilizável até expirar em 30min).
+      //
+      // O body anterior usava nomenclatura do Python SDK (config +
+      // liveConnectConstraints), que NÃO bate com a REST API direta —
+      // Google rejeitava com 400 "Unknown name config at auth_token".
+      // Token nunca foi gerado, Live nunca funcionou pra TTS na corrida.
       res = await fetch(url, {
         method: 'POST',
         signal: ctrl.signal,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          config: {
-            uses: 999,
+          authToken: {
             expireTime,
             newSessionExpireTime,
-            liveConnectConstraints: {
+            uses: 0,
+            bidiGenerateContentSetup: {
               model: DEFAULT_MODEL,
-              config: {
+              generationConfig: {
                 responseModalities: ['AUDIO'],
               },
             },
@@ -64,9 +73,12 @@ export class CreateLiveEphemeralTokenUseCase {
 
     if (!res.ok) {
       const body = await res.text().catch(() => '');
-      logger.warn('coach.live_token.failed', {
+      // Body completo (sem truncar) — diagnóstico das falhas anteriores
+      // mostrou que truncar em 300 chars cortava a parte importante
+      // (fieldViolations details).
+      logger.error('coach.live_token.failed', {
         status: res.status,
-        body: body.slice(0, 300),
+        body,
       });
       throw new Error(`auth_tokens create failed: ${res.status}`);
     }
