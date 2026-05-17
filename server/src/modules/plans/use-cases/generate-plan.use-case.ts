@@ -435,7 +435,13 @@ ${repaired}`,
 
   private _normalizeWeeks(raw: string): PlanWeek[] {
     const parsedJson = this._parseJsonLenient(raw);
-    const parsed = PlanWeeksSchema.parse(this._extractWeeksCandidate(parsedJson));
+    // Parse tolerante: descarta sessions inválidas (campos undefined/null)
+    // ao invés de invalidar o array inteiro. Gemini ocasionalmente omite
+    // dayOfWeek/type/distanceKm em 1-2 sessions; antes isso fazia
+    // PlanWeeksSchema.parse() rejeitar TUDO e o user ficar com plano falso.
+    const candidate = this._extractWeeksCandidate(parsedJson);
+    const lenientWeeks = this._coerceWeeksLenient(candidate);
+    const parsed = PlanWeeksSchema.parse(lenientWeeks);
 
     // Week 1 prioriza dias ≥ hoje. Se isso esvazia a semana inteira (caso
     // típico: user gera no fim de semana e a IA não pôs sessão pra hoje),
@@ -739,6 +745,50 @@ ${repaired}`,
     }
 
     return result;
+  }
+
+  /**
+   * Filtra sessions com campos obrigatórios faltando (dayOfWeek, type,
+   * distanceKm). Gemini ocasionalmente devolve sessions com `undefined`
+   * em algum campo crítico; antes isso fazia o array INTEIRO ser
+   * rejeitado pelo schema. Agora descartamos só a session quebrada e
+   * mantemos o resto da semana.
+   */
+  private _coerceWeeksLenient(value: unknown): unknown {
+    if (!Array.isArray(value)) return value;
+    let dropped = 0;
+    const coerced = value.map((rawWeek, weekIdx) => {
+      if (!rawWeek || typeof rawWeek !== 'object') return rawWeek;
+      const w = rawWeek as Record<string, unknown>;
+      if (!Array.isArray(w.sessions)) return w;
+      const validSessions = w.sessions.filter(s => {
+        if (!s || typeof s !== 'object') {
+          dropped++;
+          return false;
+        }
+        const sess = s as Record<string, unknown>;
+        const dayOk = typeof sess.dayOfWeek === 'number' &&
+          sess.dayOfWeek >= 1 && sess.dayOfWeek <= 7;
+        const typeOk = typeof sess.type === 'string' && sess.type.trim().length > 0;
+        const distOk = typeof sess.distanceKm === 'number' && sess.distanceKm > 0;
+        if (!dayOk || !typeOk || !distOk) {
+          dropped++;
+          return false;
+        }
+        return true;
+      });
+      if (dropped > 0 && validSessions.length === 0) {
+        logger.warn('plan.parse.week_empty_after_lenient', {
+          weekIndex: weekIdx,
+          originalCount: w.sessions.length,
+        });
+      }
+      return { ...w, sessions: validSessions };
+    });
+    if (dropped > 0) {
+      logger.warn('plan.parse.sessions_dropped_lenient', { dropped });
+    }
+    return coerced;
   }
 
   private _extractWeeksCandidate(value: unknown): unknown {

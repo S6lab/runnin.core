@@ -83,6 +83,9 @@ export const PLAN_INIT_DEFAULTS = {
   ].join('\n'),
 
   temperature: 0.6,
-  maxTokens: 5500,
+  // 8000 pra acomodar planos de 6-7 sessões/semana × 8 semanas (Triathlon
+  // intermediário+) sem truncar JSON. Antes 5500 cortava semana 7-8 e
+  // gerava `undefined` em campos das últimas sessões.
+  maxTokens: 8000,
   ragChunks: 4,
 };
