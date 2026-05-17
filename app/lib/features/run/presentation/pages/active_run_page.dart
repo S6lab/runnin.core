@@ -184,9 +184,14 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
                         _StatusChip(
                           icon: Icons.gps_fixed,
                           label: switch (gpsChipStatus) {
-                            _GpsStatus.unknown =>
-                              isIdle ? 'GPS · CONECTANDO' : 'GPS · AGUARDANDO',
-                            _GpsStatus.ok => 'GPS · OK',
+                            _GpsStatus.unknown => isIdle
+                                ? 'GPS · CONECTANDO'
+                                : 'GPS · AGUARDANDO',
+                            _GpsStatus.ok => !isIdle && state.points.isNotEmpty
+                                // Mostra contagem de points pra ficar VISÍVEL
+                                // que tá vivo (não estático).
+                                ? 'GPS · ${state.points.length} pts'
+                                : 'GPS · OK',
                             _GpsStatus.denied => 'GPS · NEGADO',
                             _GpsStatus.off => 'GPS · OFF',
                           },
@@ -198,13 +203,25 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
                           onTap: gpsChipStatus == _GpsStatus.ok
                               ? null
                               : _refreshGpsStatus,
+                          pulsing: gpsChipStatus == _GpsStatus.unknown,
                         ),
                         _StatusChip(
-                          icon: _coachMuted
-                              ? Icons.volume_off_outlined
-                              : Icons.headphones_outlined,
-                          label: _coachMuted ? 'COACH · MUTE' : 'COACH · ATIVO',
-                          color: _coachMuted ? palette.muted : palette.primary,
+                          icon: _coachAudioPlaying
+                              ? Icons.graphic_eq
+                              : _coachMuted
+                                  ? Icons.volume_off_outlined
+                                  : Icons.headphones_outlined,
+                          label: _coachAudioPlaying
+                              ? 'COACH · FALANDO'
+                              : _coachMuted
+                                  ? 'COACH · MUTE'
+                                  : 'COACH · PRONTO',
+                          color: _coachAudioPlaying
+                              ? palette.primary
+                              : _coachMuted
+                                  ? palette.muted
+                                  : palette.secondary,
+                          pulsing: _coachAudioPlaying,
                         ),
                       ],
                     ),
@@ -275,32 +292,42 @@ class _StatusChip extends StatelessWidget {
   final String label;
   final Color color;
   final VoidCallback? onTap;
+  /// Dot pulsa quando true — sinal visual de "trabalhando" (conectando,
+  /// coach falando). Sem isso o chip parece estático.
+  final bool pulsing;
   const _StatusChip({
     required this.icon,
     required this.label,
     required this.color,
     this.onTap,
+    this.pulsing = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final palette = context.runninPalette;
+    Widget dot = Container(
+      width: 6,
+      height: 6,
+      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+    );
+    if (pulsing) {
+      dot = dot
+          .animate(onPlay: (c) => c.repeat(reverse: true))
+          .fadeOut(duration: const Duration(milliseconds: 700));
+    }
     return InkWell(
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
-          color: palette.background,
+          color: palette.background.withValues(alpha: 0.92),
           border: Border.all(color: color.withValues(alpha: 0.55), width: 1),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              width: 6,
-              height: 6,
-              decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-            ),
+            dot,
             const SizedBox(width: 6),
             Icon(icon, size: 13, color: color),
             const SizedBox(width: 6),
@@ -581,22 +608,34 @@ class _StatsOverlay extends StatelessWidget {
                 ),
               ),
             ),
-          Text(
-            state.formattedDistance,
-            style: type.dataXl.copyWith(fontSize: 72),
+          // FittedBox protege contra overflow em telas estreitas (ex: 360dp).
+          // Sem isso, "12.34km" pode cortar.
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              state.formattedDistance,
+              style: type.dataXl.copyWith(fontSize: 72),
+              maxLines: 1,
+              softWrap: false,
+            ),
           ).animate().fadeIn(),
 
           const SizedBox(height: 16),
 
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _StatChip(label: 'PACE', value: state.formattedPace, unit: '/km'),
+              Flexible(
+                child: _StatChip(label: 'PACE', value: state.formattedPace, unit: '/km'),
+              ),
               const SizedBox(width: 32),
-              _StatChip(
-                label: 'TEMPO',
-                value: state.formattedElapsed,
-                unit: '',
+              Flexible(
+                child: _StatChip(
+                  label: 'TEMPO',
+                  value: state.formattedElapsed,
+                  unit: '',
+                ),
               ),
             ],
           ),
@@ -743,13 +782,20 @@ class _StatChip extends StatelessWidget {
       children: [
         Text(label, style: type.labelCaps),
         const SizedBox(height: 4),
-        RichText(
-          text: TextSpan(
-            text: value,
-            style: type.dataMd.copyWith(color: palette.primary),
-            children: [
-              if (unit.isNotEmpty) TextSpan(text: unit, style: type.bodySm),
-            ],
+        // FittedBox + maxLines/softWrap protegem PACE "--:--/km" e
+        // TEMPO "1:02:34" de cortar em telas estreitas.
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: RichText(
+            maxLines: 1,
+            softWrap: false,
+            text: TextSpan(
+              text: value,
+              style: type.dataMd.copyWith(color: palette.primary),
+              children: [
+                if (unit.isNotEmpty) TextSpan(text: unit, style: type.bodySm),
+              ],
+            ),
           ),
         ),
       ],

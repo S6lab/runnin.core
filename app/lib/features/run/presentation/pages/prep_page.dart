@@ -51,13 +51,16 @@ class _PrepViewState extends State<_PrepView> {
 
   List<WarmupExercise> _exercises = const [];
 
-  /// Wizard step: 0=Config (alertas+música+coach), 1=Tipo, 2=Aquecimento.
-  /// Tela 4 (corrida ativa) é /run após INICIAR.
+  /// Wizard step (4 telas):
+  ///   0 = TIPO (como vai correr hoje)
+  ///   1 = CHECKLIST DA SESSÃO (mesmo padrão do DayDetail)
+  ///   2 = ALERTAS + MÚSICA + GPS
+  ///   3 = AQUECIMENTO
+  /// Tela 5 = /run (corrida ativa) após CONTINUAR na 4.
   int _step = 0;
 
   /// Status do GPS no warm-up. unknown=ainda checando, ok=permissão+pos
-  /// cacheada, denied=permissão recusada, off=serviço desligado. Renderizado
-  /// como badge no header do step config.
+  /// cacheada, denied=permissão recusada, off=serviço desligado.
   _GpsStatus _gpsStatus = _GpsStatus.unknown;
 
   final Map<String, bool> _alerts = {
@@ -262,20 +265,22 @@ class _PrepViewState extends State<_PrepView> {
       child: Scaffold(
         backgroundColor: palette.background,
         appBar: RunninAppBar(
-          title: 'PREPARAR · ${_step + 1}/3',
+          title: 'PREPARAR · ${_step + 1}/4',
         ),
         body: Padding(
           padding: const EdgeInsets.all(24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _StepProgressBar(step: _step, total: 3),
+              _StepProgressBar(step: _step, total: 4),
               const SizedBox(height: 16),
               Expanded(
                 child: SingleChildScrollView(
+                  // Ordem: 0 TIPO → 1 CHECKLIST → 2 ALERTAS+MÚSICA → 3 AQUECIMENTO
                   child: switch (_step) {
-                    0 => _buildConfigStep(context, type),
-                    1 => _buildTypeStep(context, type),
+                    0 => _buildTypeStep(context, type),
+                    1 => _buildChecklistStep(context, type),
+                    2 => _buildConfigStep(context, type),
                     _ => _buildWarmupStep(context, type),
                   },
                 ),
@@ -385,6 +390,110 @@ class _PrepViewState extends State<_PrepView> {
     );
   }
 
+  // ─── Step 2: Checklist da sessão (mesmo padrão DayDetail) ───────
+  Widget _buildChecklistStep(BuildContext context, RunninTypography type) {
+    final palette = context.runninPalette;
+    final isPlanned = _planTodaySession != null &&
+        _selectedType == _planTodaySession!.type;
+    final session = isPlanned ? _planTodaySession : null;
+
+    final items = _buildChecklistItems(session);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SectionHeading(label: '> CHECKLIST DA SESSÃO'),
+        const SizedBox(height: 12),
+        Text(
+          isPlanned
+              ? 'Sessão planejada: ${session!.type} · ${session.distanceKm.toStringAsFixed(1)}km'
+              : 'Free Run · roteiro genérico de preparo',
+          style: TextStyle(
+            color: palette.muted,
+            fontSize: 12,
+            height: 1.4,
+          ),
+        ),
+        const SizedBox(height: 14),
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: palette.surface,
+            border: Border.all(color: palette.border, width: 1.0),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (var i = 0; i < items.length; i++)
+                Padding(
+                  padding: EdgeInsets.only(top: i == 0 ? 0 : 8),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.only(top: 6, right: 10),
+                        child: Container(
+                          width: 4,
+                          height: 4,
+                          color: palette.primary,
+                        ),
+                      ),
+                      Expanded(
+                        child: Text(
+                          items[i],
+                          style: TextStyle(
+                            color: palette.text.withValues(alpha: 0.92),
+                            fontSize: 13,
+                            height: 1.5,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Items adaptados ao tipo (Long → gel + garrafa; Intervalado → aquecimento
+  /// robusto; etc.) Free Run cai no caso genérico (sem session).
+  List<String> _buildChecklistItems(PlanSession? s) {
+    final items = <String>[];
+    final type = (s?.type ?? 'free run').toLowerCase();
+    final isLong = type.contains('long');
+    final isInterval = type.contains('interval') || type.contains('tiro');
+    final isTempo = type.contains('tempo');
+    final hydration = s?.hydrationLiters;
+    final pre = s?.nutritionPre?.trim();
+
+    items.add(
+      hydration != null
+          ? 'Hidratei ao longo do dia (meta: ${hydration.toStringAsFixed(1)}L)'
+          : 'Hidratei bem ao longo do dia',
+    );
+    if (pre != null && pre.isNotEmpty) {
+      items.add('Comi 60-90min antes: $pre');
+    } else {
+      items.add('Refeição leve 60-90min antes (carbo + pouca gordura)');
+    }
+    if (isLong) {
+      items.add('Levei gel/banana se passar de 60min');
+      items.add('Garrafa de água ou eletrólito comigo');
+    }
+    if (isInterval) {
+      items.add('Aquecimento robusto (10-12min) + educativos');
+    }
+    if (isTempo) {
+      items.add('Aquecimento progressivo (8-10min) antes do tempo');
+    }
+    items.add('Tênis confortável + cadarço firme');
+    items.add('GPS / wearable conectado e carregado');
+    items.add('Fone com Coach AI pronto');
+    return items;
+  }
+
   // ─── Step 3: Aquecimento ────────────────────────────────────────
   Widget _buildWarmupStep(BuildContext context, RunninTypography type) {
     return Column(
@@ -412,7 +521,7 @@ class _PrepViewState extends State<_PrepView> {
 
   // ─── Bottom navigation ──────────────────────────────────────────
   Widget _buildStepNav(BuildContext context, RunninPalette palette) {
-    final isLast = _step == 2;
+    final isLast = _step == 3;
     return Row(
       children: [
         if (_step > 0) ...[
