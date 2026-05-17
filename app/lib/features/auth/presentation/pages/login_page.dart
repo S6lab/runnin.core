@@ -121,9 +121,15 @@ class _LoginPageState extends State<LoginPage> {
     setState(() { _loading = true; _error = null; });
     try {
       if (kIsWeb) {
-        // Redirect (não popup): popup é bloqueado por COOP em browsers
-        // novos. Retorno capturado em initState via getRedirectResult.
-        await FirebaseAuth.instance.signInWithRedirect(GoogleAuthProvider());
+        // Popup em vez de redirect: redirect quebra em preview channels do
+        // Firebase Hosting por causa do cross-origin handshake com authDomain
+        // (credencial perdida no caminho de volta → user fica deslogado em
+        // /login). Popup completa na mesma janela.
+        final provider = GoogleAuthProvider()
+          ..addScope('email')
+          ..addScope('profile');
+        await FirebaseAuth.instance.signInWithPopup(provider);
+        // authStateChanges listener cuida do provisionMe + navigate.
         return;
       }
       final googleUser = await GoogleSignIn().signIn();
@@ -138,9 +144,16 @@ class _LoginPageState extends State<LoginPage> {
       );
       await FirebaseAuth.instance.signInWithCredential(credential);
       // authStateChanges listener cuida do provisionMe + navigate.
-    } catch (e) {
+    } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
       setState(() {
-        _error = 'Erro ao fazer login. Tente novamente.';
+        _error = 'Login Google: ${e.code}';
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = 'Erro ao fazer login: $e';
         _loading = false;
       });
     }
