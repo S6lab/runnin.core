@@ -70,7 +70,7 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
       body: Column(
         children: [
           const FigmaTopNav(
-            breadcrumb: 'Perfil / Ajustes / Alertas',
+            breadcrumb: 'ALERTAS',
             showBackButton: true,
           ),
           Expanded(

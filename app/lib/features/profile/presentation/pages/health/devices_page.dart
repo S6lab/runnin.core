@@ -20,7 +20,7 @@ class _HealthDevicesPageState extends State<HealthDevicesPage> {
       body: Column(
         children: [
           const FigmaTopNav(
-            breadcrumb: 'Perfil / Saúde / Dispositivos',
+            breadcrumb: 'DISPOSITIVOS',
             showBackButton: true,
           ),
           Expanded(

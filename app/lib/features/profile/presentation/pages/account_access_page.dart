@@ -410,10 +410,22 @@ class _AccountAccessPageState extends State<AccountAccessPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const FigmaTopNav(
-              breadcrumb: 'Perfil / Conta & Acesso',
+              breadcrumb: 'CONTA & ACESSO',
               showBackButton: true,
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 12),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+              child: Text(
+                'Métodos de login e vínculo entre dispositivos',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w400,
+                  color: palette.muted,
+                  height: 1.5,
+                ),
+              ),
+            ),
             Expanded(
               child: ListView(
                 padding: const EdgeInsets.symmetric(horizontal: 20),

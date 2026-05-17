@@ -17,7 +17,7 @@ class HealthIndexPage extends StatelessWidget {
         child: Column(
           children: [
             FigmaTopNav(
-              breadcrumb: 'PERFIL / SAÚDE',
+              breadcrumb: 'SAÚDE',
               showBackButton: true,
             ),
             Expanded(
@@ -27,17 +27,6 @@ class HealthIndexPage extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const SizedBox(height: AppSpacing.md),
-                    Text(
-                      'SAÚDE',
-                      style: GoogleFonts.jetBrainsMono(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w500,
-                        letterSpacing: -0.44,
-                        color: palette.text,
-                        height: 24.2 / 22,
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.xs),
                     Text(
                       'BPM, Zonas, Wearable, Exames',
                       style: GoogleFonts.jetBrainsMono(

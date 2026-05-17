@@ -125,7 +125,7 @@ class _CoachSettingsPageState extends State<CoachSettingsPage> {
       body: Column(
         children: [
           const FigmaTopNav(
-            breadcrumb: 'Perfil / Ajustes / Coach',
+            breadcrumb: 'COACH',
             showBackButton: true,
           ),
           Expanded(

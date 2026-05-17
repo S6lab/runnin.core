@@ -52,7 +52,7 @@ class _HealthTrendsPageState extends State<HealthTrendsPage> {
         child: Column(
           children: [
             FigmaTopNav(
-              breadcrumb: 'Perfil / Saúde / Tendências',
+              breadcrumb: 'TENDÊNCIAS',
               showBackButton: true,
             ),
             Expanded(

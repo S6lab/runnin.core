@@ -16,7 +16,7 @@ class SettingsIndexPage extends StatelessWidget {
       body: Column(
         children: [
           const FigmaTopNav(
-            breadcrumb: 'PERFIL / AJUSTES',
+            breadcrumb: 'AJUSTES',
             showBackButton: true,
           ),
           Expanded(
@@ -26,17 +26,6 @@ class SettingsIndexPage extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const SizedBox(height: AppSpacing.md),
-                  Text(
-                    'AJUSTES',
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w500,
-                      letterSpacing: -0.44,
-                      color: palette.text,
-                      height: 24.2 / 22,
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.xs),
                   Text(
                     'Coach, alertas e unidades',
                     style: GoogleFonts.jetBrainsMono(

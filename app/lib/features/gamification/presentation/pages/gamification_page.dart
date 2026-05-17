@@ -49,7 +49,7 @@ class _GamificationPageState extends State<GamificationPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const FigmaTopNav(
-              breadcrumb: 'PERFIL / GAMIFICAÇÃO',
+              breadcrumb: 'GAMIFICAÇÃO',
               showBackButton: true,
             ),
             const SizedBox(height: 16),

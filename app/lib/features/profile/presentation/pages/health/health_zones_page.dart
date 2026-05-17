@@ -52,7 +52,7 @@ class _HealthZonesPageState extends State<HealthZonesPage> {
         child: Column(
           children: [
             FigmaTopNav(
-              breadcrumb: 'Perfil / Saúde / Zonas',
+              breadcrumb: 'ZONAS',
               showBackButton: true,
             ),
             Expanded(

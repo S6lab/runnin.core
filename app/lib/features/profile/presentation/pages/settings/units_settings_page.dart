@@ -122,7 +122,7 @@ class _UnitsSettingsPageState extends State<UnitsSettingsPage> {
       body: Column(
         children: [
           const FigmaTopNav(
-            breadcrumb: 'Perfil / Ajustes / Unidades',
+            breadcrumb: 'UNIDADES',
             showBackButton: true,
           ),
           Expanded(

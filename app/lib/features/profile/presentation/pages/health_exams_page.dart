@@ -88,7 +88,7 @@ class _HealthExamsPageState extends State<HealthExamsPage> {
       body: Column(
         children: [
           const FigmaTopNav(
-            breadcrumb: 'Perfil / Saúde / Exames',
+            breadcrumb: 'EXAMES',
             showBackButton: true,
           ),
           Expanded(
