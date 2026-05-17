@@ -35,6 +35,13 @@ export async function postGeneratePlan(req: Request, res: Response, next: NextFu
       res.status(409).json({ error: 'PLAN_ALREADY_EXISTS', message: err.message });
       return;
     }
+    if (err instanceof Error) {
+      const code = (err as Error & { code?: string }).code;
+      if (code === 'ONBOARDING_REQUIRED' || code === 'ONBOARDING_INCOMPLETE') {
+        res.status(422).json({ error: code, message: err.message });
+        return;
+      }
+    }
     next(err);
   }
 }

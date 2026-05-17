@@ -53,6 +53,27 @@ export class GeneratePlanUseCase {
   constructor(private repo: PlanRepository) {}
 
   async execute(userId: string, input: GeneratePlanInput, opts: { confirmOverwrite?: boolean } = {}): Promise<Plan> {
+    // Guard CRÍTICO: plano requer onboarding completo. Sem isso o LLM
+    // não tem dados pra personalizar (cai em template genérico) — e
+    // user perde a percepção de "plano feito pra mim".
+    const profile = await container.repos.users.findById(userId);
+    if (!profile?.onboarded) {
+      const err = new Error('Onboarding incompleto. Termine o onboarding antes de gerar o plano.');
+      (err as Error & { code?: string }).code = 'ONBOARDING_REQUIRED';
+      throw err;
+    }
+    const missingCritical: string[] = [];
+    if (!profile.goal) missingCritical.push('objetivo');
+    if (!profile.level) missingCritical.push('nível');
+    if (!profile.birthDate) missingCritical.push('data de nascimento');
+    if (!profile.weight) missingCritical.push('peso');
+    if (!profile.height) missingCritical.push('altura');
+    if (missingCritical.length > 0) {
+      const err = new Error(`Onboarding incompleto: faltam ${missingCritical.join(', ')}.`);
+      (err as Error & { code?: string }).code = 'ONBOARDING_INCOMPLETE';
+      throw err;
+    }
+
     // Limite: 1 plano ativo por user. Pra mudar, usar /plans/:id/request-revision
     // (rate-limited 1/semana). Overwrite explícito permitido com confirmOverwrite=true.
     const existing = await this.repo.findCurrent(userId);
@@ -217,75 +238,56 @@ export class GeneratePlanUseCase {
           ].join('\n')
         : '(perfil não disponível)';
 
-      const userPrompt = `Você é o Coach AI do runnin. Escreva uma explicação DETALHADA, HONESTA E CRÍTICA (markdown, 1200-1800 palavras) sobre o plano que VOCÊ acabou de gerar.
+      const userPrompt = `Você é o Coach AI do runnin. Escreva o RACIONAL do plano (markdown, 700-1000 palavras, DENSO e direto). Vai ser renderizado em seções colapsáveis no app, então cada seção precisa ser completa em si.
 
-Este texto é o que garante o atleta confiar no plano: ele precisa SENTIR que o coach pensou nele especificamente, com critério metodológico, transparência sobre limites, e visão clara de como o plano vai evoluir.
+REGRA DE OURO: DENSIDADE > VOLUME. Não enrole. Nada de parágrafo introdutório por seção. Vai direto ao ponto. NUNCA repita ideias entre seções. Se uma seção não tem o que dizer, escreva 1 linha curta.
 
 # Dados do atleta considerados
 ${profileLines}
 
 # Plano gerado
-- Objetivo declarado: ${plan.goal}
-- Nível declarado: ${plan.level}
-- Duração: ${plan.weeksCount} semanas
-- Volume total: ${totalKm.toFixed(1)}km
+- Objetivo: ${plan.goal} / Nível: ${plan.level} / Duração: ${plan.weeksCount} semanas / Volume total: ${totalKm.toFixed(1)}km
 
 ${sessionsBySection}
 
-Estrutura esperada do markdown (use ##/### headings, parágrafos de verdade):
+ESTRUTURA OBRIGATÓRIA (use exatamente esses ## headings):
 
-## Avaliação realista do seu objetivo
-2-3 parágrafos. Aqui você é HONESTO. Se o objetivo declarado é desproporcional ao nível atual (ex: iniciante quer ultra), diga claramente que este plano de ${plan.weeksCount} semanas é a FASE DE FUNDAÇÃO — e quanto tempo realista (em meses) levaria pra chegar no objetivo final. Cite literatura/método (Lydiard, Daniels, Maffetone, Pfitzinger) quando for relevante pra justificar a decisão. Se objetivo está alinhado ao nível, valide com critério.
+## Avaliação do objetivo
+2 parágrafos curtos. Se o objetivo é desproporcional, diga direto e cite quanto tempo realista (meses) seria necessário pra chegar lá. Cite o método (Lydiard/Daniels/Maffetone/Polarized 80-20) escolhido em 1 frase.
 
-## Como li o seu perfil
-OBRIGATÓRIO citar EXPLICITAMENTE cada dado relevante do atleta neste formato: "verifiquei que você tem X, então fiz Y". Use o NOME do dado e do ajuste.
+## Leitura do perfil (verificações + ajustes)
+Bullets densos, formato OBRIGATÓRIO: "Verifiquei que [DADO COM VALOR] → [AJUSTE FEITO]". Sem parágrafo introdutório. Use 4-6 bullets, um por campo relevante. Exemplos do tom:
+- "Verifiquei que você tem hipertensão e toma betabloqueador → reduzi intensidade em Z3 pra Z2 e tirei intervalado das 3 primeiras semanas."
+- "Verifiquei que você teve cirurgia recente no tendão de Aquiles → eliminei subidas; libero terreno variado só na semana 7."
+- "Verifiquei que você acorda 06:00 e prefere correr de manhã → sessões duras 06:30-07:30."
+Se um campo está vazio, NÃO mencione.
 
-Parágrafo introdutório curto começando com "Antes de montar o plano, verifiquei tudo que você me passou: ..." listando os campos chave que você considerou (idade, gênero, peso, altura, BPM repouso/máx se houver, condições médicas TODAS pelo nome, wearable, horários de acordar/dormir, janela do dia).
+## Periodização
+Liste EXATAMENTE ${plan.weeksCount} bullets, NEM 1 A MAIS. Formato: "Semana N (FASE): foco específico em 1 frase". Pare na semana ${plan.weeksCount}. NÃO escreva "...continua".
 
-Em seguida, 5-8 bullets DENSOS no formato "verifiquei que [DADO ESPECÍFICO COM VALOR] → [AJUSTE EXPLÍCITO QUE FIZ NO PLANO]". Exemplos do tom esperado:
-- "Verifiquei que você tem hipertensão e toma betabloqueador → reduzi intensidade em Z3 pra Z2 e tirei intervalado das 3 primeiras semanas. Suas zonas de FC vão parecer baixas mas são corretas pro seu coração medicado. Comecei mais leve pra eu poder monitorar seu desempenho nas primeiras sessões."
-- "Verifiquei que você teve cirurgia recente no tendão de Aquiles → eliminei subidas e dei prioridade pra Easy Run em piso plano nas primeiras 6 semanas; vou liberar terreno variado só na semana 7."
-- "Verifiquei que você tem 43 anos e BMI 27.1 → a progressão semanal vai em incrementos de 8% (não 10%) e incluí um deload na semana 4 mais profundo."
-- "Verifiquei que você acorda 06:00 e dorme 23:00, prefere correr de manhã → marquei sessões mais exigentes 06:30-07:30 (cortisol alto, gap de 2h pro almoço)."
-NUNCA bullets genéricos. Se um campo está vazio, NÃO mencione.
+## Tipos de sessão neste plano
+Lista compacta. Para cada tipo PRESENTE neste plano (cheque o sessionsBySection acima — se Intervalado/Tempo não aparece, NÃO mencione), 1-2 linhas explicando o estímulo fisiológico e onde aparece. Máximo 4 tipos. Sem repetir explicações.
 
-## Metodologia que escolhi pra você
-2-3 parágrafos explicando QUAL método de treino estruturou este plano (periodização linear 3:1, base aeróbica de Lydiard, polarized 80/20, MAF de Maffetone, etc.) e POR QUE esse método combina com SEU perfil + objetivo. Cite o nome do método, princípio central, e tradução prática pro que ele vai sentir.
+## Recomendações específicas
+4-5 bullets ESPECÍFICAS ao perfil deste atleta. Cite valores reais (hidratação em L baseada em peso × 0.035, pace alvo baseado em FC, horário baseado em wakeTime). Nada genérico.
 
-## Periodização semana a semana
-Tabela mental detalhada — liste TODAS as semanas com FASE + objetivo + carga estimada:
-- **Semana 1 (FASE_NOME)** — Volume Xkm. Objetivo: ...
-- **Semana 2 (FASE_NOME)** — Volume Xkm. Objetivo: ...
-- ... (continua até Semana ${plan.weeksCount})
-Cada semana é CONSEQUÊNCIA da anterior. Explique a lógica de progressão (incremento %, ciclo de deload, transição base→specific→peak→taper).
+## Como vou adaptar
+3 bullets: (1) após cada corrida, (2) a cada semana, (3) em caso de falha recorrente. Cada um 1 linha.
 
-## O que cada tipo de sessão faz no seu corpo
-3-4 parágrafos breves. Para cada tipo de treino presente no plano (Easy Run, Long Run, Tempo, Intervalado, Cross), explique o estímulo fisiológico (mitocôndrias, limiar lático, VO2max, economia de corrida) e onde no plano ele aparece e por quê.
+## Limites deste plano
+2-3 bullets transparentes: o que precisa de wearable/exames pra melhorar, o que não vou prescrever ainda e por quê.
 
-## Recomendações específicas pra você
-5-7 bullets de ações ESPECÍFICAS — alimentação considerando peso/objetivo, hidratação considerando peso × 0.035L, recuperação considerando idade, sinais de alerta considerando condições médicas, dica de horário considerando wakeTime/sleepTime/runPeriod. Nada genérico.
-
-## Como vou adaptar o seu plano
-2 parágrafos. Explique o sistema de adaptação:
-- A cada CORRIDA CONCLUÍDA: ajusto volume/pace da próxima sessão se BPM ou pace ficou fora do esperado.
-- A cada SEMANA COMPLETA: reviso a semana seguinte considerando aderência, recuperação, lesões reportadas e novos exames carregados.
-- A cada FALHA RECORRENTE (2 sessões seguidas perdidas): reduzo carga automaticamente e te mando alerta.
-Mensagem realista: o plano NÃO é estático.
-
-## O que NÃO vou fazer
-3-4 bullets de transparência sobre LIMITES — o que este plano não promete, o que ainda precisa de wearable/exames pra melhorar, riscos que você precisa ter ciência (ex: "não vou prescrever HIIT até semana 4 mesmo se você se sentir pronto, porque seu BMI ainda exige base aeróbica longa primeiro").
-
-REGRAS:
-- NUNCA invente dados que não estão no perfil. Se um campo está vazio, ignore (não escreva "FC máx: não informado").
-- Use "você" pra falar com o atleta.
-- Não use emojis.
-- Linguagem técnica + acessível. Não simplifica demais — o atleta quer SENTIR que você sabe do que está falando.
-- Seja crítico onde precisa ser. Se o objetivo é irrealista, diga sem rodeios. Não infle expectativa.`;
+REGRAS GERAIS:
+- NUNCA invente dados ausentes.
+- "você" sempre.
+- Sem emojis.
+- Se a seção for redundante com outra, encurte. Não repita.
+- Pare EXATAMENTE na semana ${plan.weeksCount}; não invente semanas extras.`;
 
       const raw = await this.llm.generate(userPrompt, {
-        systemPrompt: 'Você é o Coach AI do runnin. Tom: confiante, técnico mas acessível. Profundidade > brevidade. Não use emojis. Português BR.',
-        maxTokens: 4000,
-        temperature: 0.4,
+        systemPrompt: 'Você é o Coach AI do runnin. Tom: técnico, direto, sem prolixidade. Cada parágrafo pesa. Sem emojis. PT-BR.',
+        maxTokens: 3000,
+        temperature: 0.35,
       });
 
       await this.repo.update(plan.id, plan.userId, {
@@ -355,15 +357,27 @@ ${weeksDigest}`;
 
       const raw = await this.llm.generate(userPrompt, {
         systemPrompt: 'Você é o Coach AI do runnin. Retorne SOMENTE JSON válido. Sem comentários, sem texto fora do JSON.',
-        maxTokens: 1500,
+        maxTokens: 3000,
         temperature: 0.4,
       });
 
       const parsed = this._parseNarrativesJson(raw);
       if (!parsed) return;
 
+      // Dedupe + clamp: garante 1 narrativa por week.weekNumber, sem
+      // narrativas repetidas. Se o LLM cuspiu menos narrativas, as faltantes
+      // ficam com narrative=undefined (UI lida com isso). Se cuspiu mais,
+      // ignoramos os excedentes.
+      const seenWeeks = new Set<number>();
+      const uniqueNarratives = parsed.weeks.filter(x => {
+        if (x.weekNumber > weeks.length || x.weekNumber < 1) return false;
+        if (seenWeeks.has(x.weekNumber)) return false;
+        seenWeeks.add(x.weekNumber);
+        return true;
+      });
+
       const enriched: PlanWeek[] = weeks.map((w) => {
-        const match = parsed.weeks.find((x) => x.weekNumber === w.weekNumber);
+        const match = uniqueNarratives.find((x) => x.weekNumber === w.weekNumber);
         return match ? { ...w, narrative: match.narrative } : w;
       });
 
@@ -950,6 +964,9 @@ ${JSON.stringify(normalizedWeeks)}`,
     }
 
     const result = this._renumberWeeks(weeks).slice(0, weeksCount);
+    // Rotação de tipos pra evitar clones idênticos quando o LLM truncou.
+    // Cada nova semana intercala intensidade/tipo de qualidade.
+    const qualityRotation = ['Tempo Run', 'Intervalado', 'Long Run'];
     while (result.length < weeksCount) {
       const source = result[result.length - 1];
       if (!source) break;
@@ -957,15 +974,36 @@ ${JSON.stringify(normalizedWeeks)}`,
       const nextWeekNumber = result.length + 1;
       const isRecoveryWeek = nextWeekNumber % 4 === 0;
       const progressionFactor = isRecoveryWeek ? 0.85 : 1.05;
+      const rotationKey = qualityRotation[(nextWeekNumber - 1) % qualityRotation.length] ?? 'Tempo Run';
 
-      result.push({
-        weekNumber: nextWeekNumber,
-        sessions: source.sessions.map(session => ({
+      // Substitui APENAS a primeira "Easy Run" da semana clonada pelo
+      // tipo de qualidade rotacionado — força mínimo de variação entre
+      // semanas (evita 5 semanas idênticas após o último parsed).
+      let qualitySwapped = false;
+      const newSessions = source.sessions.map((session, idx) => {
+        const newSession = {
           ...session,
           id: uuid(),
           distanceKm: Number(Math.max(1, session.distanceKm * progressionFactor).toFixed(1)),
           notes: this._deriveExpandedWeekNotes(session.notes, nextWeekNumber, isRecoveryWeek),
-        })),
+        };
+        if (!qualitySwapped && !isRecoveryWeek &&
+            session.type.toLowerCase().includes('easy') &&
+            idx === Math.floor(source.sessions.length / 2)) {
+          newSession.type = rotationKey;
+          newSession.notes = `[BUILD] ${rotationKey} pra estimular novo sistema energético na semana ${nextWeekNumber}. ${newSession.notes}`;
+          qualitySwapped = true;
+        }
+        return newSession;
+      });
+
+      result.push({
+        weekNumber: nextWeekNumber,
+        sessions: newSessions,
+        focus: isRecoveryWeek ? 'Recuperação ativa' : `Build (${rotationKey})`,
+        narrative: isRecoveryWeek
+          ? `[DELOAD] Semana ${nextWeekNumber} reduz volume em ~15% pra absorver o trabalho. Foco em recuperação, alongamento e sono.`
+          : `[BUILD] Semana ${nextWeekNumber} introduz ${rotationKey} pra subir o estímulo de qualidade. Mantenha aderência e respeito ao plano.`,
       });
     }
 

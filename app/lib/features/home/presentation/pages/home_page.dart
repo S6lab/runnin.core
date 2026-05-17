@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -2879,29 +2877,19 @@ class _HeroSection extends StatelessWidget {
                     ),
                   ],
                 ),
-                const SizedBox(height: 18),
-                // HOJE + data/relógio live
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      'HOJE',
-                      style: GoogleFonts.jetBrainsMono(
-                        fontSize: 64,
-                        fontWeight: FontWeight.w500,
-                        color: Colors.white,
-                        letterSpacing: -1.5,
-                        height: 1.0,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: _HeroLiveClock(accent: palette.primary),
-                    ),
-                  ],
-                ),
                 const Spacer(),
+                // HOJE — bem grande, logo acima do session pill
+                Text(
+                  'HOJE',
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 56,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.white,
+                    letterSpacing: -1.4,
+                    height: 1.0,
+                  ),
+                ),
+                const SizedBox(height: 10),
                 // EASY RUN pill + dia · semana
                 Row(
                   children: [
@@ -3147,50 +3135,4 @@ class _PremiumUpsellBanner extends StatelessWidget {
   }
 }
 
-/// Relógio "live" no hero da home: exibe data dd/mm e hora HH:MM:SS,
-/// rebuilda a cada 1s. Substitui o ordinal "01" antigo.
-class _HeroLiveClock extends StatefulWidget {
-  final Color accent;
-  const _HeroLiveClock({required this.accent});
-
-  @override
-  State<_HeroLiveClock> createState() => _HeroLiveClockState();
-}
-
-class _HeroLiveClockState extends State<_HeroLiveClock> {
-  Timer? _timer;
-  DateTime _now = DateTime.now();
-
-  @override
-  void initState() {
-    super.initState();
-    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted) setState(() => _now = DateTime.now());
-    });
-  }
-
-  @override
-  void dispose() {
-    _timer?.cancel();
-    super.dispose();
-  }
-
-  String _two(int n) => n.toString().padLeft(2, '0');
-
-  @override
-  Widget build(BuildContext context) {
-    final time = '${_two(_now.hour)}:${_two(_now.minute)}:${_two(_now.second)}';
-
-    return Text(
-      time,
-      style: GoogleFonts.jetBrainsMono(
-        fontSize: 20,
-        fontWeight: FontWeight.w500,
-        color: widget.accent,
-        letterSpacing: 0.6,
-        height: 1.0,
-      ),
-    );
-  }
-}
 
