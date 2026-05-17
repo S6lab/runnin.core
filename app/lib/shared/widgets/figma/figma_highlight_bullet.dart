@@ -40,7 +40,7 @@ class FigmaHighlightBullet extends StatelessWidget {
             prefix,
             style: GoogleFonts.jetBrainsMono(
               fontSize: 14,
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w500,
               color: color,
               height: 1.2,
             ),

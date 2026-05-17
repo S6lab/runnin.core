@@ -131,7 +131,7 @@ class _WeeklyReportDetailPageState extends State<WeeklyReportDetailPage> {
           '// RELATÓRIO SEMANAL',
           style: GoogleFonts.jetBrainsMono(
             fontSize: 12,
-            fontWeight: FontWeight.w700,
+            fontWeight: FontWeight.w500,
             letterSpacing: 0.6,
             color: palette.muted,
           ),
@@ -143,7 +143,7 @@ class _WeeklyReportDetailPageState extends State<WeeklyReportDetailPage> {
               'Semana ${_formatWeekStart(report.weekStart)}',
               style: GoogleFonts.jetBrainsMono(
                 fontSize: 24,
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w500,
                 color: palette.text,
               ),
             ),
@@ -243,12 +243,12 @@ class _WeeklyReportDetailPageState extends State<WeeklyReportDetailPage> {
               if (hasAdaptation)
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  color: FigmaColors.brandOrange,
+                  color: palette.secondary,
                   child: Text(
                     'ADAPTADO',
                     style: GoogleFonts.jetBrainsMono(
                       fontSize: 9,
-                      fontWeight: FontWeight.w900,
+                      fontWeight: FontWeight.w500,
                       letterSpacing: 0.9,
                       color: FigmaColors.bgBase,
                     ),
@@ -321,7 +321,7 @@ class _WeeklyReportDetailPageState extends State<WeeklyReportDetailPage> {
           'DESTAQUES',
           style: GoogleFonts.jetBrainsMono(
             fontSize: 12,
-            fontWeight: FontWeight.w700,
+            fontWeight: FontWeight.w500,
             letterSpacing: 0.6,
             color: palette.muted,
           ),
@@ -409,7 +409,7 @@ class _WeeklyReportDetailPageState extends State<WeeklyReportDetailPage> {
                   'CONVERSAR COM COACH ↗',
                   style: GoogleFonts.jetBrainsMono(
                     fontSize: 14,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w500,
                     color: palette.background,
                   ),
                 ),
@@ -429,7 +429,7 @@ class _WeeklyReportDetailPageState extends State<WeeklyReportDetailPage> {
               'MANTER PLANO ATUAL',
               style: GoogleFonts.jetBrainsMono(
                 fontSize: 14,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w500,
                 color: palette.text,
               ),
             ),
@@ -478,7 +478,7 @@ class _StatTile extends StatelessWidget {
             label,
             style: GoogleFonts.jetBrainsMono(
               fontSize: 12,
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w500,
               letterSpacing: 0.6,
               color: palette.muted,
             ),
@@ -487,7 +487,7 @@ class _StatTile extends StatelessWidget {
             value,
             style: GoogleFonts.jetBrainsMono(
               fontSize: 16,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w500,
               color: color,
             ),
           ),

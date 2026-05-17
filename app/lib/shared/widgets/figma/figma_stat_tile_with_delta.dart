@@ -56,7 +56,7 @@ class FigmaStatTileWithDelta extends StatelessWidget {
             label,
             style: GoogleFonts.jetBrainsMono(
               fontSize: 10,
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w500,
               letterSpacing: 1.0,
               color: FigmaColors.textMuted,
             ),
@@ -69,7 +69,7 @@ class FigmaStatTileWithDelta extends StatelessWidget {
                 delta,
                 style: GoogleFonts.jetBrainsMono(
                   fontSize: 22,
-                  fontWeight: FontWeight.w900,
+                  fontWeight: FontWeight.w500,
                   height: 1.0,
                   color: deltaColor,
                 ),
@@ -78,7 +78,7 @@ class FigmaStatTileWithDelta extends StatelessWidget {
                 ' ${deltaIsPositive ? '↗' : '↘'}',
                 style: GoogleFonts.jetBrainsMono(
                   fontSize: 14,
-                  fontWeight: FontWeight.w700,
+                  fontWeight: FontWeight.w500,
                   color: deltaColor,
                 ),
               ),

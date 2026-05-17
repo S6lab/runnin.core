@@ -141,7 +141,7 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
           'COMPARTILHAR',
           style: GoogleFonts.jetBrainsMono(
             fontSize: 13,
-            fontWeight: FontWeight.w700,
+            fontWeight: FontWeight.w500,
             letterSpacing: 1.1,
             color: FigmaColors.textPrimary,
           ),
@@ -189,12 +189,12 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
         unselectedLabelColor: FigmaColors.textSecondary,
         labelStyle: GoogleFonts.jetBrainsMono(
           fontSize: 11,
-          fontWeight: FontWeight.w700,
+          fontWeight: FontWeight.w500,
           letterSpacing: 1.1,
         ),
         unselectedLabelStyle: GoogleFonts.jetBrainsMono(
           fontSize: 11,
-          fontWeight: FontWeight.w700,
+          fontWeight: FontWeight.w500,
           letterSpacing: 1.1,
         ),
         dividerHeight: 0,
@@ -280,7 +280,7 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
                 label,
                 style: GoogleFonts.jetBrainsMono(
                   fontSize: 10,
-                  fontWeight: FontWeight.w700,
+                  fontWeight: FontWeight.w500,
                   letterSpacing: 1.1,
                   color: active ? FigmaColors.bgBase : FigmaColors.textSecondary,
                 ),
@@ -364,7 +364,7 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
                   _photoBytes == null ? 'TIRAR FOTO' : 'TIRAR OUTRA FOTO',
                   style: GoogleFonts.jetBrainsMono(
                     fontSize: 11,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w500,
                     letterSpacing: 1.1,
                     color: FigmaColors.brandCyan,
                   ),
@@ -381,7 +381,7 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
             'DADOS NO OVERLAY',
             style: GoogleFonts.jetBrainsMono(
               fontSize: 11,
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w500,
               letterSpacing: 1.1,
               color: FigmaColors.textSecondary,
             ),
@@ -505,7 +505,7 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
                   'RUNNIN.AI',
                   style: GoogleFonts.jetBrainsMono(
                     fontSize: 9,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w500,
                     letterSpacing: 2,
                     color: FigmaColors.brandCyan,
                   ),
@@ -656,7 +656,7 @@ class _OverlayChip extends StatelessWidget {
         label,
         style: GoogleFonts.jetBrainsMono(
           fontSize: 10,
-          fontWeight: FontWeight.w700,
+          fontWeight: FontWeight.w500,
           color: FigmaColors.brandCyan,
         ),
       ),

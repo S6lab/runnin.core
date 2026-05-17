@@ -30,7 +30,7 @@ class AppTheme {
         elevation: 0,
         titleTextStyle: GoogleFonts.jetBrainsMono(
           fontSize: 14,
-          fontWeight: FontWeight.w700,
+          fontWeight: FontWeight.w500,
           letterSpacing: 0.1,
           color: palette.text,
         ),
@@ -60,7 +60,7 @@ class AppTheme {
           foregroundColor: palette.background,
           shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
             textStyle: GoogleFonts.jetBrainsMono(
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w500,
               letterSpacing: 0.08,
               fontSize: 14,
             ),
@@ -73,7 +73,7 @@ class AppTheme {
           side: BorderSide(color: palette.border),
           shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
             textStyle: GoogleFonts.jetBrainsMono(
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w500,
               letterSpacing: 0.08,
               fontSize: 14,
             ),
@@ -83,5 +83,5 @@ class AppTheme {
     );
   }
 
-  static ThemeData get dark => build(RunninSkin.cyber.palette);
+  static ThemeData get dark => build(RunninSkin.artico.palette);
 }

@@ -62,7 +62,7 @@ class _Tab extends StatelessWidget {
           label,
           style: GoogleFonts.jetBrainsMono(
             fontSize: 11,
-            fontWeight: FontWeight.w700,
+            fontWeight: FontWeight.w500,
             letterSpacing: 1.1,
             color: active ? FigmaColors.bgBase : FigmaColors.textSecondary,
           ),

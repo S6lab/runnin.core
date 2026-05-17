@@ -423,7 +423,7 @@ class _TrainingPageState extends State<TrainingPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const FigmaTopNav(breadcrumb: 'Treino'),
+              const FigmaTopNav(breadcrumb: 'TREINO'),
               const SizedBox(height: 20),
               _buildBody(context),
             ],
@@ -979,7 +979,7 @@ class _TabButton extends StatelessWidget {
               label,
               style: TextStyle(
                 fontSize: 11,
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w500,
                 letterSpacing: 0.08,
                 color: selected ? palette.background : palette.muted,
               ),
@@ -995,7 +995,7 @@ class _TabButton extends StatelessWidget {
                   '$count',
                   style: TextStyle(
                     fontSize: 9,
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w500,
                     color: selected ? palette.background : palette.background,
                   ),
                 ),
@@ -1121,7 +1121,7 @@ class _ModeButton extends StatelessWidget {
           label,
           style: TextStyle(
             fontSize: 11,
-            fontWeight: FontWeight.w800,
+            fontWeight: FontWeight.w500,
             letterSpacing: 0.08,
             color: selected ? palette.primary : palette.muted,
           ),
@@ -1377,7 +1377,7 @@ class _WeeklyReportCard extends StatelessWidget {
                   'Semana ${_formatWeekStart(report.weekStart)}',
                   style: TextStyle(
                     fontSize: 18,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w500,
                     color: palette.text,
                   ),
                 ),
@@ -1404,7 +1404,7 @@ class _WeeklyReportCard extends StatelessWidget {
                 '${report.adherencePercent}%',
                 style: TextStyle(
                   fontSize: 16,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w500,
                   color: palette.background,
                 ),
               ),
@@ -1457,7 +1457,7 @@ class _WeekChip extends StatelessWidget {
           'S$weekNumber',
           style: TextStyle(
             fontSize: 11,
-            fontWeight: FontWeight.w700,
+            fontWeight: FontWeight.w500,
             color: selected ? palette.background : palette.muted,
           ),
         ),
@@ -1493,7 +1493,7 @@ class _SectionTitle extends StatelessWidget {
               indexLabel,
               style: TextStyle(
                 color: palette.primary,
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w500,
                 fontSize: 10,
               ),
             ),
@@ -1600,7 +1600,7 @@ class _WeeklySessionRow extends StatelessWidget {
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 9,
-                fontWeight: FontWeight.w900,
+                fontWeight: FontWeight.w500,
                 color: isDone
                     ? palette.background
                     : (isToday ? palette.primary : palette.muted),
@@ -1616,7 +1616,7 @@ class _WeeklySessionRow extends StatelessWidget {
                   _dayNames[dayOfWeek],
                   style: TextStyle(
                     fontSize: 20,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w500,
                     color: palette.text,
                   ),
                 ),
@@ -1636,7 +1636,7 @@ class _WeeklySessionRow extends StatelessWidget {
                   _distanceLabel(session!),
                   style: TextStyle(
                     fontSize: 24,
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w500,
                     color: palette.secondary,
                   ),
                 ),
@@ -1700,7 +1700,7 @@ class _MonthlyWeekCard extends StatelessWidget {
                   'Sem $weekNumber  Foco: $focus',
                   style: TextStyle(
                     fontSize: 18,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w500,
                     color: palette.text,
                   ),
                 ),
@@ -1720,7 +1720,7 @@ class _MonthlyWeekCard extends StatelessWidget {
                 '${totalDistance.toStringAsFixed(0)}K',
                 style: TextStyle(
                   fontSize: 28,
-                  fontWeight: FontWeight.w900,
+                  fontWeight: FontWeight.w500,
                   color: palette.secondary,
                 ),
               ),
@@ -1728,7 +1728,7 @@ class _MonthlyWeekCard extends StatelessWidget {
                 status,
                 style: TextStyle(
                   color: statusColor,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w500,
                   letterSpacing: 0.08,
                 ),
               ),
@@ -1765,7 +1765,7 @@ class _ReportCard extends StatelessWidget {
                   report.title,
                   style: TextStyle(
                     fontSize: 22,
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w500,
                     color: palette.text,
                   ),
                 ),
@@ -1781,7 +1781,7 @@ class _ReportCard extends StatelessWidget {
                     'MAIS RECENTE',
                     style: TextStyle(
                       fontSize: 9,
-                      fontWeight: FontWeight.w900,
+                      fontWeight: FontWeight.w500,
                       color: palette.background,
                     ),
                   ),
@@ -1844,7 +1844,7 @@ class _MetricColumn extends StatelessWidget {
           label,
           style: TextStyle(
             fontSize: 9,
-            fontWeight: FontWeight.w700,
+            fontWeight: FontWeight.w500,
             color: palette.muted,
             letterSpacing: 0.08,
           ),
@@ -1854,7 +1854,7 @@ class _MetricColumn extends StatelessWidget {
           value,
           style: TextStyle(
             fontSize: 24,
-            fontWeight: FontWeight.w900,
+            fontWeight: FontWeight.w500,
             color: palette.secondary,
           ),
         ),

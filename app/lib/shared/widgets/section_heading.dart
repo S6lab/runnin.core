@@ -115,7 +115,7 @@ class _BadgeCounter extends StatelessWidget {
         style: GoogleFonts.jetBrainsMono(
           fontSize: 9,
           height: 13.5 / 9,
-          fontWeight: FontWeight.w700,
+          fontWeight: FontWeight.w500,
           color: FigmaColors.bgBase,
         ),
       ),

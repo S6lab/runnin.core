@@ -198,7 +198,7 @@ class _FieldLabel extends StatelessWidget {
       style: GoogleFonts.jetBrainsMono(
         color: FigmaColors.textMuted,
         fontSize: 9,
-        fontWeight: FontWeight.w700,
+        fontWeight: FontWeight.w500,
         letterSpacing: FigmaDimensions.borderUniversal,
       ),
     );
@@ -364,7 +364,7 @@ class _RecommendedExamCard extends StatelessWidget {
               spec.priority,
               style: GoogleFonts.jetBrainsMono(
                 fontSize: 9,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w500,
                 letterSpacing: 0.8,
                 color: priorityColor,
               ),

@@ -56,7 +56,7 @@ class FigmaRunCard extends StatelessWidget {
                     typeLabel.substring(0, 1),
                     style: GoogleFonts.jetBrainsMono(
                       fontSize: 16,
-                      fontWeight: FontWeight.w700,
+                      fontWeight: FontWeight.w500,
                       color: typeAccent,
                     ),
                   ),
@@ -71,7 +71,7 @@ class FigmaRunCard extends StatelessWidget {
                       style: GoogleFonts.jetBrainsMono(
                         fontSize: 13,
                         height: 19.5 / 13,
-                        fontWeight: FontWeight.w700,
+                        fontWeight: FontWeight.w500,
                         color: FigmaColors.textPrimary,
                       ),
                     ),
@@ -125,7 +125,7 @@ class FigmaRunCard extends StatelessWidget {
             style: GoogleFonts.jetBrainsMono(
               fontSize: 16,
               height: 1,
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w500,
               color: FigmaColors.brandCyan,
             ),
           ),

@@ -80,7 +80,7 @@ class _StatCell extends StatelessWidget {
             label,
             style: TextStyle(
               fontSize: 9,
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w500,
               color: accent ? color : palette.muted,
               letterSpacing: 0.1,
             ),
@@ -90,7 +90,7 @@ class _StatCell extends StatelessWidget {
             value,
             style: TextStyle(
               fontSize: 20,
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w500,
               color: accent ? color : palette.text,
               letterSpacing: -0.02,
             ),

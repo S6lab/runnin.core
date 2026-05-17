@@ -92,7 +92,7 @@ class ShareMapCard extends StatelessWidget {
                     style: GoogleFonts.jetBrainsMono(
                       color: FigmaColors.brandCyan,
                       fontSize: 12,
-                      fontWeight: FontWeight.w700,
+                      fontWeight: FontWeight.w500,
                       letterSpacing: 2,
                     ),
                   ),
@@ -102,7 +102,7 @@ class ShareMapCard extends StatelessWidget {
                     style: GoogleFonts.jetBrainsMono(
                       color: Colors.white,
                       fontSize: 14,
-                      fontWeight: FontWeight.w700,
+                      fontWeight: FontWeight.w500,
                       letterSpacing: 1.1,
                     ),
                   ),
@@ -176,7 +176,7 @@ class _StatRow extends StatelessWidget {
           style: GoogleFonts.jetBrainsMono(
             color: Colors.white,
             fontSize: 32,
-            fontWeight: FontWeight.w700,
+            fontWeight: FontWeight.w500,
             height: 1.1,
           ),
         ),

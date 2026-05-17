@@ -217,7 +217,7 @@ class _BodyCell extends StatelessWidget {
               style: GoogleFonts.jetBrainsMono(
                 fontSize: 13,
                 height: 19.5 / 13,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w500,
                 color: distanceColor,
               ),
             ),
@@ -240,7 +240,7 @@ class _BodyCell extends StatelessWidget {
                 fontSize: 8,
                 height: 12 / 8,
                 letterSpacing: 0.8,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w500,
                 color: FigmaColors.brandCyan,
               ),
             ),

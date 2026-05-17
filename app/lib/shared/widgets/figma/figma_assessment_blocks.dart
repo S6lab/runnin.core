@@ -44,7 +44,7 @@ class FigmaCyanInfoBlock extends StatelessWidget {
                   title,
                   style: GoogleFonts.jetBrainsMono(
                     fontSize: 13,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w500,
                     color: FigmaColors.textPrimary,
                   ),
                 ),
@@ -145,7 +145,7 @@ class FigmaNumericInputField extends StatelessWidget {
             textAlign: TextAlign.center,
             style: GoogleFonts.jetBrainsMono(
               fontSize: 28,
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w500,
               height: 28 / 28,
               letterSpacing: -0.84,
               color: FigmaColors.textPrimary,
@@ -154,7 +154,7 @@ class FigmaNumericInputField extends StatelessWidget {
               hintText: placeholder,
               hintStyle: GoogleFonts.jetBrainsMono(
                 fontSize: 28,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w500,
                 letterSpacing: -0.84,
                 color: FigmaColors.textDim,
               ),
@@ -250,7 +250,7 @@ class FigmaTimePeriodCard extends StatelessWidget {
               label,
               style: GoogleFonts.jetBrainsMono(
                 fontSize: 13,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w500,
                 color: FigmaColors.textSecondary,
               ),
             ),

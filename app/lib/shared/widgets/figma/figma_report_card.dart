@@ -121,7 +121,7 @@ class FigmaReportCard extends StatelessWidget {
             style: GoogleFonts.jetBrainsMono(
               fontSize: 18,
               height: 22 / 18,
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w500,
               color: valueColor,
             ),
           ),

@@ -43,7 +43,7 @@ class FigmaZoneCard extends StatelessWidget {
               'Z$zoneNumber',
               style: GoogleFonts.jetBrainsMono(
                 fontSize: 11,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w500,
                 color: FigmaColors.bgBase,
               ),
             ),
@@ -59,7 +59,7 @@ class FigmaZoneCard extends StatelessWidget {
                   style: GoogleFonts.jetBrainsMono(
                     fontSize: 13,
                     height: 19.5 / 13,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w500,
                     color: FigmaColors.textPrimary,
                   ),
                 ),
@@ -87,7 +87,7 @@ class FigmaZoneCard extends StatelessWidget {
                   '${percent.toStringAsFixed(0)}%',
                   style: GoogleFonts.jetBrainsMono(
                     fontSize: 13,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w500,
                     color: zoneColor,
                   ),
                 ),

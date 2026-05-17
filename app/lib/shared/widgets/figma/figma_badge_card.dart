@@ -53,7 +53,7 @@ class FigmaBadgeCard extends StatelessWidget {
                     style: GoogleFonts.jetBrainsMono(
                       fontSize: 13,
                       height: 19.5 / 13,
-                      fontWeight: FontWeight.w700,
+                      fontWeight: FontWeight.w500,
                       color: FigmaColors.textPrimary,
                     ),
                   ),

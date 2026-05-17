@@ -26,7 +26,7 @@ class BodyMetricsGrid extends StatelessWidget {
             'MÉTRICAS CORPORAIS',
             style: TextStyle(
               fontSize: 9,
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w500,
               color: palette.muted,
               letterSpacing: 0.12,
             ),
@@ -95,7 +95,7 @@ class _MetricCard extends StatelessWidget {
             label,
             style: TextStyle(
               fontSize: 9,
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w500,
               color: palette.muted,
               letterSpacing: 0.12,
             ),
@@ -105,7 +105,7 @@ class _MetricCard extends StatelessWidget {
             value,
             style: TextStyle(
               fontSize: 20,
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w500,
               color: enabled ? palette.text : palette.muted,
               letterSpacing: -0.02,
             ),

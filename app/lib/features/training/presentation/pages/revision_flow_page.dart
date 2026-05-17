@@ -133,7 +133,7 @@ class _RevisionFlowPageState extends State<RevisionFlowPage> {
           'O que você quer mudar?',
           style: TextStyle(
             fontSize: 22,
-            fontWeight: FontWeight.w900,
+            fontWeight: FontWeight.w500,
             color: palette.text,
           ),
         ),
@@ -172,7 +172,7 @@ class _RevisionFlowPageState extends State<RevisionFlowPage> {
                     '1 ALTERAÇÃO SELECIONADA',
                     style: TextStyle(
                       fontSize: 11,
-                      fontWeight: FontWeight.w800,
+                      fontWeight: FontWeight.w500,
                       color: palette.primary,
                     ),
                   ),
@@ -214,7 +214,7 @@ class _RevisionFlowPageState extends State<RevisionFlowPage> {
           'SESSÃO DE AJUSTE · $typeLabel',
           style: TextStyle(
             fontSize: 11,
-            fontWeight: FontWeight.w800,
+            fontWeight: FontWeight.w500,
             letterSpacing: 0.08,
             color: palette.muted,
           ),
@@ -242,7 +242,7 @@ class _RevisionFlowPageState extends State<RevisionFlowPage> {
                 'Qual ajuste específico?',
                 style: TextStyle(
                   color: palette.text,
-                  fontWeight: FontWeight.w700,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
               const SizedBox(height: 12),
@@ -380,7 +380,7 @@ class _RevisionFlowPageState extends State<RevisionFlowPage> {
             'Plano recalculado!',
             style: TextStyle(
               fontSize: 24,
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w500,
               color: palette.text,
             ),
           ),

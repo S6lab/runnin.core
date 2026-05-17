@@ -548,7 +548,7 @@ class _BadgesTab extends StatelessWidget {
       children: [
         Text('Badges', style: type.displaySm.copyWith(
           color: Colors.white,
-          fontWeight: FontWeight.w700,
+          fontWeight: FontWeight.w500,
           fontSize: 24,
         )),
         const SizedBox(height: 6),
@@ -737,7 +737,7 @@ class _CalendarGrid extends StatelessWidget {
                         style: type.labelCaps.copyWith(
                           fontSize: 10,
                           color: hasRun ? palette.primary : palette.muted,
-                          fontWeight: hasRun ? FontWeight.w800 : FontWeight.w500,
+                          fontWeight: hasRun ? FontWeight.w500 : FontWeight.w500,
                         ),
                       ),
                       if (hasRun)

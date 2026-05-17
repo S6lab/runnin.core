@@ -39,7 +39,7 @@ class UserProfileHeader extends StatelessWidget {
                       userName.toUpperCase(),
                       style: GoogleFonts.jetBrainsMono(
                         fontSize: 20,
-                        fontWeight: FontWeight.w700,
+                        fontWeight: FontWeight.w500,
                         letterSpacing: 0.48,
                         color: palette.text,
                       ),
@@ -55,7 +55,7 @@ class UserProfileHeader extends StatelessWidget {
                   'Nível $levelNumber · · ',
                   style: GoogleFonts.jetBrainsMono(
                     fontSize: 13,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w500,
                     letterSpacing: 0.48,
                     color: palette.muted,
                   ),
@@ -65,7 +65,7 @@ class UserProfileHeader extends StatelessWidget {
                   '${totalRuns.toString().toUpperCase()} CORRIDAS · ${totalDistanceKm.toStringAsFixed(1)}km total',
                   style: GoogleFonts.jetBrainsMono(
                     fontSize: 13,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w500,
                     letterSpacing: 0.48,
                     color: palette.muted,
                   ),
@@ -101,7 +101,7 @@ class _Avatar extends StatelessWidget {
         initial,
         style: GoogleFonts.jetBrainsMono(
           fontSize: 22,
-          fontWeight: FontWeight.w900,
+          fontWeight: FontWeight.w500,
           color: palette.background,
         ),
       ),
@@ -127,7 +127,7 @@ class _PremiumBadge extends StatelessWidget {
         'PREMIUM',
         style: GoogleFonts.jetBrainsMono(
           fontSize: 8,
-          fontWeight: FontWeight.w700,
+          fontWeight: FontWeight.w500,
           color: palette.primary,
           letterSpacing: 0.5,
         ),

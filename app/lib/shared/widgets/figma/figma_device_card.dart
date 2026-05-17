@@ -48,7 +48,7 @@ class FigmaDeviceConnectedCard extends StatelessWidget {
                 style: GoogleFonts.jetBrainsMono(
                   fontSize: 10,
                   letterSpacing: 1.0,
-                  fontWeight: FontWeight.w700,
+                  fontWeight: FontWeight.w500,
                   color: FigmaColors.brandCyan,
                 ),
               ),
@@ -60,7 +60,7 @@ class FigmaDeviceConnectedCard extends StatelessWidget {
             style: GoogleFonts.jetBrainsMono(
               fontSize: 16,
               height: 22 / 16,
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w500,
               color: FigmaColors.textPrimary,
             ),
           ),
@@ -105,7 +105,7 @@ class FigmaDeviceConnectedCard extends StatelessWidget {
                 style: GoogleFonts.jetBrainsMono(
                   fontSize: 11,
                   letterSpacing: 1.1,
-                  fontWeight: FontWeight.w700,
+                  fontWeight: FontWeight.w500,
                   color: FigmaColors.brandCyan,
                 ),
               ),
@@ -157,7 +157,7 @@ class FigmaCompatibleDeviceCard extends StatelessWidget {
                     style: GoogleFonts.jetBrainsMono(
                       fontSize: 13,
                       height: 19.5 / 13,
-                      fontWeight: FontWeight.w700,
+                      fontWeight: FontWeight.w500,
                       color: FigmaColors.textPrimary,
                     ),
                   ),

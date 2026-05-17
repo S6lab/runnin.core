@@ -56,7 +56,7 @@ class _LogoLockup extends StatelessWidget {
           'RUNNIN',
           style: GoogleFonts.jetBrainsMono(
             fontSize: 14,
-            fontWeight: FontWeight.w700,
+            fontWeight: FontWeight.w500,
             letterSpacing: 1.4,
             color: const Color(0xFFFFFFFF),
           ),
@@ -69,7 +69,7 @@ class _LogoLockup extends StatelessWidget {
             '.AI',
             style: GoogleFonts.jetBrainsMono(
               fontSize: 9,
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w500,
               color: const Color(0xFF050510),
             ),
           ),

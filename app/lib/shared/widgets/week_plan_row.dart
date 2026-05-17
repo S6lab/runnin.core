@@ -69,7 +69,7 @@ class WeekPlanRow extends StatelessWidget {
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 9,
-                fontWeight: FontWeight.w900,
+                fontWeight: FontWeight.w500,
                 color: isDone
                     ? palette.background
                     : (isToday ? palette.primary : palette.muted),
@@ -85,7 +85,7 @@ class WeekPlanRow extends StatelessWidget {
                   _dayNames[dayOfWeek],
                   style: TextStyle(
                     fontSize: 20,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w500,
                     color: palette.text,
                   ),
                 ),
@@ -105,7 +105,7 @@ class WeekPlanRow extends StatelessWidget {
                   _distanceLabel(session!),
                   style: TextStyle(
                     fontSize: 24,
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w500,
                     color: palette.secondary,
                   ),
                 ),

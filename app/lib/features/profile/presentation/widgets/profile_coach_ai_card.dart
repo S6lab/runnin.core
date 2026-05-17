@@ -60,7 +60,7 @@ class _ProfileCoachAICardState extends State<ProfileCoachAICard> {
                           'COACH.AI > FECHAMENTO MENSAL',
                           style: GoogleFonts.jetBrainsMono(
                             fontSize: 10,
-                            fontWeight: FontWeight.w800,
+                            fontWeight: FontWeight.w500,
                             color: Colors.white,
                             letterSpacing: 0.1,
                           ),
@@ -70,7 +70,7 @@ class _ProfileCoachAICardState extends State<ProfileCoachAICard> {
                           'Resumo das métricas e evolução',
                           style: GoogleFonts.jetBrainsMono(
                             fontSize: 14,
-                            fontWeight: FontWeight.w700,
+                            fontWeight: FontWeight.w500,
                             color: Colors.white,
                           ),
                         ),
@@ -128,7 +128,7 @@ class _ProfileCoachAICardState extends State<ProfileCoachAICard> {
                             'VER FECHAMENTO',
                             style: TextStyle(
                               fontSize: 12,
-                              fontWeight: FontWeight.w800,
+                              fontWeight: FontWeight.w500,
                             ),
                           ),
                         ),

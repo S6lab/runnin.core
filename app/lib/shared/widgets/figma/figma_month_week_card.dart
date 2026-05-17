@@ -70,7 +70,7 @@ class FigmaMonthWeekCard extends StatelessWidget {
                   style: GoogleFonts.jetBrainsMono(
                     fontSize: 9,
                     letterSpacing: 0.8,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w500,
                     color: statusColor,
                   ),
                 ),

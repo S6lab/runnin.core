@@ -60,7 +60,7 @@ class TabBarWidget extends StatelessWidget {
                     color: isSelected
                         ? palette.background
                         : (appearance.inactiveColor ?? palette.muted),
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w500,
                     fontSize: appearance.fontSize ?? 11,
                   ),
                 ),

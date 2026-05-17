@@ -40,7 +40,7 @@ class FigmaAdherenceProgress extends StatelessWidget {
                   'ADERÊNCIA AO PLANO',
                   style: GoogleFonts.jetBrainsMono(
                     fontSize: 11,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w500,
                     letterSpacing: 1.1,
                     color: FigmaColors.textMuted,
                   ),
@@ -54,7 +54,7 @@ class FigmaAdherenceProgress extends StatelessWidget {
                     'ATENÇÃO',
                     style: GoogleFonts.jetBrainsMono(
                       fontSize: 9,
-                      fontWeight: FontWeight.w900,
+                      fontWeight: FontWeight.w500,
                       letterSpacing: 0.9,
                       color: FigmaColors.bgBase,
                     ),
@@ -70,7 +70,7 @@ class FigmaAdherenceProgress extends StatelessWidget {
                 '$percent',
                 style: GoogleFonts.jetBrainsMono(
                   fontSize: 36,
-                  fontWeight: FontWeight.w900,
+                  fontWeight: FontWeight.w500,
                   height: 1.0,
                   color: color,
                 ),
@@ -79,7 +79,7 @@ class FigmaAdherenceProgress extends StatelessWidget {
                 ' %',
                 style: GoogleFonts.jetBrainsMono(
                   fontSize: 16,
-                  fontWeight: FontWeight.w700,
+                  fontWeight: FontWeight.w500,
                   color: color,
                 ),
               ),

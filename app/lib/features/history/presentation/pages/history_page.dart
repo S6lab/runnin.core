@@ -119,7 +119,7 @@ class _HistoryPageState extends State<HistoryPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const FigmaTopNav(breadcrumb: 'Histórico'),
+            const FigmaTopNav(breadcrumb: 'HISTÓRICO'),
             const SizedBox(height: 16),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -200,7 +200,7 @@ class _HistoryPageState extends State<HistoryPage> {
                 children: [
                   const Text(
                     'BENCHMARK',
-                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                    style: TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
                   ),
                   const SizedBox(height: 8),
                   FigmaBenchmarkBellCurve(userPercentile: _benchmarkPercentile!),
@@ -271,7 +271,7 @@ class _DataView extends StatelessWidget {
           Expanded(child: FigmaHistStatCard(
             label: 'CORRIDAS',
             value: '${stats.count}',
-            valueColor: FigmaColors.brandCyan,
+            valueColor: context.runninPalette.primary,
           )),
           const SizedBox(width: 8),
           Expanded(child: FigmaHistStatCard(
@@ -298,14 +298,14 @@ class _DataView extends StatelessWidget {
             value: '${stats.streakDays}',
             unit: 'd',
             valueColor: stats.streakDays > 2
-                ? FigmaColors.brandOrange
+                ? context.runninPalette.secondary
                 : FigmaColors.textPrimary,
           )),
           const SizedBox(width: 8),
           Expanded(child: FigmaHistStatCard(
             label: 'XP',
             value: '${stats.totalXp}',
-            valueColor: FigmaColors.brandCyan,
+            valueColor: context.runninPalette.primary,
           )),
         ]),
         const SizedBox(height: 8),
@@ -596,7 +596,7 @@ class _RunsListView extends StatelessWidget {
                       'FREE',
                       style: TextStyle(
                         fontSize: 9,
-                        fontWeight: FontWeight.w700,
+                        fontWeight: FontWeight.w500,
                         color: Colors.white,
                       ),
                     ),

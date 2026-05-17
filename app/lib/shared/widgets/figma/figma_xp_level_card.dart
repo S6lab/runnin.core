@@ -39,7 +39,7 @@ class FigmaXpLevelCard extends StatelessWidget {
                 style: GoogleFonts.jetBrainsMono(
                   fontSize: 56,
                   height: 50.4 / 56,
-                  fontWeight: FontWeight.w700,
+                  fontWeight: FontWeight.w500,
                   color: FigmaColors.brandCyan,
                 ),
               ),

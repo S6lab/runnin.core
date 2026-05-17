@@ -138,7 +138,7 @@ class _DashedAddButton extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w500,
-                  color: FigmaColors.brandCyan,
+                  color: context.runninPalette.primary,
                 ),
               ),
               const SizedBox(width: 8),

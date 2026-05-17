@@ -92,7 +92,7 @@ class _PaywallPageState extends State<PaywallPage> {
                       'Libere todo o coach.',
                       style: GoogleFonts.jetBrainsMono(
                         fontSize: 28,
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w500,
                         color: palette.text,
                         letterSpacing: -0.8,
                         height: 1.1,
@@ -124,7 +124,7 @@ class _PaywallPageState extends State<PaywallPage> {
                     Text(
                       'COMPARAÇÃO',
                       style: GoogleFonts.jetBrainsMono(
-                        fontSize: 11, fontWeight: FontWeight.w700,
+                        fontSize: 11, fontWeight: FontWeight.w500,
                         color: palette.muted, letterSpacing: 1.0,
                       ),
                     ),
@@ -150,7 +150,7 @@ class _PaywallPageState extends State<PaywallPage> {
                         'CONTINUAR GRÁTIS',
                         style: GoogleFonts.jetBrainsMono(
                           fontSize: 12,
-                          fontWeight: FontWeight.w700,
+                          fontWeight: FontWeight.w500,
                           color: palette.text,
                           letterSpacing: 1.2,
                         ),
@@ -178,17 +178,17 @@ class _PricingCard extends StatelessWidget {
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: palette.surface,
-        border: Border.all(color: FigmaColors.brandCyan, width: 1.041),
+        border: Border.all(color: palette.primary, width: 1.041),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Container(width: 8, height: 8, decoration: const BoxDecoration(color: FigmaColors.brandCyan, shape: BoxShape.circle)),
+              Container(width: 8, height: 8, decoration: BoxDecoration(color: context.runninPalette.primary, shape: BoxShape.circle)),
               const SizedBox(width: 8),
               Text('PREMIUM', style: GoogleFonts.jetBrainsMono(
-                fontSize: 11, fontWeight: FontWeight.w800, color: FigmaColors.brandCyan, letterSpacing: 1.4,
+                fontSize: 11, fontWeight: FontWeight.w500, color: palette.primary, letterSpacing: 1.4,
               )),
             ],
           ),
@@ -197,7 +197,7 @@ class _PricingCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text(price, style: GoogleFonts.jetBrainsMono(
-                fontSize: 36, fontWeight: FontWeight.w900, color: palette.text, letterSpacing: -1.0, height: 1.0,
+                fontSize: 36, fontWeight: FontWeight.w500, color: palette.text, letterSpacing: -1.0, height: 1.0,
               )),
               const SizedBox(width: 6),
               Padding(
@@ -213,7 +213,7 @@ class _PricingCard extends StatelessWidget {
             onTap: saving ? null : onSubscribe,
             child: Container(
               padding: const EdgeInsets.symmetric(vertical: 14),
-              color: FigmaColors.brandCyan,
+              color: palette.primary,
               alignment: Alignment.center,
               child: saving
                   ? const SizedBox(
@@ -223,7 +223,7 @@ class _PricingCard extends StatelessWidget {
                   : Text(
                       'ASSINAR ↗',
                       style: GoogleFonts.jetBrainsMono(
-                        fontSize: 13, fontWeight: FontWeight.w800, color: Colors.black, letterSpacing: 1.4,
+                        fontSize: 13, fontWeight: FontWeight.w500, color: Colors.black, letterSpacing: 1.4,
                       ),
                     ),
             ),
@@ -271,6 +271,6 @@ class _Mark extends StatelessWidget {
     if (!active) {
       return Icon(Icons.close, size: 16, color: palette.muted.withValues(alpha: 0.5));
     }
-    return Icon(Icons.check, size: 18, color: premiumColor ? FigmaColors.brandCyan : palette.text);
+    return Icon(Icons.check, size: 18, color: premiumColor ? palette.primary : palette.text);
   }
 }

@@ -96,14 +96,14 @@ class _IntroPageState extends State<IntroPage> {
                   Row(
                     children: [
                       Text('RUNNIN', style: GoogleFonts.jetBrainsMono(
-                        fontSize: 14, fontWeight: FontWeight.w700, color: Colors.white, letterSpacing: 1.4,
+                        fontSize: 14, fontWeight: FontWeight.w500, color: Colors.white, letterSpacing: 1.4,
                       )),
                       const SizedBox(width: 4),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
                         color: FigmaColors.brandCyan,
                         child: Text('.AI', style: GoogleFonts.jetBrainsMono(
-                          color: FigmaColors.bgBase, fontSize: 9, fontWeight: FontWeight.w900,
+                          color: FigmaColors.bgBase, fontSize: 9, fontWeight: FontWeight.w500,
                         )),
                       ),
                     ],
@@ -113,7 +113,7 @@ class _IntroPageState extends State<IntroPage> {
                     child: Text(
                       'PULAR',
                       style: GoogleFonts.jetBrainsMono(
-                        fontSize: 11, fontWeight: FontWeight.w700,
+                        fontSize: 11, fontWeight: FontWeight.w500,
                         color: Colors.white.withValues(alpha: 0.6),
                         letterSpacing: 1.0,
                       ),
@@ -163,7 +163,7 @@ class _IntroPageState extends State<IntroPage> {
                       style: GoogleFonts.jetBrainsMono(
                         color: FigmaColors.bgBase,
                         fontSize: 13,
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w500,
                         letterSpacing: 1.4,
                       ),
                     ),
@@ -212,7 +212,7 @@ class _IntroSlideView extends StatelessWidget {
             slide.eyebrow,
             style: GoogleFonts.jetBrainsMono(
               fontSize: 11,
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w500,
               color: FigmaColors.brandCyan,
               letterSpacing: 1.1,
             ),
@@ -222,7 +222,7 @@ class _IntroSlideView extends StatelessWidget {
             slide.title,
             style: GoogleFonts.jetBrainsMono(
               fontSize: 28,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w500,
               color: Colors.white,
               letterSpacing: -0.8,
               height: 1.1,

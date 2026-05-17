@@ -100,7 +100,7 @@ class _LogoLockup extends StatelessWidget {
           style: TextStyle(
             color: palette.text,
             fontSize: 14,
-            fontWeight: FontWeight.w700,
+            fontWeight: FontWeight.w500,
             letterSpacing: 0.5,
           ),
         ),
@@ -113,7 +113,7 @@ class _LogoLockup extends StatelessWidget {
             style: TextStyle(
               color: palette.background,
               fontSize: 9,
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w500,
               letterSpacing: 1.4,
             ),
           ),

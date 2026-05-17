@@ -305,7 +305,7 @@ class _CoachSettingsPageState extends State<CoachSettingsPage> {
                         style: GoogleFonts.jetBrainsMono(
                           color: FigmaColors.bgBase,
                           fontSize: 13,
-                          fontWeight: FontWeight.w900,
+                          fontWeight: FontWeight.w500,
                           letterSpacing: 1.5,
                         ),
                       ),

@@ -109,7 +109,7 @@ class _AdjustmentsHistoryPageState extends State<AdjustmentsHistoryPage> {
             'SOLICITAÇÕES ANTERIORES',
             style: TextStyle(
               fontSize: 11,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w500,
               letterSpacing: 0.08,
               color: palette.muted,
             ),
@@ -158,7 +158,7 @@ class _QuotaCard extends StatelessWidget {
                 '$usedThisWeek/1',
                 style: TextStyle(
                   fontSize: 18,
-                  fontWeight: FontWeight.w900,
+                  fontWeight: FontWeight.w500,
                   color: palette.secondary,
                 ),
               ),
@@ -230,7 +230,7 @@ class _EmptyRevisions extends StatelessWidget {
             'Nenhuma solicitação ainda',
             style: TextStyle(
               fontSize: 16,
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w500,
               color: palette.text,
             ),
           ),
@@ -274,7 +274,7 @@ class _RevisionCard extends StatelessWidget {
                   'Semana ${revision.weekIndex + 1}',
                   style: TextStyle(
                     fontSize: 18,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w500,
                     color: palette.text,
                   ),
                 ),
@@ -333,7 +333,7 @@ class _CalendarVisualization extends StatelessWidget {
           'CALENDÁRIO DE REVISÕES',
           style: TextStyle(
             fontSize: 11,
-            fontWeight: FontWeight.w800,
+            fontWeight: FontWeight.w500,
             letterSpacing: 0.08,
             color: palette.muted,
           ),
@@ -364,7 +364,7 @@ class _CalendarVisualization extends StatelessWidget {
                       'S$weekNum',
                       style: TextStyle(
                         fontSize: 11,
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w500,
                         color: hasRevision ? palette.primary : palette.muted,
                       ),
                     ),

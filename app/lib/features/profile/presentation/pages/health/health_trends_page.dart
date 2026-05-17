@@ -382,7 +382,7 @@ class _SectionHeader extends StatelessWidget {
             text: label,
             style: GoogleFonts.jetBrainsMono(
               fontSize: 22,
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w500,
               letterSpacing: -0.44,
               color: FigmaColors.textPrimary,
               height: 24.2 / 22,

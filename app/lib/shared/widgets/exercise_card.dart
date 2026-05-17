@@ -33,7 +33,7 @@ class ExerciseCard extends StatelessWidget {
             style: type.labelCaps.copyWith(
               color: palette.primary,
               fontSize: 11,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w500,
             ),
           ),
           const SizedBox(height: 10),

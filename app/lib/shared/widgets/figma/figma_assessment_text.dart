@@ -33,7 +33,7 @@ class FigmaAssessmentHeading extends StatelessWidget {
       text,
       style: GoogleFonts.jetBrainsMono(
         fontSize: 24,
-        fontWeight: FontWeight.w700,
+        fontWeight: FontWeight.w500,
         height: 26.4 / 24,
         letterSpacing: -0.48,
         color: FigmaColors.textPrimary,

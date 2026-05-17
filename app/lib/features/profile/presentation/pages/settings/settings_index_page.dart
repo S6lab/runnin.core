@@ -93,7 +93,7 @@ class _SettingsCard extends StatelessWidget {
                     style: GoogleFonts.jetBrainsMono(
                       color: FigmaColors.textPrimary,
                       fontSize: 12,
-                      fontWeight: FontWeight.w700,
+                      fontWeight: FontWeight.w500,
                       letterSpacing: 1.0,
                     ),
                   ),

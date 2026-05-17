@@ -50,7 +50,7 @@ class StepCard extends StatelessWidget {
                   style: type.labelCaps.copyWith(
                     color: palette.primary,
                     fontSize: 12,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
                 if (step.status == StepStatus.completed)

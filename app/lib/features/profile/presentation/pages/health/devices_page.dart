@@ -104,7 +104,7 @@ class _HealthDevicesPageState extends State<HealthDevicesPage> {
           'Em breve: ${p.name}',
           style: GoogleFonts.jetBrainsMono(
             fontSize: 14,
-            fontWeight: FontWeight.w700,
+            fontWeight: FontWeight.w500,
             color: FigmaColors.textPrimary,
           ),
         ),
@@ -124,7 +124,7 @@ class _HealthDevicesPageState extends State<HealthDevicesPage> {
               'OK',
               style: GoogleFonts.jetBrainsMono(
                 fontSize: 12,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w500,
                 color: FigmaColors.brandCyan,
               ),
             ),
@@ -147,7 +147,7 @@ class _FieldLabel extends StatelessWidget {
       style: GoogleFonts.jetBrainsMono(
         color: FigmaColors.textMuted,
         fontSize: 9,
-        fontWeight: FontWeight.w700,
+        fontWeight: FontWeight.w500,
         letterSpacing: FigmaDimensions.borderUniversal,
       ),
     );
@@ -186,7 +186,7 @@ class _EmptyConnectedState extends StatelessWidget {
                   style: GoogleFonts.jetBrainsMono(
                     fontSize: 12,
                     letterSpacing: 1.0,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w500,
                     color: FigmaColors.textPrimary,
                   ),
                 ),

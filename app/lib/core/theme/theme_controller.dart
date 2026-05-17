@@ -20,7 +20,7 @@ enum AppTextScale {
 final themeController = ThemeController();
 
 class ThemeController extends ChangeNotifier {
-  RunninSkin _skin = RunninSkin.cyber;
+  RunninSkin _skin = RunninSkin.artico;
   AppTextScale _textScale = AppTextScale.normal;
   Box<dynamic>? _box;
 
@@ -34,7 +34,7 @@ class ThemeController extends ChangeNotifier {
     final savedId = _box?.get(_skinPreferenceKey) as String?;
     _skin = RunninSkin.values.firstWhere(
       (candidate) => candidate.palette.id == savedId,
-      orElse: () => RunninSkin.cyber,
+      orElse: () => RunninSkin.artico,
     );
     final savedScale = _box?.get(_textScalePreferenceKey) as String?;
     _textScale = AppTextScale.values.firstWhere(

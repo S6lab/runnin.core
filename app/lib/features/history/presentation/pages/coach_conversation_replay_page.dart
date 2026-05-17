@@ -97,9 +97,9 @@ class _CoachConversationReplayPageState extends State<CoachConversationReplayPag
                         'RUNIN.AI / COACH',
                         style: GoogleFonts.jetBrainsMono(
                           fontSize: 13,
-                          fontWeight: FontWeight.w700,
+                          fontWeight: FontWeight.w500,
                           letterSpacing: 1.1,
-                          color: FigmaColors.brandOrange,
+                          color: palette.secondary,
                         ),
                       ),
                       if (_run != null)
@@ -150,7 +150,7 @@ class _CoachConversationReplayPageState extends State<CoachConversationReplayPag
                 'CONVERSA.01',
                 style: GoogleFonts.jetBrainsMono(
                   fontSize: 14,
-                  fontWeight: FontWeight.w700,
+                  fontWeight: FontWeight.w500,
                   letterSpacing: 1.3,
                   color: FigmaColors.textPrimary,
                 ),
@@ -172,7 +172,7 @@ class _CoachConversationReplayPageState extends State<CoachConversationReplayPag
               ),
               child: Row(
                 children: [
-                  Icon(Icons.verified_outlined, size: 14, color: FigmaColors.brandCyan),
+                  Icon(Icons.verified_outlined, size: 14, color: palette.primary),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
@@ -266,7 +266,7 @@ class _MiniStat extends StatelessWidget {
             value,
             style: GoogleFonts.jetBrainsMono(
               fontSize: 13,
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w500,
               color: FigmaColors.textPrimary,
             ),
           ),

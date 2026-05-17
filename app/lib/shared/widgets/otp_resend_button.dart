@@ -96,7 +96,7 @@ class _OtpResendButtonState extends State<OtpResendButton> {
               label,
               style: TextStyle(
                 fontSize: 12,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w500,
                 letterSpacing: 0.04,
                 color: canResend ? palette.primary : palette.muted,
               ),

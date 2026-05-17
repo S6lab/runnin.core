@@ -195,7 +195,7 @@ class _HomeHeader extends StatelessWidget {
               'RUNNIN',
               style: GoogleFonts.jetBrainsMono(
                 fontSize: 14,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w500,
                 letterSpacing: 1.4,
                 color: palette.text,
               ),
@@ -209,7 +209,7 @@ class _HomeHeader extends StatelessWidget {
                 style: GoogleFonts.jetBrainsMono(
                   color: palette.background,
                   fontSize: 9,
-                  fontWeight: FontWeight.w900,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
             ),
@@ -217,21 +217,32 @@ class _HomeHeader extends StatelessWidget {
         ),
         Row(
           children: [
-            InkWell(
-              onTap: () => context.push('/coach-live'),
-              child: Icon(
-                Icons.headphones_outlined,
-                size: 22,
-                color: palette.primary,
-              ),
-            ),
-            const SizedBox(width: 14),
+            // Analytics destacado: chip com borda da skin (primary) +
+            // ícone maior. Era um ícone sem label perdido entre outros.
             InkWell(
               onTap: () => context.push('/dashboard'),
-              child: Icon(
-                Icons.bar_chart_outlined,
-                size: 22,
-                color: palette.muted,
+              borderRadius: BorderRadius.zero,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: palette.primary.withValues(alpha: 0.10),
+                  border: Border.all(color: palette.primary, width: 1.0),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.bar_chart_outlined, size: 18, color: palette.primary),
+                    const SizedBox(width: 6),
+                    Text(
+                      'ANALYTICS',
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: palette.primary,
+                        letterSpacing: 1.0,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
             const SizedBox(width: 14),
@@ -258,7 +269,7 @@ class _HomeHeader extends StatelessWidget {
                         _initial(user),
                         style: TextStyle(
                           color: palette.primary,
-                          fontWeight: FontWeight.w900,
+                          fontWeight: FontWeight.w500,
                         ),
                       )
                     : null,
@@ -552,7 +563,7 @@ class _CoachMessageCard extends StatelessWidget {
               style: GoogleFonts.jetBrainsMono(
                 color: palette.background,
                 fontSize: 12,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w500,
                 letterSpacing: 1.2,
               ),
             ),
@@ -615,7 +626,7 @@ class _CyberTodayCard extends StatelessWidget {
                   style: GoogleFonts.jetBrainsMono(
                     color: palette.primary,
                     fontSize: 14,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w500,
                     letterSpacing: 0.7,
                   ),
                 ),
@@ -636,7 +647,7 @@ class _CyberTodayCard extends StatelessWidget {
                   style: GoogleFonts.jetBrainsMono(
                     color: palette.background,
                     fontSize: 11,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w500,
                     letterSpacing: 1.65,
                   ),
                 ),
@@ -661,7 +672,7 @@ class _CyberTodayCard extends StatelessWidget {
                   style: GoogleFonts.jetBrainsMono(
                     color: palette.text,
                     fontSize: 64,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w500,
                     letterSpacing: -2.5,
                     height: 0.85,
                   ),
@@ -681,7 +692,7 @@ class _CyberTodayCard extends StatelessWidget {
                                 style: GoogleFonts.jetBrainsMono(
                                   color: palette.secondary,
                                   fontSize: 18,
-                                  fontWeight: FontWeight.w700,
+                                  fontWeight: FontWeight.w500,
                                   letterSpacing: -0.5,
                                 ),
                               ),
@@ -704,7 +715,7 @@ class _CyberTodayCard extends StatelessWidget {
                                 style: GoogleFonts.jetBrainsMono(
                                   color: palette.text.withValues(alpha: 0.55),
                                   fontSize: 13,
-                                  fontWeight: FontWeight.w700,
+                                  fontWeight: FontWeight.w500,
                                   letterSpacing: -0.26,
                                 ),
                               ),
@@ -813,7 +824,7 @@ class _NotificationsHubState extends State<_NotificationsHub> {
       _NotifGroup(
         label: 'HIDRATAÇÃO',
         icon: Icons.water_drop_outlined,
-        accent: FigmaColors.brandCyan,
+        accent: palette.primary,
         items: hidratacao,
         special: _NotifSpecial.hydrationLog,
       ),
@@ -851,7 +862,7 @@ class _NotificationsHubState extends State<_NotificationsHub> {
       children: [
         SectionHeading(
           label: 'CENTRAL DE NOTIFICAÇÕES',
-          dotColor: FigmaColors.brandCyan,
+          dotColor: palette.primary,
           badge: '$totalCount',
           action: totalCount > 0 ? 'LIMPAR' : null,
           onAction: totalCount > 0 ? cubit.clear : null,
@@ -941,7 +952,7 @@ class _NotifGroupTile extends StatelessWidget {
                     group.label,
                     style: GoogleFonts.jetBrainsMono(
                       fontSize: 12,
-                      fontWeight: FontWeight.w700,
+                      fontWeight: FontWeight.w500,
                       color: palette.text,
                       letterSpacing: 1.0,
                     ),
@@ -957,7 +968,7 @@ class _NotifGroupTile extends StatelessWidget {
                       '$count',
                       style: GoogleFonts.jetBrainsMono(
                         fontSize: 11,
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w500,
                         color: group.accent,
                       ),
                     ),
@@ -1037,7 +1048,7 @@ class _NotifItemRow extends StatelessWidget {
                     notification.title,
                     style: GoogleFonts.jetBrainsMono(
                       fontSize: 11,
-                      fontWeight: FontWeight.w700,
+                      fontWeight: FontWeight.w500,
                       color: palette.text,
                       letterSpacing: 0.8,
                     ),
@@ -1071,7 +1082,7 @@ class _NotifItemRow extends StatelessWidget {
                 '${notification.ctaLabel!} →',
                 style: GoogleFonts.jetBrainsMono(
                   fontSize: 10,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w500,
                   color: accent,
                   letterSpacing: 1.0,
                 ),
@@ -1170,7 +1181,7 @@ class _HydrationLoggerState extends State<_HydrationLogger> {
                 'REGISTRAR HOJE',
                 style: GoogleFonts.jetBrainsMono(
                   fontSize: 10,
-                  fontWeight: FontWeight.w700,
+                  fontWeight: FontWeight.w500,
                   color: palette.text,
                   letterSpacing: 0.8,
                 ),
@@ -1180,7 +1191,7 @@ class _HydrationLoggerState extends State<_HydrationLogger> {
                   '✓ META',
                   style: GoogleFonts.jetBrainsMono(
                     fontSize: 9,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w500,
                     color: widget.accent,
                     letterSpacing: 0.8,
                   ),
@@ -1192,7 +1203,7 @@ class _HydrationLoggerState extends State<_HydrationLogger> {
             '${currentLiters}L / ${goalLiters}L',
             style: GoogleFonts.jetBrainsMono(
               fontSize: 12,
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w500,
               color: palette.text,
             ),
           ),
@@ -1223,7 +1234,7 @@ class _HydrationLoggerState extends State<_HydrationLogger> {
                     '+${ml}ml',
                     style: GoogleFonts.jetBrainsMono(
                       fontSize: 11,
-                      fontWeight: FontWeight.w700,
+                      fontWeight: FontWeight.w500,
                       color: widget.accent,
                     ),
                   ),
@@ -1258,7 +1269,7 @@ class _CoachNotificationsList extends StatelessWidget {
       children: [
         SectionHeading(
           label: 'COACH.AI > NOTIFICAÇÕES',
-          dotColor: FigmaColors.brandCyan,
+          dotColor: context.runninPalette.primary,
           badge: '${items.length}',
           action: 'LIMPAR',
           onAction: cubit.clear,
@@ -1314,7 +1325,7 @@ class _ExpandableCoachAICardState extends State<_ExpandableCoachAICard> {
             color: FigmaColors.surfaceCardOrange,
             border: Border(
               left: BorderSide(
-                color: FigmaColors.brandOrange,
+                color: context.runninPalette.secondary,
                 width: FigmaDimensions.borderUniversal,
               ),
             ),
@@ -1334,8 +1345,8 @@ class _ExpandableCoachAICardState extends State<_ExpandableCoachAICard> {
                             fontSize: 11,
                             height: 16.5 / 11,
                             letterSpacing: 1.1,
-                            fontWeight: FontWeight.w700,
-                            color: FigmaColors.brandOrange,
+                            fontWeight: FontWeight.w500,
+                            color: context.runninPalette.secondary,
                           ),
                         ),
                         const SizedBox(height: 2),
@@ -1388,13 +1399,13 @@ class _ExpandableCoachAICardState extends State<_ExpandableCoachAICard> {
                         child: Container(
                           height: 38,
                           alignment: Alignment.center,
-                          color: FigmaColors.brandCyan,
+                          color: context.runninPalette.primary,
                           child: Text(
                             'VER RESUMO',
                             style: GoogleFonts.jetBrainsMono(
                               fontSize: 11,
                               height: 1,
-                              fontWeight: FontWeight.w700,
+                              fontWeight: FontWeight.w500,
                               letterSpacing: 1.1,
                               color: FigmaColors.bgBase,
                             ),
@@ -1520,7 +1531,7 @@ class _SemanaSection extends StatelessWidget {
               style: TextStyle(
                 color: palette.muted,
                 fontSize: 9,
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w500,
                 letterSpacing: 0.08,
               ),
             ),
@@ -1530,7 +1541,7 @@ class _SemanaSection extends StatelessWidget {
               style: TextStyle(
                 color: palette.text,
                 fontSize: 10,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w500,
               ),
             ),
           ],
@@ -1601,9 +1612,9 @@ class _CoachAiWeeklySummary extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SectionHeading(
+        SectionHeading(
           label: '> RESUMO SEMANAL · SEM 2',
-          dotColor: FigmaColors.brandOrange,
+          dotColor: context.runninPalette.secondary,
         ),
         const SizedBox(height: 16),
         Container(
@@ -1761,7 +1772,7 @@ class _PerformanceSection extends StatelessWidget {
                         style: TextStyle(
                           color: palette.muted,
                           fontSize: 9,
-                          fontWeight: FontWeight.w800,
+                          fontWeight: FontWeight.w500,
                           letterSpacing: 0.08,
                         ),
                       ),
@@ -1771,7 +1782,7 @@ class _PerformanceSection extends StatelessWidget {
                         style: TextStyle(
                           color: palette.secondary,
                           fontSize: 22,
-                          fontWeight: FontWeight.w900,
+                          fontWeight: FontWeight.w500,
                           letterSpacing: -0.02,
                         ),
                       ),
@@ -1805,7 +1816,7 @@ class _PerformanceSection extends StatelessWidget {
                         style: TextStyle(
                           color: palette.muted,
                           fontSize: 9,
-                          fontWeight: FontWeight.w800,
+                          fontWeight: FontWeight.w500,
                           letterSpacing: 0.08,
                         ),
                       ),
@@ -1815,7 +1826,7 @@ class _PerformanceSection extends StatelessWidget {
                         style: TextStyle(
                           color: palette.primary,
                           fontSize: 22,
-                          fontWeight: FontWeight.w900,
+                          fontWeight: FontWeight.w500,
                         ),
                       ),
                       Text(
@@ -1831,7 +1842,7 @@ class _PerformanceSection extends StatelessWidget {
                           style: TextStyle(
                             color: palette.muted,
                             fontSize: 9,
-                            fontWeight: FontWeight.w700,
+                            fontWeight: FontWeight.w500,
                           ),
                         ),
                         const SizedBox(height: 20),
@@ -1840,7 +1851,7 @@ class _PerformanceSection extends StatelessWidget {
                           style: TextStyle(
                             color: palette.secondary,
                             fontSize: 14,
-                            fontWeight: FontWeight.w900,
+                            fontWeight: FontWeight.w500,
                           ),
                         ),
                         const SizedBox(height: 20),
@@ -1875,7 +1886,7 @@ class _PerformanceSection extends StatelessWidget {
                         style: TextStyle(
                           color: Colors.black.withValues(alpha: 0.6),
                           fontSize: 9,
-                          fontWeight: FontWeight.w800,
+                          fontWeight: FontWeight.w500,
                           letterSpacing: 0.08,
                         ),
                       ),
@@ -1887,7 +1898,7 @@ class _PerformanceSection extends StatelessWidget {
                         style: TextStyle(
                           color: Colors.black,
                           fontSize: 22,
-                          fontWeight: FontWeight.w900,
+                          fontWeight: FontWeight.w500,
                           letterSpacing: -0.02,
                         ),
                       ),
@@ -1922,7 +1933,7 @@ class _PerformanceSection extends StatelessWidget {
                         style: TextStyle(
                           color: palette.muted,
                           fontSize: 9,
-                          fontWeight: FontWeight.w800,
+                          fontWeight: FontWeight.w500,
                           letterSpacing: 0.08,
                         ),
                       ),
@@ -1932,7 +1943,7 @@ class _PerformanceSection extends StatelessWidget {
                         style: TextStyle(
                           color: palette.text,
                           fontSize: 28,
-                          fontWeight: FontWeight.w900,
+                          fontWeight: FontWeight.w500,
                           letterSpacing: -0.02,
                         ),
                       ),
@@ -2023,7 +2034,7 @@ class _MonthStats extends StatelessWidget {
           style: TextStyle(
             color: palette.muted,
             fontSize: 9,
-            fontWeight: FontWeight.w700,
+            fontWeight: FontWeight.w500,
             letterSpacing: 0.06,
           ),
         ),
@@ -2037,7 +2048,7 @@ class _MonthStats extends StatelessWidget {
               style: TextStyle(
                 color: palette.text,
                 fontSize: 11,
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w500,
               ),
             ),
           ],
@@ -2122,14 +2133,14 @@ class _StatusCorporalSectionState extends State<_StatusCorporalSection> {
                   label: 'PRONTIDAO',
                   value: readinessScore?.toString() ?? '--',
                   unit: '/100',
-                  valueColor: FigmaColors.brandCyan,
+                  valueColor: context.runninPalette.primary,
                   sub: hasBodyData
                       ? _readinessLabel(readinessScore!)
                       : 'Preencha peso, altura e idade',
                   chart: hasBodyData
                       ? _MiniProgressBar(
                           value: readinessScore! / 100,
-                          color: FigmaColors.brandCyan,
+                          color: context.runninPalette.primary,
                         )
                       : TextButton(
                           onPressed: () => context.push('/profile/edit'),
@@ -2164,7 +2175,7 @@ class _StatusCorporalSectionState extends State<_StatusCorporalSection> {
                 child: MetricCard(
                   label: 'CARGA MUSCULAR',
                   value: muscleLoad,
-                  valueColor: FigmaColors.brandCyan,
+                  valueColor: context.runninPalette.primary,
                   sub: hasBpmData
                       ? 'Com BPM e volume da semana'
                       : 'Sem BPM real; por distancia/volume',
@@ -2189,7 +2200,7 @@ class _StatusCorporalSectionState extends State<_StatusCorporalSection> {
                   unit: hydrationGoalL == null
                       ? null
                       : '/${hydrationGoalL.toStringAsFixed(1)}L',
-                  valueColor: FigmaColors.brandCyan,
+                  valueColor: context.runninPalette.primary,
                   sub: hydrationGoalL == null
                       ? 'Informe peso para calcular meta'
                       : hydrationLoggedL == null
@@ -2201,7 +2212,7 @@ class _StatusCorporalSectionState extends State<_StatusCorporalSection> {
                       if (hydrationPct != null) ...[
                         _MiniProgressBar(
                           value: hydrationPct,
-                          color: FigmaColors.brandCyan,
+                          color: context.runninPalette.primary,
                         ),
                         const SizedBox(height: 8),
                       ],
@@ -2296,7 +2307,7 @@ class _HydrationUpdateSheetState extends State<_HydrationUpdateSheet> {
                 'HIDRATACAO DO DIA',
                 style: Theme.of(
                   context,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w500),
               ),
               const SizedBox(height: 20),
               Text(
@@ -2393,7 +2404,7 @@ class _CargaChip extends StatelessWidget {
           style: TextStyle(
             color: active ? palette.secondary : palette.muted,
             fontSize: 8,
-            fontWeight: FontWeight.w800,
+            fontWeight: FontWeight.w500,
           ),
         ),
       ),
@@ -2598,7 +2609,7 @@ class _RunCard extends StatelessWidget {
                     fontSize: 11,
                     fontWeight: FontWeight.w400,
                     letterSpacing: 1.1,
-                    color: FigmaColors.brandCyan,
+                    color: context.runninPalette.primary,
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -2625,7 +2636,7 @@ class _RunCard extends StatelessWidget {
                 '${distKm}K',
                 style: GoogleFonts.jetBrainsMono(
                   fontSize: 28,
-                  fontWeight: FontWeight.w700,
+                  fontWeight: FontWeight.w500,
                   color: FigmaColors.textPrimary,
                 ),
               ),
@@ -2633,8 +2644,8 @@ class _RunCard extends StatelessWidget {
                 duration,
                 style: GoogleFonts.jetBrainsMono(
                   fontSize: 22,
-                  fontWeight: FontWeight.w700,
-                  color: FigmaColors.brandOrange,
+                  fontWeight: FontWeight.w500,
+                  color: context.runninPalette.secondary,
                 ),
               ),
             ],
@@ -2647,15 +2658,15 @@ class _RunCard extends StatelessWidget {
               height: 38,
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                border: Border.all(color: FigmaColors.brandCyan, width: 1.041),
+                border: Border.all(color: context.runninPalette.primary, width: 1.041),
               ),
               child: Text(
                 'COMPARTILHAR',
                 style: GoogleFonts.jetBrainsMono(
                   fontSize: 11,
-                  fontWeight: FontWeight.w700,
+                  fontWeight: FontWeight.w500,
                   letterSpacing: 1.1,
-                  color: FigmaColors.brandCyan,
+                  color: context.runninPalette.primary,
                 ),
               ),
             ),
@@ -2748,7 +2759,7 @@ class _BigHeading extends StatelessWidget {
                   fontSize: 22,
                   height: 24.2 / 22,
                   letterSpacing: -0.44,
-                  fontWeight: FontWeight.w700,
+                  fontWeight: FontWeight.w500,
                   color: FigmaColors.textPrimary,
                 ),
               ),
@@ -2758,7 +2769,7 @@ class _BigHeading extends StatelessWidget {
                 style: GoogleFonts.jetBrainsMono(
                   fontSize: 6.6,
                   fontWeight: FontWeight.w400,
-                  color: FigmaColors.brandCyan,
+                  color: context.runninPalette.primary,
                 ),
               ),
             ],
@@ -2931,7 +2942,7 @@ class _HeroSection extends StatelessWidget {
                         sessionOrdinal,
                         style: GoogleFonts.jetBrainsMono(
                           fontSize: 14,
-                          fontWeight: FontWeight.w800,
+                          fontWeight: FontWeight.w500,
                           color: palette.primary,
                           letterSpacing: 0.6,
                         ),
@@ -2950,7 +2961,7 @@ class _HeroSection extends StatelessWidget {
                         sessionType,
                         style: GoogleFonts.jetBrainsMono(
                           fontSize: 13,
-                          fontWeight: FontWeight.w800,
+                          fontWeight: FontWeight.w500,
                           color: Colors.black,
                           letterSpacing: 1.2,
                         ),
@@ -2977,7 +2988,7 @@ class _HeroSection extends StatelessWidget {
                       distanceLabel,
                       style: GoogleFonts.jetBrainsMono(
                         fontSize: 64,
-                        fontWeight: FontWeight.w900,
+                        fontWeight: FontWeight.w500,
                         color: Colors.white,
                         letterSpacing: -1.5,
                         height: 1.0,
@@ -2996,7 +3007,7 @@ class _HeroSection extends StatelessWidget {
                                   text: paceLabel,
                                   style: GoogleFonts.jetBrainsMono(
                                     fontSize: 22,
-                                    fontWeight: FontWeight.w800,
+                                    fontWeight: FontWeight.w500,
                                     color: const Color(0xFFE85D2A),
                                     letterSpacing: -0.5,
                                   ),
@@ -3066,7 +3077,7 @@ class _HeroChip extends StatelessWidget {
             label,
             style: GoogleFonts.jetBrainsMono(
               fontSize: 11,
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w500,
               color: Colors.white,
               letterSpacing: 1.0,
             ),
@@ -3147,12 +3158,12 @@ class _PremiumUpsellBanner extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
         decoration: BoxDecoration(
-          color: FigmaColors.brandCyan.withValues(alpha: 0.08),
-          border: Border.all(color: FigmaColors.brandCyan, width: 1.041),
+          color: palette.primary.withValues(alpha: 0.08),
+          border: Border.all(color: palette.primary, width: 1.041),
         ),
         child: Row(
           children: [
-            const Icon(Icons.bolt_outlined, color: FigmaColors.brandCyan, size: 22),
+            Icon(Icons.bolt_outlined, color: context.runninPalette.primary, size: 22),
             const SizedBox(width: 10),
             Expanded(
               child: Column(
@@ -3161,8 +3172,8 @@ class _PremiumUpsellBanner extends StatelessWidget {
                   Text(
                     'COACH AI PREMIUM',
                     style: GoogleFonts.jetBrainsMono(
-                      fontSize: 11, fontWeight: FontWeight.w700,
-                      color: FigmaColors.brandCyan, letterSpacing: 1.0,
+                      fontSize: 11, fontWeight: FontWeight.w500,
+                      color: palette.primary, letterSpacing: 1.0,
                     ),
                   ),
                   const SizedBox(height: 4),

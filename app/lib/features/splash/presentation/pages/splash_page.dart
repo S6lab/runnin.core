@@ -154,7 +154,7 @@ class _SplashWordmark extends StatelessWidget {
               fontSize: 28,
               height: 42 / 28,
               letterSpacing: 3.36,
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w500,
               color: FigmaColors.textPrimary,
             ),
           ),
@@ -167,7 +167,7 @@ class _SplashWordmark extends StatelessWidget {
               style: GoogleFonts.jetBrainsMono(
                 fontSize: 12,
                 height: 18 / 12,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w500,
                 color: FigmaColors.bgBase,
               ),
             ),

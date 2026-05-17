@@ -213,7 +213,7 @@ class _CoachLivePageState extends State<CoachLivePage> {
                   Text(
                     _connecting ? 'CONECTANDO…' : _connected ? 'AO VIVO • GEMINI' : 'DESCONECTADO',
                     style: GoogleFonts.jetBrainsMono(
-                      fontSize: 11, fontWeight: FontWeight.w700,
+                      fontSize: 11, fontWeight: FontWeight.w500,
                       color: _connected ? palette.primary : palette.muted,
                       letterSpacing: 1.0,
                     ),
@@ -222,7 +222,7 @@ class _CoachLivePageState extends State<CoachLivePage> {
                   if (!_connected && !_connecting)
                     TextButton(
                       onPressed: _connect,
-                      child: Text('RECONECTAR', style: GoogleFonts.jetBrainsMono(fontSize: 10, fontWeight: FontWeight.w700, color: palette.primary)),
+                      child: Text('RECONECTAR', style: GoogleFonts.jetBrainsMono(fontSize: 10, fontWeight: FontWeight.w500, color: palette.primary)),
                     ),
                 ],
               ),

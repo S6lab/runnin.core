@@ -25,7 +25,7 @@ class AppTag extends StatelessWidget {
         label,
         style: TextStyle(
           fontSize: 9,
-          fontWeight: FontWeight.w700,
+          fontWeight: FontWeight.w500,
           color: accent,
           letterSpacing: 0.1,
         ),

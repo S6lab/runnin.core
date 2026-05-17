@@ -74,7 +74,7 @@ class RowItem extends StatelessWidget {
               row.userValue,
               style: GoogleFonts.jetBrainsMono(
                 fontSize: 14,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w500,
                 color: FigmaColors.brandCyan,
               ),
             ),

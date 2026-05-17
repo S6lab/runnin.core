@@ -39,7 +39,7 @@ class FigmaStreakCalendarGrid extends StatelessWidget {
                   textAlign: TextAlign.center,
                   style: GoogleFonts.jetBrainsMono(
                     fontSize: 11,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w500,
                     color: FigmaColors.textMuted,
                     letterSpacing: 0.5,
                   ),

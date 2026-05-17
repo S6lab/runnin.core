@@ -282,7 +282,7 @@ class _PrepViewState extends State<_PrepView> {
                               style: type.labelCaps.copyWith(
                                 color: palette.primary,
                                 fontSize: 11,
-                                fontWeight: FontWeight.w800,
+                                fontWeight: FontWeight.w500,
                               ),
                             ),
                             const SizedBox(height: 10),
@@ -566,7 +566,7 @@ class _WarmupExerciseTile extends StatelessWidget {
                 children: [
                   Text(
                     exercise.title,
-                    style: type.bodySm.copyWith(fontWeight: FontWeight.w700),
+                    style: type.bodySm.copyWith(fontWeight: FontWeight.w500),
                   ),
                   const SizedBox(height: 2),
                   Text(

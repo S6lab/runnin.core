@@ -156,7 +156,7 @@ class _CalendarGrid extends StatelessWidget {
                         style: type.labelCaps.copyWith(
                           fontSize: 10,
                           color: hasRun ? palette.primary : palette.muted,
-                          fontWeight: hasRun ? FontWeight.w800 : FontWeight.w500,
+                          fontWeight: hasRun ? FontWeight.w500 : FontWeight.w500,
                         ),
                       ),
                       if (hasRun)

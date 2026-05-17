@@ -151,7 +151,7 @@ class MetricCard extends StatelessWidget {
               style: GoogleFonts.jetBrainsMono(
                 fontSize: 13,
                 height: 19.5 / 13,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w500,
                 color: cardioLabelColor ?? FigmaColors.brandOrange,
               ),
             ),
@@ -239,7 +239,7 @@ class _ValueRow extends StatelessWidget {
               style: GoogleFonts.jetBrainsMono(
                 fontSize: isBenchmark ? 36 : 28,
                 height: 1,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w500,
                 color: valueColor,
               ),
             ),
@@ -304,7 +304,7 @@ class _DetailRow extends StatelessWidget {
               style: GoogleFonts.jetBrainsMono(
                 fontSize: 13,
                 height: 19.5 / 13,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w500,
                 color: FigmaColors.textPrimary,
               ),
             ),

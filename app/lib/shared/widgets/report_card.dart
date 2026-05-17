@@ -51,7 +51,7 @@ class ReportCard extends StatelessWidget {
                   title,
                   style: TextStyle(
                     fontSize: 22,
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w500,
                     color: palette.text,
                   ),
                 ),
@@ -67,7 +67,7 @@ class ReportCard extends StatelessWidget {
                     'MAIS RECENTE',
                     style: TextStyle(
                       fontSize: 9,
-                      fontWeight: FontWeight.w900,
+                      fontWeight: FontWeight.w500,
                       color: palette.background,
                     ),
                   ),
@@ -124,7 +124,7 @@ class _MetricColumn extends StatelessWidget {
           label,
           style: TextStyle(
             fontSize: 9,
-            fontWeight: FontWeight.w700,
+            fontWeight: FontWeight.w500,
             color: palette.muted,
             letterSpacing: 0.08,
           ),
@@ -134,7 +134,7 @@ class _MetricColumn extends StatelessWidget {
           value,
           style: TextStyle(
             fontSize: 24,
-            fontWeight: FontWeight.w900,
+            fontWeight: FontWeight.w500,
             color: palette.secondary,
           ),
         ),
@@ -156,7 +156,7 @@ class AppTag extends StatelessWidget {
       color: color,
       child: Text(
         label,
-        style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w700),
+        style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w500),
       ),
     );
   }

@@ -585,7 +585,7 @@ class _ProfilePageState extends State<ProfilePage> {
                                     'SAIR',
                                     style: TextStyle(
                                       fontSize: 12,
-                                      fontWeight: FontWeight.w700,
+                                      fontWeight: FontWeight.w500,
                                       color: palette.error,
                                     ),
                                   ),
@@ -673,7 +673,7 @@ class _ProfileEditor extends StatelessWidget {
           enabled ? 'MODO EDIÇÃO' : 'VISÃO GERAL',
           style: TextStyle(
             fontSize: 10,
-            fontWeight: FontWeight.w800,
+            fontWeight: FontWeight.w500,
             color: enabled ? palette.primary : palette.muted,
             letterSpacing: 0.12,
           ),
@@ -974,7 +974,7 @@ class _WearableConnectRowState extends State<_WearableConnectRow> {
                     style: TextStyle(
                       color: palette.text,
                       fontSize: 12,
-                      fontWeight: FontWeight.w700,
+                      fontWeight: FontWeight.w500,
                       letterSpacing: 0.5,
                     ),
                   ),
@@ -1064,7 +1064,7 @@ class _FieldLabel extends StatelessWidget {
       label,
       style: TextStyle(
         fontSize: 9,
-        fontWeight: FontWeight.w700,
+        fontWeight: FontWeight.w500,
         color: palette.muted,
         letterSpacing: 0.1,
       ),
@@ -1099,7 +1099,7 @@ class _StatCard extends StatelessWidget {
             label,
             style: TextStyle(
               fontSize: 9,
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w500,
               color: palette.muted,
               letterSpacing: 0.1,
             ),
@@ -1109,7 +1109,7 @@ class _StatCard extends StatelessWidget {
             value,
             style: TextStyle(
               fontSize: 20,
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w500,
               color: accent ? palette.primary : palette.text,
               letterSpacing: -0.02,
             ),
@@ -1133,12 +1133,12 @@ class _AnonPromoBanner extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
         decoration: BoxDecoration(
-          color: FigmaColors.brandCyan.withValues(alpha: 0.08),
-          border: Border.all(color: FigmaColors.brandCyan, width: 1.041),
+          color: palette.primary.withValues(alpha: 0.08),
+          border: Border.all(color: palette.primary, width: 1.041),
         ),
         child: Row(
           children: [
-            const Icon(Icons.account_circle_outlined, color: FigmaColors.brandCyan, size: 22),
+            Icon(Icons.account_circle_outlined, color: context.runninPalette.primary, size: 22),
             const SizedBox(width: 10),
             Expanded(
               child: Column(
@@ -1147,8 +1147,8 @@ class _AnonPromoBanner extends StatelessWidget {
                   Text(
                     'CRIE SUA CONTA',
                     style: GoogleFonts.jetBrainsMono(
-                      fontSize: 11, fontWeight: FontWeight.w700,
-                      color: FigmaColors.brandCyan, letterSpacing: 1.0,
+                      fontSize: 11, fontWeight: FontWeight.w500,
+                      color: palette.primary, letterSpacing: 1.0,
                     ),
                   ),
                   const SizedBox(height: 4),

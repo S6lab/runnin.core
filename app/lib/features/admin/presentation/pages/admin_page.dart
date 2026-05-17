@@ -788,7 +788,7 @@ class _AdminHeader extends StatelessWidget {
               Text(
                 'RUNNIN ADMIN',
                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w900,
+                  fontWeight: FontWeight.w500,
                   letterSpacing: 0,
                 ),
               ),
@@ -856,7 +856,7 @@ class _LoginPanel extends StatelessWidget {
                 'Acesso administrativo',
                 style: Theme.of(
                   context,
-                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w500),
               ),
               const SizedBox(height: 18),
               TextField(
@@ -942,7 +942,7 @@ class _BlockedPanel extends StatelessWidget {
                 textAlign: TextAlign.center,
                 style: Theme.of(
                   context,
-                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w500),
               ),
               const SizedBox(height: 8),
               Text(
@@ -1153,7 +1153,7 @@ class _UsersPanelState extends State<_UsersPanel> {
             children: [
               Text('USUÁRIOS — PLANO',
                   style: TextStyle(
-                      color: palette.text, fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 1)),
+                      color: palette.text, fontSize: 12, fontWeight: FontWeight.w500, letterSpacing: 1)),
               const Spacer(),
               SizedBox(
                 width: 220,
@@ -1175,7 +1175,7 @@ class _UsersPanelState extends State<_UsersPanel> {
               TextButton(
                 onPressed: _loading ? null : _refresh,
                 child: Text(_loading ? '…' : 'BUSCAR',
-                    style: TextStyle(color: palette.primary, fontSize: 11, fontWeight: FontWeight.w700)),
+                    style: TextStyle(color: palette.primary, fontSize: 11, fontWeight: FontWeight.w500)),
               ),
             ],
           ),
@@ -1351,7 +1351,7 @@ class _FilesSectionState extends State<_FilesSection> {
                 Text(
                   'Base RAG',
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w500,
                       ),
                 ),
                 const SizedBox(width: 12),
@@ -1535,7 +1535,7 @@ class _CoachPromptPanelState extends State<_CoachPromptPanel> {
                 child: Text(
                   'Coach ao vivo',
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
               ),
@@ -1823,7 +1823,7 @@ class _FileRowState extends State<_FileRow> {
                           file.name,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                          style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 14),
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -1962,7 +1962,7 @@ class _FileIcon extends StatelessWidget {
                 label,
                 style: TextStyle(
                   fontSize: 7,
-                  fontWeight: FontWeight.w900,
+                  fontWeight: FontWeight.w500,
                   color: color,
                 ),
               ),
@@ -1998,7 +1998,7 @@ class _StatusPill extends StatelessWidget {
         label,
         style: TextStyle(
           fontSize: 9,
-          fontWeight: FontWeight.w900,
+          fontWeight: FontWeight.w500,
           color: color,
           letterSpacing: 0.4,
         ),
@@ -2045,7 +2045,7 @@ class _EmptyFiles extends StatelessWidget {
               style: Theme.of(context)
                   .textTheme
                   .titleLarge
-                  ?.copyWith(fontWeight: FontWeight.w900),
+                  ?.copyWith(fontWeight: FontWeight.w500),
             ),
             const SizedBox(height: 8),
             Text(
@@ -2070,7 +2070,7 @@ class _EmptyFiles extends StatelessWidget {
                           f,
                           style: TextStyle(
                             fontSize: 10,
-                            fontWeight: FontWeight.w900,
+                            fontWeight: FontWeight.w500,
                             color: palette.muted,
                             letterSpacing: 0.6,
                           ),
@@ -2114,7 +2114,7 @@ class _RolePill extends StatelessWidget {
         role.toUpperCase(),
         style: TextStyle(
           color: palette.primary,
-          fontWeight: FontWeight.w900,
+          fontWeight: FontWeight.w500,
           fontSize: 11,
           letterSpacing: 0,
         ),
@@ -2146,7 +2146,7 @@ class _Notice extends StatelessWidget {
       ),
       child: Text(
         text,
-        style: TextStyle(color: color, fontWeight: FontWeight.w700),
+        style: TextStyle(color: color, fontWeight: FontWeight.w500),
       ),
     );
   }

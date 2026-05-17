@@ -440,7 +440,7 @@ class _AccountAccessPageState extends State<AccountAccessPage> {
                             Text(
                               statusTitle,
                               style: Theme.of(context).textTheme.titleMedium
-                                  ?.copyWith(fontWeight: FontWeight.w900),
+                                  ?.copyWith(fontWeight: FontWeight.w500),
                             ),
                           ],
                         ),
@@ -466,14 +466,14 @@ class _AccountAccessPageState extends State<AccountAccessPage> {
                             fontSize: 11,
                             color: palette.primary,
                             letterSpacing: 0.12,
-                            fontWeight: FontWeight.w700,
+                            fontWeight: FontWeight.w500,
                           ),
                         ),
                         const SizedBox(height: 8),
                         Text(
                           'E-mail e senha',
                           style: Theme.of(context).textTheme.titleSmall
-                              ?.copyWith(fontWeight: FontWeight.w900),
+                              ?.copyWith(fontWeight: FontWeight.w500),
                         ),
                         const SizedBox(height: 6),
                         Text(
@@ -553,14 +553,14 @@ class _AccountAccessPageState extends State<AccountAccessPage> {
                             fontSize: 11,
                             color: palette.secondary,
                             letterSpacing: 0.12,
-                            fontWeight: FontWeight.w700,
+                            fontWeight: FontWeight.w500,
                           ),
                         ),
                         const SizedBox(height: 8),
                         Text(
                           'Telefone',
                           style: Theme.of(context).textTheme.titleSmall
-                              ?.copyWith(fontWeight: FontWeight.w900),
+                              ?.copyWith(fontWeight: FontWeight.w500),
                         ),
                         const SizedBox(height: 6),
                         Text(

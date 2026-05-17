@@ -64,28 +64,28 @@ class RunninTypography {
     return RunninTypography(
       displayLg: GoogleFonts.jetBrainsMono(
         fontSize: 52,
-        fontWeight: FontWeight.w800,
+        fontWeight: FontWeight.w500,
         letterSpacing: -0.5,
         height: 1.0,
         color: textColor,
       ),
       displayMd: GoogleFonts.jetBrainsMono(
         fontSize: 32,
-        fontWeight: FontWeight.w700,
+        fontWeight: FontWeight.w500,
         letterSpacing: -0.2,
         height: 1.1,
         color: textColor,
       ),
       displaySm: GoogleFonts.jetBrainsMono(
         fontSize: 20,
-        fontWeight: FontWeight.w700,
+        fontWeight: FontWeight.w500,
         letterSpacing: 0.0,
         height: 1.2,
         color: textColor,
       ),
       dataXl: GoogleFonts.jetBrainsMono(
         fontSize: 48,
-        fontWeight: FontWeight.w700,
+        fontWeight: FontWeight.w500,
         letterSpacing: -1.0,
         height: 1.0,
         color: textColor,
@@ -120,7 +120,7 @@ class RunninTypography {
       ),
       labelCaps: GoogleFonts.jetBrainsMono(
         fontSize: 10,
-        fontWeight: FontWeight.w700,
+        fontWeight: FontWeight.w500,
         letterSpacing: 0.12,
         height: 1.2,
         color: mutedColor,
@@ -303,15 +303,15 @@ class RunninThemeTokens extends ThemeExtension<RunninThemeTokens> {
 extension RunninThemeContext on BuildContext {
   RunninPalette get runninPalette {
     final tokens = Theme.of(this).extension<RunninThemeTokens>();
-    return tokens?.palette ?? RunninSkin.cyber.palette;
+    return tokens?.palette ?? RunninSkin.artico.palette;
   }
 
   RunninTypography get runninType {
     final tokens = Theme.of(this).extension<RunninThemeTokens>();
     return tokens?.typography ??
         RunninTypography.build(
-          RunninSkin.cyber.palette.text,
-          RunninSkin.cyber.palette.muted,
+          RunninSkin.artico.palette.text,
+          RunninSkin.artico.palette.muted,
         );
   }
 }

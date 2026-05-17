@@ -74,7 +74,7 @@ class FigmaShareCardPreview extends StatelessWidget {
               'RUNNIN.AI',
               style: GoogleFonts.jetBrainsMono(
                 fontSize: 10,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w500,
                 letterSpacing: 2,
                 color: _accent,
               ),
@@ -86,7 +86,7 @@ class FigmaShareCardPreview extends StatelessWidget {
               '${distKm}km',
               style: GoogleFonts.jetBrainsMono(
                 fontSize: 48,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w500,
                 color: _textMain,
                 height: 1.0,
               ),

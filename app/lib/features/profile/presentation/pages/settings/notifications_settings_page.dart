@@ -419,7 +419,7 @@ class _Section3State extends State<_Section3> {
                           widget.dndStart,
                           style: GoogleFonts.jetBrainsMono(
                             fontSize: 16,
-                            fontWeight: FontWeight.w700,
+                            fontWeight: FontWeight.w500,
                             color: FigmaColors.textPrimary,
                           ),
                         ),
@@ -463,7 +463,7 @@ class _Section3State extends State<_Section3> {
                           widget.dndEnd,
                           style: GoogleFonts.jetBrainsMono(
                             fontSize: 16,
-                            fontWeight: FontWeight.w700,
+                            fontWeight: FontWeight.w500,
                             color: FigmaColors.textPrimary,
                           ),
                         ),
@@ -520,7 +520,7 @@ class _SaveButton extends StatelessWidget {
                 'SALVAR',
                 style: GoogleFonts.jetBrainsMono(
                   fontSize: 16,
-                  fontWeight: FontWeight.w700,
+                  fontWeight: FontWeight.w500,
                       letterSpacing:
                           AppDimensions.borderUniversal - 0.2,
                 ),

@@ -66,7 +66,7 @@ class FigmaWizardChoiceCard extends StatelessWidget {
               title,
               style: GoogleFonts.jetBrainsMono(
                 fontSize: 13,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w500,
                 height: 19.5 / 13,
                 color: FigmaColors.textPrimary,
               ),

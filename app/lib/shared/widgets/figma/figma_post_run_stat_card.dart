@@ -53,7 +53,7 @@ class FigmaPostRunStatCard extends StatelessWidget {
                   style: GoogleFonts.jetBrainsMono(
                     fontSize: 22,
                     height: 1,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w500,
                     color: valueColor,
                   ),
                 ),

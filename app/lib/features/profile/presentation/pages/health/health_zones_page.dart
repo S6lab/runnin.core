@@ -155,7 +155,7 @@ class _MaxBpmHeader extends StatelessWidget {
             '$maxBpm bpm',
             style: GoogleFonts.jetBrainsMono(
               fontSize: 24,
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w500,
               color: FigmaColors.textPrimary,
             ),
           ),
@@ -192,7 +192,7 @@ class _ZoneDescription extends StatelessWidget {
                   'Z${zone.number}',
                   style: GoogleFonts.jetBrainsMono(
                     fontSize: 10,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w500,
                     color: FigmaColors.bgBase,
                   ),
                 ),
@@ -202,7 +202,7 @@ class _ZoneDescription extends StatelessWidget {
                 zone.label,
                 style: GoogleFonts.jetBrainsMono(
                   fontSize: 14,
-                  fontWeight: FontWeight.w700,
+                  fontWeight: FontWeight.w500,
                   color: FigmaColors.textPrimary,
                 ),
               ),
@@ -237,7 +237,7 @@ class _SectionHeader extends StatelessWidget {
             text: label,
             style: GoogleFonts.jetBrainsMono(
               fontSize: 22,
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w500,
               letterSpacing: -0.44,
               color: FigmaColors.textPrimary,
               height: 24.2 / 22,

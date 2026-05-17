@@ -35,7 +35,7 @@ class FigmaTabBar extends StatelessWidget {
                   tabs[i],
                   style: context.runninType.labelMd.copyWith(
                     color: isSelected ? palette.primary : palette.muted,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
               ),

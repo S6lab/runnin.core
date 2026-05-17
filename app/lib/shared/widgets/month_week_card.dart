@@ -40,7 +40,7 @@ class MonthWeekCard extends StatelessWidget {
                   'Sem $weekNumber  Foco: $focus',
                   style: TextStyle(
                     fontSize: 18,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w500,
                     color: palette.text,
                   ),
                 ),
@@ -60,7 +60,7 @@ class MonthWeekCard extends StatelessWidget {
                 '${totalDistance.toStringAsFixed(0)}K',
                 style: TextStyle(
                   fontSize: 28,
-                  fontWeight: FontWeight.w900,
+                  fontWeight: FontWeight.w500,
                   color: palette.secondary,
                 ),
               ),
@@ -68,7 +68,7 @@ class MonthWeekCard extends StatelessWidget {
                 status,
                 style: TextStyle(
                   color: statusColor,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w500,
                   letterSpacing: 0.08,
                 ),
               ),

@@ -34,7 +34,7 @@ class FigmaGoogleSignInButton extends StatelessWidget {
               'ENTRAR COM GOOGLE',
               style: TextStyle(
                 fontSize: 12,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w500,
                 color: Colors.white,
               ),
             ),

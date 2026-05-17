@@ -98,7 +98,7 @@ class OnboardingStepWearable extends StatelessWidget {
                     text: 'Perfil → Saúde → Exames',
                     style: GoogleFonts.jetBrainsMono(
                       fontSize: 12,
-                      fontWeight: FontWeight.w700,
+                      fontWeight: FontWeight.w500,
                       height: 19.2 / 12,
                       color: FigmaColors.brandCyan,
                     ),

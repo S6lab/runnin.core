@@ -69,7 +69,7 @@ class RunninAppBar extends StatelessWidget implements PreferredSizeWidget {
                     title,
                     style: GoogleFonts.jetBrainsMono(
                       fontSize: 14,
-                      fontWeight: FontWeight.w800,
+                      fontWeight: FontWeight.w500,
                       letterSpacing: 1.4,
                       color: palette.text,
                     ),

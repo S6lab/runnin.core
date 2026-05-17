@@ -47,7 +47,7 @@ class FigmaRunFAB extends StatelessWidget {
             style: TextStyle(
               color: palette.background,
               fontSize: 11,
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w500,
             ),
           ),
         ),

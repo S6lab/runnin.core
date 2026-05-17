@@ -426,7 +426,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
             style: context.runninType.labelMd.copyWith(
               color: palette.background,
               fontSize: 9,
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w500,
             ),
           ),
         ),

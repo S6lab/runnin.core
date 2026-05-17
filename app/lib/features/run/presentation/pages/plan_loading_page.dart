@@ -123,7 +123,7 @@ class _PlanLoadingPageState extends State<PlanLoadingPage> {
                 'Criando seu plano',
                 style: TextStyle(
                   fontSize: 24,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w500,
                   letterSpacing: -0.48,
                   height: 1.1,
                   color: Colors.white,

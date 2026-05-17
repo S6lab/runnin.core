@@ -199,7 +199,7 @@ class _UnitsSettingsPageState extends State<UnitsSettingsPage> {
                           'PRÉVIA',
                           style: GoogleFonts.jetBrainsMono(
                             fontSize: 12,
-                            fontWeight: FontWeight.w700,
+                            fontWeight: FontWeight.w500,
                             color: FigmaColors.brandCyan,
                             letterSpacing: 1.0,
                           ),
@@ -273,7 +273,7 @@ class _UnitsSettingsPageState extends State<UnitsSettingsPage> {
                         style: GoogleFonts.jetBrainsMono(
                           color: FigmaColors.bgBase,
                           fontSize: 13,
-                          fontWeight: FontWeight.w900,
+                          fontWeight: FontWeight.w500,
                           letterSpacing: 1.5,
                         ),
                       ),
