@@ -290,24 +290,13 @@ class _PrepViewState extends State<_PrepView> {
     );
   }
 
-  // ─── Step 1: Config (coach + alertas + música) ──────────────────
+  // ─── Step 1: Config (alertas + música + GPS) ────────────────────
+  // Coach card REMOVIDO daqui — coach só fala na tela 4 (corrida ativa)
+  // via saudação disparada no INICIAR. Evita áudio inesperado no prep.
   Widget _buildConfigStep(BuildContext context, RunninTypography type) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SectionHeading(label: '> COACH'),
-        const SizedBox(height: 12),
-        if (_isPro == false)
-          _PreRunCoachLockedCard(onTap: () => context.push('/profile'))
-        else
-          _PreRunCoachCard(
-            loading: _coachLoading,
-            cue: _coachCue,
-            muted: _coachMuted,
-            onToggleMute: () => setState(() => _coachMuted = !_coachMuted),
-            onRefresh: _requestPreRunCue,
-          ),
-        const SizedBox(height: 24),
         Row(
           children: [
             const SectionHeading(label: '> GPS'),

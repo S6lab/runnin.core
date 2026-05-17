@@ -146,32 +146,20 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
         },
         child: BlocBuilder<RunBloc, RunState>(
           builder: (context, state) {
-            // Modo IDLE: ainda não iniciou. Mostra status chips + INICIAR.
-            // Botão INICIAR dispatch StartRun(type) — saudação só dispara
-            // aqui, não no entry da página.
-            if (state.status == RunStatus.idle) {
-              return _IdleRunView(
-                type: widget.initialType,
-                gpsStatus: _gpsStatus,
-                coachMuted: _coachMuted,
-                onRefreshGps: _refreshGpsStatus,
-                onStart: () => context
-                    .read<RunBloc>()
-                    .add(StartRun(type: widget.initialType)),
-                isStarting: false,
-              );
-            }
-            if (state.status == RunStatus.starting) {
-              return _IdleRunView(
-                type: widget.initialType,
-                gpsStatus: _gpsStatus,
-                coachMuted: _coachMuted,
-                onRefreshGps: _refreshGpsStatus,
-                onStart: () {},
-                isStarting: true,
-              );
-            }
-            // Modo ATIVO: render existing map UI + ABANDONAR + FINALIZAR.
+            // View ÚNICA — idle e active compartilham layout (mapa
+            // placeholder + stats + chips). O que muda é o conjunto de
+            // botões no rodapé: INICIAR em idle/starting, ABANDONAR +
+            // FINALIZAR quando rodando. Timer só sobe quando active
+            // (RunBloc._onTimerTick gate-ado por status).
+            final isIdle = state.status == RunStatus.idle ||
+                state.status == RunStatus.starting;
+            // GPS status real: em idle vem da checagem de permissão;
+            // em active baseia em points recebidos (≥1 = OK; 0 = aguardando).
+            final gpsChipStatus = isIdle
+                ? _gpsStatus
+                : (state.points.isNotEmpty
+                    ? _GpsStatus.ok
+                    : _GpsStatus.unknown);
             return Stack(
               children: [
                 _RouteMap(points: state.points),
@@ -183,194 +171,97 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
                     right: 16,
                     child: _CoachLiveBanner(message: state.coachLiveMessage!),
                   ),
+                // Status chips topo-esquerda: GPS, COACH, MÚSICA, WEARABLE.
                 Positioned(
                   top: 12,
-                  right: 14,
+                  left: 14,
+                  right: 80,
                   child: SafeArea(
-                    child: Row(
+                    child: Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
                       children: [
-                        _CoachTalkButton(runId: state.runId ?? ''),
-                        const SizedBox(width: 8),
-                        Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            _CoachMuteButton(
-                              muted: _coachMuted,
-                              onTap: () => setState(() => _coachMuted = !_coachMuted),
-                            ),
-                            if (_coachAudioPlaying)
-                              Positioned(
-                                bottom: 0,
-                                right: 4,
-                                child: Container(
-                                  width: 8,
-                                  height: 8,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: palette.primary,
-                                  ),
-                                ),
-                              ),
-                          ],
+                        _StatusChip(
+                          icon: Icons.gps_fixed,
+                          label: switch (gpsChipStatus) {
+                            _GpsStatus.unknown =>
+                              isIdle ? 'GPS · CONECTANDO' : 'GPS · AGUARDANDO',
+                            _GpsStatus.ok => 'GPS · OK',
+                            _GpsStatus.denied => 'GPS · NEGADO',
+                            _GpsStatus.off => 'GPS · OFF',
+                          },
+                          color: gpsChipStatus == _GpsStatus.ok
+                              ? palette.primary
+                              : gpsChipStatus == _GpsStatus.unknown
+                                  ? palette.muted
+                                  : FigmaColors.brandOrange,
+                          onTap: gpsChipStatus == _GpsStatus.ok
+                              ? null
+                              : _refreshGpsStatus,
+                        ),
+                        _StatusChip(
+                          icon: _coachMuted
+                              ? Icons.volume_off_outlined
+                              : Icons.headphones_outlined,
+                          label: _coachMuted ? 'COACH · MUTE' : 'COACH · ATIVO',
+                          color: _coachMuted ? palette.muted : palette.primary,
                         ),
                       ],
                     ),
                   ),
                 ),
+                // Mute + Talk no canto superior direito (apenas em active).
+                if (!isIdle)
+                  Positioned(
+                    top: 12,
+                    right: 14,
+                    child: SafeArea(
+                      child: Row(
+                        children: [
+                          _CoachTalkButton(runId: state.runId ?? ''),
+                          const SizedBox(width: 8),
+                          Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              _CoachMuteButton(
+                                muted: _coachMuted,
+                                onTap: () => setState(
+                                    () => _coachMuted = !_coachMuted),
+                              ),
+                              if (_coachAudioPlaying)
+                                Positioned(
+                                  bottom: 0,
+                                  right: 4,
+                                  child: Container(
+                                    width: 8,
+                                    height: 8,
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: palette.primary,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 Positioned(
                   bottom: 0,
                   left: 0,
                   right: 0,
-                  child: _StatsOverlay(state: state),
+                  child: _StatsOverlay(
+                    state: state,
+                    initialType: widget.initialType,
+                    onStart: () => context
+                        .read<RunBloc>()
+                        .add(StartRun(type: widget.initialType)),
+                  ),
                 ),
               ],
             );
           },
-        ),
-      ),
-    );
-  }
-}
-
-/// Modo idle pré-corrida: 4 status chips (GPS/Coach/Música/Wearable) + tipo
-/// selecionado + botão INICIAR. Após pressionar INICIAR a UI alterna pro
-/// mapa ativo e os botões ABANDONAR/FINALIZAR aparecem.
-class _IdleRunView extends StatelessWidget {
-  final String type;
-  final _GpsStatus gpsStatus;
-  final bool coachMuted;
-  final VoidCallback onRefreshGps;
-  final VoidCallback onStart;
-  final bool isStarting;
-
-  const _IdleRunView({
-    required this.type,
-    required this.gpsStatus,
-    required this.coachMuted,
-    required this.onRefreshGps,
-    required this.onStart,
-    required this.isStarting,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.runninPalette;
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                IconButton(
-                  onPressed: () => context.pop(),
-                  icon: Icon(Icons.arrow_back, color: palette.muted),
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  'TUDO PRONTO?',
-                  style: GoogleFonts.jetBrainsMono(
-                    color: palette.muted,
-                    fontSize: 11,
-                    letterSpacing: 1.4,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 28),
-            Text(
-              type.toUpperCase(),
-              style: GoogleFonts.jetBrainsMono(
-                color: palette.text,
-                fontSize: 36,
-                fontWeight: FontWeight.w500,
-                letterSpacing: -0.4,
-                height: 1.1,
-              ),
-            ),
-            const SizedBox(height: 18),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                _StatusChip(
-                  icon: Icons.gps_fixed,
-                  label: switch (gpsStatus) {
-                    _GpsStatus.unknown => 'GPS · CONECTANDO',
-                    _GpsStatus.ok => 'GPS · OK',
-                    _GpsStatus.denied => 'GPS · NEGADO',
-                    _GpsStatus.off => 'GPS · OFF',
-                  },
-                  color: gpsStatus == _GpsStatus.ok
-                      ? palette.primary
-                      : gpsStatus == _GpsStatus.unknown
-                          ? palette.muted
-                          : FigmaColors.brandOrange,
-                  onTap: gpsStatus == _GpsStatus.ok ? null : onRefreshGps,
-                ),
-                _StatusChip(
-                  icon: coachMuted
-                      ? Icons.volume_off_outlined
-                      : Icons.headphones_outlined,
-                  label: coachMuted ? 'COACH · MUTE' : 'COACH · ATIVO',
-                  color: coachMuted ? palette.muted : palette.primary,
-                ),
-                _StatusChip(
-                  icon: Icons.music_note_outlined,
-                  label: 'MÚSICA · APP EXTERNO',
-                  color: palette.muted,
-                ),
-                _StatusChip(
-                  icon: Icons.watch_outlined,
-                  label: 'WEARABLE · OFFLINE',
-                  color: palette.muted,
-                ),
-              ],
-            ),
-            const Spacer(),
-            SizedBox(
-              width: double.infinity,
-              height: 60,
-              child: ElevatedButton(
-                onPressed: isStarting || gpsStatus == _GpsStatus.unknown
-                    ? null
-                    : onStart,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: palette.primary,
-                  foregroundColor: palette.background,
-                  disabledBackgroundColor:
-                      palette.primary.withValues(alpha: 0.4),
-                  shape: const RoundedRectangleBorder(
-                    borderRadius: BorderRadius.zero,
-                  ),
-                ),
-                child: isStarting
-                    ? CircularProgressIndicator(
-                        color: palette.background,
-                        strokeWidth: 2,
-                      )
-                    : Text(
-                        'INICIAR CORRIDA',
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                          letterSpacing: 1.4,
-                        ),
-                      ),
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'O tempo só começa quando você pressionar INICIAR.',
-              style: TextStyle(
-                color: palette.muted,
-                fontSize: 11,
-                height: 1.4,
-              ),
-            ),
-          ],
         ),
       ),
     );
@@ -647,12 +538,20 @@ class _WaitingForGpsMap extends StatelessWidget {
 
 class _StatsOverlay extends StatelessWidget {
   final RunState state;
-  const _StatsOverlay({required this.state});
+  final String initialType;
+  final VoidCallback onStart;
+  const _StatsOverlay({
+    required this.state,
+    required this.initialType,
+    required this.onStart,
+  });
 
   @override
   Widget build(BuildContext context) {
     final palette = context.runninPalette;
     final type = context.runninType;
+    final isIdle = state.status == RunStatus.idle ||
+        state.status == RunStatus.starting;
 
     return Container(
       decoration: BoxDecoration(
@@ -669,6 +568,19 @@ class _StatsOverlay extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(24, 32, 24, 48),
       child: Column(
         children: [
+          if (isIdle)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Text(
+                initialType.toUpperCase(),
+                style: GoogleFonts.jetBrainsMono(
+                  color: palette.muted,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  letterSpacing: 1.6,
+                ),
+              ),
+            ),
           Text(
             state.formattedDistance,
             style: type.dataXl.copyWith(fontSize: 72),
@@ -691,39 +603,80 @@ class _StatsOverlay extends StatelessWidget {
 
           const SizedBox(height: 32),
 
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: () {
-                    context.read<RunBloc>().add(AbandonRun());
-                    context.pop();
-                  },
-                  child: Text(
-                    'ABANDONAR',
-                    style: type.labelCaps.copyWith(color: palette.muted),
+          // Botão muda: idle/starting → INICIAR; active+ → ABANDONAR + FINALIZAR.
+          if (isIdle) ...[
+            SizedBox(
+              width: double.infinity,
+              height: 56,
+              child: ElevatedButton(
+                onPressed: state.status == RunStatus.starting ? null : onStart,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: palette.primary,
+                  foregroundColor: palette.background,
+                  disabledBackgroundColor:
+                      palette.primary.withValues(alpha: 0.4),
+                  shape: const RoundedRectangleBorder(
+                    borderRadius: BorderRadius.zero,
                   ),
                 ),
+                child: state.status == RunStatus.starting
+                    ? CircularProgressIndicator(
+                        color: palette.background,
+                        strokeWidth: 2,
+                      )
+                    : Text(
+                        'INICIAR CORRIDA',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                          letterSpacing: 1.4,
+                        ),
+                      ),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                flex: 2,
-                child: ElevatedButton(
-                  onPressed: state.status == RunStatus.completing
-                      ? null
-                      : () {
-                          _finishRun(context, state);
-                        },
-                  child: state.status == RunStatus.completing
-                      ? CircularProgressIndicator(
-                          color: palette.background,
-                          strokeWidth: 2,
-                        )
-                      : const Text('FINALIZAR'),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'O tempo só começa ao tocar INICIAR.',
+              style: TextStyle(
+                color: palette.muted,
+                fontSize: 11,
+                height: 1.4,
+              ),
+            ),
+          ] else
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () {
+                      context.read<RunBloc>().add(AbandonRun());
+                      context.pop();
+                    },
+                    child: Text(
+                      'ABANDONAR',
+                      style: type.labelCaps.copyWith(color: palette.muted),
+                    ),
+                  ),
                 ),
-              ),
-            ],
-          ),
+                const SizedBox(width: 12),
+                Expanded(
+                  flex: 2,
+                  child: ElevatedButton(
+                    onPressed: state.status == RunStatus.completing
+                        ? null
+                        : () {
+                            _finishRun(context, state);
+                          },
+                    child: state.status == RunStatus.completing
+                        ? CircularProgressIndicator(
+                            color: palette.background,
+                            strokeWidth: 2,
+                          )
+                        : const Text('FINALIZAR'),
+                  ),
+                ),
+              ],
+            ),
         ],
       ),
     );
