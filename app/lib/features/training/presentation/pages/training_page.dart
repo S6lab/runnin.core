@@ -884,6 +884,21 @@ class _PlanContextCard extends StatelessWidget {
           const SizedBox(height: 8),
           SizedBox(
             width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: () => context.push('/training/plan-detail'),
+              icon: Icon(Icons.menu_book_outlined, size: 16, color: palette.background),
+              label: const Text('VER PLANO COMPLETO'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: palette.primary,
+                foregroundColor: palette.background,
+                shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
             child: OutlinedButton(
               onPressed: generating ? null : onRegenerate,
               child: Text(
@@ -1206,20 +1221,38 @@ class _WeeklyPlanView extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 12),
-        ...List.generate(7, (index) {
-          final day = index + 1;
-          final sessionForDay = orderedSessions
-              .where((session) => session.dayOfWeek == day)
-              .firstOrNull;
-          final isToday = day == DateTime.now().weekday;
-          final isDone = day < DateTime.now().weekday && sessionForDay != null;
-          return _WeeklySessionRow(
-            dayOfWeek: day,
-            session: sessionForDay,
-            isToday: isToday,
-            isDone: isDone,
+        ...() {
+          // Datas reais por sessão: cada semana começa na segunda anterior
+          // (ou em plan.createdAt se foi gerado numa segunda). Week 1 alinha
+          // com a semana corrente da geração; weeks subsequentes somam +7 dias.
+          final today = DateTime.now();
+          final todayDateOnly = DateTime(today.year, today.month, today.day);
+          final planCreated = DateTime.tryParse(plan.createdAt) ?? today;
+          final week1Monday = planCreated.subtract(
+            Duration(days: (planCreated.weekday - 1) % 7),
           );
-        }),
+          final weekStartMonday = DateTime(
+            week1Monday.year,
+            week1Monday.month,
+            week1Monday.day,
+          ).add(Duration(days: selectedWeek * 7));
+          return List.generate(7, (index) {
+            final day = index + 1;
+            final dayDate = weekStartMonday.add(Duration(days: index));
+            final isToday = dayDate.isAtSameMomentAs(todayDateOnly);
+            final isPast = dayDate.isBefore(todayDateOnly);
+            final sessionForDay = orderedSessions
+                .where((s) => s.dayOfWeek == day)
+                .firstOrNull;
+            return _WeeklySessionRow(
+              dayOfWeek: day,
+              dayDate: dayDate,
+              session: sessionForDay,
+              isToday: isToday,
+              isPast: isPast,
+            );
+          });
+        }(),
       ],
     );
   }
@@ -1547,15 +1580,17 @@ class _TabEmptyState extends StatelessWidget {
 
 class _WeeklySessionRow extends StatelessWidget {
   final int dayOfWeek;
+  final DateTime dayDate;
   final PlanSession? session;
   final bool isToday;
-  final bool isDone;
+  final bool isPast;
 
   const _WeeklySessionRow({
     required this.dayOfWeek,
+    required this.dayDate,
     required this.session,
     required this.isToday,
-    required this.isDone,
+    required this.isPast,
   });
 
   static const _dayNames = [
@@ -1573,6 +1608,33 @@ class _WeeklySessionRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final palette = context.runninPalette;
     final isRest = session == null;
+    final hadPastSession = isPast && !isRest;
+    final dd = dayDate.day.toString().padLeft(2, '0');
+    final mm = dayDate.month.toString().padLeft(2, '0');
+    final dayShort = _dayNames[dayOfWeek].substring(0, 3).toUpperCase();
+
+    // Cores e ênfase por status do dia
+    final Color cellBg;
+    final Color cellFg;
+    final String cellLabel;
+    if (isToday) {
+      cellBg = palette.primary.withValues(alpha: 0.15);
+      cellFg = palette.primary;
+      cellLabel = 'HOJE';
+    } else if (hadPastSession) {
+      // Assumimos concluída — futuro: cruzar com runs
+      cellBg = palette.primary.withValues(alpha: 0.85);
+      cellFg = palette.background;
+      cellLabel = 'OK';
+    } else if (isPast) {
+      cellBg = palette.surfaceAlt;
+      cellFg = palette.muted.withValues(alpha: 0.6);
+      cellLabel = dayShort;
+    } else {
+      cellBg = palette.surfaceAlt;
+      cellFg = palette.muted;
+      cellLabel = dayShort;
+    }
 
     return AppPanel(
       margin: const EdgeInsets.only(bottom: 8),
@@ -1583,42 +1645,62 @@ class _WeeklySessionRow extends StatelessWidget {
       child: Row(
         children: [
           Container(
-            width: 42,
-            height: 42,
+            width: 56,
+            height: 52,
             alignment: Alignment.center,
-            color: isDone
-                ? palette.primary
-                : isToday
-                ? palette.primary.withValues(alpha: 0.15)
-                : palette.surfaceAlt,
-            child: Text(
-              isDone
-                  ? 'OK'
-                  : (isToday
-                        ? 'HOJE'
-                        : _dayNames[dayOfWeek].substring(0, 3).toUpperCase()),
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 9,
-                fontWeight: FontWeight.w500,
-                color: isDone
-                    ? palette.background
-                    : (isToday ? palette.primary : palette.muted),
-              ),
+            color: cellBg,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  cellLabel,
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w500,
+                    color: cellFg,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '$dd/$mm',
+                  style: TextStyle(
+                    fontSize: 9,
+                    color: cellFg.withValues(alpha: 0.85),
+                    letterSpacing: 0.3,
+                  ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  _dayNames[dayOfWeek],
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w500,
-                    color: palette.text,
-                  ),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                  textBaseline: TextBaseline.alphabetic,
+                  children: [
+                    Text(
+                      _dayNames[dayOfWeek],
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w500,
+                        color: isPast && !isToday ? palette.muted : palette.text,
+                      ),
+                    ),
+                    if (isPast && !isToday) ...[
+                      const SizedBox(width: 8),
+                      Text(
+                        hadPastSession ? '· feito' : '· passado',
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: palette.muted.withValues(alpha: 0.7),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
                 const SizedBox(height: 4),
                 Text(

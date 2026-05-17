@@ -13,8 +13,8 @@ const _textScalePreferenceKey = 'text_scale';
 /// menores (labels/captions de 10-11pt).
 enum AppTextScale {
   normal(1.0, 'A', 'Padrão'),
-  plus1(1.10, 'A+', 'Maior (+1)'),
-  plus2(1.20, 'A++', 'Bem maior (+2)');
+  plus1(1.12, 'A+', 'Maior'),
+  plus2(1.28, 'A++', 'Bem maior');
 
   final double factor;
   final String label;

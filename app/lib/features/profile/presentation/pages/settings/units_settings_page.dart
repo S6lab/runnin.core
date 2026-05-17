@@ -198,7 +198,7 @@ class _UnitsSettingsPageState extends State<UnitsSettingsPage> {
                         Text(
                           'PRÉVIA',
                           style: GoogleFonts.jetBrainsMono(
-                            fontSize: 12,
+                            fontSize: 14,
                             fontWeight: FontWeight.w500,
                             color: FigmaColors.brandCyan,
                             letterSpacing: 1.0,

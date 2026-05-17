@@ -25,6 +25,13 @@ export interface Plan {
   status: PlanStatus;
   weeks: PlanWeek[];
   mesocycleNarrative?: string; // texto LLM do mesociclo (3-4 frases)
+  /**
+   * Texto markdown longo escrito pelo coach AI explicando o plano: dados
+   * considerados, racional de carga, periodização, contraindicações,
+   * recomendações nutricionais/recuperação. Renderizado na página
+   * /training/plan-detail. Gerado em background após o plano ficar 'ready'.
+   */
+  coachRationale?: string;
   createdAt: string;
   updatedAt: string;
 }

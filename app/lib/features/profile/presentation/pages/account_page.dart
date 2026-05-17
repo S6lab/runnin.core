@@ -475,7 +475,7 @@ class _InfoCard extends StatelessWidget {
             value,
             style: GoogleFonts.jetBrainsMono(
               color: FigmaColors.textPrimary,
-              fontSize: 16,
+              fontSize: 14,
               fontWeight: FontWeight.w500,
             ),
           ),
@@ -507,7 +507,7 @@ class _SkinSection extends StatelessWidget {
           'SKIN',
           style: GoogleFonts.jetBrainsMono(
             color: FigmaColors.textPrimary,
-            fontSize: 16,
+            fontSize: 14,
             fontWeight: FontWeight.w500,
           ),
         ),
@@ -687,7 +687,7 @@ class _AccessibilitySection extends StatelessWidget {
           'ACESSIBILIDADE',
           style: GoogleFonts.jetBrainsMono(
             color: FigmaColors.textPrimary,
-            fontSize: 16,
+            fontSize: 14,
             fontWeight: FontWeight.w500,
           ),
         ),
@@ -785,7 +785,7 @@ class _MenuSection extends StatelessWidget {
           'MENU',
           style: GoogleFonts.jetBrainsMono(
             color: FigmaColors.textPrimary,
-            fontSize: 16,
+            fontSize: 14,
             fontWeight: FontWeight.w500,
           ),
         ),
@@ -899,7 +899,7 @@ class _MenuItem extends StatelessWidget {
               '↗',
               style: GoogleFonts.jetBrainsMono(
                 color: FigmaColors.textDim,
-                fontSize: 16,
+                fontSize: 14,
               ),
             ),
           ],

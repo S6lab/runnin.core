@@ -156,6 +156,9 @@ export class GeneratePlanUseCase {
         weeks,
         updatedAt: new Date().toISOString(),
       });
+      // Fire-and-forget: gera narrativa longa pra página de detalhe sem
+      // bloquear a resposta. Se falhar, o plano segue funcional sem texto.
+      void this._generateCoachRationale(plan, weeks, runtime.profile);
     } catch (err) {
       logger.error('plan.generate.failed', {
         planId: plan.id,
@@ -166,6 +169,82 @@ export class GeneratePlanUseCase {
         updatedAt: new Date().toISOString(),
       });
       throw err;
+    }
+  }
+
+  private async _generateCoachRationale(
+    plan: Plan,
+    weeks: PlanWeek[],
+    profile: import('@modules/coach/use-cases/coach-runtime-context.service').CoachRuntimeProfile | null,
+  ): Promise<void> {
+    try {
+      const totalKm = weeks.reduce(
+        (s, w) => s + w.sessions.reduce((ss, x) => ss + x.distanceKm, 0),
+        0,
+      );
+      const sessionsBySection = weeks
+        .map((w, i) => `Semana ${i + 1}: ${w.sessions.length} sessões / ${w.sessions.reduce((s, x) => s + x.distanceKm, 0).toFixed(1)}km`)
+        .join('\n');
+      const profileLines = profile
+        ? [
+            `- Nome: ${profile.name ?? '—'}`,
+            `- Nível: ${profile.level ?? '—'}`,
+            `- Objetivo: ${profile.goal ?? '—'}`,
+            `- Frequência alvo: ${profile.frequency ?? '—'}x/semana`,
+            `- Período preferido: ${profile.runPeriod ?? '—'}`,
+            `- Idade: ${profile.birthDate ?? '—'}`,
+            `- Peso: ${profile.weight ?? '—'} | Altura: ${profile.height ?? '—'}`,
+            `- FC repouso: ${profile.restingBpm ?? '—'} | FC máx: ${profile.maxBpm ?? '—'}`,
+            `- Condições médicas: ${(profile.medicalConditions ?? []).join(', ') || 'nenhuma'}`,
+            `- Wearable conectado: ${profile.hasWearable ? 'sim' : 'não'}`,
+            `- Persona do coach: ${profile.coachPersonality ?? 'motivador'}`,
+          ].join('\n')
+        : '(perfil não disponível)';
+
+      const userPrompt = `Você é o Coach AI do runnin. Escreva uma explicação clara e direta (markdown, 350-500 palavras max) sobre o plano que VOCÊ acabou de gerar pra esse atleta. Foco: o "porquê" das decisões.
+
+# Dados do atleta considerados
+${profileLines}
+
+# Plano gerado
+- Objetivo: ${plan.goal}
+- Nível: ${plan.level}
+- Duração: ${plan.weeksCount} semanas
+- Volume total: ${totalKm.toFixed(1)}km
+
+${sessionsBySection}
+
+Estrutura esperada do markdown (use ##/### headings):
+## Estratégia
+2-3 frases sobre como o objetivo + nível dele orientaram a periodização.
+## Como li seu perfil
+3-5 bullets com observações específicas que afetaram o plano (ex: "FC máx alta sugere boa capacidade aeróbica → mais tempo na zona 3").
+## Distribuição da carga
+Bullets sobre como volume + intensidade são distribuídos nas semanas (progressão linear? 3:1? deload?).
+## Recomendações
+3-4 bullets curtos: alimentação, recuperação, sinais de alerta. Específicos ao perfil dele.
+## O que vou ajustar com o tempo
+1 parágrafo curto sobre como cada corrida vai ajustar próximas sessões.
+
+NUNCA invente dados que não estão no perfil. Se um campo está vazio, ignore. Seja conciso. Use "você" pra falar com o atleta.`;
+
+      const raw = await this.llm.generate(userPrompt, {
+        systemPrompt: 'Você é o Coach AI do runnin. Tom: confiante, técnico mas acessível. Não use emojis. Português BR.',
+        maxTokens: 1200,
+        temperature: 0.4,
+      });
+
+      await this.repo.update(plan.id, plan.userId, {
+        coachRationale: raw.trim(),
+        updatedAt: new Date().toISOString(),
+      });
+      logger.info('plan.rationale.generated', { planId: plan.id, chars: raw.length });
+    } catch (err) {
+      logger.warn('plan.rationale.failed', {
+        planId: plan.id,
+        err: err instanceof Error ? err.message : String(err),
+      });
+      // não falha — plano segue válido sem rationale
     }
   }
 

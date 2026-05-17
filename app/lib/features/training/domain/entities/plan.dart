@@ -47,6 +47,9 @@ class Plan {
   final String status;
   final List<PlanWeek> weeks;
   final String createdAt;
+  /// Markdown longo escrito pelo coach AI (gerado em background no server).
+  /// Pode estar null se ainda não foi gerado ou se a chamada LLM falhou.
+  final String? coachRationale;
 
   const Plan({
     required this.id,
@@ -56,6 +59,7 @@ class Plan {
     required this.status,
     required this.weeks,
     required this.createdAt,
+    this.coachRationale,
   });
 
   factory Plan.fromJson(Map<String, dynamic> j) => Plan(
@@ -68,6 +72,7 @@ class Plan {
         .map((w) => PlanWeek.fromJson(w as Map<String, dynamic>))
         .toList(),
     createdAt: j['createdAt'] as String,
+    coachRationale: j['coachRationale'] as String?,
   );
 
   bool get isReady => status == 'ready';

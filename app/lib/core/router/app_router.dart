@@ -19,6 +19,7 @@ import 'package:runnin/features/run/presentation/pages/report_page.dart';
 import 'package:runnin/features/run/presentation/pages/share_page.dart';
 import 'package:runnin/features/run/presentation/pages/plan_loading_page.dart';
 import 'package:runnin/features/training/presentation/pages/training_page.dart';
+import 'package:runnin/features/training/presentation/pages/plan_detail_page.dart';
 import 'package:runnin/features/training/presentation/pages/revision_flow_page.dart';
 import 'package:runnin/features/history/presentation/pages/history_page.dart';
 import 'package:runnin/features/history/presentation/pages/run_detail_page.dart';
@@ -192,6 +193,10 @@ final appRouter = GoRouter(
       routes: [
         GoRoute(path: '/home', builder: (_, _) => const HomePage()),
         GoRoute(path: '/training', builder: (_, _) => const TrainingPage()),
+        GoRoute(
+          path: '/training/plan-detail',
+          builder: (_, _) => const PlanDetailPage(),
+        ),
         GoRoute(
           path: '/training/report/:weekStart',
           builder: (_, state) => WeeklyReportDetailPage(
