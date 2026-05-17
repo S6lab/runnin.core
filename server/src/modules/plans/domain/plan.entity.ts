@@ -1,5 +1,26 @@
 export type PlanStatus = 'generating' | 'ready' | 'failed';
 
+/**
+ * Segmento de execução da sessão — uma fase específica da corrida
+ * (ex: km 0-1 aquecimento, km 1-4 pace alvo, km 4-5 cooldown).
+ * Renderizado no DayDetailPage como timeline ordenada, com a
+ * instrução exata do coach pra cada fase. É o "execution script".
+ */
+export interface PlanSegment {
+  /** Início do segmento em km (cumulativo desde 0). */
+  kmStart: number;
+  /** Fim do segmento em km. */
+  kmEnd: number;
+  /** Tipo: warmup | main | interval | recovery | cooldown */
+  phase: string;
+  /** Pace alvo pra esse segmento. Null em warmup/cooldown. */
+  targetPace?: string;
+  /** Tempo estimado do segmento (min). */
+  durationMin?: number;
+  /** Instrução literal do coach pra o atleta executar a fase. */
+  instruction: string;
+}
+
 export interface PlanSession {
   id: string;
   dayOfWeek: number; // 1=Mon … 7=Sun
@@ -16,6 +37,10 @@ export interface PlanSession {
   nutritionPre?: string;
   /** Sugestão de refeição pós-treino (até 1h depois). */
   nutritionPost?: string;
+  /** Execution script: timeline km-a-km com instrução do coach por
+   *  fase. Renderizado no DayDetailPage. Plano completo só mostra
+   *  agregado (pace/distância/tempo). */
+  executionSegments?: PlanSegment[];
   notes: string;
 }
 

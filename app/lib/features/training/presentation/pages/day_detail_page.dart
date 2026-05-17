@@ -310,6 +310,239 @@ class _PlannedSessionCard extends StatelessWidget {
             const SizedBox(height: 18),
             _OrientationBlock(text: session.notes),
           ],
+          if (session.executionSegments.isNotEmpty) ...[
+            const SizedBox(height: 20),
+            _ExecutionTimeline(segments: session.executionSegments),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Timeline km-a-km com instruções literais do coach pra executar a
+/// sessão. Cada segment vira um card numerado mostrando faixa de km,
+/// fase, pace alvo, tempo e a fala do coach.
+class _ExecutionTimeline extends StatelessWidget {
+  final List<PlanSegment> segments;
+  const _ExecutionTimeline({required this.segments});
+
+  static const _phaseLabels = {
+    'warmup': 'AQUECIMENTO',
+    'main': 'PRINCIPAL',
+    'interval': 'TIRO',
+    'recovery': 'RECUPERAÇÃO',
+    'cooldown': 'DESAQUECIMENTO',
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(Icons.format_list_numbered, size: 16, color: palette.primary),
+            const SizedBox(width: 8),
+            Text(
+              'ROTEIRO DA SESSÃO · ${segments.length} fases',
+              style: GoogleFonts.jetBrainsMono(
+                color: palette.primary,
+                fontSize: 11,
+                letterSpacing: 1.0,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'O que o coach vai te dizer em cada km. Use o fone — ele acompanha em tempo real.',
+          style: TextStyle(color: palette.muted, fontSize: 11, height: 1.4),
+        ),
+        const SizedBox(height: 12),
+        for (var i = 0; i < segments.length; i++)
+          _SegmentCard(
+            index: i + 1,
+            segment: segments[i],
+            phaseLabel: _phaseLabels[segments[i].phase.toLowerCase()] ??
+                segments[i].phase.toUpperCase(),
+            isLast: i == segments.length - 1,
+          ),
+      ],
+    );
+  }
+}
+
+class _SegmentCard extends StatelessWidget {
+  final int index;
+  final PlanSegment segment;
+  final String phaseLabel;
+  final bool isLast;
+  const _SegmentCard({
+    required this.index,
+    required this.segment,
+    required this.phaseLabel,
+    required this.isLast,
+  });
+
+  Color _phaseColor(BuildContext context) {
+    final palette = context.runninPalette;
+    switch (segment.phase.toLowerCase()) {
+      case 'warmup':
+        return palette.warning;
+      case 'main':
+        return palette.primary;
+      case 'interval':
+        return palette.error;
+      case 'recovery':
+        return palette.muted;
+      case 'cooldown':
+        return palette.secondary;
+      default:
+        return palette.primary;
+    }
+  }
+
+  String _kmRange() {
+    String fmt(double v) =>
+        v == v.truncateToDouble() ? v.toStringAsFixed(0) : v.toStringAsFixed(1);
+    return 'KM ${fmt(segment.kmStart)} → ${fmt(segment.kmEnd)}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    final accent = _phaseColor(context);
+
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Coluna esquerda: índice + linha conectora
+          SizedBox(
+            width: 32,
+            child: Column(
+              children: [
+                Container(
+                  width: 28,
+                  height: 28,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: accent.withValues(alpha: 0.15),
+                    border: Border.all(color: accent, width: 1.0),
+                  ),
+                  child: Text(
+                    '$index',
+                    style: GoogleFonts.jetBrainsMono(
+                      color: accent,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+                if (!isLast)
+                  Expanded(
+                    child: Container(
+                      width: 1.5,
+                      color: palette.border,
+                      margin: const EdgeInsets.symmetric(vertical: 2),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          // Coluna direita: card com info do segment
+          Expanded(
+            child: Padding(
+              padding: EdgeInsets.only(bottom: isLast ? 0 : 12),
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: palette.background,
+                  border: Border.all(color: palette.border, width: 1.0),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          color: accent.withValues(alpha: 0.15),
+                          child: Text(
+                            phaseLabel,
+                            style: GoogleFonts.jetBrainsMono(
+                              color: accent,
+                              fontSize: 9,
+                              letterSpacing: 0.8,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          _kmRange(),
+                          style: GoogleFonts.jetBrainsMono(
+                            color: palette.muted,
+                            fontSize: 10,
+                            letterSpacing: 0.6,
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (segment.targetPace != null || segment.durationMin != null) ...[
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          if (segment.targetPace != null) ...[
+                            Icon(Icons.speed, size: 11, color: palette.muted),
+                            const SizedBox(width: 4),
+                            Text(
+                              '${segment.targetPace}/km',
+                              style: TextStyle(
+                                color: palette.text,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                          ],
+                          if (segment.durationMin != null) ...[
+                            Icon(Icons.timer_outlined,
+                                size: 11, color: palette.muted),
+                            const SizedBox(width: 4),
+                            Text(
+                              '~${segment.durationMin!.round()}min',
+                              style: TextStyle(
+                                color: palette.text,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ],
+                    const SizedBox(height: 8),
+                    Text(
+                      segment.instruction,
+                      style: TextStyle(
+                        color: palette.text,
+                        fontSize: 12,
+                        height: 1.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
         ],
       ),
     );

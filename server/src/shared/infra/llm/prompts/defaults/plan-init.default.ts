@@ -7,9 +7,25 @@ export const PLAN_INIT_DEFAULTS = {
     'Cada SESSÃO tem CAMPOS RECOMENDADOS (preencha sempre que possível):',
     '  - targetPace: string "min:seg/km" (ex: "6:00"). Calcule baseado em FC máx/repouso do atleta ou estimativa por nível.',
     '  - durationMin: number (minutos estimados). Calcule distanceKm × pace. Ex: 8km a 6:00/km = 48min.',
-    '  - hydrationLiters: number (LITROS no DIA, total — não só durante o treino). Considere peso × 0.035L + carga do treino. Ex: atleta 80kg em dia de Long Run = 3.5-4.0L.',
+    '  - hydrationLiters: number (LITROS no DIA, total — não só durante o treino). Considere peso × 0.035L (CAP em 3.5L máximo). Ex: atleta 80kg em dia de Long Run = 2.8-3.0L.',
     '  - nutritionPre: string curta (até 200 char) com refeição pré-treino 60-90min antes (ex: "Banana + pão integral com mel + café preto").',
     '  - nutritionPost: string curta (até 200 char) com refeição pós até 1h (ex: "Whey + 1 fruta + 1 prato real em até 1h: arroz/quinoa + proteína magra + vegetais").',
+    '  - executionSegments: array com o ROTEIRO DETALHADO da sessão km-a-km (3-6 segments por sessão). Cada segment tem: kmStart (number, 0 indexed), kmEnd (number), phase ("warmup"|"main"|"interval"|"recovery"|"cooldown"), targetPace (opcional, formato "min:seg"), durationMin (opcional), instruction (string até 400 char com instrução LITERAL do coach pro atleta).',
+    'EXEMPLO de executionSegments pra uma sessão Easy Run 5km:',
+    '  [',
+    '    {"kmStart":0,"kmEnd":1,"phase":"warmup","durationMin":7,"instruction":"Primeiro km: caminhada acelerada → trote leve. Use o fone, vou avisando se está no pace ou não. Foco em soltar tornozelos e quadril."},',
+    '    {"kmStart":1,"kmEnd":4,"phase":"main","targetPace":"6:00","durationMin":18,"instruction":"Pace alvo 6:00/km. Mantém constante, respiração 3x3 (3 passos inspira, 3 expira). Vou alertar se acelerar ou cair."},',
+    '    {"kmStart":4,"kmEnd":5,"phase":"cooldown","durationMin":7,"instruction":"Último km: reduz pra trote leve, depois 2min de caminhada. Não trave de uma vez — desacelera gradual."}',
+    '  ]',
+    'EXEMPLO de executionSegments pra Intervalado 6km (warmup + 4x 800m fortes + cooldown):',
+    '  [',
+    '    {"kmStart":0,"kmEnd":1.5,"phase":"warmup","durationMin":10,"instruction":"Aquecimento progressivo: 5min caminhada + 5min trote leve. Esquente bem pra evitar lesão nos tiros."},',
+    '    {"kmStart":1.5,"kmEnd":2.3,"phase":"interval","targetPace":"4:30","durationMin":4,"instruction":"TIRO 1 de 800m no pace 4:30. Vai forte mas não estoura. Foco em manter o ritmo."},',
+    '    {"kmStart":2.3,"kmEnd":2.7,"phase":"recovery","durationMin":3,"instruction":"Recuperação ativa 400m em trote MUITO leve. Respiração se acalma aqui."},',
+    '    {"kmStart":2.7,"kmEnd":3.5,"phase":"interval","targetPace":"4:30","durationMin":4,"instruction":"TIRO 2 de 800m. Tenta repetir o mesmo pace do tiro 1."},',
+    '    ... (continua até completar 4 tiros + cooldown)',
+    '  ]',
+    'INSTRUCTIONS devem soar como coach FALANDO ao vivo. Use "você" e ações concretas ("acelera agora", "segura aí", "respira fundo"). NÃO genérico.',
     'Cada SEMANA tem ARRAY restDayTips (1 entry por dia SEM sessão, dayOfWeek 1-7). Cada tip tem: dayOfWeek (number), hydrationLiters (number — meta basal, peso × 0.035L), nutrition (string anti-inflamatória/recuperação), focus (string ex: "alongamento + mobilidade", "fortalecimento de core", "recuperação ativa caminhando 20min").',
     'EXEMPLO de uma semana válida:',
     '{ "weekNumber": 1, "sessions": [ { "dayOfWeek": 1, "type": "Easy Run", "distanceKm": 5, "targetPace": "6:30", "durationMin": 32, "hydrationLiters": 2.8, "nutritionPre": "Banana + pão integral com mel", "nutritionPost": "Whey + fruta + almoço com arroz integral + frango + vegetais", "notes": "[BASE] Foco em técnica e respiração." } ], "restDayTips": [ { "dayOfWeek": 2, "hydrationLiters": 2.5, "nutrition": "Anti-inflamatório: peixe gordo + folhas verdes + frutas vermelhas", "focus": "alongamento + mobilidade" } ] }',
@@ -100,9 +116,9 @@ export const PLAN_INIT_DEFAULTS = {
   ].join('\n'),
 
   temperature: 0.6,
-  // 14000 pra acomodar planos com sessions ricas (targetPace + durationMin
-  // + hydrationLiters + nutritionPre + nutritionPost + notes) × 6 sessions
-  // × 8 weeks + restDayTips. Antes 8000 cortava ainda mais.
-  maxTokens: 14000,
+  // 20000 pra acomodar planos com executionSegments (3-6 segments por
+  // session, cada um com instruction 200-400 char). Antes 14000 cortava
+  // segments nas últimas semanas. Gemini 2.5-flash suporta até 65k.
+  maxTokens: 20000,
   ragChunks: 4,
 };

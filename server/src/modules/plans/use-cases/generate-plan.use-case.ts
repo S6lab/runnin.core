@@ -10,6 +10,15 @@ import { CoachRuntimeContextService } from '@modules/coach/use-cases/coach-runti
 import { container } from '@shared/container';
 import { CooldownError } from '@shared/errors/app-error';
 
+const PlanSegmentSchema = z.object({
+  kmStart: z.number().nonnegative(),
+  kmEnd: z.number().positive(),
+  phase: z.string().min(1),
+  targetPace: z.string().min(1).optional(),
+  durationMin: z.number().positive().max(120).optional(),
+  instruction: z.string().min(1).max(500),
+});
+
 const PlanSessionSchema = z.object({
   dayOfWeek: z.number().int().min(1).max(7),
   type: z.string().min(1),
@@ -19,6 +28,7 @@ const PlanSessionSchema = z.object({
   hydrationLiters: z.number().positive().max(10).optional(),
   nutritionPre: z.string().max(400).optional(),
   nutritionPost: z.string().max(400).optional(),
+  executionSegments: z.array(PlanSegmentSchema).max(20).optional(),
   notes: z.string().default(''),
 });
 
@@ -530,6 +540,7 @@ ${repaired}`,
         hydrationLiters: session.hydrationLiters,
         nutritionPre: session.nutritionPre,
         nutritionPost: session.nutritionPost,
+        executionSegments: session.executionSegments,
         notes: session.notes,
       }) satisfies PlanSession);
 
@@ -859,6 +870,26 @@ ${repaired}`,
         }
         if (typeof cleaned.targetPace !== 'string' || !cleaned.targetPace.trim()) {
           delete cleaned.targetPace;
+        }
+        // Sanitiza executionSegments: descarta segments inválidos sem
+        // invalidar a session inteira. LLM pode omitir campos.
+        if (Array.isArray(cleaned.executionSegments)) {
+          const segs = (cleaned.executionSegments as unknown[])
+            .filter((seg): seg is Record<string, unknown> => !!seg && typeof seg === 'object')
+            .map((seg) => {
+              const s = { ...seg } as Record<string, unknown>;
+              const kmStartOk = typeof s.kmStart === 'number' && s.kmStart >= 0;
+              const kmEndOk = typeof s.kmEnd === 'number' && s.kmEnd > 0;
+              const phaseOk = typeof s.phase === 'string' && s.phase.trim().length > 0;
+              const instOk = typeof s.instruction === 'string' && s.instruction.trim().length > 0;
+              if (!kmStartOk || !kmEndOk || !phaseOk || !instOk) return null;
+              if (typeof s.durationMin !== 'number' || s.durationMin <= 0) delete s.durationMin;
+              if (typeof s.targetPace !== 'string' || !s.targetPace.trim()) delete s.targetPace;
+              return s;
+            })
+            .filter((s): s is Record<string, unknown> => s !== null);
+          if (segs.length === 0) delete cleaned.executionSegments;
+          else cleaned.executionSegments = segs;
         }
         return cleaned;
       }).filter((s): s is Record<string, unknown> => {

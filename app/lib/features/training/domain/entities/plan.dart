@@ -1,3 +1,32 @@
+/// Segmento de execução de uma sessão (km-a-km com instrução do coach).
+/// Renderizado no DayDetailPage como timeline ordenada.
+class PlanSegment {
+  final double kmStart;
+  final double kmEnd;
+  final String phase; // warmup | main | interval | recovery | cooldown
+  final String? targetPace;
+  final double? durationMin;
+  final String instruction;
+
+  const PlanSegment({
+    required this.kmStart,
+    required this.kmEnd,
+    required this.phase,
+    this.targetPace,
+    this.durationMin,
+    required this.instruction,
+  });
+
+  factory PlanSegment.fromJson(Map<String, dynamic> j) => PlanSegment(
+        kmStart: (j['kmStart'] as num).toDouble(),
+        kmEnd: (j['kmEnd'] as num).toDouble(),
+        phase: j['phase'] as String,
+        targetPace: j['targetPace'] as String?,
+        durationMin: (j['durationMin'] as num?)?.toDouble(),
+        instruction: j['instruction'] as String,
+      );
+}
+
 class PlanSession {
   final String id;
   final int dayOfWeek; // 1=Seg … 7=Dom
@@ -8,6 +37,10 @@ class PlanSession {
   final double? hydrationLiters;
   final String? nutritionPre;
   final String? nutritionPost;
+  /// Roteiro detalhado km-a-km da sessão. Aparece SOMENTE no DayDetail
+  /// (clicar no dia da semana em TREINO/Plano). Plano completo só mostra
+  /// agregado (distância/pace/tempo) pra não poluir.
+  final List<PlanSegment> executionSegments;
   final String notes;
 
   const PlanSession({
@@ -20,6 +53,7 @@ class PlanSession {
     this.hydrationLiters,
     this.nutritionPre,
     this.nutritionPost,
+    this.executionSegments = const [],
     required this.notes,
   });
 
@@ -33,6 +67,9 @@ class PlanSession {
     hydrationLiters: (j['hydrationLiters'] as num?)?.toDouble(),
     nutritionPre: j['nutritionPre'] as String?,
     nutritionPost: j['nutritionPost'] as String?,
+    executionSegments: ((j['executionSegments'] as List?) ?? [])
+        .map((e) => PlanSegment.fromJson(e as Map<String, dynamic>))
+        .toList(),
     notes: j['notes'] as String? ?? '',
   );
 }
