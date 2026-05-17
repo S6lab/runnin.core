@@ -203,7 +203,11 @@ export class GeneratePlanUseCase {
       });
       const llmMs = Date.now() - llmStart;
       const parseStart = Date.now();
-      const weeks = await this._parseWeeks(raw, input.weeksCount, input.startDate);
+      const parsedWeeks = await this._parseWeeks(raw, input.weeksCount, input.startDate);
+      // Frequency enforcement: o LLM ocasionalmente devolve 1 sessão/sem
+      // mesmo com freq=5 (sub-prompt frouxo ou bias defensivo). Preenchemos
+      // determinísticamente com Easy Run em dias livres até bater freq.
+      const weeks = this._padToFrequency(parsedWeeks, freq, input.startDate);
       const parseMs = Date.now() - parseStart;
       const totalMs = Date.now() - startedAt;
       logger.info('plan.generate.completed', {
@@ -528,6 +532,75 @@ ${repaired}`,
         return this._ensureWeeksCount(normalized, weeksCount, startDate);
       }
     }
+  }
+
+  /**
+   * Garante que cada semana tem pelo menos `targetFreq` sessões. Quando
+   * o LLM devolve menos (bug recorrente: pede 5x, devolve 1x), preenche
+   * com Easy Run em dias livres da semana. Distância clonada da média
+   * das sessões existentes (ou padrão por nível se semana vazia).
+   *
+   * Exceção: semana 1 pode ter menos sessões quando D0 cai já no meio
+   * da semana — não força preenchimento em dias anteriores ao D0.
+   */
+  private _padToFrequency(
+    weeks: PlanWeek[],
+    targetFreq: number,
+    startDate: string,
+  ): PlanWeek[] {
+    const start = new Date(`${startDate}T00:00:00`);
+    const startDow = start.getDay() || 7;
+    let totalPadded = 0;
+    const padded = weeks.map((w, idx) => {
+      // Semana 1: cap em (8 - startDow) sessões possíveis (D0 → domingo)
+      const maxAllowed = idx === 0 ? Math.min(targetFreq, 8 - startDow) : targetFreq;
+      if (w.sessions.length >= maxAllowed) return w;
+
+      const occupiedDays = new Set(w.sessions.map((s) => s.dayOfWeek));
+      const dowMin = idx === 0 ? startDow : 1;
+      const freeDays: number[] = [];
+      for (let d = dowMin; d <= 7; d++) {
+        if (!occupiedDays.has(d)) freeDays.push(d);
+      }
+      // Distribui dias com gaps (evita 3 dias seguidos).
+      freeDays.sort((a, b) => a - b);
+
+      const avgDistance = w.sessions.length > 0
+        ? w.sessions.reduce((s, x) => s + x.distanceKm, 0) / w.sessions.length
+        : 4;
+      const padDistanceKm = Number(Math.max(3, Math.min(8, avgDistance)).toFixed(1));
+
+      const needed = maxAllowed - w.sessions.length;
+      const newSessions: PlanSession[] = [];
+      for (let i = 0; i < needed && i < freeDays.length; i++) {
+        const dow = freeDays[i]!;
+        const base = {
+          id: uuid(),
+          dayOfWeek: dow,
+          type: 'Easy Run',
+          distanceKm: padDistanceKm,
+          notes: `[BASE] Sessão preenchida automaticamente pra atingir frequência alvo de ${targetFreq}x/semana. Easy run conversável.`,
+        } satisfies Omit<PlanSession, 'executionSegments' | 'targetPace' | 'durationMin' | 'hydrationLiters' | 'nutritionPre' | 'nutritionPost'>;
+        const segs = buildExecutionSegments(base as PlanSession);
+        newSessions.push({ ...base, executionSegments: segs } satisfies PlanSession);
+        totalPadded++;
+      }
+      const combined = [...w.sessions, ...newSessions].sort((a, b) => {
+        if (a.dayOfWeek !== b.dayOfWeek) return a.dayOfWeek - b.dayOfWeek;
+        return a.id.localeCompare(b.id);
+      });
+      return { ...w, sessions: combined };
+    });
+
+    if (totalPadded > 0) {
+      logger.warn('plan.parse.frequency_padded', {
+        targetFreq,
+        totalPadded,
+        countsBefore: weeks.map((w) => w.sessions.length),
+        countsAfter: padded.map((w) => w.sessions.length),
+      });
+    }
+    return padded;
   }
 
   private _normalizeWeeks(raw: string, startDate: string): PlanWeek[] {
