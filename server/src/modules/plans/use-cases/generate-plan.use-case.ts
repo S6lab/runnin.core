@@ -15,12 +15,24 @@ const PlanSessionSchema = z.object({
   type: z.string().min(1),
   distanceKm: z.number().positive().max(60),
   targetPace: z.string().min(1).optional(),
+  durationMin: z.number().positive().max(600).optional(),
+  hydrationLiters: z.number().positive().max(10).optional(),
+  nutritionPre: z.string().max(400).optional(),
+  nutritionPost: z.string().max(400).optional(),
   notes: z.string().default(''),
+});
+
+const PlanRestDayTipSchema = z.object({
+  dayOfWeek: z.number().int().min(1).max(7),
+  hydrationLiters: z.number().positive().max(10).optional(),
+  nutrition: z.string().max(400).optional(),
+  focus: z.string().max(120).optional(),
 });
 
 const PlanWeekSchema = z.object({
   weekNumber: z.number().int().min(1),
   sessions: z.array(PlanSessionSchema).max(7),
+  restDayTips: z.array(PlanRestDayTipSchema).max(7).optional(),
 });
 
 const PlanWeeksSchema = z.array(PlanWeekSchema);
@@ -226,7 +238,16 @@ Estrutura esperada do markdown (use ##/### headings, parágrafos de verdade):
 2-3 parágrafos. Aqui você é HONESTO. Se o objetivo declarado é desproporcional ao nível atual (ex: iniciante quer ultra), diga claramente que este plano de ${plan.weeksCount} semanas é a FASE DE FUNDAÇÃO — e quanto tempo realista (em meses) levaria pra chegar no objetivo final. Cite literatura/método (Lydiard, Daniels, Maffetone, Pfitzinger) quando for relevante pra justificar a decisão. Se objetivo está alinhado ao nível, valide com critério.
 
 ## Como li o seu perfil
-Parágrafo introdutório curto + 5-8 bullets DENSOS. Cada bullet explica COMO um campo específico (idade, peso, BPM, condição médica, gênero, janela do dia) ALTEROU as decisões do plano. Ex: "Hipertensão + betabloqueador → reduzi intensidade em Z3 pra Z2 e tirei intervalado das primeiras 3 semanas; suas zonas de FC vão parecer baixas mas são corretas pro seu coração medicado." NUNCA bullets genéricos.
+OBRIGATÓRIO citar EXPLICITAMENTE cada dado relevante do atleta neste formato: "verifiquei que você tem X, então fiz Y". Use o NOME do dado e do ajuste.
+
+Parágrafo introdutório curto começando com "Antes de montar o plano, verifiquei tudo que você me passou: ..." listando os campos chave que você considerou (idade, gênero, peso, altura, BPM repouso/máx se houver, condições médicas TODAS pelo nome, wearable, horários de acordar/dormir, janela do dia).
+
+Em seguida, 5-8 bullets DENSOS no formato "verifiquei que [DADO ESPECÍFICO COM VALOR] → [AJUSTE EXPLÍCITO QUE FIZ NO PLANO]". Exemplos do tom esperado:
+- "Verifiquei que você tem hipertensão e toma betabloqueador → reduzi intensidade em Z3 pra Z2 e tirei intervalado das 3 primeiras semanas. Suas zonas de FC vão parecer baixas mas são corretas pro seu coração medicado. Comecei mais leve pra eu poder monitorar seu desempenho nas primeiras sessões."
+- "Verifiquei que você teve cirurgia recente no tendão de Aquiles → eliminei subidas e dei prioridade pra Easy Run em piso plano nas primeiras 6 semanas; vou liberar terreno variado só na semana 7."
+- "Verifiquei que você tem 43 anos e BMI 27.1 → a progressão semanal vai em incrementos de 8% (não 10%) e incluí um deload na semana 4 mais profundo."
+- "Verifiquei que você acorda 06:00 e dorme 23:00, prefere correr de manhã → marquei sessões mais exigentes 06:30-07:30 (cortisol alto, gap de 2h pro almoço)."
+NUNCA bullets genéricos. Se um campo está vazio, NÃO mencione.
 
 ## Metodologia que escolhi pra você
 2-3 parágrafos explicando QUAL método de treino estruturou este plano (periodização linear 3:1, base aeróbica de Lydiard, polarized 80/20, MAF de Maffetone, etc.) e POR QUE esse método combina com SEU perfil + objetivo. Cite o nome do método, princípio central, e tradução prática pro que ele vai sentir.
@@ -471,6 +492,10 @@ ${repaired}`,
         type: session.type,
         distanceKm: Number(session.distanceKm.toFixed(1)),
         targetPace: session.targetPace,
+        durationMin: session.durationMin,
+        hydrationLiters: session.hydrationLiters,
+        nutritionPre: session.nutritionPre,
+        nutritionPost: session.nutritionPost,
         notes: session.notes,
       }) satisfies PlanSession);
 
@@ -489,6 +514,7 @@ ${repaired}`,
           if (a.dayOfWeek !== b.dayOfWeek) return a.dayOfWeek - b.dayOfWeek;
           return a.id.localeCompare(b.id);
         }),
+        restDayTips: week.restDayTips,
       };
     });
 
@@ -775,22 +801,62 @@ ${repaired}`,
       if (!rawWeek || typeof rawWeek !== 'object') return rawWeek;
       const w = rawWeek as Record<string, unknown>;
       if (!Array.isArray(w.sessions)) return w;
-      const validSessions = w.sessions.filter(s => {
-        if (!s || typeof s !== 'object') {
-          dropped++;
-          return false;
-        }
+      const validSessions = w.sessions.map(s => {
+        if (!s || typeof s !== 'object') return null;
         const sess = s as Record<string, unknown>;
         const dayOk = typeof sess.dayOfWeek === 'number' &&
           sess.dayOfWeek >= 1 && sess.dayOfWeek <= 7;
         const typeOk = typeof sess.type === 'string' && sess.type.trim().length > 0;
         const distOk = typeof sess.distanceKm === 'number' && sess.distanceKm > 0;
-        if (!dayOk || !typeOk || !distOk) {
+        if (!dayOk || !typeOk || !distOk) return null;
+        // Limpa campos opcionais malformados pra Zod não rejeitar.
+        const cleaned: Record<string, unknown> = { ...sess };
+        if (typeof cleaned.durationMin !== 'number' || cleaned.durationMin <= 0) {
+          delete cleaned.durationMin;
+        }
+        if (typeof cleaned.hydrationLiters !== 'number' || cleaned.hydrationLiters <= 0) {
+          delete cleaned.hydrationLiters;
+        }
+        if (typeof cleaned.nutritionPre !== 'string' || !cleaned.nutritionPre.trim()) {
+          delete cleaned.nutritionPre;
+        }
+        if (typeof cleaned.nutritionPost !== 'string' || !cleaned.nutritionPost.trim()) {
+          delete cleaned.nutritionPost;
+        }
+        if (typeof cleaned.targetPace !== 'string' || !cleaned.targetPace.trim()) {
+          delete cleaned.targetPace;
+        }
+        return cleaned;
+      }).filter((s): s is Record<string, unknown> => {
+        if (s === null) {
           dropped++;
           return false;
         }
         return true;
       });
+
+      // Limpa restDayTips opcional também
+      if (Array.isArray(w.restDayTips)) {
+        w.restDayTips = w.restDayTips
+          .filter((t): t is Record<string, unknown> => !!t && typeof t === 'object')
+          .map(t => {
+            const tip = { ...t } as Record<string, unknown>;
+            if (typeof tip.dayOfWeek !== 'number' || tip.dayOfWeek < 1 || tip.dayOfWeek > 7) {
+              return null;
+            }
+            if (typeof tip.hydrationLiters !== 'number' || tip.hydrationLiters <= 0) {
+              delete tip.hydrationLiters;
+            }
+            if (typeof tip.nutrition !== 'string' || !tip.nutrition.trim()) {
+              delete tip.nutrition;
+            }
+            if (typeof tip.focus !== 'string' || !tip.focus.trim()) {
+              delete tip.focus;
+            }
+            return tip;
+          })
+          .filter((t): t is Record<string, unknown> => t !== null);
+      }
       if (dropped > 0 && validSessions.length === 0) {
         logger.warn('plan.parse.week_empty_after_lenient', {
           weekIndex: weekIdx,

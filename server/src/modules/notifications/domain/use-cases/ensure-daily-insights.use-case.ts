@@ -14,12 +14,17 @@ function todayKey(): string {
   return `${yyyy}-${mm}-${dd}`;
 }
 
-function pickCurrentWeekSessions(plan: { weeks: { sessions: PlanSession[] }[]; createdAt: string } | null): PlanSession[] {
-  if (!plan || plan.weeks.length === 0) return [];
+function pickCurrentWeek(plan: { weeks: { sessions: PlanSession[]; restDayTips?: Array<{ dayOfWeek: number; hydrationLiters?: number; nutrition?: string; focus?: string }> }[]; createdAt: string } | null) {
+  if (!plan || plan.weeks.length === 0) return null;
   const created = new Date(plan.createdAt);
   const days = Math.floor((Date.now() - created.getTime()) / 86_400_000);
   const idx = Math.max(0, Math.min(plan.weeks.length - 1, Math.floor(days / 7)));
-  return plan.weeks[idx]?.sessions ?? [];
+  return plan.weeks[idx] ?? null;
+}
+
+function pickCurrentWeekSessions(plan: { weeks: { sessions: PlanSession[] }[]; createdAt: string } | null): PlanSession[] {
+  const week = pickCurrentWeek(plan as any);
+  return week?.sessions ?? [];
 }
 
 function nextSessionFromToday(sessions: PlanSession[]): PlanSession | null {
@@ -110,15 +115,24 @@ export class EnsureDailyInsightsUseCase {
 
     const dedupeKey = todayKey();
     const completedRuns = runsResult.runs.filter(r => r.status === 'completed');
-    const sessions = pickCurrentWeekSessions(plan);
+    const currentWeek = pickCurrentWeek(plan as any);
+    const sessions = currentWeek?.sessions ?? [];
     const todayWeekday = new Date().getDay() || 7;
     const todaySession = sessions.find(s => s.dayOfWeek === todayWeekday) ?? null;
     const nextSession = todaySession ?? nextSessionFromToday(sessions);
+    const todayRestTip = !todaySession
+      ? currentWeek?.restDayTips?.find(t => t.dayOfWeek === todayWeekday) ?? null
+      : null;
 
     const hasBpmData = completedRuns.some(r => (r.avgBpm ?? 0) > 0 || (r.maxBpm ?? 0) > 0);
     const hasSleepData = false; // sem integração de sono ainda
     const weight = profile.weight ? Number(profile.weight.replace(/[^0-9.]/g, '')) : null;
-    const hydrationGoalLiters = weight && weight > 0 ? +(weight * 0.035).toFixed(1) : null;
+    const fallbackHydration = weight && weight > 0 ? +(weight * 0.035).toFixed(1) : null;
+    // Prioridade: hidratação da sessão do plano > rest-day tip do plano >
+    // fallback genérico baseado em peso. Wired ao plano sempre que existe.
+    const hydrationGoalLiters = todaySession?.hydrationLiters
+      ?? todayRestTip?.hydrationLiters
+      ?? fallbackHydration;
 
     const periodLabel: Record<string, string> = { manha: '06-09h', tarde: '14-17h', noite: '19-21h' };
     const periodSuggestion = profile.runPeriod
@@ -146,10 +160,21 @@ export class EnsureDailyInsightsUseCase {
         title: 'PREPARO NUTRICIONAL',
         icon: 'restaurant_outlined',
         timeLabel: todaySession ? 'ANTES' : 'RECUP.',
-        body: nutritionBodyFor(todaySession, classifySession(todaySession)),
+        // Prioridade: nutrição do plano (pré-treino da sessão de hoje OU
+        // rest-day tip) > fallback genérico por tipo de sessão.
+        body: todaySession?.nutritionPre
+          ?? todayRestTip?.nutrition
+          ?? nutritionBodyFor(todaySession, classifySession(todaySession)),
         data: todaySession
-          ? { sessionType: todaySession.type, sessionDistanceKm: todaySession.distanceKm }
-          : undefined,
+          ? {
+              sessionType: todaySession.type,
+              sessionDistanceKm: todaySession.distanceKm,
+              ...(todaySession.nutritionPre ? { nutritionPre: todaySession.nutritionPre } : {}),
+              ...(todaySession.nutritionPost ? { nutritionPost: todaySession.nutritionPost } : {}),
+            }
+          : todayRestTip
+            ? { restDay: true, focus: todayRestTip.focus }
+            : undefined,
       },
       {
         userId,

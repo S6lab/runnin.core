@@ -6,7 +6,29 @@ export interface PlanSession {
   type: string;
   distanceKm: number;
   targetPace?: string;
+  /** Tempo alvo da sessão em minutos (ex: 45). Derivado de distância × pace
+   *  pelo coach, mas pode ser definido explicitamente (sessões por tempo). */
+  durationMin?: number;
+  /** Hidratação sugerida pra ESSE dia (litros totais), wired nas
+   *  notificações diárias. Considera peso × 0.035L + carga do treino. */
+  hydrationLiters?: number;
+  /** Sugestão de refeição pré-treino (60-90min antes). */
+  nutritionPre?: string;
+  /** Sugestão de refeição pós-treino (até 1h depois). */
+  nutritionPost?: string;
   notes: string;
+}
+
+/**
+ * Tip diária pra dias SEM sessão (descanso). O coach define hidratação +
+ * alimentação anti-inflamatória mesmo nos dias de folga, pra manter a
+ * jornada consistente.
+ */
+export interface PlanRestDayTip {
+  dayOfWeek: number; // 1=Mon … 7=Sun
+  hydrationLiters?: number;
+  nutrition?: string; // ex: "anti-inflamatório, leveza + vegetais variados"
+  focus?: string; // "recuperação ativa" | "alongamento" | "fortalecimento" | etc
 }
 
 export interface PlanWeek {
@@ -14,6 +36,9 @@ export interface PlanWeek {
   sessions: PlanSession[];
   focus?: string;       // "Base" | "Intervalado" | "Tempo" | "Recuperação"
   narrative?: string;   // texto LLM da semana (1-2 frases)
+  /** Orientação para os dias SEM treino dessa semana (descanso, recuperação,
+   *  alongamento). Wired nas notificações diárias quando não há sessão. */
+  restDayTips?: PlanRestDayTip[];
 }
 
 /**

@@ -2,8 +2,17 @@ export const PLAN_INIT_DEFAULTS = {
   systemPrompt: [
     'Você é o Coach.AI do runnin: personal trainer de corrida experiente, presente e direto.',
     'Gere um plano de treino estruturado em JSON válido.',
-    'O JSON deve ser um array de semanas. Cada semana tem weekNumber e sessions.',
-    'Cada sessão tem: dayOfWeek (1=Seg,7=Dom), type (Easy Run/Intervalado/Tempo Run/Long Run), distanceKm (number), targetPace (string opcional, ex: "6:00"), notes (string curta).',
+    'O JSON deve ser um array de semanas. Cada semana tem weekNumber, sessions e restDayTips.',
+    'Cada SESSÃO tem CAMPOS OBRIGATÓRIOS: dayOfWeek (1=Seg..7=Dom), type ("Easy Run"|"Intervalado"|"Tempo Run"|"Long Run"|"Recovery"|"Cross"), distanceKm (number), notes (string).',
+    'Cada SESSÃO tem CAMPOS RECOMENDADOS (preencha sempre que possível):',
+    '  - targetPace: string "min:seg/km" (ex: "6:00"). Calcule baseado em FC máx/repouso do atleta ou estimativa por nível.',
+    '  - durationMin: number (minutos estimados). Calcule distanceKm × pace. Ex: 8km a 6:00/km = 48min.',
+    '  - hydrationLiters: number (LITROS no DIA, total — não só durante o treino). Considere peso × 0.035L + carga do treino. Ex: atleta 80kg em dia de Long Run = 3.5-4.0L.',
+    '  - nutritionPre: string curta (até 200 char) com refeição pré-treino 60-90min antes (ex: "Banana + pão integral com mel + café preto").',
+    '  - nutritionPost: string curta (até 200 char) com refeição pós até 1h (ex: "Whey + 1 fruta + 1 prato real em até 1h: arroz/quinoa + proteína magra + vegetais").',
+    'Cada SEMANA tem ARRAY restDayTips (1 entry por dia SEM sessão, dayOfWeek 1-7). Cada tip tem: dayOfWeek (number), hydrationLiters (number — meta basal, peso × 0.035L), nutrition (string anti-inflamatória/recuperação), focus (string ex: "alongamento + mobilidade", "fortalecimento de core", "recuperação ativa caminhando 20min").',
+    'EXEMPLO de uma semana válida:',
+    '{ "weekNumber": 1, "sessions": [ { "dayOfWeek": 1, "type": "Easy Run", "distanceKm": 5, "targetPace": "6:30", "durationMin": 32, "hydrationLiters": 2.8, "nutritionPre": "Banana + pão integral com mel", "nutritionPost": "Whey + fruta + almoço com arroz integral + frango + vegetais", "notes": "[BASE] Foco em técnica e respiração." } ], "restDayTips": [ { "dayOfWeek": 2, "hydrationLiters": 2.5, "nutrition": "Anti-inflamatório: peixe gordo + folhas verdes + frutas vermelhas", "focus": "alongamento + mobilidade" } ] }',
     'Retorne SOMENTE o JSON, sem explicação, sem markdown.',
     '',
     'PRINCÍPIO MAIOR — O PLANO É UMA JORNADA, NÃO O OBJETIVO FINAL:',
@@ -89,9 +98,9 @@ export const PLAN_INIT_DEFAULTS = {
   ].join('\n'),
 
   temperature: 0.6,
-  // 8000 pra acomodar planos de 6-7 sessões/semana × 8 semanas (Triathlon
-  // intermediário+) sem truncar JSON. Antes 5500 cortava semana 7-8 e
-  // gerava `undefined` em campos das últimas sessões.
-  maxTokens: 8000,
+  // 14000 pra acomodar planos com sessions ricas (targetPace + durationMin
+  // + hydrationLiters + nutritionPre + nutritionPost + notes) × 6 sessions
+  // × 8 weeks + restDayTips. Antes 8000 cortava ainda mais.
+  maxTokens: 14000,
   ragChunks: 4,
 };
