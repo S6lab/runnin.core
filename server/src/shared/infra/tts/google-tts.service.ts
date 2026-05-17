@@ -41,8 +41,13 @@ export class GoogleTtsService {
 
     try {
       const accessToken = await this.getAccessToken();
+      // AbortController + 6s timeout pra evitar fetch travado (causa
+      // de Cloud Run 504 quando rede do TTS está degradada).
+      const ctrl = new AbortController();
+      const to = setTimeout(() => ctrl.abort(), 6000);
       const res = await fetch(TTS_URL, {
         method: 'POST',
+        signal: ctrl.signal,
         headers: {
           Authorization: `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
@@ -58,7 +63,7 @@ export class GoogleTtsService {
             speakingRate: options.speakingRate,
           },
         }),
-      });
+      }).finally(() => clearTimeout(to));
 
       if (!res.ok) {
         const body = await res.text().catch(() => '');

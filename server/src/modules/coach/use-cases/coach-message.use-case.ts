@@ -11,6 +11,7 @@ import { resolveCoachVoicePreset } from './coach-voice-presets';
 import { CoachMessageLogRepository } from '../domain/coach-message-log.repository';
 import { CoachMessageLog } from '../domain/coach-message-log.entity';
 import { FirestoreCoachMessageLogRepository } from '../infra/firestore-coach-message-log.repository';
+import { FirestoreUserRepository } from '@modules/users/infra/firestore-user.repository';
 import { logger } from '@shared/logger/logger';
 import { randomUUID } from 'crypto';
 
@@ -173,6 +174,8 @@ export class CoachMessageUseCase {
    * Para personalização real, eventos posteriores (km_reached/pace_alert)
    * seguem usando o pipeline completo.
    */
+  private readonly _userRepoForStart = new FirestoreUserRepository();
+
   private async _generateLightweightStart(
     ctx: CoachContext,
     userId: string,
@@ -180,9 +183,12 @@ export class CoachMessageUseCase {
     let voicePresetId: string | undefined;
     let firstName: string | null = null;
     try {
-      const userRepo = (await import('@modules/users/infra/firestore-user.repository')).FirestoreUserRepository;
-      const repo = new userRepo();
-      const profile = await repo.findById(userId);
+      // Profile read com timeout 4s — não quero saudação travada por
+      // Firestore lento. Se falhar, segue com saudação genérica.
+      const profile = await Promise.race([
+        this._userRepoForStart.findById(userId),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 4000)),
+      ]);
       voicePresetId = resolveCoachVoicePreset(profile?.coachVoiceId)?.id;
       const full = profile?.name?.trim();
       if (full) firstName = full.split(/\s+/)[0] ?? null;
@@ -197,7 +203,16 @@ export class CoachMessageUseCase {
       ? `Bora ${firstName}! Começando a ${runTypeNice}. Vou te acompanhar.`
       : `Bora! Começando a ${runTypeNice}. Vou te acompanhar.`;
 
-    const audio = await this._synthesize(greeting, voicePresetId);
+    // Timeout overall 15s no synthesize: Live 8s + ElevenLabs ~6s + Google
+    // ~3s. Se passar disso, retorna sem áudio — UI mostra só texto, request
+    // não fica em 504. Web/Chrome esperam SSE em poucos segundos.
+    const audio = await Promise.race([
+      this._synthesize(greeting, voicePresetId),
+      new Promise<null>((resolve) => setTimeout(() => {
+        logger.warn('coach.start.synthesize_timeout', { userId, textLen: greeting.length });
+        resolve(null);
+      }, 15000)),
+    ]);
     return {
       text: greeting,
       audioBase64: audio?.audioBase64,
