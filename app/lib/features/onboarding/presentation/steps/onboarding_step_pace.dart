@@ -25,7 +25,6 @@ class OnboardingStepPace extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const FigmaAssessmentLabel(text: '// ASSESSMENT_07'),
         const SizedBox(height: 12),
         const FigmaAssessmentHeading(text: 'Você tem um pace alvo?'),
         const SizedBox(height: 10),

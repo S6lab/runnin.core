@@ -19,7 +19,6 @@ class OnboardingStepWearable extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const FigmaAssessmentLabel(text: '// ASSESSMENT_09'),
           const SizedBox(height: 12),
           const FigmaAssessmentHeading(text: 'Conectar wearable?'),
           const SizedBox(height: 10),

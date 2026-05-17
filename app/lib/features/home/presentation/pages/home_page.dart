@@ -690,7 +690,7 @@ class _CyberTodayCard extends StatelessWidget {
                               TextSpan(
                                 text: session.targetPace!,
                                 style: GoogleFonts.jetBrainsMono(
-                                  color: palette.secondary,
+                                  color: palette.primary,
                                   fontSize: 18,
                                   fontWeight: FontWeight.w500,
                                   letterSpacing: -0.5,
@@ -2739,10 +2739,12 @@ class _ErrorCard extends StatelessWidget {
 /// (e.g. "SEMANA" + small "02"). The dot-prefixed variant
 /// (Coach.AI sections) lives in [SectionHeading].
 class _BigHeading extends StatelessWidget {
+  // `index` mantido na assinatura por compat com call sites; ignorado no
+  // render (usuário pediu pra remover as marcações 01/02 dos headers).
   const _BigHeading(this.label, this.index, {this.subtitle});
 
   final String label;
-  final String index; // e.g. "02"
+  final String index;
   final String? subtitle;
 
   @override
@@ -2750,29 +2752,14 @@ class _BigHeading extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        RichText(
-          text: TextSpan(
-            children: [
-              TextSpan(
-                text: label,
-                style: GoogleFonts.jetBrainsMono(
-                  fontSize: 22,
-                  height: 24.2 / 22,
-                  letterSpacing: -0.44,
-                  fontWeight: FontWeight.w500,
-                  color: FigmaColors.textPrimary,
-                ),
-              ),
-              const WidgetSpan(child: SizedBox(width: 4)),
-              TextSpan(
-                text: index,
-                style: GoogleFonts.jetBrainsMono(
-                  fontSize: 6.6,
-                  fontWeight: FontWeight.w400,
-                  color: context.runninPalette.primary,
-                ),
-              ),
-            ],
+        Text(
+          label,
+          style: GoogleFonts.jetBrainsMono(
+            fontSize: 22,
+            height: 24.2 / 22,
+            letterSpacing: -0.44,
+            fontWeight: FontWeight.w500,
+            color: FigmaColors.textPrimary,
           ),
         ),
         if (subtitle != null) ...[

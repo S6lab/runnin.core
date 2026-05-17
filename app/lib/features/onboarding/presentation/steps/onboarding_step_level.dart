@@ -22,7 +22,6 @@ class OnboardingStepLevel extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const FigmaAssessmentLabel(text: 'ASSESSMENT_01'),
         const SizedBox(height: 12),
         const FigmaAssessmentHeading(text: 'Qual seu nivel atual?'),
         const SizedBox(height: 10),

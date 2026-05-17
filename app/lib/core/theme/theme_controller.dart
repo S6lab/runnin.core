@@ -7,14 +7,19 @@ const _settingsBoxName = 'runnin_settings';
 const _skinPreferenceKey = 'selected_skin';
 const _textScalePreferenceKey = 'text_scale';
 
+/// 3 níveis de acessibilidade de fonte. Multiplica todo o TextScaler do app
+/// (ver main.dart). Factors calibrados pra somar ~+1pt e ~+2pt na fonte
+/// média do app (12-14pt), com efeito proporcionalmente maior nas fontes
+/// menores (labels/captions de 10-11pt).
 enum AppTextScale {
-  small(0.9, 'A−'),
-  normal(1.0, 'A'),
-  large(1.15, 'A+');
+  normal(1.0, 'A', 'Padrão'),
+  plus1(1.10, 'A+', 'Maior (+1)'),
+  plus2(1.20, 'A++', 'Bem maior (+2)');
 
   final double factor;
   final String label;
-  const AppTextScale(this.factor, this.label);
+  final String description;
+  const AppTextScale(this.factor, this.label, this.description);
 }
 
 final themeController = ThemeController();

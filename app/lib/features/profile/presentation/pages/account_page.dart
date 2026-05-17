@@ -136,6 +136,8 @@ class _AccountPageState extends State<AccountPage> {
                         const SizedBox(height: AppSpacing.xxl),
                         const _SkinSection(),
                         const SizedBox(height: AppSpacing.xxl),
+                        const _AccessibilitySection(),
+                        const SizedBox(height: AppSpacing.xxl),
                         const _MenuSection(),
                         const SizedBox(height: AppSpacing.xxl),
                         _BottomActions(),
@@ -501,26 +503,13 @@ class _SkinSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Text(
-              'SKIN',
-              style: GoogleFonts.jetBrainsMono(
-                color: FigmaColors.textPrimary,
-                fontSize: 16,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            const SizedBox(width: AppSpacing.xs),
-            Text(
-              '01',
-              style: GoogleFonts.jetBrainsMono(
-                color: context.runninPalette.primary,
-                fontSize: 9,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
+        Text(
+          'SKIN',
+          style: GoogleFonts.jetBrainsMono(
+            color: FigmaColors.textPrimary,
+            fontSize: 16,
+            fontWeight: FontWeight.w500,
+          ),
         ),
         const SizedBox(height: AppSpacing.md),
         Text(
@@ -547,10 +536,9 @@ class _ThemeCardsGrid extends StatelessWidget {
       spacing: AppSpacing.sm,
       runSpacing: AppSpacing.sm,
       children: const [
-        _ThemeCard(skin: RunninSkin.sangue, label: 'SANGUE'),
+        _ThemeCard(skin: RunninSkin.artico, label: 'ÁRTICO'),
         _ThemeCard(skin: RunninSkin.magenta, label: 'MAGENTA'),
         _ThemeCard(skin: RunninSkin.volt, label: 'VOLT'),
-        _ThemeCard(skin: RunninSkin.artico, label: 'ÁRTICO'),
       ],
     );
   }
@@ -685,6 +673,104 @@ class _ThemeCard extends StatelessWidget {
   }
 }
 
+// ── Accessibility Section ───────────────────────────────────────────────────
+
+class _AccessibilitySection extends StatelessWidget {
+  const _AccessibilitySection();
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'ACESSIBILIDADE',
+          style: GoogleFonts.jetBrainsMono(
+            color: FigmaColors.textPrimary,
+            fontSize: 16,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        const SizedBox(height: AppSpacing.md),
+        Text(
+          'Tamanho da fonte do app (afeta todas as telas)',
+          style: GoogleFonts.jetBrainsMono(
+            color: FigmaColors.textMuted,
+            fontSize: 11,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        const SizedBox(height: AppSpacing.md),
+        AnimatedBuilder(
+          animation: themeController,
+          builder: (_, __) => Row(
+            children: AppTextScale.values.map((scale) {
+              final isActive = themeController.textScale == scale;
+              final isLast = scale == AppTextScale.values.last;
+              return Expanded(
+                child: Padding(
+                  padding: EdgeInsets.only(right: isLast ? 0 : AppSpacing.md),
+                  child: _TextScaleChip(scale: scale, isActive: isActive),
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _TextScaleChip extends StatelessWidget {
+  final AppTextScale scale;
+  final bool isActive;
+  const _TextScaleChip({required this.scale, required this.isActive});
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    // Tamanho do label cresce com o scale escolhido pra preview do efeito.
+    final labelSize = 13.0 * scale.factor;
+    return InkWell(
+      onTap: () => themeController.setTextScale(scale),
+      child: Container(
+        height: 56,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: isActive ? palette.primary.withValues(alpha: 0.12) : palette.surface,
+          border: Border.all(
+            color: isActive ? palette.primary : palette.border,
+            width: 1.0,
+          ),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              scale.label,
+              style: TextStyle(
+                color: isActive ? palette.primary : palette.text,
+                fontSize: labelSize,
+                fontWeight: FontWeight.w500,
+                letterSpacing: 0.5,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              scale.description,
+              style: TextStyle(
+                color: palette.muted,
+                fontSize: 9,
+                letterSpacing: 0.4,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 // ── Menu Section ────────────────────────────────────────────────────────────
 
 class _MenuSection extends StatelessWidget {
@@ -695,26 +781,13 @@ class _MenuSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Text(
-              'MENU',
-              style: GoogleFonts.jetBrainsMono(
-                color: FigmaColors.textPrimary,
-                fontSize: 16,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            const SizedBox(width: AppSpacing.xs),
-            Text(
-              '02',
-              style: GoogleFonts.jetBrainsMono(
-                color: context.runninPalette.primary,
-                fontSize: 9,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
+        Text(
+          'MENU',
+          style: GoogleFonts.jetBrainsMono(
+            color: FigmaColors.textPrimary,
+            fontSize: 16,
+            fontWeight: FontWeight.w500,
+          ),
         ),
         const SizedBox(height: AppSpacing.md),
         _MenuItem(

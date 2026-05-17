@@ -28,7 +28,6 @@ class OnboardingStepGoal extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const FigmaAssessmentLabel(text: '// ASSESSMENT_06'),
           const SizedBox(height: 12),
           const FigmaAssessmentHeading(text: 'Qual sua meta principal?'),
           const SizedBox(height: 10),

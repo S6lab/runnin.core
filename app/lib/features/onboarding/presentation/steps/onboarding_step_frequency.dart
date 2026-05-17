@@ -32,7 +32,6 @@ class OnboardingStepFrequency extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const FigmaAssessmentLabel(text: '// ASSESSMENT_05'),
           const SizedBox(height: 12),
           const FigmaAssessmentHeading(text: 'Quantas vezes por semana?'),
           const SizedBox(height: 10),

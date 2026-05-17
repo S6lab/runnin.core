@@ -24,7 +24,6 @@ class OnboardingStepGender extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const FigmaAssessmentLabel(text: 'ASSESSMENT_GENDER'),
           const SizedBox(height: 12),
           const FigmaAssessmentHeading(text: 'Como você se identifica?'),
           const SizedBox(height: 10),

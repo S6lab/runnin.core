@@ -176,9 +176,7 @@ class RunninPalette {
 enum RunninSkin {
   artico,
   magenta,
-  sangue,
-  volt,
-  cyber;
+  volt;
 
   RunninPalette get palette {
     switch (this) {
@@ -216,23 +214,6 @@ enum RunninSkin {
           warning: Color(0xFFFFB800),
           error: Color(0xFFFF5574),
         );
-      case RunninSkin.sangue:
-        return const RunninPalette(
-          id: 'sangue',
-          label: 'Sangue',
-          background: Color(0xFF0A0509),
-          surface: Color(0xFF110A0E),
-          surfaceAlt: Color(0xFF160E12),
-          border: Color(0xFF221A1E),
-          text: Color(0xFFF9F3F5),
-          muted: Color(0xFFB89AA7),
-          primary: Color(0xFFFF3B46),
-          secondary: Color(0xFF66B5FF),
-          tertiary: Color(0xFFFF7B56),
-          success: Color(0xFF35C46F),
-          warning: Color(0xFFFFB23D),
-          error: Color(0xFFFF3B46),
-        );
       case RunninSkin.volt:
         return const RunninPalette(
           id: 'volt',
@@ -249,23 +230,6 @@ enum RunninSkin {
           success: Color(0xFF32D17C),
           warning: Color(0xFFFFC93C),
           error: Color(0xFFFF5B66),
-        );
-      case RunninSkin.cyber:
-        return const RunninPalette(
-          id: 'cyber',
-          label: 'Cyber',
-          background: Color(0xFF050510),
-          surface: Color(0xFF09091A),
-          surfaceAlt: Color(0xFF0D0D1F),
-          border: Color(0xFF17172A),
-          text: Color(0xFFFFFFFF),
-          muted: Color(0xFF8C8CA0),
-          primary: Color(0xFF00D4FF),
-          secondary: Color(0xFFFF6B35),
-          tertiary: Color(0xFF4D7DFF),
-          success: Color(0xFF25C56B),
-          warning: Color(0xFFF3BF31),
-          error: Color(0xFFFF4D5A),
         );
     }
   }

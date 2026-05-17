@@ -30,7 +30,6 @@ class OnboardingStepIdentity extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const FigmaAssessmentLabel(text: 'ASSESSMENT_02'),
           const SizedBox(height: 12),
           const FigmaAssessmentHeading(text: 'Como te chamo?'),
           const SizedBox(height: 10),

@@ -47,7 +47,6 @@ class OnboardingStepMedical extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const OnboardingStepCode('ASSESSMENT_04'),
           const SizedBox(height: 12),
           Text('Informações de saúde', style: context.runninType.displayMd),
           const SizedBox(height: 10),

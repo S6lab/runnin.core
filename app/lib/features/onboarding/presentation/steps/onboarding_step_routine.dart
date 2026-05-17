@@ -27,7 +27,6 @@ class OnboardingStepRoutine extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const FigmaAssessmentLabel(text: '// ASSESSMENT_08'),
           const SizedBox(height: 12),
           const FigmaAssessmentHeading(text: 'Rotina e horário'),
           const SizedBox(height: 10),
