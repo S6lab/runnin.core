@@ -66,5 +66,11 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSHealthShareUsageDescription</key>
+	<string>O runnin lê seus dados de saúde (batimentos, sono, passos, peso) pra personalizar seu plano de treino e dar feedback do coach.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>O runnin pode salvar suas corridas no Apple Health pra centralizar seu histórico de atividades.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>O runnin usa o microfone pro Coach Live, onde você conversa por voz com o assistente AI durante e fora do treino.</string>
 </dict>
 </plist>

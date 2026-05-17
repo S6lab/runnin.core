@@ -732,13 +732,6 @@ class _MenuSection extends StatelessWidget {
         ),
         const SizedBox(height: AppSpacing.sm),
         _MenuItem(
-          icon: Icons.chat_bubble_outline,
-          title: 'FALAR COM COACH.AI',
-          subtitle: 'Chat com o seu coach',
-          onTap: () => context.push('/coach'),
-        ),
-        const SizedBox(height: AppSpacing.sm),
-        _MenuItem(
           icon: Icons.lock_outline,
           title: 'CONTA & ACESSO',
           subtitle: 'Email, telefone, login',

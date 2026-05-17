@@ -45,7 +45,10 @@ class FigmaBottomNav extends StatelessWidget {
                 }
 
                 final isActive = currentIndex == index;
-                final color = isActive ? palette.primary : palette.muted;
+                // Inactive em cinza neutro (sem matiz da skin); só o ativo
+                // recebe a cor do tema. Mantém o RUN central já colorido.
+                const inactiveColor = Color(0xFF6B7280);
+                final color = isActive ? palette.primary : inactiveColor;
                 return Expanded(
                   child: InkWell(
                     onTap: () => onTap(index),

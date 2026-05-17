@@ -20,7 +20,6 @@ import 'package:runnin/features/run/presentation/pages/share_page.dart';
 import 'package:runnin/features/run/presentation/pages/plan_loading_page.dart';
 import 'package:runnin/features/training/presentation/pages/training_page.dart';
 import 'package:runnin/features/training/presentation/pages/revision_flow_page.dart';
-import 'package:runnin/features/coach/presentation/pages/coach_chat_page.dart';
 import 'package:runnin/features/history/presentation/pages/history_page.dart';
 import 'package:runnin/features/history/presentation/pages/run_detail_page.dart';
 import 'package:runnin/features/history/presentation/pages/coach_conversation_replay_page.dart';
@@ -140,7 +139,12 @@ final appRouter = GoRouter(
     GoRoute(path: '/admin', builder: (_, _) => const AdminPage()),
     GoRoute(path: '/admin/prompts', builder: (_, _) => const PromptsAdminPage()),
     GoRoute(path: '/intro', builder: (_, _) => const IntroPage()),
-    GoRoute(path: '/coach-live', builder: (_, _) => const CoachLivePage()),
+    GoRoute(
+      path: '/coach-live',
+      builder: (_, state) => CoachLivePage(
+        runId: state.uri.queryParameters['runId'],
+      ),
+    ),
     GoRoute(
       path: '/paywall',
       builder: (_, state) => PaywallPage(
@@ -200,7 +204,6 @@ final appRouter = GoRouter(
             planId: state.uri.queryParameters['planId'] ?? '',
           ),
         ),
-        GoRoute(path: '/coach', builder: (_, _) => const CoachChatPage()),
         GoRoute(path: '/history', builder: (_, _) => const HistoryPage()),
         GoRoute(
           path: '/history/run/:runId',

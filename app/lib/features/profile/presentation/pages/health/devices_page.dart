@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
+import 'package:runnin/features/biometrics/data/health_sync_service.dart';
 import 'package:runnin/shared/widgets/figma/figma_device_card.dart';
 import 'package:runnin/shared/widgets/figma/figma_top_nav.dart';
 
@@ -42,7 +43,7 @@ class _HealthDevicesPageState extends State<HealthDevicesPage> {
                         icon: p.icon,
                         deviceName: p.name,
                         dataLabel: p.metrics,
-                        onConnect: () => _showProviderDialog(context, p),
+                        onConnect: () => _onConnectProvider(context, p),
                       ),
                     ),
                   ),
@@ -51,6 +52,45 @@ class _HealthDevicesPageState extends State<HealthDevicesPage> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  /// Apple Watch + Samsung Galaxy Watch usam HealthKit / Health Connect direto
+  /// via plugin `health`. Outros providers (Garmin, Polar, etc.) ainda exigem
+  /// OAuth próprio — mostram dialog "em breve".
+  void _onConnectProvider(BuildContext context, _ProviderSpec p) {
+    final isAppleWatch = p.name == 'Apple Watch';
+    final isSamsung = p.name == 'Samsung Galaxy Watch';
+    if ((isAppleWatch || isSamsung) && healthSyncService.isSupported) {
+      _connectViaHealthBridge(context, p);
+      return;
+    }
+    _showProviderDialog(context, p);
+  }
+
+  Future<void> _connectViaHealthBridge(BuildContext context, _ProviderSpec p) async {
+    final granted = await healthSyncService.requestPermissions();
+    if (!context.mounted) return;
+    if (!granted) {
+      _showProviderDialog(context, p);
+      return;
+    }
+    // Permissão OK → sincroniza últimos 7d em background.
+    healthSyncService.syncSince().then((count) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('$count amostras sincronizadas de ${p.name}.'),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Conectado a ${p.name}. Sincronizando dados…'),
+        duration: const Duration(seconds: 2),
       ),
     );
   }

@@ -7,6 +7,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
+import 'package:runnin/features/biometrics/data/health_sync_service.dart';
+import 'package:runnin/features/notifications/data/push_notifications_service.dart';
 import 'package:runnin/features/subscriptions/presentation/subscription_controller.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
@@ -41,6 +43,24 @@ void main() async {
     }
     // Carrega plano + features em background — não bloqueia o boot.
     subscriptionController.refresh();
+
+    // Auto-sync de biométricos (Apple Health / Health Connect). Se user já
+    // concedeu permissão antes, puxa samples desde último sync. Não bloqueia
+    // o boot — roda em background. Sem permissão / web: no-op silencioso.
+    if (healthSyncService.isSupported) {
+      Future.microtask(() async {
+        try {
+          if (await healthSyncService.hasPermissions()) {
+            await healthSyncService.syncSince();
+          }
+        } catch (_) {
+          // Falha de sync nunca quebra o app.
+        }
+      });
+    }
+
+    // FCM push: pede permissão + registra token no backend.
+    Future.microtask(() => PushNotificationsService.instance.initAndRegister());
   }
 
   if (!kIsWeb) {

@@ -18,6 +18,7 @@ dependencies:
   cloud_firestore: ^5.6.6
   firebase_analytics: ^11.4.5
   firebase_crashlytics: ^4.3.5
+  firebase_messaging: ^15.2.5
 
   # State management
   flutter_riverpod: ^2.6.1
@@ -55,6 +56,12 @@ dependencies:
   url_launcher: ^6.3.1
   share_plus: ^10.1.4
   image_picker: ^1.1.2
+  # Apple HealthKit (iOS) + Google Health Connect (Android) unified plugin.
+  # Web não suportado — guard com kIsWeb antes de chamar.
+  health: ^13.3.1
+  # Coach Live audio (mic capture + playback) for Gemini Live multimodal.
+  record: ^5.2.1
+  audioplayers: ^6.1.0
 
 dev_dependencies:
   flutter_test:

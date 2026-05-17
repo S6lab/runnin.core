@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:runnin/core/theme/app_palette.dart';
+import 'package:runnin/features/coach_live/data/live_audio_service.dart';
 import 'package:runnin/shared/widgets/runnin_app_bar.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
@@ -18,7 +20,8 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 ///  2. Aguarda "ready" do server
 ///  3. Envia { type: 'text', text } → recebe { kind: 'content', serverContent: { modelTurn: { parts: [{ text? | inlineData? }] } } }
 class CoachLivePage extends StatefulWidget {
-  const CoachLivePage({super.key});
+  final String? runId;
+  const CoachLivePage({super.key, this.runId});
 
   @override
   State<CoachLivePage> createState() => _CoachLivePageState();
@@ -32,8 +35,10 @@ class _CoachLivePageState extends State<CoachLivePage> {
   StreamSubscription? _sub;
   final _input = TextEditingController();
   final _messages = <_Msg>[];
+  final _audio = LiveAudioService();
   bool _connecting = true;
   bool _connected = false;
+  bool _micOn = false;
   String? _error;
   String _coachStream = '';
 
@@ -48,6 +53,7 @@ class _CoachLivePageState extends State<CoachLivePage> {
     _sub?.cancel();
     _channel?.sink.close();
     _input.dispose();
+    _audio.dispose();
     super.dispose();
   }
 
@@ -61,7 +67,11 @@ class _CoachLivePageState extends State<CoachLivePage> {
       if (user == null) throw Exception('Login necessário');
       final token = await user.getIdToken();
       final baseWs = _wsFromEnv.isEmpty ? _defaultProdWs : _wsFromEnv;
-      final url = Uri.parse('$baseWs?token=$token');
+      final qs = <String, String>{'token': token ?? ''};
+      if (widget.runId != null && widget.runId!.isNotEmpty) {
+        qs['runId'] = widget.runId!;
+      }
+      final url = Uri.parse(baseWs).replace(queryParameters: qs);
       final channel = WebSocketChannel.connect(url);
       _channel = channel;
       _sub = channel.stream.listen(
@@ -117,15 +127,24 @@ class _CoachLivePageState extends State<CoachLivePage> {
             if (text != null) {
               setState(() => _coachStream += text);
             }
-            // inlineData (audio) ignorado por enquanto — MVP texto-only
+            final inline = part['inlineData'] as Map<String, dynamic>?;
+            final inlineB64 = inline?['data'] as String?;
+            if (inlineB64 != null && inlineB64.isNotEmpty) {
+              try {
+                _audio.addSpeakerChunk(base64Decode(inlineB64));
+              } catch (_) {/* ignore decoder errors */}
+            }
           }
         }
         final turnComplete = serverContent?['turnComplete'] as bool? ?? false;
-        if (turnComplete && _coachStream.isNotEmpty) {
-          setState(() {
-            _messages.add(_Msg(role: 'coach', text: _coachStream));
-            _coachStream = '';
-          });
+        if (turnComplete) {
+          if (_coachStream.isNotEmpty) {
+            setState(() {
+              _messages.add(_Msg(role: 'coach', text: _coachStream));
+              _coachStream = '';
+            });
+          }
+          _audio.flushAndPlay();
         }
       }
     } catch (e) {
@@ -141,6 +160,31 @@ class _CoachLivePageState extends State<CoachLivePage> {
       _input.clear();
     });
     _channel?.sink.add(jsonEncode({'type': 'text', 'text': text}));
+  }
+
+  Future<void> _toggleMic() async {
+    if (!_connected) return;
+    if (_micOn) {
+      await _audio.stopCapture();
+      if (mounted) setState(() => _micOn = false);
+      return;
+    }
+    try {
+      await _audio.startCapture(_onMicChunk);
+      if (mounted) setState(() => _micOn = true);
+    } catch (e) {
+      if (mounted) setState(() => _error = 'Mic: $e');
+    }
+  }
+
+  void _onMicChunk(Uint8List pcmChunk) {
+    final channel = _channel;
+    if (channel == null || !_connected) return;
+    channel.sink.add(jsonEncode({
+      'type': 'audio',
+      'mimeType': 'audio/pcm;rate=16000',
+      'data': base64Encode(pcmChunk),
+    }));
   }
 
   @override
@@ -222,7 +266,17 @@ class _CoachLivePageState extends State<CoachLivePage> {
                       onSubmitted: (_) => _send(),
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 4),
+                  IconButton(
+                    tooltip: _micOn ? 'Parar microfone' : 'Falar com o coach',
+                    onPressed: _connected ? _toggleMic : null,
+                    icon: Icon(
+                      _micOn ? Icons.mic : Icons.mic_none,
+                      color: _micOn
+                          ? palette.error
+                          : (_connected ? palette.primary : palette.muted),
+                    ),
+                  ),
                   IconButton(
                     onPressed: _connected ? _send : null,
                     icon: Icon(Icons.send, color: _connected ? palette.primary : palette.muted),
