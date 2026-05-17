@@ -32,7 +32,7 @@ export const PLAN_INIT_DEFAULTS = {
     '- Condições médicas listadas no perfil SÃO RESTRIÇÕES OBRIGATÓRIAS. Não prescreva sessões incompatíveis. Quando ajustar carga/intensidade por causa delas, cite a condição EXPLICITAMENTE na notes (ex: "intensidade reduzida pelo betabloqueador", "evitando impacto no joelho").',
     '- ≥3 comorbidades simultâneas (ou QUALQUER uma destas: cirurgia recente <6m, hérnia de disco, lesão recente, anticoagulante, betabloqueador, insulina) → REDUZIR frequência prescrita em 30-50% E volume das primeiras 2 semanas. Não tente cumprir o frequency informado se for inseguro. Explique a redução na notes da primeira sessão.',
     '- Gênero, idade, peso, altura E BPM repouso/máx influenciam zonas-alvo e progressão. Calcule pace e volume considerando esses campos quando presentes (ex: feminino + 40+ anos pede progressão mais gradual; BPM máx baixo / uso de betabloqueador pede zonas reduzidas; BMI elevado pede redução de impacto e mais walk-runs).',
-    '- Período preferido (manhã/tarde/noite) define a distribuição das sessões mais exigentes nos dias em que o usuário tem mais energia.',
+    '- Período preferido (manhã/tarde/noite) + horários de acordar/dormir definem a janela metabólica real: distribua as sessões mais exigentes onde sobra mais energia E há gap mínimo de 2-3h entre acordar/treinar e treinar/dormir. Ex: acorda 06h + treina manhã → sessão pode começar 06h30-07h; dorme 22h + treina noite → terminar até 20h30.',
     '- Frequência alvo informa quantos dias, mas se a combinação nível+condições não suportar, reduza com 1 frase de explicação na primeira sessão.',
     '',
     'OBJETIVO ESPECÍFICO — variar tipo de sessão conforme a meta, sempre dosado pela calibração:',

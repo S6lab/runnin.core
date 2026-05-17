@@ -151,7 +151,10 @@ class _OnboardingPageState extends State<OnboardingPage> {
                       child: GestureDetector(
                         behavior: HitTestBehavior.translucent,
                         onHorizontalDragEnd: _handleSwipe,
-                        child: _buildStep(context),
+                        child: SingleChildScrollView(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: _buildStep(context),
+                        ),
                       ),
                     ),
                     const SizedBox(height: 18),

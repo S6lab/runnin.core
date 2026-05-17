@@ -20,8 +20,8 @@ class FigmaSelectionButton extends StatelessWidget {
       onTap: onTap,
       child: Container(
         width: double.infinity,
-        height: 56.5,
-        padding: const EdgeInsets.symmetric(horizontal: 21.74, vertical: 17.74),
+        constraints: const BoxConstraints(minHeight: 56.5),
+        padding: const EdgeInsets.symmetric(horizontal: 21.74, vertical: 14),
         decoration: BoxDecoration(
           color: selected
               ? FigmaColors.selectionActiveBg
@@ -37,10 +37,11 @@ class FigmaSelectionButton extends StatelessWidget {
         alignment: Alignment.centerLeft,
         child: Text(
           label,
+          softWrap: true,
           style: GoogleFonts.jetBrainsMono(
-            fontSize: 14,
+            fontSize: 13.5,
             fontWeight: FontWeight.w500,
-            height: 21 / 14,
+            height: 20 / 13.5,
             letterSpacing: 0,
             color: selected
                 ? FigmaColors.textPrimary

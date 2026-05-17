@@ -110,15 +110,14 @@ class _PlanLoadingPageState extends State<PlanLoadingPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF050510),
-      body: Center(
-        child: SizedBox(
-          width: 329.55,
-          height: 613.716,
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const SizedBox(height: 118.901),
               const CoachAIBreadcrumb(action: 'GERANDO PLANO'),
-              const SizedBox(height: 37.98),
+              const SizedBox(height: 24),
               const Text(
                 'Criando seu plano',
                 style: TextStyle(
@@ -129,7 +128,7 @@ class _PlanLoadingPageState extends State<PlanLoadingPage> {
                   color: Colors.white,
                 ),
               ),
-              const SizedBox(height: 34.37),
+              const SizedBox(height: 16),
               Text(
                 _error ?? 'Analisando perfil para criar seu plano',
                 style: TextStyle(
@@ -142,38 +141,53 @@ class _PlanLoadingPageState extends State<PlanLoadingPage> {
                       : const Color(0x8CFFFFFF),
                 ),
               ),
-              const SizedBox(height: 51.51),
-              for (var i = 0; i < _taskEntries.length; i++)
-                PlanTaskRow(
-                  status: i < _completedCount
-                      ? PlanTaskStatus.done
-                      : i == _completedCount
-                          ? PlanTaskStatus.active
-                          : PlanTaskStatus.pending,
-                  label: i < _completedCount ? 'OK' : i == _completedCount ? '●' : '○',
-                  mainText: _taskEntries[i].$1,
-                  detail: _taskEntries[i].$2,
+              const SizedBox(height: 28),
+              Expanded(
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      for (var i = 0; i < _taskEntries.length; i++)
+                        PlanTaskRow(
+                          status: i < _completedCount
+                              ? PlanTaskStatus.done
+                              : i == _completedCount
+                                  ? PlanTaskStatus.active
+                                  : PlanTaskStatus.pending,
+                          label: i < _completedCount
+                              ? 'OK'
+                              : i == _completedCount
+                                  ? '●'
+                                  : '○',
+                          mainText: _taskEntries[i].$1,
+                          detail: _taskEntries[i].$2,
+                        ),
+                    ],
+                  ),
                 ),
-              const Spacer(),
+              ),
+              const SizedBox(height: 12),
               SizedBox(
-                width: 329.55,
+                width: double.infinity,
                 height: 4,
                 child: Stack(
                   children: [
                     const SizedBox.expand(
                       child: ColoredBox(color: FigmaColors.borderDefault),
                     ),
-                    AnimatedContainer(
-                      duration: const Duration(milliseconds: 400),
-                      curve: Curves.easeOut,
-                      width: 329.55 * (_completedCount / _taskEntries.length),
-                      height: 4,
-                      color: FigmaColors.brandCyan,
+                    LayoutBuilder(
+                      builder: (context, constraints) => AnimatedContainer(
+                        duration: const Duration(milliseconds: 400),
+                        curve: Curves.easeOut,
+                        width: constraints.maxWidth *
+                            (_completedCount / _taskEntries.length),
+                        height: 4,
+                        color: FigmaColors.brandCyan,
+                      ),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: 3.284),
             ],
           ),
         ),

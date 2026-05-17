@@ -37,6 +37,8 @@ export function formatProfileContext(profile: Partial<UserProfile> | null | unde
   if (profile.goal) lines.push(`- Objetivo: ${profile.goal}`);
   if (profile.frequency) lines.push(`- Frequência alvo: ${profile.frequency} dias/semana`);
   if (profile.runPeriod) lines.push(`- Período preferido: ${profile.runPeriod}`);
+  if (profile.wakeTime) lines.push(`- Acorda às: ${profile.wakeTime}`);
+  if (profile.sleepTime) lines.push(`- Dorme às: ${profile.sleepTime}`);
   if (profile.weight) lines.push(`- Peso: ${profile.weight}`);
   if (profile.height) lines.push(`- Altura: ${profile.height}`);
   if (profile.restingBpm) lines.push(`- BPM repouso: ${profile.restingBpm}`);

@@ -23,12 +23,11 @@ class OnboardingStepRoutine extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const SizedBox(height: 12),
-          const FigmaAssessmentHeading(text: 'Rotina e horário'),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 12),
+        const FigmaAssessmentHeading(text: 'Rotina e horário'),
           const SizedBox(height: 10),
           const FigmaAssessmentDescription(
             text:
@@ -137,8 +136,7 @@ class OnboardingStepRoutine extends StatelessWidget {
             ],
           ),
         ],
-      ),
-    );
+      );
   }
 }
 

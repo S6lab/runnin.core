@@ -195,6 +195,7 @@ export class GeneratePlanUseCase {
             `- Objetivo: ${profile.goal ?? '—'}`,
             `- Frequência alvo: ${profile.frequency ?? '—'}x/semana`,
             `- Período preferido: ${profile.runPeriod ?? '—'}`,
+            `- Janela do dia: acorda ${profile.wakeTime ?? '—'} / dorme ${profile.sleepTime ?? '—'}`,
             `- Idade: ${profile.birthDate ?? '—'}`,
             `- Peso: ${profile.weight ?? '—'} | Altura: ${profile.height ?? '—'}`,
             `- FC repouso: ${profile.restingBpm ?? '—'} | FC máx: ${profile.maxBpm ?? '—'}`,
