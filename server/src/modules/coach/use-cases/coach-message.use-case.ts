@@ -3,6 +3,7 @@ import { getRealtimeLLM } from '@shared/infra/llm/llm.factory';
 import { formatRunningKnowledgeContext } from '@shared/knowledge/running/running-knowledge';
 import { ElevenLabsTtsService } from '@shared/infra/tts/elevenlabs-tts.service';
 import { GoogleTtsService } from '@shared/infra/tts/google-tts.service';
+import { GeminiLiveTtsService } from '@shared/infra/llm/gemini-live-tts.service';
 import { buildLiveCoachPrompt, getKnobs, isInDndWindow } from '@shared/infra/llm/prompts';
 import { CoachConfigService } from './coach-config.service';
 import { CoachRuntimeContextService } from './coach-runtime-context.service';
@@ -55,6 +56,9 @@ export class CoachMessageUseCase {
   private llm = getRealtimeLLM();
   private googleTts = new GoogleTtsService();
   private elevenLabsTts = new ElevenLabsTtsService();
+  // Gemini Live TTS é o source primário (mesmo motor do chat ao vivo).
+  // ElevenLabs/Google ficam como fallbacks pra resiliência.
+  private liveTts = new GeminiLiveTtsService();
   private config = new CoachConfigService();
   private runtime = new CoachRuntimeContextService();
   private messageLog: CoachMessageLogRepository = new FirestoreCoachMessageLogRepository();
@@ -92,7 +96,13 @@ export class CoachMessageUseCase {
     let audio = null as { audioBase64: string; mimeType: string } | null;
 
     if (config.ttsEnabled) {
-      if (config.ttsProvider === 'elevenlabs') {
+      // Cascata: Gemini Live (primário) → ElevenLabs → Google TTS.
+      // Live falhar (timeout/quota) cai pros legados pra não ficar mudo.
+      audio = await this.liveTts.synthesize(text, {
+        voiceId: voicePreset?.id ?? 'coach-bruno',
+      });
+
+      if (!audio && config.ttsProvider === 'elevenlabs') {
         const voiceId =
           config.elevenLabsVoiceIds[voicePreset?.id ?? 'coach-bruno'] ||
           config.elevenLabsVoiceIds['coach-bruno'] ||
@@ -103,15 +113,9 @@ export class CoachMessageUseCase {
           outputFormat: config.elevenLabsOutputFormat,
           languageCode: 'pt',
         });
+      }
 
-        if (!audio) {
-          audio = await this.googleTts.synthesize(text, {
-            voiceName: voicePreset?.googleVoiceName ?? config.ttsVoiceName,
-            languageCode: voicePreset?.languageCode ?? config.ttsLanguageCode,
-            speakingRate: voicePreset?.speakingRate ?? config.ttsSpeakingRate,
-          });
-        }
-      } else {
+      if (!audio) {
         audio = await this.googleTts.synthesize(text, {
           voiceName: voicePreset?.googleVoiceName ?? config.ttsVoiceName,
           languageCode: voicePreset?.languageCode ?? config.ttsLanguageCode,
