@@ -14,6 +14,7 @@ import 'package:runnin/features/run/data/datasources/run_remote_datasource.dart'
 import 'package:runnin/features/run/domain/entities/run.dart';
 import 'package:runnin/shared/widgets/figma/figma_chart_line_spark.dart';
 import 'package:runnin/shared/widgets/figma/figma_share_card_preview.dart';
+import 'package:runnin/features/run/presentation/widgets/share_map_card.dart';
 
 const _overlayToggleLabels = [
   'Pace',
@@ -41,9 +42,11 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
   late final TabController _tabController;
   final _cardBoundaryKey = GlobalKey();
   final _overlayBoundaryKey = GlobalKey();
+  final _mapBoundaryKey = GlobalKey();
 
   final _remote = RunRemoteDatasource();
   Run? _run;
+  List<GpsPoint> _gpsPoints = const [];
   bool _loading = true;
 
   ShareTheme _selectedTheme = ShareTheme.dark;
@@ -53,14 +56,19 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
     _loadRun();
   }
 
   Future<void> _loadRun() async {
     try {
       final run = await _remote.getRun(widget.runId);
-      if (mounted) setState(() { _run = run; _loading = false; });
+      final points = await _remote.getGpsPoints(widget.runId).catchError((_) => <GpsPoint>[]);
+      if (mounted) setState(() {
+        _run = run;
+        _gpsPoints = points;
+        _loading = false;
+      });
     } catch (_) {
       if (mounted) setState(() => _loading = false);
     }
@@ -157,6 +165,7 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
                         controller: _tabController,
                         children: [
                           _buildCardTab(),
+                          _buildMapTab(),
                           _buildOverlayTab(),
                         ],
                       ),
@@ -191,7 +200,8 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
         dividerHeight: 0,
         tabs: const [
           Tab(height: 44, text: 'CARD'),
-          Tab(height: 44, text: 'CÂMERA + OVERLAY'),
+          Tab(height: 44, text: 'MAPA'),
+          Tab(height: 44, text: 'CÂMERA'),
         ],
       ),
     );
@@ -279,6 +289,51 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
           ),
         );
       }).toList(),
+    );
+  }
+
+  // ─── TAB: MAPA ────────────────────────────────────────────────────────────────
+
+  Widget _buildMapTab() {
+    final hasRoute = _gpsPoints.length >= 2;
+    return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 12),
+          RepaintBoundary(
+            key: _mapBoundaryKey,
+            child: ShareMapCard(run: _run!, points: _gpsPoints),
+          ),
+          if (!hasRoute) ...[
+            const SizedBox(height: 12),
+            Text(
+              'Sem GPS suficiente nessa corrida — card mostra fundo neutro.',
+              style: GoogleFonts.jetBrainsMono(
+                color: FigmaColors.textMuted, fontSize: 11,
+              ),
+            ),
+          ],
+          const SizedBox(height: 24),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              _ShareTarget(
+                label: 'COMPARTILHAR',
+                icon: Icons.ios_share,
+                onTap: () => _shareImage(_mapBoundaryKey),
+              ),
+              _ShareTarget(
+                label: 'SALVAR',
+                icon: Icons.download,
+                onTap: () => _saveImage(_mapBoundaryKey),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+        ],
+      ),
     );
   }
 

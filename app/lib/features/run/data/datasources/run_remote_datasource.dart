@@ -54,6 +54,19 @@ class RunRemoteDatasource {
     return Run.fromJson(res.data as Map<String, dynamic>);
   }
 
+  Future<List<GpsPoint>> getGpsPoints(String runId) async {
+    try {
+      final res = await _dio.get('/runs/$runId/gps');
+      final raw = (res.data as Map<String, dynamic>)['points'] as List? ?? [];
+      return raw
+          .map((p) => GpsPoint.fromJson(p as Map<String, dynamic>))
+          .toList();
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 404) return const [];
+      rethrow;
+    }
+  }
+
   Future<List<Run>> listRuns({int limit = 20}) async {
     try {
       final res = await _dio.get('/runs', queryParameters: {'limit': limit});

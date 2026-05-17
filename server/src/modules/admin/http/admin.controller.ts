@@ -152,3 +152,76 @@ export function postInvalidateCache(_req: Request, res: Response): void {
   invalidatePromptsCache();
   res.json({ ok: true });
 }
+
+// === Admin: gerenciamento de plano de usuário ===
+import { FirestoreUserRepository } from '@modules/users/infra/firestore-user.repository';
+import { getAuth } from '@shared/infra/firebase/firebase.client';
+
+const userRepo = new FirestoreUserRepository();
+
+const ListUsersQuery = z.object({
+  search: z.string().trim().optional(),
+  limit: z.coerce.number().int().min(1).max(200).optional().default(50),
+});
+
+const SetUserPlanSchema = z.object({
+  plan: z.enum(['freemium', 'pro']),
+});
+
+export async function getUsersList(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { search, limit } = ListUsersQuery.parse(req.query);
+    const all = await userRepo.list(limit);
+    // Enriquece com email do Firebase Auth (perfil só guarda dados de treino).
+    const ids = all.map(u => u.id).filter(Boolean);
+    const emailById = new Map<string, string | undefined>();
+    if (ids.length > 0) {
+      try {
+        const auth = getAuth();
+        const chunks: string[][] = [];
+        for (let i = 0; i < ids.length; i += 100) chunks.push(ids.slice(i, i + 100));
+        for (const chunk of chunks) {
+          const result = await auth.getUsers(chunk.map(uid => ({ uid })));
+          for (const u of result.users) emailById.set(u.uid, u.email ?? undefined);
+        }
+      } catch (_) {/* enrichment best-effort */}
+    }
+    const term = (search ?? '').toLowerCase();
+    const filtered = term
+      ? all.filter(u =>
+          (u.id ?? '').toLowerCase().includes(term) ||
+          (emailById.get(u.id) ?? '').toLowerCase().includes(term) ||
+          (u.name ?? '').toLowerCase().includes(term),
+        )
+      : all;
+    res.json({
+      users: filtered.map(u => ({
+        id: u.id,
+        email: emailById.get(u.id) ?? null,
+        name: u.name ?? null,
+        subscriptionPlanId: u.subscriptionPlanId ?? 'freemium',
+        onboarded: u.onboarded ?? false,
+        updatedAt: u.updatedAt ?? null,
+      })),
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function patchUserPlan(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const userId = req.params.userId;
+    if (!userId || typeof userId !== 'string') throw new Error('userId required');
+    const { plan } = SetUserPlanSchema.parse(req.body);
+    const existing = await userRepo.findById(userId);
+    if (!existing) {
+      res.status(404).json({ error: 'user_not_found' });
+      return;
+    }
+    await userRepo.upsert({ ...existing, subscriptionPlanId: plan });
+    res.json({ ok: true, userId, plan });
+  } catch (err) {
+    next(err);
+  }
+}

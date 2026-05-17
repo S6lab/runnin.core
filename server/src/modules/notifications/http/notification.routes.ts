@@ -7,6 +7,7 @@ import {
   clearNotifications,
   markRead,
   ensureDailyNotifications,
+  registerDevice,
 } from './notification.controller';
 
 export const notificationRouter = Router();
@@ -15,4 +16,5 @@ notificationRouter.get('/', authMiddleware, listNotifications);
 notificationRouter.post('/clear', authMiddleware, clearNotifications);
 notificationRouter.post('/:id/dismiss', authMiddleware, dismissNotification);
 notificationRouter.post('/:id/read', authMiddleware, markRead);
+notificationRouter.post('/devices', authMiddleware, registerDevice);
 notificationRouter.post('/ensure-daily', cronTokenMiddleware, ensureDailyNotifications);

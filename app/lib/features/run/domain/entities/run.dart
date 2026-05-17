@@ -21,6 +21,15 @@ class GpsPoint {
     if (pace != null) 'pace': pace,
     if (bpm != null) 'bpm': bpm,
   };
+
+  factory GpsPoint.fromJson(Map<String, dynamic> j) => GpsPoint(
+        lat: (j['lat'] as num).toDouble(),
+        lng: (j['lng'] as num).toDouble(),
+        ts: (j['ts'] as num).toInt(),
+        accuracy: (j['accuracy'] as num?)?.toDouble() ?? 0,
+        pace: (j['pace'] as num?)?.toDouble(),
+        bpm: (j['bpm'] as num?)?.toInt(),
+      );
 }
 
 class Run {

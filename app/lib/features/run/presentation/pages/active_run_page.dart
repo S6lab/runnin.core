@@ -29,7 +29,7 @@ class ActiveRunPage extends StatelessWidget {
           );
         }
       },
-      child: const _ActiveRunView(),
+      child: _ActiveRunView(runId: runId),
     );
   }
 
@@ -82,7 +82,8 @@ class ActiveRunPage extends StatelessWidget {
 }
 
 class _ActiveRunView extends StatefulWidget {
-  const _ActiveRunView();
+  final String runId;
+  const _ActiveRunView({required this.runId});
 
   @override
   State<_ActiveRunView> createState() => _ActiveRunViewState();
@@ -128,26 +129,32 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
                 top: 12,
                 right: 14,
                 child: SafeArea(
-                  child: Stack(
-                    alignment: Alignment.center,
+                  child: Row(
                     children: [
-                      _CoachMuteButton(
-                        muted: _coachMuted,
-                        onTap: () => setState(() => _coachMuted = !_coachMuted),
-                      ),
-                      if (_coachAudioPlaying)
-                        Positioned(
-                          bottom: 0,
-                          right: 4,
-                          child: Container(
-                            width: 8,
-                            height: 8,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: palette.primary,
-                            ),
+                      _CoachTalkButton(runId: widget.runId),
+                      const SizedBox(width: 8),
+                      Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          _CoachMuteButton(
+                            muted: _coachMuted,
+                            onTap: () => setState(() => _coachMuted = !_coachMuted),
                           ),
-                        ),
+                          if (_coachAudioPlaying)
+                            Positioned(
+                              bottom: 0,
+                              right: 4,
+                              child: Container(
+                                width: 8,
+                                height: 8,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: palette.primary,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
                     ],
                   ),
                 ),
@@ -186,6 +193,26 @@ class _CoachMuteButton extends StatelessWidget {
         side: BorderSide(color: palette.border),
       ),
       icon: Icon(muted ? Icons.volume_off_outlined : Icons.volume_up_outlined),
+    );
+  }
+}
+
+class _CoachTalkButton extends StatelessWidget {
+  final String runId;
+  const _CoachTalkButton({required this.runId});
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    return IconButton(
+      tooltip: 'Falar com o coach',
+      onPressed: () => context.push('/coach-live?runId=$runId'),
+      style: IconButton.styleFrom(
+        backgroundColor: palette.background.withValues(alpha: 0.82),
+        foregroundColor: palette.primary,
+        side: BorderSide(color: palette.border),
+      ),
+      icon: const Icon(Icons.chat_bubble_outline),
     );
   }
 }

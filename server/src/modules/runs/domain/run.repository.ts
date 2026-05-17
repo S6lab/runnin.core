@@ -5,6 +5,7 @@ export interface RunRepository {
   findById(id: string, userId: string): Promise<Run | null>;
   update(id: string, userId: string, data: Partial<Run>): Promise<void>;
   addGpsBatch(runId: string, userId: string, points: GpsPoint[]): Promise<void>;
+  listGpsPoints(runId: string, userId: string, limit?: number): Promise<GpsPoint[]>;
   findByUser(userId: string, limit: number, cursor?: string): Promise<{ runs: Run[]; nextCursor?: string }>;
   findByDateRange(userId: string, from: Date, to: Date): Promise<Run[]>;
 }

@@ -1,9 +1,12 @@
 import { IncomingMessage, Server as HttpServer } from 'http';
+import { randomUUID } from 'crypto';
 import { WebSocketServer, WebSocket, RawData } from 'ws';
 import { getAuth } from '@shared/infra/firebase/firebase.client';
 import { GeminiLiveSession } from '@shared/infra/llm/gemini-live.service';
 import { CoachRuntimeContextService } from '@modules/coach/use-cases/coach-runtime-context.service';
 import { resolvePersonaTone } from '@shared/infra/llm/prompts';
+import { FirestoreCoachMessageLogRepository } from '@modules/coach/infra/firestore-coach-message-log.repository';
+import { CoachMessageLog } from '@modules/coach/domain/coach-message-log.entity';
 import { logger } from '@shared/logger/logger';
 
 /**
@@ -31,10 +34,13 @@ export function attachCoachLiveWebSocket(httpServer: HttpServer): void {
       socket.destroy();
       return;
     }
+    // runId é opcional: quando presente, persistimos a conversa em
+    // users/{uid}/runs/{runId}/coach_messages pra replay no histórico.
+    const runId = url.searchParams.get('runId') ?? undefined;
 
     getAuth().verifyIdToken(token).then((decoded) => {
       wss.handleUpgrade(req, socket, head, (ws) => {
-        wss.emit('connection', ws, req, decoded.uid);
+        wss.emit('connection', ws, req, decoded.uid, runId);
       });
     }).catch((err) => {
       logger.warn('coach.live.auth_failed', { err: String(err) });
@@ -43,8 +49,32 @@ export function attachCoachLiveWebSocket(httpServer: HttpServer): void {
     });
   });
 
-  wss.on('connection', async (clientWs: WebSocket, _req: IncomingMessage, uid: string) => {
-    logger.info('coach.live.client_connected', { uid });
+  const messageLog = new FirestoreCoachMessageLogRepository();
+
+  wss.on('connection', async (clientWs: WebSocket, _req: IncomingMessage, uid: string, runId?: string) => {
+    logger.info('coach.live.client_connected', { uid, runId: runId ?? null });
+    let coachTextBuffer = '';
+    const persistLog = async (
+      author: 'user' | 'coach',
+      text: string,
+    ) => {
+      if (!runId || !text.trim()) return;
+      const log: CoachMessageLog = {
+        id: randomUUID(),
+        runId,
+        userId: uid,
+        author,
+        text: text.trim(),
+        promptVersion: 'live-coach.v1',
+        promptSource: 'default',
+        createdAt: new Date().toISOString(),
+      };
+      try {
+        await messageLog.save(log);
+      } catch (err) {
+        logger.warn('coach.live.persist_failed', { uid, runId, err: String(err) });
+      }
+    };
     const runtimeService = new CoachRuntimeContextService();
     const runtime = await runtimeService.getContext(uid);
     const tone = await resolvePersonaTone(runtime.profile?.coachPersonality);
@@ -66,6 +96,23 @@ export function attachCoachLiveWebSocket(httpServer: HttpServer): void {
       onMessage: (msg) => {
         if (clientWs.readyState === WebSocket.OPEN) {
           clientWs.send(JSON.stringify(msg));
+        }
+        // Acumula texto do coach durante o turn; salva quando turnComplete.
+        if (runId) {
+          try {
+            const sc = (msg as { serverContent?: { modelTurn?: { parts?: Array<{ text?: string }> }; turnComplete?: boolean } }).serverContent;
+            const parts = sc?.modelTurn?.parts;
+            if (parts) {
+              for (const p of parts) {
+                if (typeof p.text === 'string') coachTextBuffer += p.text;
+              }
+            }
+            if (sc?.turnComplete && coachTextBuffer.trim()) {
+              const toSave = coachTextBuffer;
+              coachTextBuffer = '';
+              void persistLog('coach', toSave);
+            }
+          } catch (_) {/* ignore parse */}
         }
       },
       onClose: (code, reason) => {
@@ -96,6 +143,7 @@ export function attachCoachLiveWebSocket(httpServer: HttpServer): void {
           session.sendAudio(msg.data, msg.mimeType ?? 'audio/pcm;rate=16000');
         } else if (msg.type === 'text' && msg.text) {
           session.sendText(msg.text);
+          void persistLog('user', msg.text);
         } else if (msg.type === 'close') {
           session.close();
           clientWs.close(1000, 'client_close');

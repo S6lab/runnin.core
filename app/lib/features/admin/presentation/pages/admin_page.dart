@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/features/admin/data/admin_file_picker.dart';
+import 'package:runnin/features/admin/data/admin_users_datasource.dart';
 
 class AdminPage extends StatefulWidget {
   const AdminPage({super.key});
@@ -1049,6 +1050,8 @@ class _DrivePanel extends StatelessWidget {
           onSave: onSaveCoachConfig,
         ),
         const SizedBox(height: 14),
+        _UsersPanel(canEdit: session.canUpload),
+        const SizedBox(height: 14),
         Expanded(
           child: _FilesSection(
             files: files,
@@ -1062,6 +1065,189 @@ class _DrivePanel extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+// ───────────────────────────── Users plan management ──────────────────────
+
+class _UsersPanel extends StatefulWidget {
+  final bool canEdit;
+  const _UsersPanel({required this.canEdit});
+
+  @override
+  State<_UsersPanel> createState() => _UsersPanelState();
+}
+
+class _UsersPanelState extends State<_UsersPanel> {
+  final _ds = AdminUsersDatasource();
+  final _searchCtrl = TextEditingController();
+  List<AdminUserSummary> _users = [];
+  bool _loading = false;
+  String? _error;
+  String? _savingUserId;
+
+  Future<void> _refresh() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final r = await _ds.list(search: _searchCtrl.text.trim());
+      if (mounted) setState(() => _users = r);
+    } catch (e) {
+      if (mounted) setState(() => _error = '$e');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _setPlan(AdminUserSummary u, String plan) async {
+    setState(() => _savingUserId = u.id);
+    try {
+      await _ds.setPlan(userId: u.id, plan: plan);
+      if (mounted) {
+        setState(() {
+          _users = _users
+              .map((x) => x.id == u.id
+                  ? AdminUserSummary(
+                      id: x.id,
+                      email: x.email,
+                      name: x.name,
+                      subscriptionPlanId: plan,
+                      onboarded: x.onboarded,
+                    )
+                  : x)
+              .toList();
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Plano de ${u.email ?? u.id} alterado para $plan')),
+        );
+      }
+    } catch (e) {
+      if (mounted) setState(() => _error = '$e');
+    } finally {
+      if (mounted) setState(() => _savingUserId = null);
+    }
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: palette.surface,
+        border: Border.all(color: palette.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text('USUÁRIOS — PLANO',
+                  style: TextStyle(
+                      color: palette.text, fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 1)),
+              const Spacer(),
+              SizedBox(
+                width: 220,
+                child: TextField(
+                  controller: _searchCtrl,
+                  style: TextStyle(color: palette.text, fontSize: 12),
+                  decoration: InputDecoration(
+                    isDense: true,
+                    hintText: 'buscar (email / nome / uid)',
+                    hintStyle: TextStyle(color: palette.muted, fontSize: 11),
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.zero,
+                        borderSide: BorderSide(color: palette.border)),
+                  ),
+                  onSubmitted: (_) => _refresh(),
+                ),
+              ),
+              const SizedBox(width: 6),
+              TextButton(
+                onPressed: _loading ? null : _refresh,
+                child: Text(_loading ? '…' : 'BUSCAR',
+                    style: TextStyle(color: palette.primary, fontSize: 11, fontWeight: FontWeight.w700)),
+              ),
+            ],
+          ),
+          if (_error != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text(_error!, style: TextStyle(color: palette.error, fontSize: 11)),
+            ),
+          const SizedBox(height: 8),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 280),
+            child: _users.isEmpty
+                ? Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    child: Text(
+                      _loading ? 'carregando…' : 'use o buscar pra listar',
+                      style: TextStyle(color: palette.muted, fontSize: 11),
+                    ),
+                  )
+                : ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: _users.length,
+                    separatorBuilder: (_, __) =>
+                        Divider(color: palette.border, height: 1),
+                    itemBuilder: (_, i) {
+                      final u = _users[i];
+                      final saving = _savingUserId == u.id;
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 6),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(u.email ?? u.id,
+                                      style: TextStyle(
+                                          color: palette.text, fontSize: 12, fontWeight: FontWeight.w600)),
+                                  Text(u.name ?? u.id,
+                                      style: TextStyle(color: palette.muted, fontSize: 10)),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            if (saving)
+                              SizedBox(
+                                width: 14, height: 14,
+                                child: CircularProgressIndicator(strokeWidth: 1.5, color: palette.primary),
+                              )
+                            else
+                              DropdownButton<String>(
+                                value: u.subscriptionPlanId,
+                                items: const [
+                                  DropdownMenuItem(value: 'freemium', child: Text('freemium')),
+                                  DropdownMenuItem(value: 'pro', child: Text('pro')),
+                                ],
+                                onChanged: widget.canEdit
+                                    ? (v) {
+                                        if (v != null && v != u.subscriptionPlanId) _setPlan(u, v);
+                                      }
+                                    : null,
+                                style: TextStyle(color: palette.text, fontSize: 12),
+                                dropdownColor: palette.surface,
+                              ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
     );
   }
 }

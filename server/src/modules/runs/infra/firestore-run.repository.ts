@@ -47,6 +47,11 @@ export class FirestoreRunRepository implements RunRepository {
     await batch.commit();
   }
 
+  async listGpsPoints(runId: string, userId: string, limit = 5000): Promise<GpsPoint[]> {
+    const snap = await this.gpscol(userId, runId).orderBy('ts', 'asc').limit(limit).get();
+    return snap.docs.map(d => d.data() as GpsPoint);
+  }
+
   async findByUser(userId: string, limit: number, cursor?: string): Promise<{ runs: Run[]; nextCursor?: string }> {
     let query = this.col(userId).orderBy('createdAt', 'desc').limit(limit + 1);
     if (cursor) query = query.startAfter(cursor);

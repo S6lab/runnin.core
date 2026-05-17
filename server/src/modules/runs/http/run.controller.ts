@@ -46,6 +46,13 @@ export async function getRun(req: Request, res: Response, next: NextFunction): P
   } catch (err) { next(err); }
 }
 
+export async function getRunGps(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const points = await repo.listGpsPoints(req.params['id'] as string, req.uid);
+    res.json({ points });
+  } catch (err) { next(err); }
+}
+
 export async function listRuns(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const limit = Math.min(Number(req.query.limit ?? 20), 50);
