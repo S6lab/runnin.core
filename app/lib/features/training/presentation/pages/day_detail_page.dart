@@ -314,6 +314,151 @@ class _PlannedSessionCard extends StatelessWidget {
             const SizedBox(height: 20),
             _ExecutionTimeline(segments: session.executionSegments),
           ],
+          const SizedBox(height: 20),
+          _PrepChecklist(session: session),
+        ],
+      ),
+    );
+  }
+}
+
+/// Checklist visual de preparo pra sessão. Items variam por tipo
+/// (Long Run pede mais hidratação prévia, Intervalado pede aquecimento
+/// reforçado, etc). Estado é local (não persiste) — propósito é
+/// memória de curto prazo pré-corrida.
+class _PrepChecklist extends StatefulWidget {
+  final PlanSession session;
+  const _PrepChecklist({required this.session});
+
+  @override
+  State<_PrepChecklist> createState() => _PrepChecklistState();
+}
+
+class _PrepChecklistState extends State<_PrepChecklist> {
+  final Set<int> _checked = {};
+
+  List<String> _items() {
+    final s = widget.session;
+    final type = s.type.toLowerCase();
+    final isLong = type.contains('long');
+    final isInterval = type.contains('interval') || type.contains('tiro');
+    final isTempo = type.contains('tempo');
+    final hydration = s.hydrationLiters;
+    final pre = s.nutritionPre?.trim();
+
+    final items = <String>[];
+
+    items.add(
+      hydration != null
+          ? 'Hidratei ao longo do dia (meta: ${hydration.toStringAsFixed(1)}L)'
+          : 'Hidratei bem ao longo do dia',
+    );
+
+    if (pre != null && pre.isNotEmpty) {
+      items.add('Comi 60-90min antes: $pre');
+    } else {
+      items.add('Refeição leve 60-90min antes (carbo + pouca gordura)');
+    }
+
+    if (isLong) {
+      items.add('Levei gel/banana se passar de 60min');
+      items.add('Garrafa de água ou eletrólito comigo');
+    }
+    if (isInterval) {
+      items.add('Aquecimento robusto (10-12min) + educativos');
+    }
+    if (isTempo) {
+      items.add('Aquecimento progressivo (8-10min) antes do tempo');
+    }
+
+    items.add('Tênis confortável + cadarço firme');
+    items.add('GPS / wearable conectado e carregado');
+    items.add('Fone com Coach AI pronto');
+
+    return items;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    final items = _items();
+    final done = _checked.length;
+    final total = items.length;
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: palette.background,
+        border: Border.all(color: palette.border, width: 1.0),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.checklist, size: 16, color: palette.primary),
+              const SizedBox(width: 8),
+              Text(
+                'CHECKLIST DE PREPARO · $done/$total',
+                style: GoogleFonts.jetBrainsMono(
+                  color: palette.primary,
+                  fontSize: 11,
+                  letterSpacing: 1.0,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Toque pra marcar conforme se preparar. Lista some quando você sair desta tela.',
+            style: TextStyle(color: palette.muted, fontSize: 11, height: 1.4),
+          ),
+          const SizedBox(height: 10),
+          for (var i = 0; i < items.length; i++)
+            InkWell(
+              onTap: () => setState(() {
+                if (_checked.contains(i)) {
+                  _checked.remove(i);
+                } else {
+                  _checked.add(i);
+                }
+              }),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      _checked.contains(i)
+                          ? Icons.check_box_outlined
+                          : Icons.check_box_outline_blank,
+                      size: 18,
+                      color: _checked.contains(i)
+                          ? palette.primary
+                          : palette.muted,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        items[i],
+                        style: TextStyle(
+                          color: _checked.contains(i)
+                              ? palette.muted
+                              : palette.text,
+                          fontSize: 13,
+                          height: 1.45,
+                          decoration: _checked.contains(i)
+                              ? TextDecoration.lineThrough
+                              : null,
+                          decorationColor: palette.muted,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
         ],
       ),
     );

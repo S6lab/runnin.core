@@ -3,15 +3,36 @@ import { FirestorePlanRepository } from '../infra/firestore-plan.repository';
 import { GeneratePlanUseCase, GeneratePlanSchema } from '../use-cases/generate-plan.use-case';
 import { NotFoundError } from '@shared/errors/app-error';
 import { getRunningKnowledgeCorpusWithStorage } from '@shared/knowledge/running/running-knowledge';
+import { Plan, PlanSession } from '../domain/plan.entity';
+import { buildExecutionSegments } from '../use-cases/build-execution-segments';
 
 const repo = new FirestorePlanRepository();
 const generatePlan = new GeneratePlanUseCase(repo);
+
+/**
+ * Garante que cada sessão tem executionSegments populados. Planos antigos
+ * (gerados antes do builder determinístico) podem ter [] ou 1 segment
+ * solto vindo do LLM. Regenera in-memory na leitura sem mutar Firestore
+ * — migration silenciosa só pra resposta.
+ */
+function ensureSessionSegments(plan: Plan): Plan {
+  let patched = false;
+  const weeks = plan.weeks.map((w) => ({
+    ...w,
+    sessions: w.sessions.map((s: PlanSession) => {
+      if ((s.executionSegments?.length ?? 0) >= 2) return s;
+      patched = true;
+      return { ...s, executionSegments: buildExecutionSegments(s) };
+    }),
+  }));
+  return patched ? { ...plan, weeks } : plan;
+}
 
 export async function getCurrentPlan(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const plan = await repo.findCurrent(req.uid);
     if (!plan) { res.status(404).json({ error: 'No active plan' }); return; }
-    res.json(plan);
+    res.json(ensureSessionSegments(plan));
   } catch (err) { next(err); }
 }
 
@@ -50,6 +71,6 @@ export async function getPlanById(req: Request, res: Response, next: NextFunctio
   try {
     const plan = await repo.findById(req.params['id'] as string, req.uid);
     if (!plan) throw new NotFoundError('Plan');
-    res.json(plan);
+    res.json(ensureSessionSegments(plan));
   } catch (err) { next(err); }
 }
