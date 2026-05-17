@@ -9,6 +9,8 @@ import 'package:runnin/core/warmup/warmup_exercises.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 import 'package:runnin/features/run/data/datasources/run_coach_remote_datasource.dart';
 import 'package:runnin/features/run/presentation/bloc/run_bloc.dart';
+import 'package:runnin/features/training/data/datasources/plan_remote_datasource.dart';
+import 'package:runnin/features/training/domain/entities/plan.dart';
 import 'package:runnin/shared/widgets/runnin_app_bar.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -29,42 +31,13 @@ class _PrepView extends StatefulWidget {
 class _PrepViewState extends State<_PrepView> {
   final _coachRemote = RunCoachRemoteDatasource();
   final _userRemote = UserRemoteDatasource();
-  final _types = [
-    'Easy Run',
-    'Intervalado',
-    'Tempo Run',
-    'Long Run',
-    'Free Run',
-  ];
-  String _selectedType = 'Easy Run';
-
-  static const _typeDetails = {
-    'Easy Run': (
-      'Rodagem leve para construir consistencia',
-      'Ideal para dias de base, recuperacao ativa e ajuste tecnico sem subir demais a carga.',
-      ['Ritmo solto', 'Respiracao controlada', 'Foco em economia'],
-    ),
-    'Intervalado': (
-      'Blocos fortes com recuperacao entre tiros',
-      'Boa opcao para velocidade e VO2. Vale chegar com aquecimento caprichado.',
-      ['Tiros curtos', 'Recuperacao guiada', 'Alta intensidade'],
-    ),
-    'Tempo Run': (
-      'Ritmo sustentado para limiar e consistencia',
-      'Pede concentracao e estabilidade. O objetivo e correr forte sem quebrar no final.',
-      ['Ritmo estavel', 'Esforco controlado', 'Mental firme'],
-    ),
-    'Long Run': (
-      'Volume para resistencia e adaptacao',
-      'Sessao boa para base aerobica. Hidratacao e paciencia fazem diferenca aqui.',
-      ['Duracao maior', 'Pace conservador', 'Foco em resistencia'],
-    ),
-    'Free Run': (
-      'Corrida livre para registrar o momento',
-      'Quando quiser apenas sair para correr, o app acompanha sem travar voce num protocolo.',
-      ['Sem meta fixa', 'Leitura livre', 'Bom para explorar'],
-    ),
-  };
+  final _planRemote = PlanRemoteDatasource();
+  // Tipo selecionado: 'Free Run' (sempre disponível) ou o type da sessão
+  // do plano do dia (quando premium + plano + sessão hoje).
+  String _selectedType = 'Free Run';
+  // Sessão do plano de HOJE, se existir. Null = freemium OU sem plano OU
+  // sem sessão hoje. Mostra o card "Sessão do Plano" no seletor.
+  PlanSession? _planTodaySession;
 
   StreamSubscription<CoachCue>? _coachSub;
   Timer? _coachDebounce;
@@ -95,7 +68,34 @@ class _PrepViewState extends State<_PrepView> {
   void initState() {
     super.initState();
     _resolvePremiumThenLoadCue();
+    _loadTodaySessionFromPlan();
     _loadExercises();
+  }
+
+  Future<void> _loadTodaySessionFromPlan() async {
+    try {
+      final plan = await _planRemote.getCurrentPlan();
+      if (!mounted || plan == null || !plan.isReady) return;
+      final today = DateTime.now().weekday; // 1=Mon..7=Sun
+      // Calcula a semana atual baseado em startDate.
+      final start = plan.effectiveStartDate;
+      final daysFromStart = DateTime.now().difference(start).inDays;
+      final weekIdx = (daysFromStart / 7).floor().clamp(0, plan.weeks.length - 1);
+      final week = plan.weeks[weekIdx];
+      final session = week.sessions
+          .where((s) => s.dayOfWeek == today)
+          .cast<PlanSession?>()
+          .firstWhere((_) => true, orElse: () => null);
+      if (mounted && session != null) {
+        setState(() {
+          _planTodaySession = session;
+          // Default: pré-selecionado a sessão do plano (user pode trocar
+          // pra Free Run se quiser).
+          _selectedType = session.type;
+        });
+        _loadExercises();
+      }
+    } catch (_) {/* Sem plano OU erro de network — segue free run */}
   }
 
   Future<void> _resolvePremiumThenLoadCue() async {
@@ -203,7 +203,7 @@ class _PrepViewState extends State<_PrepView> {
   Widget build(BuildContext context) {
     final palette = context.runninPalette;
     final type = context.runninType;
-    final detail = _typeDetails[_selectedType] ?? _typeDetails['Free Run']!;
+    // detail card removido — descrição agora vem direto do _RunModeCard.
 
     return BlocListener<RunBloc, RunState>(
       listenWhen: (prev, curr) =>
@@ -234,90 +234,49 @@ class _PrepViewState extends State<_PrepView> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('TIPO DE TREINO', style: type.labelCaps),
+                      Text('COMO VOCÊ VAI CORRER HOJE?', style: type.labelCaps),
                       const SizedBox(height: 12),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: _types.map((t) {
-                          final sel = _selectedType == t;
-                          return GestureDetector(
-                            onTap: () => _selectType(t),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 14,
-                                vertical: 8,
-                              ),
-                              decoration: BoxDecoration(
-                                color: sel ? palette.primary : palette.surface,
-                                border: Border.all(
-                                  color: sel ? palette.primary : palette.border,
-                                ),
-                              ),
-                              child: Text(
-                                t.toUpperCase(),
-                                style: type.labelCaps.copyWith(
-                                  color: sel
-                                      ? palette.background
-                                      : palette.muted,
-                                ),
-                              ),
-                            ),
-                          );
-                        }).toList(),
-                      ),
-                      const SizedBox(height: 20),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(18),
-                        decoration: BoxDecoration(
-                          color: palette.surface,
-                          border: Border.all(color: palette.border),
+                      // Premium + plano + sessão hoje → 2 opções
+                      // (Sessão do plano OU Free Run).
+                      // Sem isso → só Free Run.
+                      if (_planTodaySession != null && _isPro == true) ...[
+                        _RunModeCard(
+                          icon: Icons.assignment_outlined,
+                          title: _planTodaySession!.type.toUpperCase(),
+                          subtitle:
+                              'SESSÃO DO PLANO DE HOJE · ${_planTodaySession!.distanceKm.toStringAsFixed(1)}km'
+                              '${_planTodaySession!.targetPace != null ? " · ${_planTodaySession!.targetPace}/km" : ""}'
+                              '${_planTodaySession!.durationMin != null ? " · ~${_planTodaySession!.durationMin!.round()}min" : ""}',
+                          description: _planTodaySession!.notes.isNotEmpty
+                              ? _planTodaySession!.notes
+                              : 'Sessão estruturada pra seu objetivo. Coach acompanha pace alvo e BPM.',
+                          selected: _selectedType == _planTodaySession!.type,
+                          accent: true,
+                          onTap: () => _selectType(_planTodaySession!.type),
                         ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              detail.$1.toUpperCase(),
-                              style: type.labelCaps.copyWith(
-                                color: palette.primary,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                            const SizedBox(height: 10),
-                            Text(detail.$2, style: type.bodyMd),
-                            const SizedBox(height: 16),
-                            ...detail.$3.map(
-                              (item) => Padding(
-                                padding: const EdgeInsets.only(bottom: 8),
-                                child: Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Padding(
-                                      padding: const EdgeInsets.only(top: 5),
-                                      child: Icon(
-                                        Icons.circle,
-                                        size: 6,
-                                        color: palette.primary,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 10),
-                                    Expanded(
-                                      child: Text(
-                                        item,
-                                        style: type.bodySm.copyWith(
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ],
+                        const SizedBox(height: 10),
+                        _RunModeCard(
+                          icon: Icons.directions_run_outlined,
+                          title: 'FREE RUN',
+                          subtitle: 'Corrida livre, sem meta',
+                          description:
+                              'Sai sem protocolo. O coach observa o que você faz e ajusta a próxima sessão do plano com base nesses dados.',
+                          selected: _selectedType == 'Free Run',
+                          accent: false,
+                          onTap: () => _selectType('Free Run'),
                         ),
-                      ),
+                      ] else
+                        _RunModeCard(
+                          icon: Icons.directions_run_outlined,
+                          title: 'FREE RUN',
+                          subtitle: 'Corrida livre, sem meta',
+                          description: _isPro == true
+                              ? 'Não há sessão planejada pra hoje. Free run registra a corrida e ajusta o plano.'
+                              : 'Versão grátis. Plano AI personalizado é premium — assine pra ter sessões estruturadas.',
+                          selected: true,
+                          accent: false,
+                          onTap: () => _selectType('Free Run'),
+                        ),
                       const SizedBox(height: 14),
                       if (_isPro == false)
                         _PreRunCoachLockedCard(
@@ -701,6 +660,114 @@ class _MusicProviderButton extends StatelessWidget {
               provider.label,
               style: type.labelCaps.copyWith(fontSize: 10),
               textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Card grande de seleção do modo de corrida. Substitui os chips antigos.
+/// `accent: true` destaca a opção principal (sessão do plano).
+class _RunModeCard extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final String description;
+  final bool selected;
+  final bool accent;
+  final VoidCallback onTap;
+
+  const _RunModeCard({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.description,
+    required this.selected,
+    required this.accent,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    final type = context.runninType;
+    final borderCol = selected
+        ? palette.primary
+        : (accent
+            ? palette.primary.withValues(alpha: 0.4)
+            : palette.border);
+    final bgCol = selected
+        ? palette.primary.withValues(alpha: 0.12)
+        : palette.surface;
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: bgCol,
+          border: Border.all(color: borderCol, width: selected ? 1.5 : 1.0),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: accent
+                    ? palette.primary.withValues(alpha: 0.15)
+                    : palette.surface,
+                border: Border.all(color: palette.border, width: 1.0),
+              ),
+              alignment: Alignment.center,
+              child: Icon(
+                icon,
+                size: 20,
+                color: accent ? palette.primary : palette.muted,
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: type.labelCaps.copyWith(
+                      color: palette.text,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      letterSpacing: 1.0,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    style: type.bodySm.copyWith(
+                      color: accent ? palette.primary : palette.muted,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    description,
+                    style: type.bodySm.copyWith(
+                      color: palette.text.withValues(alpha: 0.78),
+                      height: 1.45,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Icon(
+              selected ? Icons.check_circle : Icons.radio_button_unchecked,
+              size: 20,
+              color: selected ? palette.primary : palette.muted,
             ),
           ],
         ),

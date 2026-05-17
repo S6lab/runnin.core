@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
@@ -807,16 +808,25 @@ class _WeekTile extends StatelessWidget {
               ),
             // Renderiza TODOS os 7 dias da semana: sessões + rest tips +
             // dias sem nenhum dos dois (mostrados como "Descanso").
+            // Cada row é clicável → abre /training/day/:weekNumber/:d
+            // com a ficha completa do dia (hidratação, nutrição, etc).
             for (var d = 1; d <= 7; d++) ...[
-              if (sessionDays.contains(d))
-                _SessionRow(
-                  session: sorted.firstWhere((s) => s.dayOfWeek == d),
-                  dayLabel: _dayDateLabel(d),
-                )
-              else if (restTipsByDay.containsKey(d))
-                _RestDayRow(tip: restTipsByDay[d]!, dayLabel: _dayDateLabel(d))
-              else
-                _PlainRestRow(dayLabel: _dayDateLabel(d)),
+              InkWell(
+                onTap: () => context.push(
+                  '/training/day/${week.weekNumber}/$d',
+                ),
+                child: sessionDays.contains(d)
+                    ? _SessionRow(
+                        session: sorted.firstWhere((s) => s.dayOfWeek == d),
+                        dayLabel: _dayDateLabel(d),
+                      )
+                    : restTipsByDay.containsKey(d)
+                        ? _RestDayRow(
+                            tip: restTipsByDay[d]!,
+                            dayLabel: _dayDateLabel(d),
+                          )
+                        : _PlainRestRow(dayLabel: _dayDateLabel(d)),
+              ),
             ],
           ],
         ),
