@@ -168,6 +168,15 @@ export async function getRunningKnowledgeCorpusWithStorage(): Promise<RunningKno
   return [...storageChunks, ...chunks];
 }
 
+/**
+ * Limpa o cache de chunks do Storage forçando relê + reindex na próxima
+ * query. Chamar quando admin sobe arquivo novo pra ele aparecer
+ * imediatamente nas queries (sem ter que esperar TTL de 5min).
+ */
+export function invalidateRunningKnowledgeStorageCache(): void {
+  storageChunksCache = undefined;
+}
+
 async function getStorageRunningKnowledge(): Promise<RunningKnowledgeChunk[]> {
   const now = Date.now();
   if (storageChunksCache && now - storageChunksCache.loadedAt < STORAGE_CACHE_TTL_MS) {
@@ -189,6 +198,8 @@ async function getStorageRunningKnowledge(): Promise<RunningKnowledgeChunk[]> {
     const parsedChunks = await readStorageChunks(files);
     const storageChunks = await syncEmbeddedStorageChunks(parsedChunks);
     storageChunksCache = { loadedAt: now, chunks: storageChunks };
+    // Marca cada doc admin como indexed depois de embedding rodar OK.
+    void markDocumentsIndexed(storageChunks);
     return storageChunks;
   } catch (err) {
     logger.warn('knowledge.storage.unavailable', {
@@ -196,6 +207,45 @@ async function getStorageRunningKnowledge(): Promise<RunningKnowledgeChunk[]> {
     });
     storageChunksCache = { loadedAt: now, chunks: [] };
     return [];
+  }
+}
+
+/**
+ * Atualiza ragStatus='indexed' + chunkCount nos docs Firestore
+ * rag_documents que correspondem aos chunks recém-indexados. Permite
+ * que admin veja no painel quais arquivos já foram processados.
+ */
+async function markDocumentsIndexed(chunks: RunningKnowledgeChunk[]): Promise<void> {
+  try {
+    const db = (await import('@shared/infra/firebase/firebase.client')).getFirestore();
+    // Agrupa chunks por sourcePath (cada source = 1 file no Storage)
+    const byPath = new Map<string, number>();
+    for (const c of chunks) {
+      if (!c.storagePath) continue;
+      byPath.set(c.storagePath, (byPath.get(c.storagePath) ?? 0) + 1);
+    }
+    if (byPath.size === 0) return;
+    const col = db.collection('rag_documents');
+    const now = new Date().toISOString();
+    await Promise.all(
+      Array.from(byPath.entries()).map(async ([path, count]) => {
+        // rag_documents tem doc id = sanitized path or random — tentamos
+        // achar por field storagePath. Update bulk via query.
+        try {
+          const snap = await col.where('storagePath', '==', path).limit(1).get();
+          if (!snap.empty) {
+            await snap.docs[0].ref.set(
+              { ragStatus: 'indexed', chunkCount: count, indexedAt: now },
+              { merge: true },
+            );
+          }
+        } catch (_) {/* ignore per-doc errors */}
+      }),
+    );
+  } catch (err) {
+    logger.warn('knowledge.storage.mark_indexed_failed', {
+      err: err instanceof Error ? err.message : String(err),
+    });
   }
 }
 

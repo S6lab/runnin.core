@@ -155,8 +155,12 @@ export function postInvalidateCache(_req: Request, res: Response): void {
 
 // === Admin: gerenciamento de plano de usuário ===
 import { FirestoreUserRepository } from '@modules/users/infra/firestore-user.repository';
-import { getAuth } from '@shared/infra/firebase/firebase.client';
+import { getAuth, getFirestore } from '@shared/infra/firebase/firebase.client';
 import { SeedTesterUseCase } from '../use-cases/seed-tester.use-case';
+import {
+  invalidateRunningKnowledgeStorageCache,
+  getRunningKnowledgeCorpusWithStorage,
+} from '@shared/knowledge/running/running-knowledge';
 
 const userRepo = new FirestoreUserRepository();
 const seedTester = new SeedTesterUseCase();
@@ -225,6 +229,68 @@ export async function getUsersList(req: Request, res: Response, next: NextFuncti
         onboarded: u.onboarded ?? false,
         updatedAt: u.updatedAt ?? null,
       })),
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * POST /admin/rag/reindex — força re-leitura do bucket Storage + reindex
+ * de embeddings. Chamar quando subir/remover arquivo .md no painel admin
+ * (base é quase estática, então invalidação é manual).
+ */
+export async function postRagReindex(_req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    invalidateRunningKnowledgeStorageCache();
+    // Força a próxima query a rebuildar imediatamente — pra admin ver feedback
+    const chunks = await getRunningKnowledgeCorpusWithStorage();
+    res.json({
+      ok: true,
+      totalChunks: chunks.length,
+      withEmbedding: chunks.filter(c => c.embedding && c.embedding.length > 0).length,
+      fromStorage: chunks.filter(c => c.storagePath).length,
+      fromCorpus: chunks.filter(c => !c.storagePath).length,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * GET /admin/rag/status — lista documentos da base RAG com status indexed/
+ * pending, contagem de chunks por doc e timestamps.
+ */
+export async function getRagStatus(_req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const db = getFirestore();
+    const snap = await db.collection('rag_documents').limit(200).get();
+    const docs = snap.docs.map(d => {
+      const data = d.data();
+      return {
+        id: d.id,
+        originalName: data.originalName ?? null,
+        storagePath: data.storagePath ?? null,
+        ragStatus: data.ragStatus ?? 'unknown',
+        chunkCount: data.chunkCount ?? 0,
+        uploadedAt: data.uploadedAt ?? null,
+        indexedAt: data.indexedAt ?? null,
+        uploadedByEmail: data.uploadedByEmail ?? null,
+        size: data.size ?? null,
+      };
+    });
+    // Também conta chunks que vieram do corpus estático embutido
+    const chunks = await getRunningKnowledgeCorpusWithStorage();
+    res.json({
+      documents: docs,
+      summary: {
+        adminDocs: docs.length,
+        indexed: docs.filter(d => d.ragStatus === 'indexed').length,
+        pending: docs.filter(d => d.ragStatus === 'pending').length,
+        totalChunksInUse: chunks.length,
+        chunksWithEmbedding: chunks.filter(c => c.embedding && c.embedding.length > 0).length,
+        builtinCorpusChunks: chunks.filter(c => !c.storagePath).length,
+      },
     });
   } catch (err) {
     next(err);

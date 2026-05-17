@@ -9,6 +9,8 @@ import {
   getUsersList,
   patchUserPlan,
   postSeedTester,
+  postRagReindex,
+  getRagStatus,
 } from './admin.controller';
 
 export const adminRouter = Router();
@@ -25,3 +27,5 @@ adminRouter.get('/prompts/defaults', getPromptDefaults);
 adminRouter.post('/prompts/invalidate-cache', postInvalidateCache);
 adminRouter.get('/users', getUsersList);
 adminRouter.patch('/users/:userId/plan', patchUserPlan);
+adminRouter.get('/rag/status', getRagStatus);
+adminRouter.post('/rag/reindex', postRagReindex);

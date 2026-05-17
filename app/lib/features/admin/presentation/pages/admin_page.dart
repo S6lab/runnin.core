@@ -10,6 +10,7 @@ import 'package:go_router/go_router.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/features/admin/data/admin_file_picker.dart';
 import 'package:runnin/features/admin/data/admin_users_datasource.dart';
+import 'package:runnin/features/admin/data/admin_rag_datasource.dart';
 
 class AdminPage extends StatefulWidget {
   const AdminPage({super.key});
@@ -1052,6 +1053,8 @@ class _DrivePanel extends StatelessWidget {
         const SizedBox(height: 14),
         _UsersPanel(canEdit: session.canUpload),
         const SizedBox(height: 14),
+        const _RagStatusPanel(),
+        const SizedBox(height: 14),
         Expanded(
           child: _FilesSection(
             files: files,
@@ -1257,6 +1260,183 @@ class _UsersPanelState extends State<_UsersPanel> {
 }
 
 // ───────────────────────────── Prompts console entry ──────────────────────
+
+// ───────────────────────────── RAG status + reindex ──────────────────────
+
+class _RagStatusPanel extends StatefulWidget {
+  const _RagStatusPanel();
+  @override
+  State<_RagStatusPanel> createState() => _RagStatusPanelState();
+}
+
+class _RagStatusPanelState extends State<_RagStatusPanel> {
+  final _ds = AdminRagDatasource();
+  RagStatusSummary? _summary;
+  List<RagDocStatus> _docs = const [];
+  bool _loading = false;
+  bool _reindexing = false;
+  String? _msg;
+  String? _err;
+
+  @override
+  void initState() {
+    super.initState();
+    _refresh();
+  }
+
+  Future<void> _refresh() async {
+    setState(() { _loading = true; _err = null; });
+    try {
+      final r = await _ds.status();
+      if (mounted) setState(() { _summary = r.summary; _docs = r.docs; _loading = false; });
+    } catch (e) {
+      if (mounted) setState(() { _err = '$e'; _loading = false; });
+    }
+  }
+
+  Future<void> _reindex() async {
+    setState(() { _reindexing = true; _msg = null; _err = null; });
+    try {
+      final r = await _ds.reindex();
+      if (mounted) {
+        setState(() {
+          _msg = 'Reindex OK: ${r.totalChunks} chunks (${r.fromStorage} do admin, ${r.fromCorpus} do corpus). ${r.withEmbedding} com embedding.';
+          _reindexing = false;
+        });
+        await _refresh();
+      }
+    } catch (e) {
+      if (mounted) setState(() { _err = '$e'; _reindexing = false; });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    final s = _summary;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: palette.surface,
+        border: Border.all(color: palette.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text('BASE RAG — STATUS',
+                  style: TextStyle(
+                      color: palette.text, fontSize: 12, fontWeight: FontWeight.w500, letterSpacing: 1)),
+              const Spacer(),
+              TextButton(
+                onPressed: _loading ? null : _refresh,
+                child: Text(_loading ? '…' : 'ATUALIZAR',
+                    style: TextStyle(color: palette.muted, fontSize: 11)),
+              ),
+              const SizedBox(width: 6),
+              ElevatedButton(
+                onPressed: _reindexing ? null : _reindex,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: palette.primary,
+                  foregroundColor: palette.background,
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+                ),
+                child: Text(_reindexing ? 'REINDEXANDO…' : 'REINDEXAR',
+                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500)),
+              ),
+            ],
+          ),
+          if (_msg != null) Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text(_msg!, style: TextStyle(color: palette.primary, fontSize: 11)),
+          ),
+          if (_err != null) Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text(_err!, style: TextStyle(color: palette.error, fontSize: 11)),
+          ),
+          const SizedBox(height: 8),
+          if (s != null) Row(
+            children: [
+              _RagStat(label: 'CHUNKS', value: '${s.totalChunksInUse}'),
+              _RagStat(label: 'COM EMBED', value: '${s.chunksWithEmbedding}'),
+              _RagStat(label: 'ADMIN DOCS', value: '${s.adminDocs}'),
+              _RagStat(label: 'INDEXED', value: '${s.indexed}', accent: true),
+              _RagStat(label: 'PENDING', value: '${s.pending}'),
+            ],
+          ),
+          if (_docs.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 180),
+              child: ListView.separated(
+                shrinkWrap: true,
+                itemCount: _docs.length,
+                separatorBuilder: (_, __) => Divider(color: palette.border, height: 1),
+                itemBuilder: (_, i) {
+                  final d = _docs[i];
+                  final isIndexed = d.ragStatus == 'indexed';
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 6, height: 6,
+                          decoration: BoxDecoration(
+                            color: isIndexed ? palette.primary : palette.secondary,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            d.originalName ?? d.storagePath ?? d.id,
+                            style: TextStyle(color: palette.text, fontSize: 11),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          isIndexed ? '${d.chunkCount} chunks' : d.ragStatus,
+                          style: TextStyle(color: palette.muted, fontSize: 10),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _RagStat extends StatelessWidget {
+  final String label;
+  final String value;
+  final bool accent;
+  const _RagStat({required this.label, required this.value, this.accent = false});
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    return Expanded(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: TextStyle(color: palette.muted, fontSize: 9, letterSpacing: 0.8)),
+          const SizedBox(height: 2),
+          Text(value, style: TextStyle(
+            color: accent ? palette.primary : palette.text,
+            fontSize: 16, fontWeight: FontWeight.w500,
+          )),
+        ],
+      ),
+    );
+  }
+}
 
 class _PromptsConsoleEntry extends StatelessWidget {
   final bool canRead;
