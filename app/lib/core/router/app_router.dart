@@ -22,6 +22,7 @@ import 'package:runnin/features/training/presentation/pages/training_page.dart';
 import 'package:runnin/features/training/presentation/pages/plan_detail_page.dart';
 import 'package:runnin/features/training/presentation/pages/day_detail_page.dart';
 import 'package:runnin/features/training/presentation/pages/revision_flow_page.dart';
+import 'package:runnin/features/training/presentation/pages/checkpoint_page.dart';
 import 'package:runnin/features/history/presentation/pages/history_page.dart';
 import 'package:runnin/features/history/presentation/pages/run_detail_page.dart';
 import 'package:runnin/features/history/presentation/pages/coach_conversation_replay_page.dart';
@@ -225,6 +226,13 @@ final appRouter = GoRouter(
           path: '/training/revise',
           builder: (_, state) => RevisionFlowPage(
             planId: state.uri.queryParameters['planId'] ?? '',
+          ),
+        ),
+        GoRoute(
+          path: '/training/checkpoint/:planId/:weekNumber',
+          builder: (_, state) => CheckpointPage(
+            planId: state.pathParameters['planId']!,
+            weekNumber: int.parse(state.pathParameters['weekNumber']!),
           ),
         ),
         GoRoute(path: '/history', builder: (_, _) => const HistoryPage()),

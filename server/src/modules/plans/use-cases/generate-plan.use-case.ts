@@ -4,6 +4,8 @@ import { getAsyncLLM } from '@shared/infra/llm/llm.factory';
 import { PlanRepository } from '../domain/plan.repository';
 import { Plan, PlanSegment, PlanSession, PlanWeek } from '../domain/plan.entity';
 import { buildExecutionSegments } from './build-execution-segments';
+import { ScheduleCheckpointsUseCase } from './schedule-checkpoints.use-case';
+import { FirestorePlanCheckpointRepository } from '../infra/firestore-plan-checkpoint.repository';
 import { logger } from '@shared/logger/logger';
 import { formatRunningKnowledgeContext } from '@shared/knowledge/running/running-knowledge';
 import { buildPlanInitPrompt } from '@shared/infra/llm/prompts';
@@ -68,6 +70,11 @@ export type GeneratePlanInput = z.infer<typeof GeneratePlanSchema>;
 export class GeneratePlanUseCase {
   private llm = getAsyncLLM();
   private runtime = new CoachRuntimeContextService();
+  // Default impl injetada via construtor de classe pra não exigir DI
+  // explícita no callsite, mas trocável em testes.
+  private scheduleCheckpoints = new ScheduleCheckpointsUseCase(
+    new FirestorePlanCheckpointRepository(),
+  );
 
   constructor(private repo: PlanRepository) {}
 
@@ -213,6 +220,15 @@ export class GeneratePlanUseCase {
         weeks,
         updatedAt: new Date().toISOString(),
       });
+      // Cria 1 checkpoint por semana (fire-and-forget). Idempotente.
+      void this.scheduleCheckpoints
+        .execute({ ...plan, weeks, status: 'ready' })
+        .catch((err) =>
+          logger.warn('plan.checkpoints.schedule_failed', {
+            planId: plan.id,
+            err: err instanceof Error ? err.message : String(err),
+          }),
+        );
       // Fire-and-forget: gera narrativa longa pra página de detalhe sem
       // bloquear a resposta. Se falhar, o plano segue funcional sem texto.
       void this._generateCoachRationale(plan, weeks, runtime.profile);

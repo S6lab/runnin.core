@@ -5,6 +5,7 @@ import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 import 'package:runnin/features/training/data/datasources/plan_remote_datasource.dart';
 import 'package:runnin/features/training/domain/entities/plan.dart';
+import 'package:runnin/shared/widgets/app_panel.dart';
 import 'package:runnin/shared/widgets/runnin_app_bar.dart';
 
 /// Vista detalhada do plano com:
@@ -109,6 +110,11 @@ class _PlanDetailPageState extends State<PlanDetailPage> {
                           // 1. Header com objetivo + stats principais
                           _Header(plan: _plan!, profile: _profile),
                           const SizedBox(height: 14),
+                          // Disclaimer: regra "1 ajuste por semana" via checkpoint.
+                          // Aparece logo no topo pra criar expectativa correta
+                          // antes do user ler o plano detalhado.
+                          _CheckpointDisclaimer(),
+                          const SizedBox(height: 14),
                           // 2. Ficha do perfil — dados que o coach considerou
                           _CollapsibleSection(
                             icon: Icons.person_outline,
@@ -147,6 +153,42 @@ class _PlanDetailPageState extends State<PlanDetailPage> {
                         ],
                       ),
                     ),
+    );
+  }
+}
+
+/// Disclaimer 1x/semana — comunica a regra do checkpoint logo no topo.
+/// Não tem CTA: o entry pro checkpoint vive na visão SEMANAL do training_page.
+class _CheckpointDisclaimer extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    return AppPanel(
+      borderColor: palette.primary.withValues(alpha: 0.5),
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '> AJUSTES DO PLANO',
+            style: GoogleFonts.jetBrainsMono(
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+              letterSpacing: 1.2,
+              color: palette.primary,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Seu plano é ajustável 1x por semana, no checkpoint do fim de cada semana. O coach lê tudo que você fez (corridas, pace, BPM, aderência) e cruza com o que você marcar nos chips (mais carga, dor específica, etc). Histórico dos ajustes fica visível abaixo.',
+            style: TextStyle(
+              color: palette.text.withValues(alpha: 0.85),
+              fontSize: 12.5,
+              height: 1.55,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

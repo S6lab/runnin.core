@@ -1256,7 +1256,61 @@ class _WeeklyPlanView extends StatelessWidget {
             );
           });
         }(),
+        const SizedBox(height: 12),
+        _CheckpointEntry(
+          planId: plan.id,
+          weekNumber: selectedWeek + 1,
+        ),
       ],
+    );
+  }
+}
+
+/// Entry compacta pro checkpoint semanal. Tap → /training/checkpoint/:planId/:weekNumber.
+/// Não bloqueia a UI se falhar — apenas omite o card.
+class _CheckpointEntry extends StatelessWidget {
+  final String planId;
+  final int weekNumber;
+  const _CheckpointEntry({required this.planId, required this.weekNumber});
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    return InkWell(
+      onTap: () => context.push('/training/checkpoint/$planId/$weekNumber'),
+      child: AppPanel(
+        borderColor: palette.primary.withValues(alpha: 0.55),
+        padding: const EdgeInsets.all(14),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              color: palette.primary.withValues(alpha: 0.18),
+              child: Text(
+                'CHECKPOINT',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w500,
+                  color: palette.primary,
+                  letterSpacing: 1.0,
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Fim de SEM $weekNumber · ajustar plano com base na sua semana',
+                style: TextStyle(
+                  color: palette.text,
+                  fontSize: 12.5,
+                  height: 1.4,
+                ),
+              ),
+            ),
+            Icon(Icons.chevron_right, color: palette.muted, size: 18),
+          ],
+        ),
+      ),
     );
   }
 }
