@@ -15,7 +15,11 @@ import 'package:runnin/shared/widgets/runnin_app_bar.dart';
 ///
 /// Rotada via /training/plan-detail.
 class PlanDetailPage extends StatefulWidget {
-  const PlanDetailPage({super.key});
+  /// Quando vier de uma navegação que aponta uma semana específica
+  /// (ex: monthly card em TREINO → /training/plan-detail?focusWeek=3),
+  /// faz scroll automático pra essa semana após o load.
+  final int? focusWeek;
+  const PlanDetailPage({super.key, this.focusWeek});
 
   @override
   State<PlanDetailPage> createState() => _PlanDetailPageState();
@@ -66,6 +70,13 @@ class _PlanDetailPageState extends State<PlanDetailPage> {
         _profile = results[1] as UserProfile?;
         _loading = false;
       });
+      // Se navegou com ?focusWeek=N, scroll após primeiro paint.
+      final fw = widget.focusWeek;
+      if (fw != null && _plan != null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _jumpToWeek(fw);
+        });
+      }
     } catch (e) {
       if (mounted) setState(() { _error = '$e'; _loading = false; });
     }
@@ -106,40 +117,31 @@ class _PlanDetailPageState extends State<PlanDetailPage> {
                             child: _ProfileSummary(profile: _profile),
                           ),
                           const SizedBox(height: 10),
-                          // 3. Mesociclo (curto)
-                          if (_plan!.mesocycleNarrative != null &&
-                              _plan!.mesocycleNarrative!.trim().isNotEmpty)
-                            _CollapsibleSection(
-                              icon: Icons.timeline,
-                              title: 'VISÃO DO MESOCICLO',
-                              accent: true,
-                              child: _MesocycleCard(text: _plan!.mesocycleNarrative!),
-                            ),
-                          if (_plan!.mesocycleNarrative != null &&
-                              _plan!.mesocycleNarrative!.trim().isNotEmpty)
-                            const SizedBox(height: 10),
-                          // 4. Racional colapsável (por seções ##)
+                          // 3. Racional colapsável (por seções ## — inclui
+                          //    seção "Periodização" do coach)
                           _RationaleAccordion(plan: _plan!),
                           const SizedBox(height: 10),
-                          // 5. Stats numérico
+                          // 4. Stats numérico
                           _CollapsibleSection(
                             icon: Icons.bar_chart_outlined,
                             title: 'NÚMEROS DO PLANO',
                             child: _StatsSection(plan: _plan!),
                           ),
                           const SizedBox(height: 10),
-                          // 6. Periodização clicável → scroll pra week
-                          _CollapsibleSection(
-                            icon: Icons.timeline,
-                            title: 'PERIODIZAÇÃO (clique pra abrir a semana)',
-                            initiallyExpanded: true,
-                            child: _PeriodizationChips(
-                              plan: _plan!,
-                              onTapWeek: _jumpToWeek,
-                            ),
+                          // 5. UNIFICADO: Periodização + Semana-a-semana num
+                          //    bloco só. Chips de FASE clicáveis abrem o
+                          //    week tile correspondente abaixo (auto-scroll).
+                          //    Mesociclo narrative (se houver) vai no topo.
+                          if (_plan!.mesocycleNarrative != null &&
+                              _plan!.mesocycleNarrative!.trim().isNotEmpty) ...[
+                            _MesocycleCard(text: _plan!.mesocycleNarrative!),
+                            const SizedBox(height: 10),
+                          ],
+                          _PeriodizationChips(
+                            plan: _plan!,
+                            onTapWeek: _jumpToWeek,
                           ),
-                          const SizedBox(height: 10),
-                          // 7. Plano semana a semana (1 expansion tile por week)
+                          const SizedBox(height: 14),
                           _WeeksBreakdown(plan: _plan!, weekKey: _keyFor),
                           // 7. Histórico de revisões (se houver)
                           if (_plan!.revisions.isNotEmpty) ...[
@@ -773,22 +775,41 @@ class _WeekTile extends StatelessWidget {
           collapsedIconColor: palette.muted,
           title: Row(
             children: [
-              Text(
-                'SEMANA ${week.weekNumber}',
-                style: GoogleFonts.jetBrainsMono(
-                  color: palette.text,
-                  fontSize: 12,
-                  letterSpacing: 1.0,
-                  fontWeight: FontWeight.w500,
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 7,
+                  vertical: 3,
+                ),
+                color: palette.primary.withValues(alpha: 0.15),
+                child: Text(
+                  'SEM ${week.weekNumber}',
+                  style: GoogleFonts.jetBrainsMono(
+                    color: palette.primary,
+                    fontSize: 10,
+                    letterSpacing: 1.0,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
               ),
-              const Spacer(),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  _phaseLabelFromFocus(week.focus, week.narrative),
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.jetBrainsMono(
+                    color: palette.text,
+                    fontSize: 12,
+                    letterSpacing: 0.8,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
               Text(
-                '${week.sessions.length} sess · ${wKm.toStringAsFixed(0)}km',
+                '${week.sessions.length}s · ${wKm.toStringAsFixed(0)}km',
                 style: GoogleFonts.jetBrainsMono(
-                  color: palette.primary,
-                  fontSize: 11,
-                  letterSpacing: 0.5,
+                  color: palette.muted,
+                  fontSize: 10,
+                  letterSpacing: 0.4,
                 ),
               ),
             ],
@@ -833,6 +854,48 @@ class _WeekTile extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Deriva o label de FASE pra mostrar no header colapsado da semana.
+/// Prioriza week.focus; se vazio, tenta extrair [FASE] do narrative;
+/// fallback genérico por palavras-chave.
+String _phaseLabelFromFocus(String? focus, String? narrative) {
+  final f = (focus ?? '').trim();
+  if (f.isNotEmpty) {
+    final phase = _normalizePhase(f);
+    return '$phase · ${_focusSubtitle(f)}';
+  }
+  final n = (narrative ?? '').trim();
+  final phaseTag = RegExp(r'\[([A-Z\+]+)\]').firstMatch(n);
+  final phase = phaseTag?.group(1) ?? 'PROGRESSÃO';
+  // Pega 1ª frase do narrative pra subtitle
+  final firstSentence = n.split(RegExp(r'[.!]')).first.trim();
+  final cleanSub = firstSentence.replaceAll(RegExp(r'\[[A-Z\+]+\]\s*'), '');
+  return cleanSub.length > 50
+      ? '$phase · ${cleanSub.substring(0, 50)}…'
+      : (cleanSub.isEmpty ? phase : '$phase · $cleanSub');
+}
+
+String _normalizePhase(String f) {
+  final low = f.toLowerCase();
+  if (low.contains('recup') || low.contains('deload')) return 'DELOAD';
+  if (low.contains('taper')) return 'TAPER';
+  if (low.contains('peak') || low.contains('pico')) return 'PEAK';
+  if (low.contains('intervalad') || low.contains('tempo') || low.contains('build')) {
+    return 'BUILD';
+  }
+  if (low.contains('long') || low.contains('specific')) return 'SPECIFIC';
+  return 'BASE';
+}
+
+String _focusSubtitle(String f) {
+  // Tira tags em colchetes e palavras de fase pra deixar só o "foco" útil
+  final stripped = f
+      .replaceAll(RegExp(r'\[[A-Z\+]+\]\s*'), '')
+      .replaceAll(RegExp(r'^(BUILD|PEAK|TAPER|DELOAD|BASE|SPECIFIC)\s*[·-]?\s*',
+          caseSensitive: false), '')
+      .trim();
+  return stripped.isEmpty ? f : stripped;
 }
 
 class _SessionRow extends StatelessWidget {

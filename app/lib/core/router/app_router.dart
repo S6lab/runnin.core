@@ -202,7 +202,11 @@ final appRouter = GoRouter(
         GoRoute(path: '/training', builder: (_, _) => const TrainingPage()),
         GoRoute(
           path: '/training/plan-detail',
-          builder: (_, _) => const PlanDetailPage(),
+          builder: (_, state) => PlanDetailPage(
+            focusWeek: int.tryParse(
+              state.uri.queryParameters['focusWeek'] ?? '',
+            ),
+          ),
         ),
         GoRoute(
           path: '/training/day/:weekNumber/:dayOfWeek',

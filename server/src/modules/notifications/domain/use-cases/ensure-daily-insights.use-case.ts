@@ -127,12 +127,22 @@ export class EnsureDailyInsightsUseCase {
     const hasBpmData = completedRuns.some(r => (r.avgBpm ?? 0) > 0 || (r.maxBpm ?? 0) > 0);
     const hasSleepData = false; // sem integração de sono ainda
     const weight = profile.weight ? Number(profile.weight.replace(/[^0-9.]/g, '')) : null;
-    const fallbackHydration = weight && weight > 0 ? +(weight * 0.035).toFixed(1) : null;
-    // Prioridade: hidratação da sessão do plano > rest-day tip do plano >
-    // fallback genérico baseado em peso. Wired ao plano sempre que existe.
-    const hydrationGoalLiters = todaySession?.hydrationLiters
-      ?? todayRestTip?.hydrationLiters
-      ?? fallbackHydration;
+    // Fallback CAP em 3.5L: pra weights muito altos (130kg+) a fórmula peso×0.035
+    // dá 4.5L+ que ninguém bebe num dia normal. Cap em 3.5L é meta saudável
+    // recomendada (WHO + American Council on Exercise) pra adultos comuns.
+    const rawFallback = weight && weight > 0 ? +(weight * 0.035).toFixed(1) : null;
+    const fallbackHydration = rawFallback != null
+      ? Math.min(rawFallback, 3.5)
+      : null;
+    // Prioridade: hidratação da sessão do plano (coach calibrou) > rest-day
+    // tip do plano > fallback genérico capado. Plan data sempre vence.
+    const planHydration = todaySession?.hydrationLiters ?? todayRestTip?.hydrationLiters;
+    // Sanity-cap também no plan data — defensivo contra LLM hallucination
+    // (já vimos caso de gerar 6.3L). Máx absoluto 4L mesmo se for Long Run.
+    const cappedPlanHydration = planHydration != null
+      ? Math.min(planHydration, 4.0)
+      : null;
+    const hydrationGoalLiters = cappedPlanHydration ?? fallbackHydration;
 
     const periodLabel: Record<string, string> = { manha: '06-09h', tarde: '14-17h', noite: '19-21h' };
     const periodSuggestion = profile.runPeriod

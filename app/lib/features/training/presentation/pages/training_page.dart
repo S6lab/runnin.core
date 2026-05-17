@@ -1239,6 +1239,7 @@ class _WeeklyPlanView extends StatelessWidget {
                 .where((s) => s.dayOfWeek == day)
                 .firstOrNull;
             return _WeeklySessionRow(
+              weekNumber: selectedWeek + 1,
               dayOfWeek: day,
               dayDate: dayDate,
               session: sessionForDay,
@@ -1333,45 +1334,39 @@ class _MonthlyPlanView extends StatelessWidget {
 }
 
 class _ReportsTab extends StatelessWidget {
-  final List<_RunFeedback> reports;
+  // reports (feedbacks IA por corrida) saiu daqui — agora vive no
+  // /history/run/:id quando user clica numa corrida. TREINO/Relatórios
+  // mostra SOMENTE os relatórios semanais do coach.
+  final List<_RunFeedback> reports; // mantido p/ compat; ignorado aqui
   final List<WeeklyReport> weeklyReports;
 
   const _ReportsTab({required this.reports, required this.weeklyReports});
 
   @override
   Widget build(BuildContext context) {
-    if (reports.isEmpty && weeklyReports.isEmpty) {
-      return const _TabEmptyState(
-        title: 'Nenhum feedback de IA ainda',
+    final palette = context.runninPalette;
+    if (weeklyReports.isEmpty) {
+      return _TabEmptyState(
+        title: 'Sem relatórios semanais ainda',
         body:
-            'Os feedbacks reais aparecem aqui depois que voce conclui corridas com relatorio tecnico gerado pelo Coach.AI.',
+            'O coach gera 1 relatório por semana com aderência, evolução e ajustes. Feedback de cada corrida fica em HISTÓRICO > sua corrida.',
       );
     }
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (weeklyReports.isNotEmpty) ...[
-          _SectionTitle(
-            title: 'RELATÓRIOS SEMANAIS',
-            indexLabel: '02',
-            subtitle:
-                'Analises semanais de aderencia e desempenho',
-          ),
-          const SizedBox(height: 12),
-          ...weeklyReports.map((report) => _WeeklyReportCard(report: report)),
-        ],
-        if (reports.isNotEmpty && weeklyReports.isNotEmpty) const SizedBox(height: 24),
-        if (reports.isNotEmpty) ...[
-          _SectionTitle(
-            title: 'FEEDBACKS DA IA',
-            indexLabel: '01',
-            subtitle:
-                'Analises tecnicas geradas a partir das suas corridas reais',
-          ),
-          const SizedBox(height: 12),
-          ...reports.map((report) => _ReportCard(report: report)),
-        ],
+        _SectionTitle(
+          title: 'RELATÓRIOS SEMANAIS',
+          indexLabel: '01',
+          subtitle: 'Análises semanais de aderência e desempenho',
+        ),
+        const SizedBox(height: 12),
+        ...weeklyReports.map((report) => _WeeklyReportCard(report: report)),
+        const SizedBox(height: 18),
+        Text(
+          'Feedback por corrida → HISTÓRICO > toque na corrida.',
+          style: TextStyle(color: palette.muted, fontSize: 11.5, height: 1.5),
+        ),
       ],
     );
   }
@@ -1559,6 +1554,7 @@ class _TabEmptyState extends StatelessWidget {
 }
 
 class _WeeklySessionRow extends StatelessWidget {
+  final int weekNumber;
   final int dayOfWeek;
   final DateTime dayDate;
   final PlanSession? session;
@@ -1566,6 +1562,7 @@ class _WeeklySessionRow extends StatelessWidget {
   final bool isPast;
 
   const _WeeklySessionRow({
+    required this.weekNumber,
     required this.dayOfWeek,
     required this.dayDate,
     required this.session,
@@ -1652,7 +1649,9 @@ class _WeeklySessionRow extends StatelessWidget {
       statusIcon = Icons.nightlight_outlined;
     }
 
-    return Container(
+    return InkWell(
+      onTap: () => context.push('/training/day/$weekNumber/$dayOfWeek'),
+      child: Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
         color: rowBg,
@@ -1800,6 +1799,7 @@ class _WeeklySessionRow extends StatelessWidget {
             ),
         ],
       ),
+      ),
     );
   }
 
@@ -1835,59 +1835,113 @@ class _MonthlyWeekCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final palette = context.runninPalette;
 
-    return AppPanel(
-      margin: const EdgeInsets.only(bottom: 8),
-      borderColor: status == 'ATUAL'
-          ? palette.primary.withValues(alpha: 0.45)
-          : palette.border,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+    // Nome da FASE em destaque (BUILD/PEAK/DELOAD/BASE/RECUPERAÇÃO).
+    // Inferido do focus que vem de _deriveWeekFocus(week).
+    final phaseLabel = _phaseFromFocus(focus);
+
+    return InkWell(
+      // Clique na week vai pra plan-detail focando essa semana.
+      // (plan-detail tem _jumpToWeek via GlobalKey)
+      onTap: () => context.push('/training/plan-detail?focusWeek=$weekNumber'),
+      child: AppPanel(
+        margin: const EdgeInsets.only(bottom: 8),
+        borderColor: status == 'ATUAL'
+            ? palette.primary.withValues(alpha: 0.45)
+            : palette.border,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 7,
+                          vertical: 3,
+                        ),
+                        color: palette.primary.withValues(alpha: 0.15),
+                        child: Text(
+                          'SEM $weekNumber',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w500,
+                            color: palette.primary,
+                            letterSpacing: 1.0,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        phaseLabel,
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                          color: palette.text,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Foco: $focus',
+                    style: TextStyle(
+                      color: palette.text.withValues(alpha: 0.82),
+                      fontSize: 12.5,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    summary,
+                    style: TextStyle(color: palette.muted, height: 1.5),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 16),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
-                  'Sem $weekNumber  Foco: $focus',
+                  '${totalDistance.toStringAsFixed(0)}K',
                   style: TextStyle(
-                    fontSize: 18,
+                    fontSize: 28,
                     fontWeight: FontWeight.w500,
-                    color: palette.text,
+                    color: palette.secondary,
                   ),
                 ),
-                const SizedBox(height: 8),
                 Text(
-                  summary,
-                  style: TextStyle(color: palette.muted, height: 1.5),
+                  status,
+                  style: TextStyle(
+                    color: statusColor,
+                    fontWeight: FontWeight.w500,
+                    letterSpacing: 0.08,
+                  ),
                 ),
+                const SizedBox(height: 6),
+                Icon(Icons.chevron_right, size: 16, color: palette.muted),
               ],
             ),
-          ),
-          const SizedBox(width: 16),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                '${totalDistance.toStringAsFixed(0)}K',
-                style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.w500,
-                  color: palette.secondary,
-                ),
-              ),
-              Text(
-                status,
-                style: TextStyle(
-                  color: statusColor,
-                  fontWeight: FontWeight.w500,
-                  letterSpacing: 0.08,
-                ),
-              ),
-            ],
-          ),
-        ],
+          ],
+        ),
       ),
     );
+  }
+
+  /// Mapeia o focus livre em um nome de FASE canônico mostrado em CAIXA ALTA.
+  String _phaseFromFocus(String f) {
+    final low = f.toLowerCase();
+    if (low.contains('recup') || low.contains('deload')) return 'DELOAD';
+    if (low.contains('taper')) return 'TAPER';
+    if (low.contains('peak') || low.contains('pico')) return 'PEAK';
+    if (low.contains('build') || low.contains('intervalad') || low.contains('tempo')) {
+      return 'BUILD';
+    }
+    if (low.contains('long')) return 'SPECIFIC';
+    return 'BASE';
   }
 }
 

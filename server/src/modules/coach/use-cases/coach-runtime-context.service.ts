@@ -73,51 +73,73 @@ export class CoachRuntimeContextService {
   async getContext(userId: string): Promise<CoachRuntimeContext> {
     try {
       const db = getFirestore();
+      // Cada fetch é INDEPENDENTE. Antes era Promise.all com try/catch
+      // global → se EXAMS falhava por índice ausente, profile vinha null
+      // e o coach gerava plano genérico ("perfil não fornecido"). Agora
+      // cada um falha isolado e mantemos o resto.
+      const safeFetch = async <T>(label: string, fn: () => Promise<T>, fallback: T): Promise<T> => {
+        try { return await fn(); }
+        catch (err) {
+          logger.warn('coach.runtime_context.partial', {
+            userId, what: label,
+            err: err instanceof Error ? err.message : String(err),
+          });
+          return fallback;
+        }
+      };
       const [profileDoc, plansSnap, runsSnap, examsSnap, ragSnap] = await Promise.all([
-        db.collection('users').doc(userId).get(),
-        db.collection(`users/${userId}/plans`).get(),
-        db.collection(`users/${userId}/runs`)
+        safeFetch('profile', () => db.collection('users').doc(userId).get(), null as any),
+        safeFetch('plans', () => db.collection(`users/${userId}/plans`).get(), { docs: [] } as any),
+        safeFetch('runs', () => db.collection(`users/${userId}/runs`)
           .orderBy('createdAt', 'desc')
           .limit(8)
-          .get(),
-        db.collection(`users/${userId}/exams`)
+          .get(), { docs: [] } as any),
+        safeFetch('exams', () => db.collection(`users/${userId}/exams`)
           .where('deletedAt', '==', null)
           .orderBy('uploadedAt', 'desc')
           .limit(3)
-          .get(),
-        db.collection(`users/${userId}/rag_chunks`).orderBy('updatedAt', 'desc').limit(5).get(),
+          .get(), { docs: [] } as any),
+        safeFetch('rag_chunks', () => db.collection(`users/${userId}/rag_chunks`).orderBy('updatedAt', 'desc').limit(5).get(), { docs: [] } as any),
       ]);
+      // Se profile falhou de vez, sai com profile=null mas mantemos
+      // arrays vazios pro resto.
+      if (!profileDoc) {
+        return { profile: null, currentPlan: null, recentRuns: [], recentExams: [] };
+      }
 
       const profile = profileDoc.exists
         ? ({ id: profileDoc.id, ...profileDoc.data() } as UserProfile)
         : null;
 
-      const plan = latestPlan(plansSnap.docs.map(doc => ({
-        id: doc.id,
-        userId,
-        ...doc.data(),
-      }) as Plan));
+      const plan = latestPlan(
+        (plansSnap.docs as Array<{ id: string; data: () => Record<string, unknown> }>).map((doc) => ({
+          id: doc.id,
+          userId,
+          ...doc.data(),
+        }) as Plan)
+      );
 
-      const runs = runsSnap.docs
-        .map(doc => ({
+      const runs: Run[] = (runsSnap.docs as Array<{ id: string; data: () => Record<string, unknown> }>)
+        .map((doc) => ({
           id: doc.id,
           userId,
           ...doc.data(),
         }) as Run)
-        .filter(run => run.status === 'completed')
+        .filter((run: Run) => run.status === 'completed')
         .slice(0, 5);
 
-      const exams = examsSnap.docs
-        .map(doc => ({
+      type ExamShape = { extractedData: { summary?: string; keyFindings?: unknown[]; recommendations?: unknown[] }; uploadedAt?: string };
+      const exams: ExamShape[] = (examsSnap.docs as Array<{ id: string; data: () => Record<string, unknown> }>)
+        .map((doc) => ({
           id: doc.id,
           userId,
           ...doc.data(),
-        }) as any)
-        .filter((exam: any) => exam.extractedData?.summary)
+        }) as unknown as ExamShape)
+        .filter((exam) => exam.extractedData?.summary)
         .slice(0, 3);
 
-      const ragChunks = ragSnap.docs.map(doc => {
-        const d = doc.data() as Record<string, unknown>;
+      const ragChunks = (ragSnap.docs as Array<{ data: () => Record<string, unknown> }>).map((doc) => {
+        const d = doc.data();
         return {
           text: (d.text as string) ?? '',
           embedding: d.embedding as number[] | undefined,
@@ -163,28 +185,28 @@ export class CoachRuntimeContextService {
               currentWeek: currentPlanWeek(plan),
             }
           : null,
-        recentRuns: runs.map(run => ({
+        recentRuns: runs.map((run: Run) => ({
           type: run.type,
           distanceKm: Number((run.distanceM / 1000).toFixed(2)),
           durationMin: Math.round(run.durationS / 60),
           avgPace: run.avgPace,
           avgBpm: run.avgBpm,
-          completedAt: run.completedAt ?? run.createdAt,
+          completedAt: (run as { completedAt?: string }).completedAt ?? run.createdAt,
         })),
-        recentExams: exams.map(exam => ({
-          summary: exam.extractedData.summary,
-          keyFindings: exam.extractedData.keyFindings || [],
-          recommendations: exam.extractedData.recommendations || [],
-          uploadedAt: exam.uploadedAt,
+        recentExams: exams.map((exam) => ({
+          summary: exam.extractedData.summary ?? '',
+          keyFindings: (exam.extractedData.keyFindings ?? []) as string[],
+          recommendations: (exam.extractedData.recommendations ?? []) as string[],
+          uploadedAt: exam.uploadedAt ?? '',
         })),
         runningKnowledgeContext: {
           name: 'recent_exams',
           description: 'Exames médicos recentes do usuário extraídos via OCR e RAG',
-          chunks: ragChunks.map(chunk => ({
+          chunks: ragChunks.map((chunk: { text: string; updatedAt?: string; examId?: string }) => ({
             relevanceScore: 0.9,
             text: chunk.text,
             metadata: {
-              examId: (chunk as any).examId,
+              examId: chunk.examId,
               uploadedAt: chunk.updatedAt,
             },
           })),
