@@ -15,16 +15,31 @@ import {
   CheckpointWeekMetrics,
   CheckpointWeekRun,
 } from './checkpoint-analysis.strategy';
+import { AppError, NotFoundError } from '@shared/errors/app-error';
 import { logger } from '@shared/logger/logger';
 
-export class CheckpointError extends Error {
-  constructor(
-    message: string,
-    public readonly code: string,
-    public readonly meta?: Record<string, unknown>,
-  ) {
-    super(message);
-    this.name = 'CheckpointError';
+/**
+ * Erro específico: checkpoint dessa semana já foi aplicado. 409.
+ * Carrega `completedAt` no body pra UI mostrar quando o user usou.
+ */
+export class CheckpointAlreadyAppliedError extends AppError {
+  public readonly weekNumber: number;
+  public readonly completedAt?: string;
+  constructor(weekNumber: number, completedAt?: string) {
+    super(
+      'Esse checkpoint já foi aplicado. Próximo ajuste disponível no checkpoint da semana seguinte.',
+      409,
+      'CHECKPOINT_ALREADY_APPLIED',
+    );
+    this.weekNumber = weekNumber;
+    this.completedAt = completedAt;
+  }
+}
+
+/** Plano ainda em geração / falhou. 422 — user precisa aguardar. */
+export class PlanNotReadyError extends AppError {
+  constructor() {
+    super('Plano ainda não está pronto.', 422, 'PLAN_NOT_READY');
   }
 }
 
@@ -59,29 +74,18 @@ export class ApplyCheckpointUseCase {
   }> {
     const plan = await this.planRepo.findById(planId, userId);
     if (!plan) {
-      throw new CheckpointError('Plano não encontrado.', 'PLAN_NOT_FOUND');
+      throw new NotFoundError('Plan');
     }
     if (plan.status !== 'ready') {
-      throw new CheckpointError(
-        'Plano ainda não está pronto.',
-        'PLAN_NOT_READY',
-      );
+      throw new PlanNotReadyError();
     }
 
     const cp = await this.checkpointRepo.findByWeek(planId, weekNumber, userId);
     if (!cp) {
-      throw new CheckpointError(
-        'Checkpoint não existe pra essa semana.',
-        'CHECKPOINT_NOT_FOUND',
-        { weekNumber },
-      );
+      throw new NotFoundError('Checkpoint');
     }
     if (cp.status === 'completed') {
-      throw new CheckpointError(
-        'Esse checkpoint já foi aplicado. Próximo ajuste disponível no checkpoint da semana seguinte.',
-        'CHECKPOINT_ALREADY_APPLIED',
-        { weekNumber, completedAt: cp.completedAt },
-      );
+      throw new CheckpointAlreadyAppliedError(weekNumber, cp.completedAt);
     }
 
     const mergedInputs = mergeInputs(cp.userInputs ?? [], extraInputs);
@@ -179,8 +183,16 @@ export class ApplyCheckpointUseCase {
     }
     const weekStart = new Date(start.getTime() + (weekNumber - 1) * 7 * 86_400_000);
     const weekEnd = new Date(weekStart.getTime() + 7 * 86_400_000);
-    const runsRaw = await this.runRepo.findByDateRange(userId, weekStart, weekEnd);
-    const completed = runsRaw.filter((r: Run) => r.status === 'completed');
+    // Não usamos findByDateRange porque ele exige composite index
+    // (status + createdAt). findByUser retorna em ordem de createdAt
+    // desc; filtramos por data + status em memória — semanas têm poucos
+    // runs (<10), payload pequeno mesmo no limite alto.
+    const recentRuns = await this.runRepo.findByUser(userId, 50);
+    const completed = recentRuns.runs.filter((r: Run) => {
+      if (r.status !== 'completed') return false;
+      const t = new Date(r.createdAt).getTime();
+      return t >= weekStart.getTime() && t < weekEnd.getTime();
+    });
 
     const runs: CheckpointWeekRun[] = completed.map((r) => ({
       date: new Date(r.createdAt).toISOString().slice(0, 10),

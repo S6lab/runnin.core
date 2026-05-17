@@ -7,12 +7,13 @@ import { FirestoreRunRepository } from '@modules/runs/infra/firestore-run.reposi
 import { LlmCheckpointAnalysisStrategy } from '../use-cases/llm-checkpoint-analysis.strategy';
 import {
   ApplyCheckpointUseCase,
-  CheckpointError,
+  CheckpointAlreadyAppliedError,
 } from '../use-cases/apply-checkpoint.use-case';
 import {
   CheckpointInput,
   CheckpointInputType,
 } from '../domain/plan-checkpoint.entity';
+import { NotFoundError } from '@shared/errors/app-error';
 
 const planRepo = new FirestorePlanRepository();
 const checkpointRepo = new FirestorePlanCheckpointRepository();
@@ -84,10 +85,7 @@ export async function getCheckpoint(
     const weekNumber = parseWeekNumber(req, res);
     if (weekNumber == null) return;
     const cp = await checkpointRepo.findByWeek(planId, weekNumber, req.uid);
-    if (!cp) {
-      res.status(404).json({ error: 'not_found', code: 'CHECKPOINT_NOT_FOUND' });
-      return;
-    }
+    if (!cp) throw new NotFoundError('Checkpoint');
     if (!cp.openedAt) {
       await checkpointRepo.update(planId, weekNumber, req.uid, {
         openedAt: new Date().toISOString(),
@@ -111,17 +109,9 @@ export async function submitCheckpointInputs(
     if (weekNumber == null) return;
     const body = SubmitInputsBody.parse(req.body);
     const cp = await checkpointRepo.findByWeek(planId, weekNumber, req.uid);
-    if (!cp) {
-      res.status(404).json({ error: 'not_found', code: 'CHECKPOINT_NOT_FOUND' });
-      return;
-    }
+    if (!cp) throw new NotFoundError('Checkpoint');
     if (cp.status === 'completed') {
-      res.status(409).json({
-        error: 'already_applied',
-        code: 'CHECKPOINT_ALREADY_APPLIED',
-        message: 'Esse checkpoint já foi aplicado.',
-      });
-      return;
+      throw new CheckpointAlreadyAppliedError(weekNumber, cp.completedAt);
     }
     const merged = mergeInputs(cp.userInputs ?? [], body.inputs);
     await checkpointRepo.update(planId, weekNumber, req.uid, {
@@ -156,23 +146,6 @@ export async function applyCheckpointHandler(
       plan: result.plan,
     });
   } catch (err) {
-    if (err instanceof CheckpointError) {
-      const statusCode =
-        err.code === 'PLAN_NOT_FOUND' || err.code === 'CHECKPOINT_NOT_FOUND'
-          ? 404
-          : err.code === 'CHECKPOINT_ALREADY_APPLIED'
-          ? 409
-          : err.code === 'PLAN_NOT_READY'
-          ? 422
-          : 400;
-      res.status(statusCode).json({
-        error: 'checkpoint_error',
-        code: err.code,
-        message: err.message,
-        meta: err.meta,
-      });
-      return;
-    }
     next(err);
   }
 }

@@ -131,17 +131,22 @@ class _CheckpointPageState extends State<CheckpointPage> {
     } on DioException catch (e) {
       if (!mounted) return;
       final code = e.response?.statusCode;
-      final body = e.response?.data is Map ? e.response!.data as Map : null;
+      // Padrão do server: { "error": { "code": "...", "message": "..." } }
+      final raw = e.response?.data is Map ? e.response!.data as Map : null;
+      final err = raw?['error'] is Map ? raw!['error'] as Map : null;
+      final serverMsg = err?['message'] as String?;
+      final errCode = err?['code'] as String?;
       String msg;
-      if (code == 403) {
-        msg =
-            'Ajuste do plano via checkpoint é recurso premium. Assine pra desbloquear.';
-      } else if (code == 409) {
+      if (errCode == 'PREMIUM_REQUIRED' || code == 403) {
+        msg = 'Ajuste do plano via checkpoint é recurso premium. Assine pra desbloquear.';
+      } else if (errCode == 'CHECKPOINT_ALREADY_APPLIED' || code == 409) {
         msg = 'Esse checkpoint já foi aplicado — só 1 ajuste por semana.';
-      } else if (code == 422) {
+      } else if (errCode == 'PLAN_NOT_READY' || code == 422) {
         msg = 'Plano não está pronto. Aguarde geração concluir.';
+      } else if (errCode == 'LLM_RATE_LIMITED' || code == 503) {
+        msg = serverMsg ?? 'Coach sobrecarregado. Tente em alguns segundos.';
       } else {
-        msg = (body?['message'] as String?) ?? 'Erro ao aplicar checkpoint.';
+        msg = serverMsg ?? 'Erro ao aplicar checkpoint.';
       }
       setState(() {
         _applyError = msg;

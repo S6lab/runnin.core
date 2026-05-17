@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { ZodError } from 'zod';
 import { AppError, CooldownError } from '@shared/errors/app-error';
+import { CheckpointAlreadyAppliedError } from '@modules/plans/use-cases/apply-checkpoint.use-case';
 import { logger } from '@shared/logger/logger';
 
 export function errorMiddleware(err: unknown, req: Request, res: Response, _next: NextFunction): void {
@@ -17,6 +18,10 @@ export function errorMiddleware(err: unknown, req: Request, res: Response, _next
     }
     const body: Record<string, unknown> = { code: err.code, message: err.message };
     if (err instanceof CooldownError) body['availableAt'] = err.availableAt;
+    if (err instanceof CheckpointAlreadyAppliedError) {
+      body['weekNumber'] = err.weekNumber;
+      if (err.completedAt) body['completedAt'] = err.completedAt;
+    }
     res.status(err.statusCode).json({ error: body });
     return;
   }
