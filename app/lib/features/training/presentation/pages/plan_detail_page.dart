@@ -235,6 +235,12 @@ class _CollapsibleSection extends StatelessWidget {
               color: accent ? palette.primary : palette.muted),
           title: Text(
             title,
+            // ExpansionTile default truncava o título com ellipsis quando
+            // longo (ex: "AVALIAÇÃO DO OBJETIVO"). softWrap explícito +
+            // maxLines null garante que o texto inteiro caiba quebrando.
+            softWrap: true,
+            overflow: TextOverflow.visible,
+            maxLines: null,
             style: GoogleFonts.jetBrainsMono(
               color: accent ? palette.primary : palette.text,
               fontSize: 11,

@@ -22,7 +22,10 @@ import 'package:runnin/shared/widgets/coach_narrative_card.dart';
 import 'package:runnin/shared/widgets/metric_card.dart';
 import 'package:runnin/features/training/presentation/pages/adjustments_history_page.dart';
 
-enum _TrainingTab { plan, reports, adjustments }
+/// RELATÓRIOS saiu daqui — relatório de uma corrida vive em
+/// /history/run/:id (user clica na corrida). TREINO foca em plano +
+/// histórico de ajustes do mesociclo (checkpoints).
+enum _TrainingTab { plan, adjustments }
 
 enum _PlanMode { weekly, monthly }
 
@@ -801,8 +804,7 @@ class _TrainingWorkspace extends StatelessWidget {
           const SizedBox(height: 12),
           _TopTabs(
             selectedTab: selectedTab,
-            reportsCount: reports.length,
-            adjustmentsCount: 0,
+            adjustmentsCount: plan.revisions.length,
             onChanged: onTabChanged,
           ),
           const SizedBox(height: 16),
@@ -814,7 +816,6 @@ class _TrainingWorkspace extends StatelessWidget {
               onWeekChanged: onWeekChanged,
               onPlanModeChanged: onPlanModeChanged,
             ),
-            _TrainingTab.reports => _ReportsTab(reports: reports, weeklyReports: weeklyReports),
             _TrainingTab.adjustments => AdjustmentsHistoryPage(planId: plan.id),
           },
         ],
@@ -908,13 +909,11 @@ class _PlanContextCard extends StatelessWidget {
 
 class _TopTabs extends StatelessWidget {
   final _TrainingTab selectedTab;
-  final int reportsCount;
   final int adjustmentsCount;
   final ValueChanged<_TrainingTab> onChanged;
 
   const _TopTabs({
     required this.selectedTab,
-    required this.reportsCount,
     required this.adjustmentsCount,
     required this.onChanged,
   });
@@ -928,15 +927,6 @@ class _TopTabs extends StatelessWidget {
             label: 'PLANO',
             selected: selectedTab == _TrainingTab.plan,
             onTap: () => onChanged(_TrainingTab.plan),
-          ),
-        ),
-        const SizedBox(width: 1),
-        Expanded(
-          child: _TabButton(
-            label: 'RELATÓRIOS',
-            count: reportsCount,
-            selected: selectedTab == _TrainingTab.reports,
-            onTap: () => onChanged(_TrainingTab.reports),
           ),
         ),
         const SizedBox(width: 1),

@@ -1,5 +1,5 @@
 import { v4 as uuid } from 'uuid';
-import { Plan, PlanWeek } from '../domain/plan.entity';
+import { Plan, PlanRevision as PlanRevisionLog, PlanWeek } from '../domain/plan.entity';
 import { PlanRepository } from '../domain/plan.repository';
 import { PlanRevision } from '../domain/plan-revision.entity';
 import { PlanRevisionRepository } from '../domain/plan-revision.repository';
@@ -133,8 +133,23 @@ export class ApplyCheckpointUseCase {
         appliedAt: now,
       };
       await this.revisionRepo.save(revision);
+
+      // Adiciona entrada no log embutido `plan.revisions[]` pra renderizar
+      // no PlanDetailPage > _RevisionsSection. O snapshot completo fica no
+      // collection PlanRevision (acessível via /plans/:id/revisions).
+      const logEntry: PlanRevisionLog = {
+        weekNumber,
+        revisedAt: now,
+        trigger: 'checkpoint',
+        summary: buildLogSummary(mergedInputs, oldFollowingWeeks, analysisOut.newWeeks),
+        details: analysisOut.coachExplanation,
+        changes: buildChangesSnapshot(oldFollowingWeeks, analysisOut.newWeeks),
+      };
+      const updatedRevisions = [...(plan.revisions ?? []), logEntry];
+
       await this.planRepo.update(planId, userId, {
         weeks: newPlanWeeks,
+        revisions: updatedRevisions,
         updatedAt: now,
       });
     } else {
@@ -277,4 +292,55 @@ function deriveRequestType(
 function parseISO(s: string): Date | null {
   const d = new Date(`${s}T00:00:00`);
   return isNaN(d.getTime()) ? null : d;
+}
+
+/** Resumo curto (1-2 frases) pra renderizar em _RevisionsSection. */
+function buildLogSummary(
+  inputs: CheckpointInput[],
+  oldWeeks: PlanWeek[],
+  newWeeks: PlanWeek[],
+): string {
+  const oldKm = oldWeeks.reduce(
+    (s, w) => s + w.sessions.reduce((a, x) => a + x.distanceKm, 0),
+    0,
+  );
+  const newKm = newWeeks.reduce(
+    (s, w) => s + w.sessions.reduce((a, x) => a + x.distanceKm, 0),
+    0,
+  );
+  const delta = newKm - oldKm;
+  const deltaStr =
+    Math.abs(delta) < 0.5
+      ? 'volume mantido'
+      : delta > 0
+      ? `volume +${delta.toFixed(1)}km`
+      : `volume ${delta.toFixed(1)}km`;
+  const triggerLabels = inputs.length
+    ? inputs.map((i) => i.type).slice(0, 3).join(', ')
+    : 'sem inputs (análise automática)';
+  return `Checkpoint aplicado — ${triggerLabels}. ${deltaStr} nas semanas seguintes.`;
+}
+
+function buildChangesSnapshot(
+  oldWeeks: PlanWeek[],
+  newWeeks: PlanWeek[],
+): PlanRevisionLog['changes'] {
+  const oldKm = oldWeeks.reduce(
+    (s, w) => s + w.sessions.reduce((a, x) => a + x.distanceKm, 0),
+    0,
+  );
+  const newKm = newWeeks.reduce(
+    (s, w) => s + w.sessions.reduce((a, x) => a + x.distanceKm, 0),
+    0,
+  );
+  const volumeDelta = +(newKm - oldKm).toFixed(1);
+  const oldCount = oldWeeks.reduce((s, w) => s + w.sessions.length, 0);
+  const newCount = newWeeks.reduce((s, w) => s + w.sessions.length, 0);
+  const intensityShift: 'increased' | 'decreased' | 'unchanged' =
+    volumeDelta > 0.5 ? 'increased' : volumeDelta < -0.5 ? 'decreased' : 'unchanged';
+  return {
+    sessionsAdjusted: Math.abs(newCount - oldCount),
+    volumeDelta,
+    intensityShift,
+  };
 }

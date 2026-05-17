@@ -76,7 +76,7 @@ export interface PlanWeek {
 export interface PlanRevision {
   weekNumber: number;             // qual semana foi revisada (1, 2, 3...)
   revisedAt: string;              // ISO timestamp
-  trigger: 'weekly_cron' | 'manual' | 'event_adapt';
+  trigger: 'weekly_cron' | 'manual' | 'event_adapt' | 'checkpoint';
   summary: string;                // texto curto do que mudou (1-2 frases)
   details?: string;               // markdown longo da análise (opcional)
   // Snapshot do que mudou em comparação à versão anterior do plano.

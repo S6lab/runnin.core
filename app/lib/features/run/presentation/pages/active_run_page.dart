@@ -104,11 +104,13 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
             curr.coachAudioBase64 != null && curr.coachAudioBase64!.isNotEmpty,
         listener: (context, state) {
           if (_coachMuted) return;
+          // Sem cap de duração: o cap de 3s cortava áudio do TTS estático
+          // no meio (efeito "travado no nome"). Tamanho do cue é controlado
+          // pelo prompt do server (frases curtas).
           playCoachAudio(
             state.coachAudioBase64!,
             mimeType: state.coachAudioMimeType ?? 'audio/mpeg',
             volume: 1.0,
-            maxDurationMs: 3000,
           ).then((_) => setState(() => _coachAudioPlaying = true));
         },
         child: BlocBuilder<RunBloc, RunState>(
