@@ -896,16 +896,10 @@ class _PlanContextCard extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(height: 8),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton(
-              onPressed: generating ? null : onRegenerate,
-              child: Text(
-                generating ? 'GERANDO NOVO PLANO...' : 'GERAR NOVO PLANO',
-              ),
-            ),
-          ),
+          // "GERAR NOVO PLANO" removido — regenerar plano vira ação restrita
+          // (cooldown 1×/semana). Mantém só "VER PLANO COMPLETO" pra mostrar
+          // o plano que o coach montou. Pra ajustes pontuais existe a aba
+          // AJUSTES (revisão semanal) e auto-adapt pós-corrida.
         ],
       ),
     );
@@ -1501,6 +1495,7 @@ class _WeekChip extends StatelessWidget {
 
 class _SectionTitle extends StatelessWidget {
   final String title;
+  // Mantém na assinatura por compat com call sites; ignorado no render.
   final String indexLabel;
   final String subtitle;
 
@@ -1513,25 +1508,10 @@ class _SectionTitle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final palette = context.runninPalette;
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Text(title, style: context.runninType.displayMd),
-            const SizedBox(width: 6),
-            Text(
-              indexLabel,
-              style: TextStyle(
-                color: palette.primary,
-                fontWeight: FontWeight.w500,
-                fontSize: 10,
-              ),
-            ),
-          ],
-        ),
+        Text(title, style: context.runninType.displayMd),
         const SizedBox(height: 6),
         Text(subtitle, style: TextStyle(color: palette.muted)),
       ],
@@ -1608,45 +1588,82 @@ class _WeeklySessionRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final palette = context.runninPalette;
     final isRest = session == null;
-    final hadPastSession = isPast && !isRest;
+    final hasPlanned = !isRest;
+    final hadPastSession = isPast && hasPlanned;
     final dd = dayDate.day.toString().padLeft(2, '0');
     final mm = dayDate.month.toString().padLeft(2, '0');
     final dayShort = _dayNames[dayOfWeek].substring(0, 3).toUpperCase();
 
-    // Cores e ênfase por status do dia
+    // 4 estados visualmente distintos:
+    //  HOJE              → border PRIMARY grossa + bg primary 0.18 + ícone alvo
+    //  CORRIDA FUTURA    → border SECONDARY 1.5 + bg surface + ícone correr
+    //  CORRIDA PASSADA   → bg primary forte + label OK em background color
+    //  DESCANSO          → border DASHED muted + bg surface + ícone moon
+    //  PASSADO/DESCANSO  → tudo cinza apagado
     final Color cellBg;
     final Color cellFg;
+    final Color rowBg;
+    final Color rowBorder;
+    final double rowBorderWidth;
+    final IconData? statusIcon;
     final String cellLabel;
     if (isToday) {
-      cellBg = palette.primary.withValues(alpha: 0.15);
-      cellFg = palette.primary;
+      cellBg = palette.primary;
+      cellFg = palette.background;
       cellLabel = 'HOJE';
+      rowBg = palette.primary.withValues(alpha: 0.10);
+      rowBorder = palette.primary;
+      rowBorderWidth = 1.5;
+      statusIcon = hasPlanned ? Icons.gps_fixed : Icons.bedtime_outlined;
     } else if (hadPastSession) {
-      // Assumimos concluída — futuro: cruzar com runs
       cellBg = palette.primary.withValues(alpha: 0.85);
       cellFg = palette.background;
       cellLabel = 'OK';
+      rowBg = palette.surface;
+      rowBorder = palette.primary.withValues(alpha: 0.30);
+      rowBorderWidth = 1.0;
+      statusIcon = Icons.check_circle_outline;
     } else if (isPast) {
+      // descanso passado
       cellBg = palette.surfaceAlt;
-      cellFg = palette.muted.withValues(alpha: 0.6);
+      cellFg = palette.muted.withValues(alpha: 0.5);
       cellLabel = dayShort;
+      rowBg = palette.surface.withValues(alpha: 0.6);
+      rowBorder = palette.border.withValues(alpha: 0.5);
+      rowBorderWidth = 1.0;
+      statusIcon = null;
+    } else if (hasPlanned) {
+      // corrida futura
+      cellBg = palette.surface;
+      cellFg = palette.secondary;
+      cellLabel = dayShort;
+      rowBg = palette.surface;
+      rowBorder = palette.secondary.withValues(alpha: 0.55);
+      rowBorderWidth = 1.3;
+      statusIcon = Icons.directions_run;
     } else {
-      cellBg = palette.surfaceAlt;
+      // descanso futuro
+      cellBg = palette.surfaceAlt.withValues(alpha: 0.5);
       cellFg = palette.muted;
       cellLabel = dayShort;
+      rowBg = palette.surface.withValues(alpha: 0.5);
+      rowBorder = palette.border;
+      rowBorderWidth = 1.0;
+      statusIcon = Icons.nightlight_outlined;
     }
 
-    return AppPanel(
+    return Container(
       margin: const EdgeInsets.only(bottom: 8),
-      color: isToday ? palette.surfaceAlt : palette.surface,
-      borderColor: isToday
-          ? palette.primary.withValues(alpha: 0.4)
-          : palette.border,
+      decoration: BoxDecoration(
+        color: rowBg,
+        border: Border.all(color: rowBorder, width: rowBorderWidth),
+      ),
+      padding: const EdgeInsets.all(12),
       child: Row(
         children: [
           Container(
             width: 56,
-            height: 52,
+            height: 56,
             alignment: Alignment.center,
             color: cellBg,
             child: Column(
@@ -1655,8 +1672,10 @@ class _WeeklySessionRow extends StatelessWidget {
                 Text(
                   cellLabel,
                   style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w500,
+                    fontSize: 11,
+                    fontWeight: isToday || hadPastSession
+                        ? FontWeight.w700
+                        : FontWeight.w500,
                     color: cellFg,
                     letterSpacing: 0.5,
                   ),
@@ -1682,6 +1701,10 @@ class _WeeklySessionRow extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.baseline,
                   textBaseline: TextBaseline.alphabetic,
                   children: [
+                    if (statusIcon != null) ...[
+                      Icon(statusIcon, size: 14, color: cellFg),
+                      const SizedBox(width: 6),
+                    ],
                     Text(
                       _dayNames[dayOfWeek],
                       style: TextStyle(
@@ -2029,25 +2052,41 @@ String _buildWeekHeadline(PlanWeek? week) {
   return 'Semana ${week.weekNumber} · ${week.sessions.length} sessoes · ${totalKm.toStringAsFixed(1)} km';
 }
 
+/// Summary per-week derivado dos dados reais — distância total, intensidade
+/// dominante, sessão-chave da semana. Mantém o foco em informação concreta
+/// em vez do template anterior que repetia "vamos combinar easy run..." em
+/// toda semana sem distinção.
 String _buildWeekSummary(PlanWeek? week) {
   if (week == null || week.sessions.isEmpty) {
-    return 'Semana livre no plano. Use para recuperar bem e chegar inteiro no proximo bloco.';
+    return 'Sem sessões nesta semana — descanso ativo recomendado.';
   }
-
   final ordered = [...week.sessions]
     ..sort((a, b) => a.dayOfWeek.compareTo(b.dayOfWeek));
-  final sessionTypes = ordered.map((item) => item.type).toSet().join(', ');
-  final notes = ordered
-      .map((item) => item.notes.trim())
-      .where((item) => item.isNotEmpty)
-      .take(3)
-      .join(' ');
-
-  if (notes.isEmpty) {
-    return 'Nesta semana vamos combinar $sessionTypes. Mantem constancia, respeita os dias leves e chega forte no treino-chave.';
+  final totalKm = ordered.fold<double>(0, (s, x) => s + x.distanceKm);
+  // Sessão-chave: a mais longa (geralmente o long run da semana).
+  final keySession = [...ordered]
+    ..sort((a, b) => b.distanceKm.compareTo(a.distanceKm));
+  final key = keySession.first;
+  final focus = _deriveWeekFocus(week).toLowerCase();
+  final restDays = 7 - ordered.length;
+  // Conta tipos pra mensagem específica.
+  final typeCounts = <String, int>{};
+  for (final s in ordered) {
+    typeCounts.update(s.type, (v) => v + 1, ifAbsent: () => 1);
   }
+  final dominantType = typeCounts.entries.toList()
+    ..sort((a, b) => b.value.compareTo(a.value));
+  final dominant = dominantType.first.key;
 
-  return 'Nesta semana vamos combinar $sessionTypes. $notes';
+  return 'Semana ${week.weekNumber} · foco em $focus. '
+      'Volume: ${totalKm.toStringAsFixed(1)}km em ${ordered.length} sessões + '
+      '$restDays descanso. Sessão-chave: ${key.type} de ${key.distanceKm.toStringAsFixed(1)}km '
+      'na ${_dayNamePt(key.dayOfWeek)}. Predomínio: $dominant.';
+}
+
+String _dayNamePt(int d) {
+  const names = ['', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado', 'domingo'];
+  return names[d.clamp(1, 7)];
 }
 
 String _deriveWeekFocus(PlanWeek week) {

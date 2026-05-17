@@ -209,7 +209,7 @@ class _HomeHeader extends StatelessWidget {
                 style: GoogleFonts.jetBrainsMono(
                   color: palette.background,
                   fontSize: 9,
-                  fontWeight: FontWeight.w500,
+                  fontWeight: FontWeight.w700, // exceção: .AI é bold
                 ),
               ),
             ),
@@ -605,33 +605,15 @@ class _CyberTodayCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                'HOJE',
-                style: GoogleFonts.jetBrainsMono(
-                  color: palette.text,
-                  fontSize: 40,
-                  fontWeight: FontWeight.w500,
-                  letterSpacing: -2,
-                  height: 0.88,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Padding(
-                padding: const EdgeInsets.only(bottom: 4),
-                child: Text(
-                  '0$sessionNum',
-                  style: GoogleFonts.jetBrainsMono(
-                    color: palette.primary,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                    letterSpacing: 0.7,
-                  ),
-                ),
-              ),
-            ],
+          Text(
+            'HOJE',
+            style: GoogleFonts.jetBrainsMono(
+              color: palette.text,
+              fontSize: 40,
+              fontWeight: FontWeight.w500,
+              letterSpacing: -2,
+              height: 0.88,
+            ),
           ),
           const SizedBox(height: 20),
           Row(
@@ -820,14 +802,12 @@ class _NotificationsHubState extends State<_NotificationsHub> {
       return !claimed.contains(n.type);
     }).toList();
 
+    // Hidratação aparece só no STATUS CORPORAL (wired com log de copo).
+    // Removido daqui pra evitar duplicação. `hidratacao` notifications são
+    // ignoradas no display — quando o user precisar agir, vê no STATUS.
+    // ignore: unused_local_variable
+    final _ = hidratacao;
     final groups = <_NotifGroup>[
-      _NotifGroup(
-        label: 'HIDRATAÇÃO',
-        icon: Icons.water_drop_outlined,
-        accent: palette.primary,
-        items: hidratacao,
-        special: _NotifSpecial.hydrationLog,
-      ),
       _NotifGroup(
         label: 'PREPARO NUTRICIONAL',
         icon: Icons.restaurant_outlined,

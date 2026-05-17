@@ -167,7 +167,7 @@ class _SplashWordmark extends StatelessWidget {
               style: GoogleFonts.jetBrainsMono(
                 fontSize: 12,
                 height: 18 / 12,
-                fontWeight: FontWeight.w500,
+                fontWeight: FontWeight.w700, // exceção da regra: .AI é bold
                 color: FigmaColors.bgBase,
               ),
             ),
