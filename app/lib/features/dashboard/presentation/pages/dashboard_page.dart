@@ -31,13 +31,27 @@ class _DashboardView extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const FigmaTopNav(
-            breadcrumb: 'Analytics',
+            breadcrumb: 'PERFIL / ANALYTICS',
             showBackButton: true,
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 16),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 4),
+            child: Text(
+              'ANALYTICS',
+              style: type.displaySm.copyWith(fontSize: 22),
+            ),
+          ),
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-            child: Text('ANALYTICS', style: type.displaySm),
+            child: Text(
+              'Métricas, evolução e plano',
+              style: TextStyle(
+                color: palette.muted,
+                fontSize: 12,
+                height: 1.5,
+              ),
+            ),
           ),
           Expanded(
             child: BlocBuilder<DashboardCubit, DashboardState>(

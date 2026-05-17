@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/shared/widgets/figma/figma_top_nav.dart';
 
@@ -9,13 +10,14 @@ class HealthIndexPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.runninPalette;
     return Scaffold(
-      backgroundColor: FigmaColors.bgBase,
+      backgroundColor: palette.background,
       body: SafeArea(
         child: Column(
           children: [
             FigmaTopNav(
-              breadcrumb: 'Perfil / Saúde',
+              breadcrumb: 'PERFIL / SAÚDE',
               showBackButton: true,
             ),
             Expanded(
@@ -25,15 +27,24 @@ class HealthIndexPage extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const SizedBox(height: AppSpacing.md),
-                    _SectionHeader(label: 'SAÚDE', index: '01'),
+                    Text(
+                      'SAÚDE',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w500,
+                        letterSpacing: -0.44,
+                        color: palette.text,
+                        height: 24.2 / 22,
+                      ),
+                    ),
                     const SizedBox(height: AppSpacing.xs),
                     Text(
                       'BPM, Zonas, Wearable, Exames',
                       style: GoogleFonts.jetBrainsMono(
-                        fontSize: 13,
+                        fontSize: 12,
                         fontWeight: FontWeight.w400,
-                        color: FigmaColors.textMuted,
-                        height: 19.5 / 13,
+                        color: palette.muted,
+                        height: 1.5,
                       ),
                     ),
                     const SizedBox(height: AppSpacing.xl),
@@ -90,23 +101,24 @@ class _HealthCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.runninPalette;
     return GestureDetector(
       onTap: onTap,
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.all(AppSpacing.xl),
         decoration: BoxDecoration(
-          color: FigmaColors.surfaceCard,
-          border: Border.all(color: FigmaColors.borderDefault, width: 1.041),
+          color: palette.surface,
+          border: Border.all(color: palette.border, width: 1.0),
         ),
         child: Row(
           children: [
             Icon(
               Icons.favorite_outline,
-              color: available ? FigmaColors.brandCyan : FigmaColors.textMuted,
-              size: 19.98,
+              color: available ? palette.primary : palette.muted,
+              size: 20,
             ),
-            const SizedBox(width: 11.983),
+            const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -116,70 +128,29 @@ class _HealthCard extends StatelessWidget {
                     style: GoogleFonts.jetBrainsMono(
                       fontSize: 14,
                       fontWeight: FontWeight.w500,
-                      color: FigmaColors.textPrimary,
-                      height: 21 / 14,
+                      color: palette.text,
+                      height: 1.4,
                     ),
                   ),
                   Text(
                     subtitle,
                     style: GoogleFonts.jetBrainsMono(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                      color: FigmaColors.textMuted,
-                      height: 19.5 / 13,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w400,
+                      color: palette.muted,
+                      height: 1.5,
                     ),
                   ),
                 ],
               ),
             ),
-            Text(
-              available ? '↗' : 'em breve',
-              style: GoogleFonts.jetBrainsMono(
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
-                color: FigmaColors.textMuted,
-                height: 19.5 / 13,
-              ),
+            Icon(
+              available ? Icons.chevron_right : Icons.lock_outline,
+              color: palette.muted,
+              size: 18,
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _SectionHeader extends StatelessWidget {
-  const _SectionHeader({required this.label, required this.index});
-  final String label;
-  final String index;
-
-  @override
-  Widget build(BuildContext context) {
-    return RichText(
-      text: TextSpan(
-        children: [
-          TextSpan(
-            text: label,
-            style: GoogleFonts.jetBrainsMono(
-              fontSize: 22,
-              fontWeight: FontWeight.w500,
-              letterSpacing: -0.44,
-              color: FigmaColors.textPrimary,
-              height: 24.2 / 22,
-            ),
-          ),
-          WidgetSpan(
-            alignment: PlaceholderAlignment.top,
-            child: Text(
-              index,
-              style: GoogleFonts.jetBrainsMono(
-                fontSize: 6.6,
-                fontWeight: FontWeight.w400,
-                color: FigmaColors.brandCyan,
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/shared/widgets/figma/figma_top_nav.dart';
 
@@ -9,12 +10,13 @@ class SettingsIndexPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.runninPalette;
     return Scaffold(
-      backgroundColor: FigmaColors.bgBase,
+      backgroundColor: palette.background,
       body: Column(
         children: [
           const FigmaTopNav(
-            breadcrumb: 'Perfil / Ajustes',
+            breadcrumb: 'PERFIL / AJUSTES',
             showBackButton: true,
           ),
           Expanded(
@@ -23,13 +25,35 @@ class SettingsIndexPage extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  const SizedBox(height: AppSpacing.md),
+                  Text(
+                    'AJUSTES',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w500,
+                      letterSpacing: -0.44,
+                      color: palette.text,
+                      height: 24.2 / 22,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.xs),
+                  Text(
+                    'Coach, alertas e unidades',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w400,
+                      color: palette.muted,
+                      height: 1.5,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.xl),
                   _SettingsCard(
                     icon: Icons.smart_toy_outlined,
                     title: 'COACH',
                     subtitle: 'Personalidade, voz, frequência e feedback',
                     onTap: () => context.push('/profile/settings/coach'),
                   ),
-                  const SizedBox(height: AppSpacing.sm),
+                  const SizedBox(height: AppSpacing.md),
                   _SettingsCard(
                     icon: Icons.notifications_outlined,
                     title: 'ALERTAS',
@@ -37,7 +61,7 @@ class SettingsIndexPage extends StatelessWidget {
                     onTap: () =>
                         context.push('/profile/settings/notifications'),
                   ),
-                  const SizedBox(height: AppSpacing.sm),
+                  const SizedBox(height: AppSpacing.md),
                   _SettingsCard(
                     icon: Icons.straighten_outlined,
                     title: 'UNIDADES',
@@ -69,21 +93,19 @@ class _SettingsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.runninPalette;
     return InkWell(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 18),
+        padding: const EdgeInsets.all(AppSpacing.xl),
         decoration: BoxDecoration(
-          color: FigmaColors.surfaceCard,
-          border: Border.all(
-            color: FigmaColors.borderDefault,
-            width: AppDimensions.borderUniversal,
-          ),
+          color: palette.surface,
+          border: Border.all(color: palette.border, width: 1.0),
         ),
         child: Row(
           children: [
-            Icon(icon, color: FigmaColors.brandCyan, size: 22),
-            const SizedBox(width: AppSpacing.md),
+            Icon(icon, color: palette.primary, size: 20),
+            const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -91,31 +113,26 @@ class _SettingsCard extends StatelessWidget {
                   Text(
                     title,
                     style: GoogleFonts.jetBrainsMono(
-                      color: FigmaColors.textPrimary,
-                      fontSize: 12,
+                      color: palette.text,
+                      fontSize: 14,
                       fontWeight: FontWeight.w500,
-                      letterSpacing: 1.0,
+                      height: 1.4,
                     ),
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 2),
                   Text(
                     subtitle,
                     style: GoogleFonts.jetBrainsMono(
-                      color: FigmaColors.textMuted,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w500,
+                      color: palette.muted,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w400,
+                      height: 1.5,
                     ),
                   ),
                 ],
               ),
             ),
-            Text(
-              '↗',
-              style: GoogleFonts.jetBrainsMono(
-                color: FigmaColors.textDim,
-                fontSize: 16,
-              ),
-            ),
+            Icon(Icons.chevron_right, color: palette.muted, size: 18),
           ],
         ),
       ),

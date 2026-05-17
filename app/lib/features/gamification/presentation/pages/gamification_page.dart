@@ -49,7 +49,7 @@ class _GamificationPageState extends State<GamificationPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const FigmaTopNav(
-              breadcrumb: 'Perfil / Gamificação',
+              breadcrumb: 'PERFIL / GAMIFICAÇÃO',
               showBackButton: true,
             ),
             const SizedBox(height: 16),
@@ -547,9 +547,9 @@ class _BadgesTab extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
       children: [
         Text('Badges', style: type.displaySm.copyWith(
-          color: Colors.white,
+          color: context.runninPalette.text,
           fontWeight: FontWeight.w500,
-          fontSize: 24,
+          fontSize: 22,
         )),
         const SizedBox(height: 6),
         Text(
