@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
+import 'package:runnin/features/biometrics/data/health_sync_service.dart';
 import 'package:runnin/features/run/data/datasources/run_remote_datasource.dart';
 import 'package:runnin/features/run/domain/entities/run.dart';
 import 'package:runnin/shared/widgets/app_panel.dart';
@@ -886,22 +887,106 @@ class _ProfileEditor extends StatelessWidget {
         const SizedBox(height: 16),
         FigmaFormFieldLabel(text: 'Wearable'),
         const SizedBox(height: 8),
-        SwitchListTile(
-          value: hasWearable,
-          onChanged: enabled ? onWearableChanged : null,
-          activeThumbColor: palette.primary,
-          activeTrackColor: palette.primary.withValues(alpha: 0.35),
-          contentPadding: EdgeInsets.zero,
-          title: Text(
-            hasWearable ? 'Tenho/pretendo conectar' : 'Depois',
-            style: TextStyle(color: palette.text),
-          ),
-          subtitle: Text(
-            'Isso ainda nao confirma dados conectados. Health Connect / HealthKit sera usado na proxima fase.',
-            style: TextStyle(color: palette.muted),
-          ),
+        _WearableConnectRow(
+          hasWearable: hasWearable,
+          onWearableChanged: onWearableChanged,
         ),
       ],
+    );
+  }
+}
+
+/// Status + atalho pra /profile/health/devices, que é onde mora o flow real
+/// de conexão Apple Health / Health Connect (plugin `health`).
+class _WearableConnectRow extends StatefulWidget {
+  final bool hasWearable;
+  final ValueChanged<bool> onWearableChanged;
+  const _WearableConnectRow({
+    required this.hasWearable,
+    required this.onWearableChanged,
+  });
+
+  @override
+  State<_WearableConnectRow> createState() => _WearableConnectRowState();
+}
+
+class _WearableConnectRowState extends State<_WearableConnectRow> {
+  bool _checking = true;
+  bool _connected = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _refresh();
+  }
+
+  Future<void> _refresh() async {
+    if (!healthSyncService.isSupported) {
+      if (mounted) setState(() { _checking = false; _connected = false; });
+      return;
+    }
+    try {
+      final ok = await healthSyncService.hasPermissions();
+      if (mounted) setState(() { _checking = false; _connected = ok; });
+      // Espelha estado real no perfil persistido (campo hasWearable).
+      if (ok && !widget.hasWearable) widget.onWearableChanged(true);
+    } catch (_) {
+      if (mounted) setState(() { _checking = false; _connected = false; });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    final platformSupported = healthSyncService.isSupported;
+    final statusText = !platformSupported
+        ? 'Sincronização nativa só está disponível em iOS/Android.'
+        : _checking
+            ? 'Checando conexão…'
+            : _connected
+                ? 'Conectado · Apple Health / Health Connect ativo.'
+                : 'Não conectado. Toque pra escolher um dispositivo.';
+    return GestureDetector(
+      onTap: () async {
+        await context.push('/profile/health/devices');
+        if (mounted) await _refresh();
+      },
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: palette.surface,
+          border: Border.all(color: palette.border),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              _connected ? Icons.check_circle_outline : Icons.watch_outlined,
+              size: 20,
+              color: _connected ? palette.primary : palette.muted,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _connected ? 'DISPOSITIVO CONECTADO' : 'CONECTAR DISPOSITIVO',
+                    style: TextStyle(
+                      color: palette.text,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(statusText, style: TextStyle(color: palette.muted, fontSize: 11)),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right, color: palette.muted, size: 18),
+          ],
+        ),
+      ),
     );
   }
 }
