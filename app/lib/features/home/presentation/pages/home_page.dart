@@ -20,6 +20,10 @@ import 'package:runnin/shared/widgets/notification_card.dart';
 import 'package:runnin/shared/widgets/section_heading.dart';
 import 'package:runnin/shared/widgets/week_grid.dart' as wg;
 
+/// Key global do _StatusCorporalSection — usado pelo _NotifItemRow
+/// pra scroll auto quando o user clica na notificação de hidratação.
+final GlobalKey statusCorporalSectionKey = GlobalKey();
+
 // Helper functions for greeting and date formatting (used by both _HeroSection and _CyberStatusBar)
 String _greeting(int hour) {
   if (hour < 12) return 'BOM DIA';
@@ -153,7 +157,10 @@ class _HomeViewState extends State<_HomeView> {
                      const SizedBox(height: 20),
                      // B7 SUP-411 Section 6 — Status Corporal (REAL)
                      ///status corporal implements all 4 metrics with real data: Prontidão, Sono, Carga Muscular, Hidratação
-                     _StatusCorporalSection(data: state.data),
+                     _StatusCorporalSection(
+                       key: statusCorporalSectionKey,
+                       data: state.data,
+                     ),
                     const SizedBox(height: 20),
                     // B8 SUP-412 Section 7 — Última Corrida
                     _UltimaCorrida(run: state.data.latestRun),
@@ -1006,11 +1013,34 @@ class _NotifItemRow extends StatelessWidget {
   final Color accent;
   const _NotifItemRow({required this.notification, required this.accent});
 
+  Future<void> _onTap(BuildContext context) async {
+    // Intercept: notif de hidratação faz scroll pro Status Corporal
+    // (onde tem o "registrar copo"). Não navega pra outra rota.
+    if (notification.type == 'hidratacao') {
+      final key = statusCorporalSectionKey;
+      final ctx = key.currentContext;
+      if (ctx != null) {
+        await Scrollable.ensureVisible(
+          ctx,
+          duration: const Duration(milliseconds: 350),
+          curve: Curves.easeOut,
+          alignment: 0.05,
+        );
+      }
+      return;
+    }
+    if (notification.ctaRoute != null) {
+      context.push(notification.ctaRoute!);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final palette = context.runninPalette;
     return GestureDetector(
-      onTap: notification.ctaRoute == null ? null : () => context.push(notification.ctaRoute!),
+      onTap: (notification.type == 'hidratacao' || notification.ctaRoute != null)
+          ? () => _onTap(context)
+          : null,
       behavior: HitTestBehavior.opaque,
       child: Container(
         padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
@@ -2034,7 +2064,7 @@ class _MonthStats extends StatelessWidget {
 
 class _StatusCorporalSection extends StatefulWidget {
   final HomeData data;
-  const _StatusCorporalSection({required this.data});
+  const _StatusCorporalSection({super.key, required this.data});
 
   @override
   State<_StatusCorporalSection> createState() => _StatusCorporalSectionState();

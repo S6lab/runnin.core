@@ -126,8 +126,11 @@ class _RunDetailPageState extends State<RunDetailPage> {
                               ),
                               const SizedBox(height: 20),
 
-                              // Stats tiles
+                              // Stats tiles (linha 1: distância/tempo/pace)
                               _StatsTiles(run: _run!),
+                              const SizedBox(height: 10),
+                              // Stats tiles (linha 2: BPM méd/máx + calorias)
+                              _BiometricStatsTiles(run: _run!),
                               const SizedBox(height: 20),
 
                               // XP badge
@@ -276,6 +279,44 @@ class _StatsTiles extends StatelessWidget {
           _StatCell(label: 'PACE MÉD.', value: run.avgPace ?? '--:--', unit: '/km'),
         ],
       ),
+    );
+  }
+}
+
+/// 2ª linha de stats: BPM médio, BPM máx, calorias. Só renderiza
+/// cells com valor — pra runs antigas sem esses campos não fica
+/// poluído com "—".
+class _BiometricStatsTiles extends StatelessWidget {
+  final Run run;
+  const _BiometricStatsTiles({required this.run});
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    final cells = <Widget>[];
+    void addCell(String label, String value, String unit) {
+      if (cells.isNotEmpty) {
+        cells.add(Container(width: 1, height: 40, color: palette.border));
+      }
+      cells.add(_StatCell(label: label, value: value, unit: unit));
+    }
+    if (run.avgBpm != null && run.avgBpm! > 0) {
+      addCell('BPM MÉD.', '${run.avgBpm}', 'bpm');
+    }
+    if (run.maxBpm != null && run.maxBpm! > 0) {
+      addCell('BPM MÁX.', '${run.maxBpm}', 'bpm');
+    }
+    if (run.calories != null && run.calories! > 0) {
+      addCell('CALORIAS', '${run.calories}', 'kcal');
+    }
+    if (cells.isEmpty) return const SizedBox.shrink();
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: palette.surface,
+        border: Border.all(color: palette.border),
+      ),
+      child: Row(children: cells),
     );
   }
 }

@@ -128,20 +128,16 @@ class _PlanDetailPageState extends State<PlanDetailPage> {
                             child: _StatsSection(plan: _plan!),
                           ),
                           const SizedBox(height: 10),
-                          // 5. UNIFICADO: Periodização + Semana-a-semana num
-                          //    bloco só. Chips de FASE clicáveis abrem o
-                          //    week tile correspondente abaixo (auto-scroll).
-                          //    Mesociclo narrative (se houver) vai no topo.
+                          // 5. UNIFICADO: só _WeeksBreakdown agora. Cada
+                          //    week tile tem header rico com FASE/foco/km/
+                          //    dates. Removidos os chips duplicados de
+                          //    periodização — informação aparece direto no
+                          //    header colapsado de cada semana.
                           if (_plan!.mesocycleNarrative != null &&
                               _plan!.mesocycleNarrative!.trim().isNotEmpty) ...[
                             _MesocycleCard(text: _plan!.mesocycleNarrative!),
-                            const SizedBox(height: 10),
+                            const SizedBox(height: 14),
                           ],
-                          _PeriodizationChips(
-                            plan: _plan!,
-                            onTapWeek: _jumpToWeek,
-                          ),
-                          const SizedBox(height: 14),
                           _WeeksBreakdown(plan: _plan!, weekKey: _keyFor),
                           // 7. Histórico de revisões (se houver)
                           if (_plan!.revisions.isNotEmpty) ...[
@@ -751,6 +747,16 @@ class _WeekTile extends StatelessWidget {
     return '${dayNames[dayOfWeek]} ${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}';
   }
 
+  /// Range completo da semana (Mon → Sun) calculado a partir de planStartDate.
+  String _weekDateRange(DateTime start, int weekNumber) {
+    final startDow = start.weekday;
+    final weekStart = start.add(Duration(days: (weekNumber - 1) * 7 + (1 - startDow)));
+    final weekEnd = weekStart.add(const Duration(days: 6));
+    String fmt(DateTime d) =>
+        '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}';
+    return '${fmt(weekStart)} – ${fmt(weekEnd)}';
+  }
+
   @override
   Widget build(BuildContext context) {
     final palette = context.runninPalette;
@@ -773,39 +779,53 @@ class _WeekTile extends StatelessWidget {
           childrenPadding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
           iconColor: palette.primary,
           collapsedIconColor: palette.muted,
-          title: Row(
+          title: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 7,
-                  vertical: 3,
-                ),
-                color: palette.primary.withValues(alpha: 0.15),
-                child: Text(
-                  'SEM ${week.weekNumber}',
-                  style: GoogleFonts.jetBrainsMono(
-                    color: palette.primary,
-                    fontSize: 10,
-                    letterSpacing: 1.0,
-                    fontWeight: FontWeight.w500,
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 7,
+                      vertical: 3,
+                    ),
+                    color: palette.primary.withValues(alpha: 0.15),
+                    child: Text(
+                      'SEM ${week.weekNumber}',
+                      style: GoogleFonts.jetBrainsMono(
+                        color: palette.primary,
+                        fontSize: 10,
+                        letterSpacing: 1.0,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
                   ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  _phaseLabelFromFocus(week.focus, week.narrative),
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.jetBrainsMono(
-                    color: palette.text,
-                    fontSize: 12,
-                    letterSpacing: 0.8,
-                    fontWeight: FontWeight.w500,
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _phaseLabelFromFocus(week.focus, week.narrative),
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.jetBrainsMono(
+                        color: palette.text,
+                        fontSize: 12,
+                        letterSpacing: 0.8,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
                   ),
-                ),
+                  Text(
+                    '${week.sessions.length}s · ${wKm.toStringAsFixed(0)}km',
+                    style: GoogleFonts.jetBrainsMono(
+                      color: palette.muted,
+                      fontSize: 10,
+                      letterSpacing: 0.4,
+                    ),
+                  ),
+                ],
               ),
+              const SizedBox(height: 4),
               Text(
-                '${week.sessions.length}s · ${wKm.toStringAsFixed(0)}km',
+                _weekDateRange(planStartDate, week.weekNumber),
                 style: GoogleFonts.jetBrainsMono(
                   color: palette.muted,
                   fontSize: 10,

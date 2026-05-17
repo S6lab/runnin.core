@@ -24,6 +24,10 @@ export interface Run {
   maxBpm?: number;
   cadence?: number;        // spm (steps per minute)
   elevationGain?: number;  // metros
+  /** Calorias estimadas (kcal) gastas na corrida. Calculado em
+   *  CompleteRunUseCase via MET × peso(kg) × tempo(h). MET varia por
+   *  pace: 6.0 (caminhada 5km/h) ... 12.5 (8min/km) ... 16.0 (4min/km). */
+  calories?: number;
   xpEarned?: number;
   coachReportId?: string;
   createdAt: string;

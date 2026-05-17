@@ -251,9 +251,9 @@ export class GeneratePlanUseCase {
           ].join('\n')
         : '(perfil não disponível)';
 
-      const userPrompt = `Você é o Coach AI do runnin. Escreva o RACIONAL do plano (markdown, 700-1000 palavras, DENSO e direto). Vai ser renderizado em seções colapsáveis no app, então cada seção precisa ser completa em si.
+      const userPrompt = `Você é o Coach AI do runnin. Escreva o RACIONAL do plano (markdown, 1000-1400 palavras — equilíbrio entre objetivo e detalhe suficiente pro atleta confiar). Vai ser renderizado em seções colapsáveis no app.
 
-REGRA DE OURO: DENSIDADE > VOLUME. Não enrole. Nada de parágrafo introdutório por seção. Vai direto ao ponto. NUNCA repita ideias entre seções. Se uma seção não tem o que dizer, escreva 1 linha curta.
+REGRA DE OURO: cada seção deve dar AO MENOS 2-3 parágrafos densos OU 4-6 bullets detalhados. Sem enrolação, mas COM substância — o atleta precisa SENTIR que o coach explicou as decisões. Frases de 1 linha só pra seções genuinamente curtas (ex: "Limites"). NUNCA repita ideias entre seções.
 
 # Dados do atleta considerados
 ${profileLines}
@@ -266,29 +266,37 @@ ${sessionsBySection}
 ESTRUTURA OBRIGATÓRIA (use exatamente esses ## headings):
 
 ## Avaliação do objetivo
-2 parágrafos curtos. Se o objetivo é desproporcional, diga direto e cite quanto tempo realista (meses) seria necessário pra chegar lá. Cite o método (Lydiard/Daniels/Maffetone/Polarized 80-20) escolhido em 1 frase.
+2-3 parágrafos densos. Se o objetivo é desproporcional, diga direto e cite quanto tempo realista (meses) seria necessário pra chegar lá. Cite o método (Lydiard/Daniels/Maffetone/Polarized 80-20) escolhido em 1-2 frases, explicando o PRINCÍPIO central — por que esse método combina com este perfil específico.
 
 ## Leitura do perfil (verificações + ajustes)
-Bullets densos, formato OBRIGATÓRIO: "Verifiquei que [DADO COM VALOR] → [AJUSTE FEITO]". Sem parágrafo introdutório. Use 4-6 bullets, um por campo relevante. Exemplos do tom:
-- "Verifiquei que você tem hipertensão e toma betabloqueador → reduzi intensidade em Z3 pra Z2 e tirei intervalado das 3 primeiras semanas."
-- "Verifiquei que você teve cirurgia recente no tendão de Aquiles → eliminei subidas; libero terreno variado só na semana 7."
-- "Verifiquei que você acorda 06:00 e prefere correr de manhã → sessões duras 06:30-07:30."
+Parágrafo introdutório de 1-2 linhas: "Antes de montar, verifiquei: ..." listando os campos chave que considerei. Em seguida 4-6 bullets DENSOS, formato OBRIGATÓRIO: "Verifiquei que [DADO COM VALOR] → [AJUSTE EXPLÍCITO + razão fisiológica/clínica em 1 frase]". Exemplos do tom esperado:
+- "Verifiquei que você tem hipertensão e toma betabloqueador → reduzi intensidade em Z3 pra Z2 e tirei intervalado das 3 primeiras semanas. Beta bloqueia adrenalina e baixa o teto de FC, então suas zonas vão parecer baixas mas estão certas pro seu coração medicado."
+- "Verifiquei que você teve cirurgia recente no tendão de Aquiles → eliminei subidas e dei prioridade pra Easy Run em piso plano nas primeiras 6 semanas. Tendão regenerado precisa de carga constante de baixo impacto antes de aceitar variação."
+- "Verifiquei que você acorda 06:00 e prefere correr de manhã → marquei sessões duras 06:30-07:30, cortisol alto, gap de 2h pro almoço."
 Se um campo está vazio, NÃO mencione.
 
-## Periodização
-Liste EXATAMENTE ${plan.weeksCount} bullets, NEM 1 A MAIS. Formato: "Semana N (FASE): foco específico em 1 frase". Pare na semana ${plan.weeksCount}. NÃO escreva "...continua".
+## Periodização semana a semana
+Liste EXATAMENTE ${plan.weeksCount} bullets, NEM 1 A MAIS. Formato: "**Semana N (FASE)** — volume Xkm. Objetivo específico em 1-2 frases conectando com a semana anterior/próxima". Pare na semana ${plan.weeksCount}. NÃO escreva "...continua". Demonstre como a progressão se constrói (incremento %, deload, transição base→build→peak→taper).
 
 ## Tipos de sessão neste plano
-Lista compacta. Para cada tipo PRESENTE neste plano (cheque o sessionsBySection acima — se Intervalado/Tempo não aparece, NÃO mencione), 1-2 linhas explicando o estímulo fisiológico e onde aparece. Máximo 4 tipos. Sem repetir explicações.
+Para cada tipo PRESENTE neste plano (cheque o sessionsBySection acima — se Intervalado/Tempo não aparece, NÃO mencione), 2-3 linhas explicando o estímulo fisiológico (mitocôndrias, limiar lático, VO2max, economia de corrida) e onde aparece no plano + por quê dessa quantidade. Máximo 4 tipos.
 
 ## Recomendações específicas
-4-5 bullets ESPECÍFICAS ao perfil deste atleta. Cite valores reais (hidratação em L baseada em peso × 0.035, pace alvo baseado em FC, horário baseado em wakeTime). Nada genérico.
+5-6 bullets ESPECÍFICAS ao perfil deste atleta — cada um com VALOR real (não genérico):
+- alimentação considerando peso/objetivo + 1 exemplo de refeição.
+- hidratação: peso × 0.035L com cap em 3.5L (valor calculado pro atleta).
+- recuperação considerando idade (mais velho = sono+alongamento crítico).
+- sinais de alerta considerando condições médicas (cite quais).
+- dica de horário considerando wakeTime/sleepTime/runPeriod (concreto).
 
-## Como vou adaptar
-3 bullets: (1) após cada corrida, (2) a cada semana, (3) em caso de falha recorrente. Cada um 1 linha.
+## Como vou adaptar o plano
+2 parágrafos. Explique:
+- Por corrida: ajusto pace/volume da próxima sessão se BPM/pace ficar fora do esperado.
+- Por semana (cron semanal): reviso aderência + reduzo carga se você falhar 2+ sessões seguidas.
+- Por evento extraordinário: novo exame OCR, lesão reportada, mudança de objetivo → replan imediato.
 
 ## Limites deste plano
-2-3 bullets transparentes: o que precisa de wearable/exames pra melhorar, o que não vou prescrever ainda e por quê.
+3-4 bullets transparentes: o que este plano NÃO promete, o que precisa de wearable/exames pra melhorar, riscos a ter ciência (ex: "não vou prescrever HIIT até semana 4 mesmo se você se sentir pronto, porque seu BMI ainda exige base aeróbica longa").
 
 REGRAS GERAIS:
 - NUNCA invente dados ausentes.

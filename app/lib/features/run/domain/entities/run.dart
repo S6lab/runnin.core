@@ -42,6 +42,11 @@ class Run {
   final int durationS;
   final String? avgPace;
   final int? avgBpm;
+  final int? maxBpm;
+  /// Calorias estimadas (kcal). Calculado pelo server no complete-run
+  /// via MET × peso × tempo. Null se server ainda não suportava no
+  /// momento da corrida (campos retroativos viram null).
+  final int? calories;
   final int? xpEarned;
   final String? coachReportId;
   final List<String>? newBadges;
@@ -61,6 +66,8 @@ class Run {
     required this.durationS,
     this.avgPace,
     this.avgBpm,
+    this.maxBpm,
+    this.calories,
     this.xpEarned,
     this.coachReportId,
     this.newBadges,
@@ -80,14 +87,16 @@ class Run {
     distanceM: (j['distanceM'] as num).toDouble(),
     durationS: j['durationS'] as int,
     avgPace: j['avgPace'] as String?,
-    avgBpm: j['avgBpm'] as int?,
-    xpEarned: j['xpEarned'] as int?,
+    avgBpm: (j['avgBpm'] as num?)?.toInt(),
+    maxBpm: (j['maxBpm'] as num?)?.toInt(),
+    calories: (j['calories'] as num?)?.toInt(),
+    xpEarned: (j['xpEarned'] as num?)?.toInt(),
     coachReportId: j['coachReportId'] as String?,
     newBadges: j['newBadges'] != null
         ? (j['newBadges'] as List).map((e) => e as String).toList()
         : null,
     createdAt: j['createdAt'] as String,
-    elapsedSeconds: j['elapsedSeconds'] as int?,
+    elapsedSeconds: (j['elapsedSeconds'] as num?)?.toInt(),
     elevationGain: (j['elevationGain'] as num?)?.toDouble(),
     deviceInfo: j['deviceInfo'] as String?,
     planSessionId: j['planSessionId'] as String?,

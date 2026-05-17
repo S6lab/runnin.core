@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -72,17 +73,35 @@ class _PlanLoadingPageState extends State<PlanLoadingPage>
           if (mounted) context.go('/home');
           return;
         }
-        await _planDs.generatePlan(
-          goal: profile.goal,
-          level: profile.level,
-          frequency: profile.frequency,
-          startDate: widget.startDate,
-        );
+        try {
+          await _planDs.generatePlan(
+            goal: profile.goal,
+            level: profile.level,
+            frequency: profile.frequency,
+            startDate: widget.startDate,
+          );
+        } on DioException catch (e) {
+          // 409 PLAN_ALREADY_EXISTS = race condition (outro device
+          // disparou). Não é erro real — só seguir polling.
+          if (e.response?.statusCode != 409) rethrow;
+        }
       }
 
       _pollTimer = Timer.periodic(const Duration(seconds: 3), _poll);
+    } on DioException catch (e) {
+      if (mounted) {
+        final code = e.response?.statusCode;
+        final msg = e.response?.data is Map
+            ? (e.response!.data as Map)['message']?.toString()
+            : null;
+        setState(() => _error = code == 422
+            ? (msg ?? 'Onboarding incompleto. Volta pra TREINO e termine os dados.')
+            : 'Falha temporária ($code). Vou pra home e você gera de novo em TREINO.');
+      }
     } catch (e) {
-      if (mounted) setState(() => _error = '$e');
+      if (mounted) {
+        setState(() => _error = 'Erro inesperado: ${e.runtimeType}');
+      }
     }
   }
 
@@ -286,8 +305,9 @@ class _PlanLoadingPageState extends State<PlanLoadingPage>
   }
 }
 
-/// Ícone de TREINO (directions_run) animado deslizando horizontalmente
-/// como se estivesse correndo em loop. Sem dependências extras.
+/// Stick figure correndo estilo Pitfall (Atari). Pernas + braços
+/// alternam em 4 frames durante o ciclo, cabeça com leve bobble e
+/// chão com tracinhos passando pra sensação de velocidade.
 class _RunnerAnimation extends StatelessWidget {
   final Animation<double> animation;
   const _RunnerAnimation({required this.animation});
@@ -296,34 +316,13 @@ class _RunnerAnimation extends StatelessWidget {
   Widget build(BuildContext context) {
     return SizedBox(
       width: double.infinity,
-      height: 80,
+      height: 110,
       child: AnimatedBuilder(
         animation: animation,
         builder: (context, _) {
-          // Desloca horizontalmente em loop: -1 → +1 → reset
-          final t = animation.value;
-          // Pulsar de pulso (bobble pra cima/baixo enquanto corre)
-          final bob = (1 - (2 * t - 1).abs()) * 4; // pico no meio
-          return Stack(
-            children: [
-              Positioned.fill(
-                child: CustomPaint(
-                  painter: _GroundPainter(progress: t),
-                ),
-              ),
-              Positioned(
-                left: 20 + t * 80,
-                top: 18 - bob,
-                child: Transform.rotate(
-                  angle: -0.05,
-                  child: Icon(
-                    Icons.directions_run,
-                    size: 56,
-                    color: FigmaColors.brandCyan,
-                  ),
-                ),
-              ),
-            ],
+          return CustomPaint(
+            painter: _PitfallRunnerPainter(t: animation.value),
+            child: const SizedBox.expand(),
           );
         },
       ),
@@ -331,38 +330,107 @@ class _RunnerAnimation extends StatelessWidget {
   }
 }
 
-class _GroundPainter extends CustomPainter {
-  final double progress;
-  _GroundPainter({required this.progress});
+/// Desenha o runner stick figure + chão com perspectiva.
+/// `t` ∈ [0,1] é a fase do ciclo de corrida.
+class _PitfallRunnerPainter extends CustomPainter {
+  final double t;
+  _PitfallRunnerPainter({required this.t});
 
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = FigmaColors.borderDefault.withValues(alpha: 0.5)
-      ..strokeWidth = 1.5;
-    // Linha do chão
+    final cyan = FigmaColors.brandCyan;
+    final muted = FigmaColors.borderDefault;
+
+    // Chão com tracinhos passando (sensação de movimento)
+    final groundY = size.height - 14;
+    final groundPaint = Paint()
+      ..color = muted.withValues(alpha: 0.4)
+      ..strokeWidth = 1.2;
     canvas.drawLine(
-      Offset(0, size.height - 8),
-      Offset(size.width, size.height - 8),
-      paint,
+      Offset(0, groundY + 8),
+      Offset(size.width, groundY + 8),
+      groundPaint,
     );
-    // Tracinhos passando (dão sensação de movimento)
     final tickPaint = Paint()
-      ..color = FigmaColors.brandCyan.withValues(alpha: 0.6)
-      ..strokeWidth = 2;
-    final offset = (progress * 40) % 40;
-    for (double x = -offset; x < size.width; x += 40) {
+      ..color = cyan.withValues(alpha: 0.55)
+      ..strokeWidth = 2.4
+      ..strokeCap = StrokeCap.round;
+    final offset = (t * 60) % 60;
+    for (double x = -offset; x < size.width; x += 60) {
       canvas.drawLine(
-        Offset(x, size.height - 4),
-        Offset(x + 14, size.height - 4),
+        Offset(x, groundY + 12),
+        Offset(x + 22, groundY + 12),
         tickPaint,
       );
     }
+
+    // Posição do runner: centro horizontal, bobble vertical
+    final cx = size.width / 2;
+    final bobble = (1 - (2 * t - 1).abs()) * 3.0; // 0→3→0 (pico no meio)
+    final hipY = groundY - 28 - bobble;
+
+    // Stick figure
+    final body = Paint()
+      ..color = cyan
+      ..strokeWidth = 3
+      ..strokeCap = StrokeCap.round;
+    final headPaint = Paint()..color = cyan;
+
+    // Cabeça
+    canvas.drawCircle(Offset(cx, hipY - 28), 6, headPaint);
+    // Tronco (leve inclinação à frente)
+    canvas.drawLine(
+      Offset(cx + 1, hipY - 22),
+      Offset(cx - 1, hipY),
+      body,
+    );
+
+    // Pernas + braços alternam baseado em t (2 ciclos por loop)
+    // Ângulo das pernas: ciclo seno
+    final legCycle = (t * 2 * 3.14159 * 2); // 2 ciclos
+    final legA = legCycle;
+    final legB = legCycle + 3.14159;
+    final legLen = 14.0;
+
+    Offset legFoot(double phase) {
+      final dx = legLen * 0.7 *
+          (phase > 3.14159 ? 1 : -1) *
+          (1 - (phase % 3.14159 / 3.14159 - 0.5).abs() * 1.4).clamp(0, 1);
+      final dy = legLen *
+          (0.4 + 0.6 * (phase % 3.14159 / 3.14159));
+      return Offset(cx + dx, hipY + dy);
+    }
+
+    final footA = legFoot(legA % (2 * 3.14159));
+    final footB = legFoot(legB % (2 * 3.14159));
+    canvas.drawLine(Offset(cx, hipY), footA, body);
+    canvas.drawLine(Offset(cx, hipY), footB, body);
+
+    // Braços contralateral (movem oposto às pernas)
+    final shoulderY = hipY - 18;
+    Offset armHand(double phase) {
+      final dx = 10 *
+          (phase > 3.14159 ? -1 : 1) *
+          (1 - (phase % 3.14159 / 3.14159 - 0.5).abs() * 1.4).clamp(0, 1);
+      final dy = 8 - 4 * (phase % 3.14159 / 3.14159);
+      return Offset(cx + dx, shoulderY + dy);
+    }
+
+    canvas.drawLine(
+      Offset(cx, shoulderY),
+      armHand(legB % (2 * 3.14159)),
+      body,
+    );
+    canvas.drawLine(
+      Offset(cx, shoulderY),
+      armHand(legA % (2 * 3.14159)),
+      body,
+    );
   }
 
   @override
-  bool shouldRepaint(covariant _GroundPainter oldDelegate) =>
-      oldDelegate.progress != progress;
+  bool shouldRepaint(covariant _PitfallRunnerPainter oldDelegate) =>
+      oldDelegate.t != t;
 }
 
 class _LinearProgress extends StatelessWidget {

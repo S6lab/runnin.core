@@ -30,6 +30,38 @@ function calcXp(distanceM: number, durationS: number): number {
   return Math.round(km * 10 + minutes * 0.5);
 }
 
+/**
+ * Calorias estimadas (kcal) baseadas em MET × peso(kg) × tempo(h).
+ * MET escalonado por pace (Compendium of Physical Activities, Ainsworth):
+ *  - >7:30/km → 6.0 (caminhada rápida / trote leve)
+ *  - 6-7:30   → 9.0 (corrida easy)
+ *  - 5-6      → 11.0 (corrida moderada)
+ *  - 4:30-5   → 12.5 (tempo run)
+ *  - <4:30    → 14.0+ (intervalado / fast)
+ * Sem peso (perfil incompleto) usa 70kg como média genérica.
+ */
+function calcCalories(distanceM: number, durationS: number, weightKg: number): number {
+  if (distanceM <= 0 || durationS <= 0) return 0;
+  const km = distanceM / 1000;
+  const minutes = durationS / 60;
+  const paceMinPerKm = minutes / km;
+  let met: number;
+  if (paceMinPerKm > 7.5) met = 6.0;
+  else if (paceMinPerKm > 6.0) met = 9.0;
+  else if (paceMinPerKm > 5.0) met = 11.0;
+  else if (paceMinPerKm > 4.5) met = 12.5;
+  else met = 14.0;
+  const hours = durationS / 3600;
+  return Math.round(met * weightKg * hours);
+}
+
+function parseWeightKg(raw: string | undefined): number {
+  if (!raw) return 70; // fallback genérico
+  const n = Number(raw.replace(/[^0-9.]/g, ''));
+  if (!Number.isFinite(n) || n <= 0) return 70;
+  return n;
+}
+
 export class CompleteRunUseCase {
   constructor(
     private readonly runRepo: RunRepository,
@@ -40,6 +72,16 @@ export class CompleteRunUseCase {
     const run = await this.runRepo.findById(runId, userId);
     if (!run) throw new NotFoundError('Run');
 
+    // Busca peso do perfil pra calcular calorias com precisão real.
+    // Sem peso, usa fallback 70kg.
+    let weightKg = 70;
+    try {
+      const userRepo = new FirestoreUserRepository();
+      const getProfileUC = new GetProfileUseCase(userRepo);
+      const profile = await getProfileUC.execute(userId);
+      weightKg = parseWeightKg(profile?.weight);
+    } catch (_) {/* mantém fallback 70kg */}
+
     const updates: Partial<Run> = {
       status: 'completed',
       distanceM: input.distanceM,
@@ -47,6 +89,7 @@ export class CompleteRunUseCase {
       avgPace: formatPace(input.distanceM, input.durationS),
       avgBpm: input.avgBpm,
       maxBpm: input.maxBpm,
+      calories: calcCalories(input.distanceM, input.durationS, weightKg),
       xpEarned: calcXp(input.distanceM, input.durationS),
       completedAt: new Date().toISOString(),
     };
