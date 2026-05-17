@@ -313,12 +313,29 @@ class _TrainingPageState extends State<TrainingPage> {
             if (mounted) setState(() => _generating = false);
             return;
           }
-          planId = await _ds.generatePlan(
-            goal: goal,
-            level: level,
-            frequency: profile.frequency,
-            confirmOverwrite: true,
-          );
+          try {
+            planId = await _ds.generatePlan(
+              goal: goal,
+              level: level,
+              frequency: profile.frequency,
+              confirmOverwrite: true,
+            );
+          } on DioException catch (e2) {
+            // Server enforça 1 substituição/semana. Mensagem amigável com
+            // data de quando libera novamente.
+            // Error middleware embrulha em { error: { code, message, availableAt } }
+            final body = e2.response?.data;
+            final errMap = body is Map ? body['error'] : null;
+            final code = errMap is Map ? errMap['code'] as String? : null;
+            if (e2.response?.statusCode == 403 && code == 'COOLDOWN_ACTIVE') {
+              if (!mounted) return;
+              final availableAt = (errMap as Map)['availableAt'] as String?;
+              await _showCooldownDialog(availableAt);
+              if (mounted) setState(() => _generating = false);
+              return;
+            }
+            rethrow;
+          }
         } else {
           rethrow;
         }
@@ -353,6 +370,46 @@ class _TrainingPageState extends State<TrainingPage> {
         });
       }
     }
+  }
+
+  Future<void> _showCooldownDialog(String? availableAtIso) async {
+    final palette = context.runninPalette;
+    String availableLine;
+    if (availableAtIso != null) {
+      try {
+        final dt = DateTime.parse(availableAtIso).toLocal();
+        final dd = dt.day.toString().padLeft(2, '0');
+        final mm = dt.month.toString().padLeft(2, '0');
+        final hh = dt.hour.toString().padLeft(2, '0');
+        final mi = dt.minute.toString().padLeft(2, '0');
+        final daysLeft = dt.difference(DateTime.now()).inDays;
+        availableLine = daysLeft > 0
+            ? 'Próximo plano disponível em $daysLeft dia${daysLeft == 1 ? '' : 's'} ($dd/$mm às $hh:$mi).'
+            : 'Próximo plano disponível em $dd/$mm às $hh:$mi.';
+      } catch (_) {
+        availableLine = 'Aguarde até a próxima semana pra gerar outro plano.';
+      }
+    } else {
+      availableLine = 'Aguarde até a próxima semana pra gerar outro plano.';
+    }
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: palette.surface,
+        title: const Text('Limite semanal atingido'),
+        content: Text(
+          'No plano Pro você pode gerar um novo plano completo 1× por semana. '
+          'Pra ajustes pontuais (mais carga, troca de dias, etc.), use a '
+          '"Revisão semanal" do plano atual.\n\n$availableLine',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('ENTENDI'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
