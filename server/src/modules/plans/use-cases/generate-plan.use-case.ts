@@ -204,32 +204,47 @@ export class GeneratePlanUseCase {
           ].join('\n')
         : '(perfil não disponível)';
 
-      const userPrompt = `Você é o Coach AI do runnin. Escreva uma explicação clara e direta (markdown, 350-500 palavras max) sobre o plano que VOCÊ acabou de gerar pra esse atleta. Foco: o "porquê" das decisões.
+      const userPrompt = `Você é o Coach AI do runnin. Escreva uma explicação HONESTA e CRÍTICA (markdown, 400-600 palavras) sobre o plano que VOCÊ acabou de gerar. Foco: "por que" das decisões + transparência sobre o GAP entre estado atual do atleta e objetivo declarado.
 
 # Dados do atleta considerados
 ${profileLines}
 
 # Plano gerado
-- Objetivo: ${plan.goal}
-- Nível: ${plan.level}
+- Objetivo declarado: ${plan.goal}
+- Nível declarado: ${plan.level}
 - Duração: ${plan.weeksCount} semanas
 - Volume total: ${totalKm.toFixed(1)}km
 
 ${sessionsBySection}
 
 Estrutura esperada do markdown (use ##/### headings):
-## Estratégia
-2-3 frases sobre como o objetivo + nível dele orientaram a periodização.
-## Como li seu perfil
-3-5 bullets com observações específicas que afetaram o plano (ex: "FC máx alta sugere boa capacidade aeróbica → mais tempo na zona 3").
-## Distribuição da carga
-Bullets sobre como volume + intensidade são distribuídos nas semanas (progressão linear? 3:1? deload?).
-## Recomendações
-3-4 bullets curtos: alimentação, recuperação, sinais de alerta. Específicos ao perfil dele.
-## O que vou ajustar com o tempo
-1 parágrafo curto sobre como cada corrida vai ajustar próximas sessões.
 
-NUNCA invente dados que não estão no perfil. Se um campo está vazio, ignore. Seja conciso. Use "você" pra falar com o atleta.`;
+## Avaliação realista do objetivo
+Aqui você é HONESTO. Se o objetivo declarado é desproporcional ao nível atual (ex: iniciante quer ultra), diga claramente que este plano de ${plan.weeksCount} semanas é a FASE DE FUNDAÇÃO — e quanto tempo realista (em meses) levaria pra chegar no objetivo final. Se objetivo está alinhado ao nível, valide.
+
+## Como li seu perfil
+3-5 bullets com observações específicas que afetaram o plano. Cite gênero/idade/peso/BPM/condições quando aplicáveis (ex: "BMI elevado + lesão recente → walk-runs em vez de corrida contínua"). NÃO repita campos genericamente; explique o IMPACTO de cada um.
+
+## Periodização do mesociclo
+Liste cada semana com a FASE e o objetivo dela. Ex:
+- **Semana 1 (BASE)**: estabelecer rotina, foco em técnica, sem fadiga.
+- **Semana 2 (BASE+)**: aumentar volume em 10%, mesma intensidade.
+- **Semana 3 (BUILD)**: introduzir primeiro estímulo de qualidade leve.
+- **Semana 4 (DELOAD)**: reduzir volume pra absorver o trabalho.
+- ... (continua até a Semana ${plan.weeksCount}).
+Mostra como semanas se conectam, NÃO são independentes.
+
+## Recomendações específicas
+3-4 bullets de ações pro atleta: alimentação, recuperação, sinais de alerta. ESPECÍFICOS ao perfil dele (não genéricos).
+
+## Como vou adaptar ao longo do caminho
+1 parágrafo curto: o que cada corrida concluída vai ajustar nas próximas (volume, intensidade, dias). Mensagem realista — se ele falhar 2 sessões seguidas, eu reduzo automaticamente.
+
+REGRAS:
+- NUNCA invente dados que não estão no perfil. Se um campo está vazio, ignore.
+- Use "você" pra falar com o atleta.
+- Não use emojis.
+- Seja crítico onde precisa ser (se o objetivo é irrealista, diga). Não infle expectativa.`;
 
       const raw = await this.llm.generate(userPrompt, {
         systemPrompt: 'Você é o Coach AI do runnin. Tom: confiante, técnico mas acessível. Não use emojis. Português BR.',
@@ -275,28 +290,31 @@ NUNCA invente dados que não estão no perfil. Se um campo está vazio, ignore. 
         ? `Perfil: ${profile.level}, objetivo "${profile.goal}", ${profile.frequency ?? '?'}x/sem, FC máx ${profile.maxBpm ?? '?'}, persona "${profile.coachPersonality ?? 'motivador'}"`
         : 'Perfil indisponível';
 
-      const userPrompt = `Você é o Coach AI do runnin. Produza narrativas curtas e personalizadas pra cada semana do plano + 1 narrativa de mesociclo. Responda APENAS JSON estritamente neste schema:
+      const userPrompt = `Você é o Coach AI do runnin. Produza narrativas curtas, personalizadas e CONECTADAS entre si. Cada semana é uma peça de uma jornada — explicite a fase e a relação com a anterior/próxima.
+
+Responda APENAS JSON estritamente neste schema:
 
 {
-  "mesocycle": "string (3-4 frases sobre estratégia geral do mesociclo de ${plan.weeksCount} semanas, conectando ao perfil/objetivo)",
+  "mesocycle": "string (3-5 frases). Explique: (1) avaliação realista do gap nível-vs-objetivo (se objetivo é ambicioso pro nível, diga que essas ${plan.weeksCount} semanas são fundação, NÃO o objetivo final); (2) estratégia de periodização (padrão 3:1, deload, blocos); (3) o que ele DEVE esperar ao final dessas semanas (resultado realista).",
   "weeks": [
-    { "weekNumber": 1, "narrative": "string (1-2 frases sobre foco específico da semana 1 e como ela serve o objetivo do user)" },
-    { "weekNumber": 2, "narrative": "string idem" },
+    {
+      "weekNumber": 1,
+      "narrative": "string (2-3 frases). DEVE COMEÇAR com a FASE em colchetes (ex: '[BASE]', '[BUILD]', '[DELOAD]', '[SPECIFIC]', '[PEAK]', '[TAPER]'). Em seguida: foco da semana + sessão-chave + conexão com a próxima ou anterior ('preparamos pra...' / 'consolida o que fez na semana X')."
+    },
     ...
   ]
 }
 
-Regras:
-- weeks tem exatamente ${weeks.length} elementos (1 por semana do plano).
-- Narrativas SÃO personalizadas (nunca template "vamos combinar..."). Cite o ${profile?.level ?? 'nível'} e objetivo quando relevante.
-- Use linguagem direta, "você", português BR.
-- Sem emojis, sem markdown.
-- Mesociclo: por que essas ${plan.weeksCount} semanas nessa ordem? Quando intensifica? Quando recupera?
-- Cada semana: foco da semana + sessão-chave + o que muda da anterior. Conciso.
+REGRAS CRÍTICAS:
+- weeks tem EXATAMENTE ${weeks.length} elementos (1 por semana).
+- A FASE de cada semana SAI do volume relativo: se volume cai 30%+ da semana anterior = DELOAD/TAPER; se mantém com qualidade nova = BUILD; se sobe sem qualidade = BASE+; semana de início (S1) = BASE; última = TAPER ou PEAK conforme objetivo.
+- Mesociclo precisa fazer leitura HONESTA do gap nível→objetivo (não infle expectativa).
+- Cada narrative deve EXPLICITAMENTE conectar com a sequência (não pode ser independente).
+- Sem emojis, sem markdown, "você", PT-BR.
 
 ${profileLine}
 
-Estrutura do plano:
+Estrutura do plano (use volume/qualidade pra inferir a fase de cada semana):
 ${weeksDigest}`;
 
       const raw = await this.llm.generate(userPrompt, {
