@@ -88,7 +88,11 @@ final appRouter = GoRouter(
   navigatorKey: _rootNavigatorKey,
   initialLocation: _initialLocation(),
   redirect: (context, state) {
-    final loggedIn = FirebaseAuth.instance.currentUser != null;
+    final user = FirebaseAuth.instance.currentUser;
+    // Anônimo NÃO conta como logado — desde a remoção do auto-anonymous,
+    // qualquer leftover de sessão anônima deve ser tratado como logged-out
+    // pra empurrar pro /login.
+    final loggedIn = user != null && !user.isAnonymous;
     final loc = state.matchedLocation;
     final path = state.uri.path;
     final onboardingStatus = onboardingCacheStatus();

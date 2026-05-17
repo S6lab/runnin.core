@@ -27,6 +27,14 @@ void main() async {
   final isAdminEntry =
       Uri.base.path == '/admin' || Uri.base.path.startsWith('/admin/');
 
+  // Limpa qualquer sessão anônima leftover (do tempo em que a app fazia
+  // signInAnonymously no boot). Sem isso, o user reabre o app já "logado"
+  // como anônimo, pula a tela /login e cai direto em onboarding.
+  if (!isAdminEntry &&
+      FirebaseAuth.instance.currentUser?.isAnonymous == true) {
+    await FirebaseAuth.instance.signOut();
+  }
+
   if (!isAdminEntry && FirebaseAuth.instance.currentUser != null) {
     try {
       await UserRemoteDatasource().provisionMe();

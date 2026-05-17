@@ -50,8 +50,9 @@ class _SplashPageState extends State<SplashPage>
     await _fadeController.forward();
     if (!mounted) return;
     final user = FirebaseAuth.instance.currentUser;
+    final loggedIn = user != null && !user.isAnonymous;
     if (!mounted) return;
-    context.go(user != null ? '/home' : '/login');
+    context.go(loggedIn ? '/home' : '/login');
   }
 
   @override
