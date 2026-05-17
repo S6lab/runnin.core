@@ -64,6 +64,13 @@ export class CoachMessageUseCase {
   private messageLog: CoachMessageLogRepository = new FirestoreCoachMessageLogRepository();
 
   async generate(ctx: CoachContext, userId: string): Promise<CoachGenerateResult> {
+    // Saudação inicial = caminho leve. Sem LLM, sem RAG, sem runtime
+    // context pesado — só template baseado em nome do user + tipo de
+    // corrida. Salva ~10s no entry da run e elimina ponto de falha.
+    if (ctx.event === 'start') {
+      return this._generateLightweightStart(ctx, userId);
+    }
+
     const [config, runtime, knobs] = await Promise.all([
       this.config.getConfig(),
       this.runtime.getContext(userId),
@@ -154,6 +161,89 @@ export class CoachMessageUseCase {
 
   async listForRun(userId: string, runId: string): Promise<CoachMessageLog[]> {
     return this.messageLog.listByRun(userId, runId);
+  }
+
+  /**
+   * Caminho leve da saudação: nenhum LLM, nenhum RAG, nenhum runtime
+   * context pesado. Só busca o profile pra pegar o primeiro nome + voz
+   * preferida e monta uma frase template baseada no tipo de corrida.
+   *
+   * Trade-off: perde personalização longa (que pra saudação não importa)
+   * em troca de latência baixa (<3s end-to-end) e zero ponto de falha.
+   * Para personalização real, eventos posteriores (km_reached/pace_alert)
+   * seguem usando o pipeline completo.
+   */
+  private async _generateLightweightStart(
+    ctx: CoachContext,
+    userId: string,
+  ): Promise<CoachCueResponse> {
+    let voicePresetId: string | undefined;
+    let firstName: string | null = null;
+    try {
+      const userRepo = (await import('@modules/users/infra/firestore-user.repository')).FirestoreUserRepository;
+      const repo = new userRepo();
+      const profile = await repo.findById(userId);
+      voicePresetId = resolveCoachVoicePreset(profile?.coachVoiceId)?.id;
+      const full = profile?.name?.trim();
+      if (full) firstName = full.split(/\s+/)[0] ?? null;
+    } catch {
+      // Profile read falhou → segue com saudação genérica.
+    }
+
+    const runTypeNice = (ctx.runType ?? 'corrida')
+      .toLowerCase()
+      .replace('free run', 'corrida livre');
+    const greeting = firstName
+      ? `Bora ${firstName}! Começando a ${runTypeNice}. Vou te acompanhar.`
+      : `Bora! Começando a ${runTypeNice}. Vou te acompanhar.`;
+
+    const audio = await this._synthesize(greeting, voicePresetId);
+    return {
+      text: greeting,
+      audioBase64: audio?.audioBase64,
+      audioMimeType: audio?.mimeType,
+    };
+  }
+
+  /**
+   * Cascata de TTS reutilizável: Live → ElevenLabs → Google. Retorna
+   * null se TUDO falhar (cue fica só com texto).
+   */
+  private async _synthesize(
+    text: string,
+    voicePresetId?: string,
+  ): Promise<{ audioBase64: string; mimeType: string } | null> {
+    const config = await this.config.getConfig();
+    if (!config.ttsEnabled) return null;
+    const preset = voicePresetId
+      ? resolveCoachVoicePreset(voicePresetId)
+      : undefined;
+
+    let audio = await this.liveTts.synthesize(text, {
+      voiceId: preset?.id ?? 'coach-bruno',
+    });
+
+    if (!audio && config.ttsProvider === 'elevenlabs') {
+      const voiceId =
+        config.elevenLabsVoiceIds[preset?.id ?? 'coach-bruno'] ||
+        config.elevenLabsVoiceIds['coach-bruno'] ||
+        '';
+      audio = await this.elevenLabsTts.synthesize(text, {
+        voiceId,
+        modelId: config.elevenLabsModelId,
+        outputFormat: config.elevenLabsOutputFormat,
+        languageCode: 'pt',
+      });
+    }
+
+    if (!audio) {
+      audio = await this.googleTts.synthesize(text, {
+        voiceName: preset?.googleVoiceName ?? config.ttsVoiceName,
+        languageCode: preset?.languageCode ?? config.ttsLanguageCode,
+        speakingRate: preset?.speakingRate ?? config.ttsSpeakingRate,
+      });
+    }
+    return audio;
   }
 }
 

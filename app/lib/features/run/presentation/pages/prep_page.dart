@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
 import 'package:runnin/core/audio/coach_audio_player.dart';
 import 'package:runnin/core/theme/app_palette.dart';
@@ -48,6 +49,12 @@ class _PrepViewState extends State<_PrepView> {
 
   List<WarmupExercise> _exercises = const [];
 
+  /// Wizard step: 0=Config (alertas+música+coach), 1=Tipo, 2=Aquecimento.
+  /// Tela 4 (corrida ativa) é /run após INICIAR. Step persistido nada;
+  /// volta sempre pra 0 ao abrir prep.
+  int _step = 0;
+  static const _stepLabels = ['CONFIG', 'TIPO', 'AQUECIMENTO'];
+
   final Map<String, bool> _alerts = {
     'kmAlert': true,
     'paceOutOfRange': true,
@@ -70,6 +77,31 @@ class _PrepViewState extends State<_PrepView> {
     _resolvePremiumThenLoadCue();
     _loadTodaySessionFromPlan();
     _loadExercises();
+    // GPS warm-up: solicita permissão + posição inicial AGORA pra que no
+    // step 4 (corrida) o stream já esteja autorizado e o primeiro fix
+    // tenha menos latência. Falha silenciosa — RunBloc._onStart faz a
+    // checagem oficial de novo.
+    unawaited(_warmGps());
+  }
+
+  Future<void> _warmGps() async {
+    try {
+      final enabled = await Geolocator.isLocationServiceEnabled();
+      if (!enabled) return;
+      var perm = await Geolocator.checkPermission();
+      if (perm == LocationPermission.denied) {
+        perm = await Geolocator.requestPermission();
+      }
+      if (perm == LocationPermission.denied ||
+          perm == LocationPermission.deniedForever) {
+        return;
+      }
+      // Posição inicial cacheada pelo OS — corta primeiro fix do stream
+      // na tela ativa em ~2-5s.
+      await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
+      );
+    } catch (_) {/* warm-up best-effort */}
   }
 
   Future<void> _loadTodaySessionFromPlan() async {
@@ -223,142 +255,232 @@ class _PrepViewState extends State<_PrepView> {
       },
       child: Scaffold(
         backgroundColor: palette.background,
-        appBar: const RunninAppBar(title: 'PREPARAR CORRIDA'),
+        appBar: RunninAppBar(
+          title: 'PREPARAR · ${_step + 1}/3 ${_stepLabels[_step]}',
+        ),
         body: Padding(
           padding: const EdgeInsets.all(24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              _StepProgressBar(step: _step, total: 3),
+              const SizedBox(height: 16),
               Expanded(
                 child: SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('COMO VOCÊ VAI CORRER HOJE?', style: type.labelCaps),
-                      const SizedBox(height: 12),
-                      // Premium + plano + sessão hoje → 2 opções
-                      // (Sessão do plano OU Free Run).
-                      // Sem isso → só Free Run.
-                      if (_planTodaySession != null && _isPro == true) ...[
-                        _RunModeCard(
-                          icon: Icons.assignment_outlined,
-                          title: _planTodaySession!.type.toUpperCase(),
-                          subtitle:
-                              'SESSÃO DO PLANO DE HOJE · ${_planTodaySession!.distanceKm.toStringAsFixed(1)}km'
-                              '${_planTodaySession!.targetPace != null ? " · ${_planTodaySession!.targetPace}/km" : ""}'
-                              '${_planTodaySession!.durationMin != null ? " · ~${_planTodaySession!.durationMin!.round()}min" : ""}',
-                          description: _planTodaySession!.notes.isNotEmpty
-                              ? _planTodaySession!.notes
-                              : 'Sessão estruturada pra seu objetivo. Coach acompanha pace alvo e BPM.',
-                          selected: _selectedType == _planTodaySession!.type,
-                          accent: true,
-                          onTap: () => _selectType(_planTodaySession!.type),
-                        ),
-                        const SizedBox(height: 10),
-                        _RunModeCard(
-                          icon: Icons.directions_run_outlined,
-                          title: 'FREE RUN',
-                          subtitle: 'Corrida livre, sem meta',
-                          description:
-                              'Sai sem protocolo. O coach observa o que você faz e ajusta a próxima sessão do plano com base nesses dados.',
-                          selected: _selectedType == 'Free Run',
-                          accent: false,
-                          onTap: () => _selectType('Free Run'),
-                        ),
-                      ] else
-                        _RunModeCard(
-                          icon: Icons.directions_run_outlined,
-                          title: 'FREE RUN',
-                          subtitle: 'Corrida livre, sem meta',
-                          description: _isPro == true
-                              ? 'Não há sessão planejada pra hoje. Free run registra a corrida e ajusta o plano.'
-                              : 'Versão grátis. Plano AI personalizado é premium — assine pra ter sessões estruturadas.',
-                          selected: true,
-                          accent: false,
-                          onTap: () => _selectType('Free Run'),
-                        ),
-                      const SizedBox(height: 14),
-                      if (_isPro == false)
-                        _PreRunCoachLockedCard(
-                          onTap: () => context.push('/profile'),
-                        )
-                      else
-                        _PreRunCoachCard(
-                          loading: _coachLoading,
-                          cue: _coachCue,
-                          muted: _coachMuted,
-                          onToggleMute: () =>
-                              setState(() => _coachMuted = !_coachMuted),
-                          onRefresh: _requestPreRunCue,
-                        ),
-
-                      const SizedBox(height: 24),
-                      Text('AQUECIMENTO', style: type.labelCaps),
-                      const SizedBox(height: 12),
-                      ..._exercises.map(
-                        (ex) => _WarmupExerciseTile(exercise: ex),
-                      ),
-
-                      const SizedBox(height: 24),
-                      Text('ALERTAS PRÉ-CORRIDA', style: type.labelCaps),
-                      const SizedBox(height: 8),
-                      ..._alerts.entries.map(
-                        (e) => _AlertToggleRow(
-                          label: _alertLabels[e.key] ?? e.key,
-                          value: e.value,
-                          onChanged: (v) => _toggleAlert(e.key, v),
-                        ),
-                      ),
-
-                      const SizedBox(height: 24),
-                      Text('MÚSICA', style: type.labelCaps),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: _MusicProvider.values.map((p) {
-                          return Expanded(
-                            child: Padding(
-                              padding: EdgeInsets.only(
-                                right: p != _MusicProvider.values.last ? 8 : 0,
-                              ),
-                              child: _MusicProviderButton(
-                                provider: p,
-                                onTap: () => _openMusicApp(p),
-                              ),
-                            ),
-                          );
-                        }).toList(),
-                      ),
-                    ],
-                  ),
+                  child: switch (_step) {
+                    0 => _buildConfigStep(context, type),
+                    1 => _buildTypeStep(context, type),
+                    _ => _buildWarmupStep(context, type),
+                  },
                 ),
               ),
-              const SizedBox(height: 20),
-              BlocBuilder<RunBloc, RunState>(
-                builder: (context, state) => SizedBox(
-                  width: double.infinity,
-                  height: 52,
-                  child: ElevatedButton(
-                    onPressed: state.status == RunStatus.starting
-                        ? null
-                        : () {
-                            context.read<RunBloc>().add(
-                              StartRun(type: _selectedType),
-                            );
-                          },
-                    child: state.status == RunStatus.starting
-                        ? CircularProgressIndicator(
-                            color: palette.background,
-                            strokeWidth: 2,
-                          )
-                        : const Text('INICIAR CORRIDA'),
-                  ),
-                ),
-              ),
+              const SizedBox(height: 16),
+              _buildStepNav(context, palette),
               const SizedBox(height: 12),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  // ─── Step 1: Config (coach + alertas + música) ──────────────────
+  Widget _buildConfigStep(BuildContext context, RunninTypography type) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('COACH', style: type.labelCaps),
+        const SizedBox(height: 12),
+        if (_isPro == false)
+          _PreRunCoachLockedCard(onTap: () => context.push('/profile'))
+        else
+          _PreRunCoachCard(
+            loading: _coachLoading,
+            cue: _coachCue,
+            muted: _coachMuted,
+            onToggleMute: () => setState(() => _coachMuted = !_coachMuted),
+            onRefresh: _requestPreRunCue,
+          ),
+        const SizedBox(height: 24),
+        Text('ALERTAS PRÉ-CORRIDA', style: type.labelCaps),
+        const SizedBox(height: 8),
+        ..._alerts.entries.map(
+          (e) => _AlertToggleRow(
+            label: _alertLabels[e.key] ?? e.key,
+            value: e.value,
+            onChanged: (v) => _toggleAlert(e.key, v),
+          ),
+        ),
+        const SizedBox(height: 24),
+        Text('MÚSICA', style: type.labelCaps),
+        const SizedBox(height: 12),
+        Row(
+          children: _MusicProvider.values.map((p) {
+            return Expanded(
+              child: Padding(
+                padding: EdgeInsets.only(
+                  right: p != _MusicProvider.values.last ? 8 : 0,
+                ),
+                child: _MusicProviderButton(
+                  provider: p,
+                  onTap: () => _openMusicApp(p),
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+      ],
+    );
+  }
+
+  // ─── Step 2: Tipo de corrida ────────────────────────────────────
+  Widget _buildTypeStep(BuildContext context, RunninTypography type) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('COMO VOCÊ VAI CORRER HOJE?', style: type.labelCaps),
+        const SizedBox(height: 12),
+        if (_planTodaySession != null && _isPro == true) ...[
+          _RunModeCard(
+            icon: Icons.assignment_outlined,
+            title: _planTodaySession!.type.toUpperCase(),
+            subtitle:
+                'SESSÃO DO PLANO DE HOJE · ${_planTodaySession!.distanceKm.toStringAsFixed(1)}km'
+                '${_planTodaySession!.targetPace != null ? " · ${_planTodaySession!.targetPace}/km" : ""}'
+                '${_planTodaySession!.durationMin != null ? " · ~${_planTodaySession!.durationMin!.round()}min" : ""}',
+            description: _planTodaySession!.notes.isNotEmpty
+                ? _planTodaySession!.notes
+                : 'Sessão estruturada pra seu objetivo. Coach acompanha pace alvo e BPM.',
+            selected: _selectedType == _planTodaySession!.type,
+            accent: true,
+            onTap: () => _selectType(_planTodaySession!.type),
+          ),
+          const SizedBox(height: 10),
+          _RunModeCard(
+            icon: Icons.directions_run_outlined,
+            title: 'FREE RUN',
+            subtitle: 'Corrida livre, sem meta',
+            description:
+                'Sai sem protocolo. O coach observa o que você faz e ajusta a próxima sessão do plano com base nesses dados.',
+            selected: _selectedType == 'Free Run',
+            accent: false,
+            onTap: () => _selectType('Free Run'),
+          ),
+        ] else
+          _RunModeCard(
+            icon: Icons.directions_run_outlined,
+            title: 'FREE RUN',
+            subtitle: 'Corrida livre, sem meta',
+            description: _isPro == true
+                ? 'Não há sessão planejada pra hoje. Free run registra a corrida e ajusta o plano.'
+                : 'Versão grátis. Plano AI personalizado é premium — assine pra ter sessões estruturadas.',
+            selected: true,
+            accent: false,
+            onTap: () => _selectType('Free Run'),
+          ),
+      ],
+    );
+  }
+
+  // ─── Step 3: Aquecimento ────────────────────────────────────────
+  Widget _buildWarmupStep(BuildContext context, RunninTypography type) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('AQUECIMENTO', style: type.labelCaps),
+        const SizedBox(height: 12),
+        if (_exercises.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 24),
+            child: Text(
+              'Sem exercícios específicos pra esse tipo. Faça 5min de trote leve + mobilidade básica de quadril/tornozelo antes de começar.',
+              style: TextStyle(
+                color: context.runninPalette.muted,
+                fontSize: 13,
+                height: 1.5,
+              ),
+            ),
+          )
+        else
+          ..._exercises.map((ex) => _WarmupExerciseTile(exercise: ex)),
+      ],
+    );
+  }
+
+  // ─── Bottom navigation ──────────────────────────────────────────
+  Widget _buildStepNav(BuildContext context, RunninPalette palette) {
+    final isLast = _step == 2;
+    return BlocBuilder<RunBloc, RunState>(
+      builder: (context, state) {
+        final starting = state.status == RunStatus.starting;
+        return Row(
+          children: [
+            if (_step > 0) ...[
+              Expanded(
+                child: SizedBox(
+                  height: 52,
+                  child: OutlinedButton(
+                    onPressed: starting ? null : () => setState(() => _step--),
+                    style: OutlinedButton.styleFrom(
+                      side: BorderSide(color: palette.border),
+                      shape: const RoundedRectangleBorder(
+                        borderRadius: BorderRadius.zero,
+                      ),
+                    ),
+                    child: Text('VOLTAR', style: TextStyle(color: palette.muted)),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+            ],
+            Expanded(
+              flex: _step == 0 ? 1 : 2,
+              child: SizedBox(
+                height: 52,
+                child: ElevatedButton(
+                  onPressed: starting
+                      ? null
+                      : isLast
+                          ? () => context.read<RunBloc>().add(
+                                StartRun(type: _selectedType),
+                              )
+                          : () => setState(() => _step++),
+                  child: starting
+                      ? CircularProgressIndicator(
+                          color: palette.background,
+                          strokeWidth: 2,
+                        )
+                      : Text(isLast ? 'INICIAR CORRIDA' : 'CONTINUAR'),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// Barra de progresso visual do wizard. 3 segments, ativo destacado.
+class _StepProgressBar extends StatelessWidget {
+  final int step;
+  final int total;
+  const _StepProgressBar({required this.step, required this.total});
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    return Row(
+      children: List.generate(total, (i) {
+        final active = i <= step;
+        return Expanded(
+          child: Container(
+            margin: EdgeInsets.only(right: i < total - 1 ? 6 : 0),
+            height: 3,
+            color: active ? palette.primary : palette.border,
+          ),
+        );
+      }),
     );
   }
 }
