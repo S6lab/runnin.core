@@ -275,6 +275,29 @@ export async function postDiagnoseRegeneratePlan(req: Request, res: Response, ne
 }
 
 /**
+ * POST /admin/diagnose/weekly-revise?email=X — dispara manualmente a
+ * revisão semanal do plano do user. Útil pra testar o flow antes do
+ * cron semanal estar wired no Cloud Scheduler.
+ */
+export async function postDiagnoseWeeklyRevise(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const email = (req.query.email as string | undefined)?.trim();
+    if (!email) {
+      res.status(400).json({ error: 'email query param required' });
+      return;
+    }
+    const auth = getAuth();
+    const user = await auth.getUserByEmail(email);
+
+    const { container } = await import('@shared/container');
+    const result = await container.useCases.adaptPlan.executeWeeklyRevision(user.uid);
+    res.json({ ok: true, userId: user.uid, ...result });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
  * GET /admin/diagnose/user?email=X — devolve profile + último plano + stats
  * pra debug rápido sem precisar de ADC local. Protegido por X-Cron-Token.
  */

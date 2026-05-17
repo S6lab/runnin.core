@@ -3179,35 +3179,17 @@ class _HeroLiveClockState extends State<_HeroLiveClock> {
 
   @override
   Widget build(BuildContext context) {
-    final date = '${_two(_now.day)}/${_two(_now.month)}';
     final time = '${_two(_now.hour)}:${_two(_now.minute)}:${_two(_now.second)}';
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          date,
-          style: GoogleFonts.jetBrainsMono(
-            fontSize: 14,
-            fontWeight: FontWeight.w500,
-            color: widget.accent,
-            letterSpacing: 0.6,
-            height: 1.1,
-          ),
-        ),
-        const SizedBox(height: 2),
-        Text(
-          time,
-          style: GoogleFonts.jetBrainsMono(
-            fontSize: 13,
-            fontWeight: FontWeight.w400,
-            color: Colors.white.withValues(alpha: 0.75),
-            letterSpacing: 0.4,
-            height: 1.0,
-          ),
-        ),
-      ],
+    return Text(
+      time,
+      style: GoogleFonts.jetBrainsMono(
+        fontSize: 20,
+        fontWeight: FontWeight.w500,
+        color: widget.accent,
+        letterSpacing: 0.6,
+        height: 1.0,
+      ),
     );
   }
 }

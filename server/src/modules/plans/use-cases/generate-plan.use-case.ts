@@ -205,7 +205,9 @@ export class GeneratePlanUseCase {
           ].join('\n')
         : '(perfil não disponível)';
 
-      const userPrompt = `Você é o Coach AI do runnin. Escreva uma explicação HONESTA e CRÍTICA (markdown, 400-600 palavras) sobre o plano que VOCÊ acabou de gerar. Foco: "por que" das decisões + transparência sobre o GAP entre estado atual do atleta e objetivo declarado.
+      const userPrompt = `Você é o Coach AI do runnin. Escreva uma explicação DETALHADA, HONESTA E CRÍTICA (markdown, 1200-1800 palavras) sobre o plano que VOCÊ acabou de gerar.
+
+Este texto é o que garante o atleta confiar no plano: ele precisa SENTIR que o coach pensou nele especificamente, com critério metodológico, transparência sobre limites, e visão clara de como o plano vai evoluir.
 
 # Dados do atleta considerados
 ${profileLines}
@@ -218,38 +220,50 @@ ${profileLines}
 
 ${sessionsBySection}
 
-Estrutura esperada do markdown (use ##/### headings):
+Estrutura esperada do markdown (use ##/### headings, parágrafos de verdade):
 
-## Avaliação realista do objetivo
-Aqui você é HONESTO. Se o objetivo declarado é desproporcional ao nível atual (ex: iniciante quer ultra), diga claramente que este plano de ${plan.weeksCount} semanas é a FASE DE FUNDAÇÃO — e quanto tempo realista (em meses) levaria pra chegar no objetivo final. Se objetivo está alinhado ao nível, valide.
+## Avaliação realista do seu objetivo
+2-3 parágrafos. Aqui você é HONESTO. Se o objetivo declarado é desproporcional ao nível atual (ex: iniciante quer ultra), diga claramente que este plano de ${plan.weeksCount} semanas é a FASE DE FUNDAÇÃO — e quanto tempo realista (em meses) levaria pra chegar no objetivo final. Cite literatura/método (Lydiard, Daniels, Maffetone, Pfitzinger) quando for relevante pra justificar a decisão. Se objetivo está alinhado ao nível, valide com critério.
 
-## Como li seu perfil
-3-5 bullets com observações específicas que afetaram o plano. Cite gênero/idade/peso/BPM/condições quando aplicáveis (ex: "BMI elevado + lesão recente → walk-runs em vez de corrida contínua"). NÃO repita campos genericamente; explique o IMPACTO de cada um.
+## Como li o seu perfil
+Parágrafo introdutório curto + 5-8 bullets DENSOS. Cada bullet explica COMO um campo específico (idade, peso, BPM, condição médica, gênero, janela do dia) ALTEROU as decisões do plano. Ex: "Hipertensão + betabloqueador → reduzi intensidade em Z3 pra Z2 e tirei intervalado das primeiras 3 semanas; suas zonas de FC vão parecer baixas mas são corretas pro seu coração medicado." NUNCA bullets genéricos.
 
-## Periodização do mesociclo
-Liste cada semana com a FASE e o objetivo dela. Ex:
-- **Semana 1 (BASE)**: estabelecer rotina, foco em técnica, sem fadiga.
-- **Semana 2 (BASE+)**: aumentar volume em 10%, mesma intensidade.
-- **Semana 3 (BUILD)**: introduzir primeiro estímulo de qualidade leve.
-- **Semana 4 (DELOAD)**: reduzir volume pra absorver o trabalho.
-- ... (continua até a Semana ${plan.weeksCount}).
-Mostra como semanas se conectam, NÃO são independentes.
+## Metodologia que escolhi pra você
+2-3 parágrafos explicando QUAL método de treino estruturou este plano (periodização linear 3:1, base aeróbica de Lydiard, polarized 80/20, MAF de Maffetone, etc.) e POR QUE esse método combina com SEU perfil + objetivo. Cite o nome do método, princípio central, e tradução prática pro que ele vai sentir.
 
-## Recomendações específicas
-3-4 bullets de ações pro atleta: alimentação, recuperação, sinais de alerta. ESPECÍFICOS ao perfil dele (não genéricos).
+## Periodização semana a semana
+Tabela mental detalhada — liste TODAS as semanas com FASE + objetivo + carga estimada:
+- **Semana 1 (FASE_NOME)** — Volume Xkm. Objetivo: ...
+- **Semana 2 (FASE_NOME)** — Volume Xkm. Objetivo: ...
+- ... (continua até Semana ${plan.weeksCount})
+Cada semana é CONSEQUÊNCIA da anterior. Explique a lógica de progressão (incremento %, ciclo de deload, transição base→specific→peak→taper).
 
-## Como vou adaptar ao longo do caminho
-1 parágrafo curto: o que cada corrida concluída vai ajustar nas próximas (volume, intensidade, dias). Mensagem realista — se ele falhar 2 sessões seguidas, eu reduzo automaticamente.
+## O que cada tipo de sessão faz no seu corpo
+3-4 parágrafos breves. Para cada tipo de treino presente no plano (Easy Run, Long Run, Tempo, Intervalado, Cross), explique o estímulo fisiológico (mitocôndrias, limiar lático, VO2max, economia de corrida) e onde no plano ele aparece e por quê.
+
+## Recomendações específicas pra você
+5-7 bullets de ações ESPECÍFICAS — alimentação considerando peso/objetivo, hidratação considerando peso × 0.035L, recuperação considerando idade, sinais de alerta considerando condições médicas, dica de horário considerando wakeTime/sleepTime/runPeriod. Nada genérico.
+
+## Como vou adaptar o seu plano
+2 parágrafos. Explique o sistema de adaptação:
+- A cada CORRIDA CONCLUÍDA: ajusto volume/pace da próxima sessão se BPM ou pace ficou fora do esperado.
+- A cada SEMANA COMPLETA: reviso a semana seguinte considerando aderência, recuperação, lesões reportadas e novos exames carregados.
+- A cada FALHA RECORRENTE (2 sessões seguidas perdidas): reduzo carga automaticamente e te mando alerta.
+Mensagem realista: o plano NÃO é estático.
+
+## O que NÃO vou fazer
+3-4 bullets de transparência sobre LIMITES — o que este plano não promete, o que ainda precisa de wearable/exames pra melhorar, riscos que você precisa ter ciência (ex: "não vou prescrever HIIT até semana 4 mesmo se você se sentir pronto, porque seu BMI ainda exige base aeróbica longa primeiro").
 
 REGRAS:
-- NUNCA invente dados que não estão no perfil. Se um campo está vazio, ignore.
+- NUNCA invente dados que não estão no perfil. Se um campo está vazio, ignore (não escreva "FC máx: não informado").
 - Use "você" pra falar com o atleta.
 - Não use emojis.
-- Seja crítico onde precisa ser (se o objetivo é irrealista, diga). Não infle expectativa.`;
+- Linguagem técnica + acessível. Não simplifica demais — o atleta quer SENTIR que você sabe do que está falando.
+- Seja crítico onde precisa ser. Se o objetivo é irrealista, diga sem rodeios. Não infle expectativa.`;
 
       const raw = await this.llm.generate(userPrompt, {
-        systemPrompt: 'Você é o Coach AI do runnin. Tom: confiante, técnico mas acessível. Não use emojis. Português BR.',
-        maxTokens: 1200,
+        systemPrompt: 'Você é o Coach AI do runnin. Tom: confiante, técnico mas acessível. Profundidade > brevidade. Não use emojis. Português BR.',
+        maxTokens: 4000,
         temperature: 0.4,
       });
 
@@ -460,14 +474,14 @@ ${repaired}`,
         notes: session.notes,
       }) satisfies PlanSession);
 
-      let filtered = allSessions;
-      if (weekIndex === 0) {
-        const futureOnly = allSessions.filter(s => s.dayOfWeek >= todayDow);
-        // Só aplica o filtro se ainda sobrar pelo menos 1 sessão futura.
-        // Caso contrário, mantém tudo (atleta ficará com sessões "perdidas"
-        // visualmente — preferível a uma semana 1 vazia que parece bug).
-        filtered = futureOnly.length > 0 ? futureOnly : allSessions;
-      }
+      // Week 1: descarta SEMPRE sessões com dayOfWeek < hoje (LLM não deveria
+      // ter gerado, mas garante). Não há fallback "manter tudo" — sessão
+      // passada na week 1 confunde o usuário (parece que o plano "atrasou").
+      // Se week 1 ficar vazia, paciência: o usuário começa a sério no
+      // próximo dia. O prompt foi instruído a evitar isso.
+      const filtered = weekIndex === 0
+        ? allSessions.filter(s => s.dayOfWeek >= todayDow)
+        : allSessions;
 
       return {
         weekNumber: week.weekNumber || weekIndex + 1,

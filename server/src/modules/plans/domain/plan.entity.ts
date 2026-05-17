@@ -16,6 +16,28 @@ export interface PlanWeek {
   narrative?: string;   // texto LLM da semana (1-2 frases)
 }
 
+/**
+ * Uma revisão semanal automática do plano: o coach lê as corridas
+ * concluídas, exames novos, condições reportadas e reajusta as semanas
+ * seguintes. O log fica anexado ao plano original (não substitui) pra
+ * o atleta ver a evolução: plano inicial → revisão sem 1 → revisão sem
+ * 2 → ...
+ */
+export interface PlanRevision {
+  weekNumber: number;             // qual semana foi revisada (1, 2, 3...)
+  revisedAt: string;              // ISO timestamp
+  trigger: 'weekly_cron' | 'manual' | 'event_adapt';
+  summary: string;                // texto curto do que mudou (1-2 frases)
+  details?: string;               // markdown longo da análise (opcional)
+  // Snapshot do que mudou em comparação à versão anterior do plano.
+  // Não precisa ser exaustivo — é pra leitura humana, não pra rollback.
+  changes?: {
+    sessionsAdjusted?: number;
+    volumeDelta?: number;          // km diff
+    intensityShift?: 'increased' | 'decreased' | 'unchanged';
+  };
+}
+
 export interface Plan {
   id: string;
   userId: string;
@@ -32,6 +54,12 @@ export interface Plan {
    * /training/plan-detail. Gerado em background após o plano ficar 'ready'.
    */
   coachRationale?: string;
+  /**
+   * Histórico de revisões automáticas (cron semanal) ou manuais. Cada
+   * entrada documenta o que foi ajustado e por quê. O plano evolui sem
+   * apagar o histórico — o atleta vê a jornada toda.
+   */
+  revisions?: PlanRevision[];
   createdAt: string;
   updatedAt: string;
 }
