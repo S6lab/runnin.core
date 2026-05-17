@@ -30,6 +30,26 @@ class _AccountAccessPageState extends State<AccountAccessPage> {
   final _resendCtrl = OtpResendController();
 
   @override
+  void initState() {
+    super.initState();
+    // Web: ao voltar do redirect do Google Auth, processa o resultado.
+    // No-op se a pessoa não veio de um redirect. Vital pra fluxo
+    // signInWithRedirect/linkWithRedirect (evita CORS do popup).
+    if (kIsWeb) {
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        try {
+          final result = await FirebaseAuth.instance.getRedirectResult();
+          if (result.user != null && mounted) {
+            setState(() => _message = 'Conta Google vinculada.');
+          }
+        } catch (e) {
+          if (mounted) setState(() => _error = 'Erro no retorno do Google: $e');
+        }
+      });
+    }
+  }
+
+  @override
   void dispose() {
     _emailCtrl.dispose();
     _passwordCtrl.dispose();
@@ -114,12 +134,18 @@ class _AccountAccessPageState extends State<AccountAccessPage> {
       OAuthCredential? credential;
 
       if (kIsWeb) {
+        // Redirect em vez de popup: popup quebra com CORS em browsers
+        // novos (Chrome 95+ aplica COOP same-origin que bloqueia
+        // postMessage entre janelas). Redirect faz navegação full-page
+        // e o retorno é capturado em initState via getRedirectResult().
         final provider = GoogleAuthProvider();
         if (user != null && user.isAnonymous) {
-          await user.linkWithPopup(provider);
+          await user.linkWithRedirect(provider);
         } else {
-          await auth.signInWithPopup(provider);
+          await auth.signInWithRedirect(provider);
         }
+        // Não há mais código após o redirect — a página é recarregada.
+        return;
       } else {
         final googleUser = await GoogleSignIn().signIn();
         if (googleUser == null) {

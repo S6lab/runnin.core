@@ -156,8 +156,28 @@ export function postInvalidateCache(_req: Request, res: Response): void {
 // === Admin: gerenciamento de plano de usuário ===
 import { FirestoreUserRepository } from '@modules/users/infra/firestore-user.repository';
 import { getAuth } from '@shared/infra/firebase/firebase.client';
+import { SeedTesterUseCase } from '../use-cases/seed-tester.use-case';
 
 const userRepo = new FirestoreUserRepository();
+const seedTester = new SeedTesterUseCase();
+
+const SeedTesterSchema = z.object({
+  phone: z.string().optional(),
+  email: z.string().email().optional(),
+  uid: z.string().optional(),
+}).refine(v => v.phone || v.email || v.uid, {
+  message: 'phone, email ou uid obrigatório',
+});
+
+export async function postSeedTester(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const input = SeedTesterSchema.parse(req.body);
+    const result = await seedTester.execute(input);
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    next(err);
+  }
+}
 
 const ListUsersQuery = z.object({
   search: z.string().trim().optional(),

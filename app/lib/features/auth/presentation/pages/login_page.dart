@@ -27,6 +27,23 @@ class _LoginPageState extends State<LoginPage> {
   bool _phoneMode = false;
 
   @override
+  void initState() {
+    super.initState();
+    if (kIsWeb) {
+      // Captura retorno do signInWithRedirect(Google).
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        try {
+          final result = await FirebaseAuth.instance.getRedirectResult();
+          if (result.user != null && mounted) {
+            await UserRemoteDatasource().provisionMe();
+            await _navigateAfterAuth();
+          }
+        } catch (_) {/* sem redirect pendente — no-op */}
+      });
+    }
+  }
+
+  @override
   void dispose() {
     _phoneController.dispose();
     _smsCodeController.dispose();
@@ -58,20 +75,22 @@ class _LoginPageState extends State<LoginPage> {
     setState(() { _loading = true; _error = null; });
     try {
       if (kIsWeb) {
-        await FirebaseAuth.instance.signInWithPopup(GoogleAuthProvider());
-      } else {
-        final googleUser = await GoogleSignIn().signIn();
-        if (googleUser == null) {
-          if (mounted) setState(() => _loading = false);
-          return;
-        }
-        final googleAuth = await googleUser.authentication;
-        final credential = GoogleAuthProvider.credential(
-          accessToken: googleAuth.accessToken,
-          idToken: googleAuth.idToken,
-        );
-        await FirebaseAuth.instance.signInWithCredential(credential);
+        // Redirect (não popup): popup é bloqueado por COOP em browsers
+        // novos. Retorno capturado em initState via getRedirectResult.
+        await FirebaseAuth.instance.signInWithRedirect(GoogleAuthProvider());
+        return;
       }
+      final googleUser = await GoogleSignIn().signIn();
+      if (googleUser == null) {
+        if (mounted) setState(() => _loading = false);
+        return;
+      }
+      final googleAuth = await googleUser.authentication;
+      final credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+      await FirebaseAuth.instance.signInWithCredential(credential);
       await UserRemoteDatasource().provisionMe();
       await _navigateAfterAuth();
     } catch (e) {
@@ -235,7 +254,12 @@ class _LoginPageState extends State<LoginPage> {
 
     return Scaffold(
       backgroundColor: palette.background,
-      appBar: const RunninAppBar(title: 'ENTRAR'),
+      // Sem back: /login é o ponto de entrada autenticado. Não há tela
+      // anterior significativa pra voltar (/splash é redirector, /intro
+      // é o slide de welcome só na primeira sessão). Firebase Auth via
+      // Google/anonymous/phone faz cria-ou-loga no mesmo botão — sem
+      // tela de "criar conta" separada.
+      appBar: const RunninAppBar(title: 'ENTRAR', showBack: false),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(23.992),
