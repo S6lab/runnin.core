@@ -305,6 +305,16 @@ class _MarkdownText extends StatelessWidget {
       s.replaceAll(RegExp(r'\*\*'), '').replaceAll(RegExp(r'(?<!\w)\*(?!\w)'), '');
 }
 
+int? _computeAge(String? birthDate) {
+  if (birthDate == null || birthDate.isEmpty) return null;
+  final d = DateTime.tryParse(birthDate);
+  if (d == null) return null;
+  final now = DateTime.now();
+  var age = now.year - d.year;
+  if (now.month < d.month || (now.month == d.month && now.day < d.day)) age--;
+  return age > 0 && age < 120 ? age : null;
+}
+
 class _ProfileSummary extends StatelessWidget {
   final UserProfile? profile;
   const _ProfileSummary({this.profile});
@@ -313,17 +323,28 @@ class _ProfileSummary extends StatelessWidget {
     final palette = context.runninPalette;
     final p = profile;
     if (p == null) return const SizedBox.shrink();
+    final age = _computeAge(p.birthDate);
+    final genderLabel = switch (p.gender) {
+      'male' => 'masculino',
+      'female' => 'feminino',
+      'other' => 'outro',
+      _ => null,
+    };
     final items = <(String, String)>[
       ('Nível', p.level),
       ('Objetivo', p.goal),
       ('Frequência', '${p.frequency}x/semana'),
+      if (genderLabel != null) ('Gênero', genderLabel),
+      if (age != null) ('Idade', '$age anos'),
       if (p.runPeriod != null) ('Período', p.runPeriod!),
       if (p.weight != null && p.weight!.isNotEmpty) ('Peso', p.weight!),
       if (p.height != null && p.height!.isNotEmpty) ('Altura', p.height!),
       if (p.restingBpm != null) ('FC repouso', '${p.restingBpm} bpm'),
       if (p.maxBpm != null) ('FC máx', '${p.maxBpm} bpm'),
       if ((p.medicalConditions ?? []).isNotEmpty)
-        ('Condições', (p.medicalConditions ?? []).join(', ')),
+        ('Condições', (p.medicalConditions ?? []).join(', '))
+      else
+        ('Condições', 'nenhuma informada'),
       ('Wearable', p.hasWearable ? 'conectado' : 'sem'),
     ];
     return Container(
