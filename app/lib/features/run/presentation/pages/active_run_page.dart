@@ -11,6 +11,7 @@ import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/features/run/domain/entities/run.dart' show GpsPoint;
 import 'package:runnin/features/run/presentation/bloc/run_bloc.dart';
+import 'package:runnin/features/run/presentation/widgets/gps_permission_modal.dart';
 import 'package:runnin/shared/widgets/figma/export.dart' show FigmaBadgeUnlockModal;
 
 /// Página da corrida ativa. Aceita `initialType` que vem da última tela
@@ -106,6 +107,21 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
   void initState() {
     super.initState();
     _refreshGpsStatus();
+    // Modal de GPS abre AUTOMATICAMENTE em TODA entrada idle (decisão
+    // do user pra garantir testes). Pode gate-ar por status depois.
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      final granted = await GpsPermissionModal.show(context);
+      if (granted) await _refreshGpsStatus();
+    });
+  }
+
+  Future<void> _openPermissionModal() async {
+    final granted = await GpsPermissionModal.show(
+      context,
+      blocked: _gpsStatus == _GpsStatus.denied || _gpsStatus == _GpsStatus.off,
+    );
+    if (granted && mounted) await _refreshGpsStatus();
   }
 
   Future<void> _refreshGpsStatus() async {
@@ -271,9 +287,17 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
                   child: _StatsOverlay(
                     state: state,
                     initialType: widget.initialType,
-                    onStart: () => context
-                        .read<RunBloc>()
-                        .add(StartRun(type: widget.initialType)),
+                    gpsOk: gpsChipStatus == _GpsStatus.ok,
+                    onRetryGps: _openPermissionModal,
+                    onStart: () {
+                      // Destrava autoplay dentro do user gesture — sem
+                      // isso a saudação Live falha silenciosamente em
+                      // Chrome/Safari/Firefox.
+                      unlockAudioContext();
+                      context
+                          .read<RunBloc>()
+                          .add(StartRun(type: widget.initialType));
+                    },
                   ),
                 ),
               ],
@@ -567,10 +591,14 @@ class _StatsOverlay extends StatelessWidget {
   final RunState state;
   final String initialType;
   final VoidCallback onStart;
+  final bool gpsOk;
+  final VoidCallback onRetryGps;
   const _StatsOverlay({
     required this.state,
     required this.initialType,
     required this.onStart,
+    required this.gpsOk,
+    required this.onRetryGps,
   });
 
   @override
@@ -682,6 +710,37 @@ class _StatsOverlay extends StatelessWidget {
                 height: 1.4,
               ),
             ),
+            // Botão "TENTAR LOCALIZAÇÃO": só visível em idle se GPS
+            // não-ok. Re-dispara o modal + força refresh — útil quando
+            // o user dispensou o popup do navegador.
+            if (!gpsOk) ...[
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                height: 44,
+                child: OutlinedButton.icon(
+                  onPressed: onRetryGps,
+                  icon: Icon(Icons.gps_fixed, size: 16, color: FigmaColors.brandOrange),
+                  label: Text(
+                    'TENTAR LOCALIZAÇÃO',
+                    style: TextStyle(
+                      color: FigmaColors.brandOrange,
+                      fontSize: 11,
+                      letterSpacing: 1.2,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    side: BorderSide(
+                      color: FigmaColors.brandOrange.withValues(alpha: 0.55),
+                    ),
+                    shape: const RoundedRectangleBorder(
+                      borderRadius: BorderRadius.zero,
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ] else
             Row(
               children: [

@@ -13,11 +13,17 @@ import 'package:runnin/shared/widgets/coach_ai_breadcrumb.dart';
 
 /// Tela "Criando seu plano" pós-onboarding.
 ///
-/// Estratégia atual (curta):
+/// Estratégia:
 ///  - dispara POST /plans/generate em background (fire-and-forget)
-///  - mostra relógio com countdown de 10s no design system
-///  - avisa que o plano vai aparecer em TREINO quando pronto
-///  - após 10s → /home (não bloqueia o user esperando o LLM)
+///  - relógio com countdown de 15s (apenas wait visual — o plano
+///    continua sendo gerado pelo coach AI no servidor)
+///  - mensagem explica: "primeira geração leva ~60s porque o coach
+///    está analisando perfil + objetivo + condições"
+///  - após 15s → /home (não bloqueia o user). Polling na /training
+///    detecta status='ready' e mostra o plano automaticamente.
+///
+/// Não temos fallback determinístico — plano só faz sentido com IA.
+/// Se gerar falha, /training mostra status='failed' com botão de retry.
 class PlanLoadingPage extends StatefulWidget {
   final String? startDate;
   const PlanLoadingPage({super.key, this.startDate});
@@ -28,7 +34,11 @@ class PlanLoadingPage extends StatefulWidget {
 
 class _PlanLoadingPageState extends State<PlanLoadingPage>
     with TickerProviderStateMixin {
-  static const _countdownSeconds = 10;
+  // 15s de "espera visual" no app + plano segue gerando em background
+  // no server (60-90s normais pra IA). Polling na /training pega o
+  // resultado quando ready. Aumentado de 10s pra dar tempo do user ler
+  // a mensagem com calma antes de ir pra home.
+  static const _countdownSeconds = 15;
 
   Timer? _tickTimer;
   int _elapsedSeconds = 0;
@@ -122,7 +132,7 @@ class _PlanLoadingPageState extends State<PlanLoadingPage>
               const SizedBox(height: 40),
 
               Text(
-                'Gerando seu plano',
+                'Montando seu plano',
                 style: GoogleFonts.jetBrainsMono(
                   fontSize: 28,
                   fontWeight: FontWeight.w500,
@@ -151,17 +161,30 @@ class _PlanLoadingPageState extends State<PlanLoadingPage>
                     ),
                   ),
                 )
-              else
+              else ...[
                 Text(
-                  'O plano vai ser gerado em background pelo coach AI. '
-                  'Pode demorar um pouco — assim que estiver pronto, '
-                  'aparece em TREINO.',
+                  'A primeira geração leva entre 30 e 60 segundos. '
+                  'O coach AI está cruzando seu perfil, objetivo, '
+                  'condições e horários pra montar um plano único '
+                  'pra você — não é um template.',
                   style: TextStyle(
                     fontSize: 14,
-                    color: Colors.white.withValues(alpha: 0.72),
+                    color: Colors.white.withValues(alpha: 0.78),
                     height: 1.55,
                   ),
                 ),
+                const SizedBox(height: 14),
+                _AnalysisSteps(elapsedSeconds: _elapsedSeconds),
+                const SizedBox(height: 14),
+                Text(
+                  'Você pode ir pra HOME — quando o plano ficar pronto, aparece automaticamente em TREINO.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.white.withValues(alpha: 0.55),
+                    height: 1.5,
+                  ),
+                ),
+              ],
 
               const Spacer(),
 
@@ -205,6 +228,97 @@ class _PlanLoadingPageState extends State<PlanLoadingPage>
 /// Relógio com arco de countdown e segundo restante centralizado.
 /// Segue o design system (mono, cyan brand, sem cantos arredondados além
 /// do círculo natural).
+/// Lista visual de "passos da análise" que o coach AI tá fazendo
+/// enquanto user espera. Avança em cascata baseado em segundos
+/// decorridos — propósito é dar feedback de progresso (não é o estado
+/// real do server, é uma sequência fixa que cobre o tempo típico de
+/// 30-60s do LLM).
+class _AnalysisSteps extends StatelessWidget {
+  final int elapsedSeconds;
+  const _AnalysisSteps({required this.elapsedSeconds});
+
+  static const _steps = [
+    (label: 'Lendo seu perfil', threshold: 0),
+    (label: 'Calculando zonas de FC e pace', threshold: 3),
+    (label: 'Montando periodização do mesociclo', threshold: 7),
+    (label: 'Criando roteiro km-a-km', threshold: 11),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final s in _steps)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: _StepRow(
+              label: s.label,
+              done: elapsedSeconds >= s.threshold + 3,
+              active: elapsedSeconds >= s.threshold &&
+                  elapsedSeconds < s.threshold + 3,
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _StepRow extends StatelessWidget {
+  final String label;
+  final bool done;
+  final bool active;
+  const _StepRow({required this.label, required this.done, required this.active});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = done
+        ? FigmaColors.brandCyan
+        : active
+            ? FigmaColors.brandCyan.withValues(alpha: 0.85)
+            : Colors.white.withValues(alpha: 0.35);
+    return Row(
+      children: [
+        SizedBox(
+          width: 16,
+          height: 16,
+          child: done
+              ? Icon(Icons.check, size: 14, color: color)
+              : active
+                  ? SizedBox(
+                      width: 12,
+                      height: 12,
+                      child: CircularProgressIndicator(
+                        color: color,
+                        strokeWidth: 1.5,
+                      ),
+                    )
+                  : Center(
+                      child: Container(
+                        width: 6,
+                        height: 6,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: color,
+                        ),
+                      ),
+                    ),
+        ),
+        const SizedBox(width: 10),
+        Text(
+          label,
+          style: GoogleFonts.jetBrainsMono(
+            fontSize: 12,
+            color: color,
+            fontWeight: done || active ? FontWeight.w500 : FontWeight.w400,
+            letterSpacing: 0.4,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _ClockCountdown extends StatelessWidget {
   final Animation<double> animation;
   final int remaining;

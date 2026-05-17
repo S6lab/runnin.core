@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:geolocator/geolocator.dart';
@@ -13,6 +14,7 @@ import 'package:runnin/features/run/presentation/bloc/run_bloc.dart';
 import 'package:runnin/features/training/data/datasources/plan_remote_datasource.dart';
 import 'package:runnin/features/training/domain/entities/plan.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
+import 'package:runnin/features/run/presentation/widgets/gps_permission_modal.dart';
 import 'package:runnin/shared/widgets/runnin_app_bar.dart';
 import 'package:runnin/shared/widgets/section_heading.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -92,25 +94,57 @@ class _PrepViewState extends State<_PrepView> {
     unawaited(_warmGps());
   }
 
-  Future<void> _warmGps() async {
+  Future<void> _warmGps({bool showModalIfNeeded = false}) async {
     try {
       final enabled = await Geolocator.isLocationServiceEnabled();
       if (!enabled) {
         if (mounted) setState(() => _gpsStatus = _GpsStatus.off);
+        if (showModalIfNeeded && mounted) {
+          await GpsPermissionModal.show(context, blocked: true);
+        }
         return;
       }
       var perm = await Geolocator.checkPermission();
-      if (perm == LocationPermission.denied) {
+      // Se ainda não decidiu E user quer modal: abre modal educacional
+      // ANTES do prompt nativo. User vê contexto e clica ATIVAR GPS,
+      // o que dispara o requestPermission do browser.
+      if (perm == LocationPermission.denied && showModalIfNeeded && mounted) {
+        final granted = await GpsPermissionModal.show(context);
+        perm = await Geolocator.checkPermission();
+        if (!granted &&
+            perm != LocationPermission.always &&
+            perm != LocationPermission.whileInUse) {
+          if (mounted) setState(() => _gpsStatus = _GpsStatus.denied);
+          return;
+        }
+      } else if (perm == LocationPermission.denied) {
+        // Caller não quis modal — pede direto (warm-up silencioso original).
         perm = await Geolocator.requestPermission();
       }
-      if (perm == LocationPermission.denied ||
-          perm == LocationPermission.deniedForever) {
+      if (perm == LocationPermission.deniedForever) {
+        if (mounted) setState(() => _gpsStatus = _GpsStatus.denied);
+        if (showModalIfNeeded && mounted) {
+          await GpsPermissionModal.show(context, blocked: true);
+        }
+        return;
+      }
+      if (perm == LocationPermission.denied) {
         if (mounted) setState(() => _gpsStatus = _GpsStatus.denied);
         return;
       }
-      await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
-      );
+      // Web usa medium + timeLimit pra resolver via WiFi rapido.
+      final settings = kIsWeb
+          ? const LocationSettings(
+              accuracy: LocationAccuracy.medium,
+              timeLimit: Duration(seconds: 8),
+            )
+          : const LocationSettings(accuracy: LocationAccuracy.high);
+      try {
+        await Geolocator.getCurrentPosition(locationSettings: settings);
+      } catch (_) {
+        // Timeout/erro do getCurrentPosition: tenta lastKnown como cache.
+        await Geolocator.getLastKnownPosition();
+      }
       if (mounted) setState(() => _gpsStatus = _GpsStatus.ok);
     } catch (_) {
       if (mounted) setState(() => _gpsStatus = _GpsStatus.off);
@@ -306,7 +340,10 @@ class _PrepViewState extends State<_PrepView> {
           children: [
             const SectionHeading(label: '> GPS'),
             const SizedBox(width: 10),
-            _GpsStatusChip(status: _gpsStatus, onRetry: _warmGps),
+            _GpsStatusChip(
+              status: _gpsStatus,
+              onRetry: () => _warmGps(showModalIfNeeded: true),
+            ),
           ],
         ),
         const SizedBox(height: 24),

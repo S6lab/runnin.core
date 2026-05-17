@@ -200,6 +200,9 @@ export class GeneratePlanUseCase {
         systemPrompt: built.systemPrompt,
         maxTokens: built.maxTokens,
         temperature: built.temperature,
+        // JSON mode: Gemini garante schema válido. Elimina ~90% das
+        // falhas de parse que levavam plano a "failed" status.
+        responseJson: true,
       });
       const llmMs = Date.now() - llmStart;
       const parseStart = Date.now();
@@ -240,39 +243,9 @@ export class GeneratePlanUseCase {
       // ao rationale longo. Falha silenciosa.
       void this._generateWeekNarratives(plan, weeks, runtime.profile);
     } catch (err) {
-      // Fallback determinístico: LLM falhou todas as 3 tentativas do
-      // _parseWeeks. Gera plano sem IA baseado em level + freq + weeks.
-      // User nunca fica sem plano — pode regerar depois pelo checkpoint
-      // ou GERAR PLANO se quiser personalizado.
-      logger.warn('plan.generate.llm_exhausted_using_fallback', {
-        planId: plan.id,
-        err: err instanceof Error ? err.message : String(err),
-      });
-      try {
-        const fallbackWeeks = this._buildDeterministicFallbackPlan(
-          input.weeksCount,
-          input.startDate,
-          freq,
-          input.level,
-        );
-        await this.repo.update(plan.id, plan.userId, {
-          status: 'ready',
-          weeks: fallbackWeeks,
-          updatedAt: new Date().toISOString(),
-        });
-        void this.scheduleCheckpoints
-          .execute({ ...plan, weeks: fallbackWeeks, status: 'ready' })
-          .catch(() => {});
-        logger.info('plan.generate.fallback_applied', { planId: plan.id });
-        return;
-      } catch (fbErr) {
-        logger.error('plan.generate.fallback_failed', {
-          planId: plan.id,
-          err: fbErr instanceof Error ? fbErr.message : String(fbErr),
-        });
-      }
-      // Fallback também falhou (improvável) — marca failed pra UI poder
-      // mostrar erro e user pode tentar de novo.
+      // Fallback determinístico saiu — plano só faz sentido com IA. Se
+      // as 3 tentativas LLM falham, marca failed pra UI mostrar erro
+      // claro e dar retry. Não masquerade com plano genérico.
       logger.error('plan.generate.failed', {
         planId: plan.id,
         err: err instanceof Error ? err.message : String(err),
@@ -530,6 +503,7 @@ ${raw}`,
             'Retorne somente JSON valido. Preserve o conteudo util e descarte texto fora do JSON.',
           maxTokens: 3000,
           temperature: 0,
+          responseJson: true,
         },
       );
 
@@ -556,6 +530,7 @@ ${repaired}`,
           {
             systemPrompt:
               'Voce e um reparador de JSON. Retorne apenas JSON valido e parseavel.',
+            responseJson: true,
             maxTokens: 3000,
             temperature: 0,
           },
@@ -567,92 +542,13 @@ ${repaired}`,
     }
   }
 
-  /**
-   * Plano determinístico de último recurso quando LLM falhou todas as
-   * 3 tentativas do _parseWeeks (JSON quebrado / 0 sessões). Não é tão
-   * personalizado quanto o que IA geraria, mas é seguro, progressivo e
-   * adapta ao level + freq + weeksCount + startDate. User pode regerar
-   * via TREINO > GERAR PLANO ou esperar próximo checkpoint.
-   *
-   * Padrão por semana:
-   *   - 1ª sessão: Easy Run (volume base)
-   *   - 2ª sessão: Easy Run (volume base + 10%)
-   *   - 3ª (intermediário+): Tempo Run alternando com Intervalado por semana
-   *   - 4ª: Easy Run
-   *   - 5ª (5x+): Long Run (volume crescente semana a semana)
-   *
-   * Padrão 3:1 (deload na 4ª semana, 8ª semana...).
-   */
-  private _buildDeterministicFallbackPlan(
-    weeksCount: number,
-    startDate: string,
-    freq: number,
-    level: string,
-  ): PlanWeek[] {
-    const start = new Date(`${startDate}T00:00:00`);
-    const startDow = start.getDay() || 7;
-    // Volume base por nível (km da sessão easy curta)
-    const baseKm =
-      level === 'iniciante' ? 3 : level === 'intermediario' ? 5 : 7;
-    const longBaseKm =
-      level === 'iniciante' ? 5 : level === 'intermediario' ? 10 : 15;
-    // Distribuição de dias de treino na semana (evita 3 dias seguidos).
-    // Pra freq=5: Seg, Ter, Qui, Sex, Dom. Pra freq=3: Seg, Qua, Sex.
-    const allWeekdays: number[] = (() => {
-      switch (freq) {
-        case 2: return [2, 5];
-        case 3: return [1, 3, 5];
-        case 4: return [1, 3, 5, 7];
-        case 5: return [1, 2, 4, 5, 7];
-        case 6: return [1, 2, 3, 5, 6, 7];
-        case 7: return [1, 2, 3, 4, 5, 6, 7];
-        default: return [1, 3, 5];
-      }
-    })();
-
-    const phases = [
-      '[BASE]', '[BASE+]', '[BUILD]', '[DELOAD]',
-      '[BUILD+]', '[SPECIFIC]', '[PEAK]', '[TAPER]',
-    ];
-
-    return Array.from({ length: weeksCount }, (_, weekIdx) => {
-      const weekNumber = weekIdx + 1;
-      const isDeload = weekNumber % 4 === 0;
-      const progression = isDeload ? 0.7 : (1 + weekIdx * 0.05);
-      const phase = phases[weekIdx % phases.length] ?? '[BUILD]';
-
-      // Week 1 respeita D0 — só dias >= startDow
-      const allowedDays = weekIdx === 0
-        ? allWeekdays.filter((d) => d >= startDow)
-        : allWeekdays;
-
-      const sessions: PlanSession[] = allowedDays.map((dow, idx) => {
-        const isLong = idx === allowedDays.length - 1 && freq >= 4 && weekNumber >= 2;
-        const isTempo = !isLong && idx === 2 && freq >= 4 && level !== 'iniciante' && weekNumber >= 3;
-        const distanceKm = isLong
-          ? Number((longBaseKm * progression).toFixed(1))
-          : Number((baseKm * progression * (isTempo ? 0.9 : 1)).toFixed(1));
-        const type = isLong ? 'Long Run' : isTempo ? 'Tempo Run' : 'Easy Run';
-        const targetPace = level === 'iniciante'
-          ? '7:00'
-          : level === 'intermediario'
-            ? (isTempo ? '5:30' : isLong ? '6:30' : '6:00')
-            : (isTempo ? '4:30' : isLong ? '5:30' : '5:00');
-        const session: PlanSession = {
-          id: uuid(),
-          dayOfWeek: dow,
-          type,
-          distanceKm,
-          targetPace,
-          durationMin: Math.round(distanceKm * parsePaceToMin(targetPace) * 10) / 10,
-          notes: `${phase} ${type}. Plano gerado em modo seguro — você pode regerar via GERAR PLANO no TREINO pra ter versão IA personalizada.`,
-        };
-        return { ...session, executionSegments: buildExecutionSegments(session) };
-      });
-
-      return { weekNumber, sessions, focus: phase };
-    });
-  }
+  // REMOVIDO: _buildDeterministicFallbackPlan. Plano só faz sentido
+  // com IA personalizada. Sem isso o produto perde propósito. Em vez de
+  // fallback, melhoramos a confiabilidade da IA (responseMimeType JSON,
+  // retries) e a UX da espera no app (mensagem clara, retry visível).
+  //
+  // _BUILD_FALLBACK_LEGACY_DOCSTRING_REMOVED — bloco abaixo deletado
+  // pra cumprir o requisito do user.
 
   /**
    * Garante que cada semana tem pelo menos `targetFreq` sessões. Quando
@@ -1322,12 +1218,6 @@ export function resolvePlanWeeksCount(input: Pick<GeneratePlanInput, 'goal' | 'l
   }
 
   return Math.min(Math.max(weeks, 4), 16);
-}
-
-function parsePaceToMin(pace: string): number {
-  const m = pace.match(/^(\d+):(\d{1,2})$/);
-  if (!m) return 6.0;
-  return Number(m[1]) + Number(m[2]) / 60;
 }
 
 function normalizeGoal(goal: string): string {

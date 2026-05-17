@@ -123,6 +123,10 @@ export class GeminiAdapter implements LLMProvider {
       generationConfig: {
         maxOutputTokens: options.maxTokens ?? 1024,
         temperature: options.temperature ?? 0.7,
+        // responseMimeType:'application/json' força saída JSON válida —
+        // Gemini garante schema bem-formado, elimina quebras de aspas
+        // e vírgulas trailing. Crítico pra plan generation.
+        ...(options.responseJson ? { responseMimeType: 'application/json' } : {}),
       },
     };
   }

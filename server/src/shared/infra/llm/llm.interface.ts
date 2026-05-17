@@ -3,6 +3,12 @@ export interface LLMOptions {
   temperature?: number;
   systemPrompt?: string;
   model?: string;
+  /**
+   * Força saída em JSON válido (Gemini suporta via responseMimeType).
+   * Quando true, o modelo é instruído a NUNCA quebrar JSON — elimina
+   * 90%+ das falhas de parse. Usar quando o consumidor precisa parsear.
+   */
+  responseJson?: boolean;
 }
 
 export interface LLMProvider {

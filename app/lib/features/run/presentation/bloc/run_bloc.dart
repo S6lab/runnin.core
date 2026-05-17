@@ -234,21 +234,30 @@ class RunBloc extends Bloc<RunEvent, RunState> {
       // mantém stream com distanceFilter (mais eficiente, sem bateria
       // extra).
       if (kIsWeb) {
-        // Primeiro ponto imediato
-        Geolocator.getCurrentPosition(
-          locationSettings: const LocationSettings(
-            accuracy: LocationAccuracy.high,
-          ),
-        ).then((pos) {
-          if (!isClosed) add(_GpsUpdate(pos));
-        }).catchError((_) {});
-        // Polling a cada 3s
+        // Settings web: medium + timeLimit 8s. High força tentativa de
+        // GPS-de-hardware (não existe em desktop) e demora 10-30s pra
+        // cair pra WiFi. Medium usa WiFi direto em 1-3s.
+        const webSettings = LocationSettings(
+          accuracy: LocationAccuracy.medium,
+          timeLimit: Duration(seconds: 8),
+        );
+        // Primeiro ponto: tenta getCurrentPosition; se timeout, cai no
+        // cache do browser via getLastKnownPosition.
+        () async {
+          try {
+            final pos = await Geolocator.getCurrentPosition(locationSettings: webSettings);
+            if (!isClosed) add(_GpsUpdate(pos));
+          } catch (_) {
+            try {
+              final cached = await Geolocator.getLastKnownPosition();
+              if (cached != null && !isClosed) add(_GpsUpdate(cached));
+            } catch (_) {/* sem cache nem fresh — polling tenta depois */}
+          }
+        }();
+        // Polling 3s — cada chamada respeita timeLimit (não pendura).
         _gpsPollTimer = Timer.periodic(const Duration(seconds: 3), (_) {
-          Geolocator.getCurrentPosition(
-            locationSettings: const LocationSettings(
-              accuracy: LocationAccuracy.high,
-            ),
-          ).then((pos) {
+          Geolocator.getCurrentPosition(locationSettings: webSettings)
+              .then((pos) {
             if (!isClosed) add(_GpsUpdate(pos));
           }).catchError((_) {});
         });
@@ -285,13 +294,44 @@ class RunBloc extends Bloc<RunEvent, RunState> {
   }
 
   void _onCoachChunk(_CoachChunk event, Emitter<RunState> emit) {
+    final cue = event.cue;
+    // Banner do coach atualiza imediato com o texto. Áudio: se o cue
+    // já vier com audioBase64 (saudação via _speakStartGreeting OU
+    // legado /coach/message), toca direto. Caso contrário (cues
+    // automáticos pós-saudação devem vir só com texto), sintetiza via
+    // Live e despacha um novo chunk pra reativar o listener de player.
     emit(
       state.copyWith(
-        coachLiveMessage: event.cue.text,
-        coachAudioBase64: event.cue.audioBase64 ?? '',
-        coachAudioMimeType: event.cue.audioMimeType ?? '',
+        coachLiveMessage: cue.text,
+        coachAudioBase64: cue.audioBase64 ?? '',
+        coachAudioMimeType: cue.audioMimeType ?? '',
       ),
     );
+    final hasAudio = (cue.audioBase64 ?? '').isNotEmpty;
+    if (!hasAudio && cue.text.isNotEmpty) {
+      unawaited(_synthesizeAndDispatch(cue.text));
+    }
+  }
+
+  /// Sintetiza texto via Gemini Live (client→Google direto) e despacha
+  /// novo `_CoachChunk` carregando o áudio. UI player escuta.
+  Future<void> _synthesizeAndDispatch(String text) async {
+    try {
+      final profile = await _userRemote.getMe().timeout(
+            const Duration(seconds: 2),
+            onTimeout: () => null,
+          );
+      final audio = await _liveVoice.synthesize(
+        text,
+        voiceId: profile?.coachVoiceId,
+      );
+      if (audio == null || isClosed) return;
+      add(_CoachChunk(CoachCue(
+        text: text,
+        audioBase64: audio.audioBase64,
+        audioMimeType: audio.mimeType,
+      )));
+    } catch (_) {/* sem áudio, banner segue */}
   }
 
   void _onGpsUpdate(_GpsUpdate event, Emitter<RunState> emit) {

@@ -11,9 +11,14 @@ const DEFAULT_MODEL =
  * sem a API key real sair do server. Token format: `auth_tokens/...`.
  * App passa pro pacote gemini_live como apiKey + apiVersion: 'v1alpha'.
  *
- * Janela: token válido por 30min, 1 uso (1 sessão Live).
- * Modelo restringido aqui — app não pode pular pra outro modelo mais
- * caro com o mesmo token.
+ * Janela: token válido por 30min, 999 usos (saudação + km_reached +
+ * pace_alert + finish na mesma corrida sem precisar renovar). Modelo +
+ * modalidades restringidos por liveConnectConstraints — app não pode
+ * abusar pra outro modelo ou mais caro.
+ *
+ * Mudado de uses:1 → uses:999 porque o cache do app guardava token
+ * gasto e cues subsequentes falhavam silenciosamente com
+ * resource_exhausted.
  */
 export class CreateLiveEphemeralTokenUseCase {
   async execute(): Promise<{ token: string; expireTime: string }> {
@@ -41,7 +46,7 @@ export class CreateLiveEphemeralTokenUseCase {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           config: {
-            uses: 1,
+            uses: 999,
             expireTime,
             newSessionExpireTime,
             liveConnectConstraints: {

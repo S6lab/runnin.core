@@ -61,6 +61,21 @@ class LiveCoachVoiceService {
     String? voiceId,
   }) async {
     if (text.trim().isEmpty) return null;
+    // 1 retry: se Live falhar (token expirou, resource_exhausted, etc),
+    // invalida cache e pede token novo.
+    var result = await _trySynthesize(text, voiceId: voiceId);
+    if (result == null && _cachedToken != null) {
+      _cachedToken = null;
+      _cachedExpire = null;
+      result = await _trySynthesize(text, voiceId: voiceId);
+    }
+    return result;
+  }
+
+  Future<LiveSynthesisResult?> _trySynthesize(
+    String text, {
+    String? voiceId,
+  }) async {
     final token = await _fetchEphemeralToken();
     if (token == null) return null;
 
