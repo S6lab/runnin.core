@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -25,49 +27,93 @@ class _LoginPageState extends State<LoginPage> {
   bool _loading = false;
   String? _error;
   bool _phoneMode = false;
+  bool _postAuthRunning = false;
+  StreamSubscription<User?>? _authSub;
 
   @override
   void initState() {
     super.initState();
+    // 1) Se o user já está autenticado quando a página monta (cenário típico
+    //    do redirect do Google que volta direto pra /login), dispara o flow.
+    final current = FirebaseAuth.instance.currentUser;
+    if (current != null) {
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _handlePostAuth(source: 'currentUser'),
+      );
+    }
+
+    // 2) Escuta mudanças de auth (caso o sign-in resolva depois que a página
+    //    montou). getRedirectResult é one-shot e nem sempre dispara — esse
+    //    listener cobre o caso.
+    _authSub = FirebaseAuth.instance.authStateChanges().listen((user) {
+      if (user != null) _handlePostAuth(source: 'authStateChanges');
+    });
+
+    // 3) Best-effort no getRedirectResult pra capturar erros do redirect do
+    //    Google (popup blocked, account mismatch, etc).
     if (kIsWeb) {
-      // Captura retorno do signInWithRedirect(Google).
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         try {
-          final result = await FirebaseAuth.instance.getRedirectResult();
-          if (result.user != null && mounted) {
-            await UserRemoteDatasource().provisionMe();
-            await _navigateAfterAuth();
-          }
-        } catch (_) {/* sem redirect pendente — no-op */}
+          await FirebaseAuth.instance.getRedirectResult();
+        } on FirebaseAuthException catch (e) {
+          if (!mounted) return;
+          setState(() {
+            _error = 'Erro no login Google: ${e.code}';
+            _loading = false;
+          });
+        } catch (_) {
+          // sem redirect pendente — no-op
+        }
       });
     }
   }
 
   @override
   void dispose() {
+    _authSub?.cancel();
     _phoneController.dispose();
     _smsCodeController.dispose();
     super.dispose();
   }
 
-  /// Após login bem-sucedido + provisionMe, decide pra onde mandar:
+  /// Após login bem-sucedido: provisiona o user no backend (best-effort) e
+  /// decide a rota.
   /// - onboarded == true → /home
-  /// - onboarded == false (ou null) → /onboarding (assessment)
-  Future<void> _navigateAfterAuth() async {
+  /// - onboarded == false (ou null/erro) → /onboarding
+  /// Reentrant-safe: o flag _postAuthRunning evita disparar 2x quando o
+  /// currentUser inicial e o authStateChanges acontecem juntos.
+  Future<void> _handlePostAuth({required String source}) async {
+    if (_postAuthRunning) return;
+    _postAuthRunning = true;
     if (!mounted) return;
+    setState(() => _loading = true);
+
     try {
-      final profile = await UserRemoteDatasource().getMe();
-      final onboarded = profile?.onboarded ?? false;
+      try {
+        await UserRemoteDatasource().provisionMe();
+      } catch (_) {
+        // Se provision falhar, segue mesmo assim — onboarding pode reprovision.
+      }
+      if (!mounted) return;
+
+      bool onboarded = false;
+      try {
+        final profile = await UserRemoteDatasource().getMe();
+        onboarded = profile?.onboarded ?? false;
+      } catch (_) {
+        onboarded = false;
+      }
+      if (!mounted) return;
+
       if (onboarded) {
         markOnboardingDone();
-        if (mounted) context.go('/home');
+        context.go('/home');
       } else {
         markOnboardingPending();
-        if (mounted) context.go('/onboarding');
+        context.go('/onboarding');
       }
-    } catch (_) {
-      // Fallback: vai pro onboarding se algo falhar (mais seguro que home)
-      if (mounted) context.go('/onboarding');
+    } finally {
+      _postAuthRunning = false;
     }
   }
 
@@ -91,8 +137,7 @@ class _LoginPageState extends State<LoginPage> {
         idToken: googleAuth.idToken,
       );
       await FirebaseAuth.instance.signInWithCredential(credential);
-      await UserRemoteDatasource().provisionMe();
-      await _navigateAfterAuth();
+      // authStateChanges listener cuida do provisionMe + navigate.
     } catch (e) {
       setState(() {
         _error = 'Erro ao fazer login. Tente novamente.';
@@ -122,8 +167,7 @@ class _LoginPageState extends State<LoginPage> {
           verificationCompleted: (credential) async {
             try {
               await auth.signInWithCredential(credential);
-              await UserRemoteDatasource().provisionMe();
-              await _navigateAfterAuth();
+              // authStateChanges listener cuida do resto.
             } catch (_) {}
           },
           verificationFailed: (e) {
@@ -191,8 +235,7 @@ class _LoginPageState extends State<LoginPage> {
         );
         await auth.signInWithCredential(credential);
       }
-      await UserRemoteDatasource().provisionMe();
-      await _navigateAfterAuth();
+      // authStateChanges listener cuida do provisionMe + navigate.
     } on FirebaseAuthException catch (e) {
       if (!mounted) return;
       setState(() {
