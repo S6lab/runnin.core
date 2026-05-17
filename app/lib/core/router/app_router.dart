@@ -155,7 +155,12 @@ final appRouter = GoRouter(
     ),
     GoRoute(path: '/login', builder: (_, _) => const LoginPage()),
     GoRoute(path: '/onboarding', builder: (_, _) => const OnboardingPage()),
-    GoRoute(path: '/plan-loading', builder: (_, _) => const PlanLoadingPage()),
+    GoRoute(
+      path: '/plan-loading',
+      builder: (_, state) => PlanLoadingPage(
+        startDate: state.uri.queryParameters['startDate'],
+      ),
+    ),
     GoRoute(path: '/coach-intro', builder: (_, _) => const CoachIntroPage()),
     GoRoute(
       path: '/share',

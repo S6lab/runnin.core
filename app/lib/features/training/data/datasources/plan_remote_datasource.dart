@@ -22,6 +22,7 @@ class PlanRemoteDatasource {
     required String level,
     int? frequency,
     int? weeksCount,
+    String? startDate, // ISO YYYY-MM-DD; D0 escolhida no onboarding
     bool confirmOverwrite = false,
   }) async {
     final res = await _dio.post(
@@ -32,6 +33,7 @@ class PlanRemoteDatasource {
         'level': level,
         'weeksCount': ?weeksCount,
         'frequency': ?frequency,
+        'startDate': ?startDate,
       },
     );
     return (res.data as Map<String, dynamic>)['planId'] as String;

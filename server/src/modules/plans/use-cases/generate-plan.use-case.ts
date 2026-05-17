@@ -42,6 +42,14 @@ export const GeneratePlanSchema = z.object({
   level: z.enum(['iniciante', 'intermediario', 'avancado']),
   frequency: z.number().int().min(2).max(7).optional(),
   weeksCount: z.number().int().min(4).max(16).optional(),
+  /**
+   * Data D0 escolhida pelo atleta no onboarding (ISO YYYY-MM-DD).
+   * Se ausente, default = hoje. Plano e periodização começam nessa data.
+   */
+  startDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'startDate deve ser YYYY-MM-DD')
+    .optional(),
 });
 
 export type GeneratePlanInput = z.infer<typeof GeneratePlanSchema>;
@@ -117,6 +125,10 @@ export class GeneratePlanUseCase {
     const now = new Date().toISOString();
     const weeksCount = input.weeksCount ?? resolvePlanWeeksCount(input);
 
+    // startDate vem do onboarding (último step "quando começar"). Aceita
+    // qualquer data futura (ou hoje). Sem ela, default = hoje.
+    const startDate = input.startDate ?? new Date().toISOString().slice(0, 10);
+
     // Cria o plano como "generating" imediatamente
     const plan: Plan = {
       id: planId,
@@ -126,13 +138,14 @@ export class GeneratePlanUseCase {
       weeksCount,
       status: 'generating',
       weeks: [],
+      startDate,
       createdAt: now,
       updatedAt: now,
     };
     await this.repo.create(plan);
 
     // Gera o plano em background
-    this._generateAsync(plan, { ...input, weeksCount }).catch(err =>
+    this._generateAsync(plan, { ...input, weeksCount, startDate }).catch(err =>
       logger.error('plan.generate.background_failed', {
         planId,
         err: err instanceof Error ? err.message : String(err),
@@ -144,7 +157,7 @@ export class GeneratePlanUseCase {
 
   private async _generateAsync(
     plan: Plan,
-    input: GeneratePlanInput & { weeksCount: number },
+    input: GeneratePlanInput & { weeksCount: number; startDate: string },
   ): Promise<void> {
     const freq =
         input.frequency ??
@@ -158,7 +171,7 @@ export class GeneratePlanUseCase {
 
     const built = await buildPlanInitPrompt({
       profile: runtime.profile,
-      input: { goal: input.goal, level: input.level, frequency: freq, weeksCount: input.weeksCount },
+      input: { goal: input.goal, level: input.level, frequency: freq, weeksCount: input.weeksCount, startDate: input.startDate },
       ragContext: knowledgeContext,
     });
 
@@ -172,7 +185,7 @@ export class GeneratePlanUseCase {
       });
       const llmMs = Date.now() - llmStart;
       const parseStart = Date.now();
-      const weeks = await this._parseWeeks(raw, input.weeksCount);
+      const weeks = await this._parseWeeks(raw, input.weeksCount, input.startDate);
       const parseMs = Date.now() - parseStart;
       const totalMs = Date.now() - startedAt;
       logger.info('plan.generate.completed', {
@@ -424,10 +437,10 @@ ${weeksDigest}`;
     return ['', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'][i] ?? '?';
   }
 
-  private async _parseWeeks(raw: string, weeksCount: number): Promise<PlanWeek[]> {
+  private async _parseWeeks(raw: string, weeksCount: number, startDate: string): Promise<PlanWeek[]> {
     try {
-      const normalized = this._normalizeWeeks(raw);
-      return this._ensureWeeksCount(normalized, weeksCount);
+      const normalized = this._normalizeWeeks(raw, startDate);
+      return this._ensureWeeksCount(normalized, weeksCount, startDate);
     } catch (initialError) {
       const firstErrorMessage =
         initialError instanceof Error ? initialError.message : String(initialError);
@@ -449,8 +462,8 @@ ${raw}`,
       );
 
       try {
-        const normalized = this._normalizeWeeks(repaired);
-        return this._ensureWeeksCount(normalized, weeksCount);
+        const normalized = this._normalizeWeeks(repaired, startDate);
+        return this._ensureWeeksCount(normalized, weeksCount, startDate);
       } catch (repairError) {
         const secondErrorMessage =
           repairError instanceof Error ? repairError.message : String(repairError);
@@ -476,13 +489,13 @@ ${repaired}`,
           },
         );
 
-        const normalized = this._normalizeWeeks(repairedAgain);
-        return this._ensureWeeksCount(normalized, weeksCount);
+        const normalized = this._normalizeWeeks(repairedAgain, startDate);
+        return this._ensureWeeksCount(normalized, weeksCount, startDate);
       }
     }
   }
 
-  private _normalizeWeeks(raw: string): PlanWeek[] {
+  private _normalizeWeeks(raw: string, startDate: string): PlanWeek[] {
     const parsedJson = this._parseJsonLenient(raw);
     // Parse tolerante: descarta sessions inválidas (campos undefined/null)
     // ao invés de invalidar o array inteiro. Gemini ocasionalmente omite
@@ -492,12 +505,11 @@ ${repaired}`,
     const lenientWeeks = this._coerceWeeksLenient(candidate);
     const parsed = PlanWeeksSchema.parse(lenientWeeks);
 
-    // Week 1 prioriza dias ≥ hoje. Se isso esvazia a semana inteira (caso
-    // típico: user gera no fim de semana e a IA não pôs sessão pra hoje),
-    // mantém todas as sessões pra não entregar semana vazia. O app exibe
-    // sessões passadas como "perdidas" — melhor que nenhuma sessão.
-    // Mon=1...Sun=7 (Date.getDay() retorna 0=Sun → tratamos como 7).
-    const todayDow = new Date().getDay() || 7;
+    // Week 1 filtra sessões com dayOfWeek < startDayOfWeek (D0 escolhido
+    // pelo user no onboarding). Sem fallback "manter tudo" — o prompt
+    // já instrui a IA a respeitar isso. Mon=1...Sun=7.
+    const start = new Date(`${startDate}T00:00:00`);
+    const startDow = (start.getDay() || 7);
 
     const normalized = parsed.map((week, weekIndex) => {
       const allSessions = week.sessions.map(session => ({
@@ -519,7 +531,7 @@ ${repaired}`,
       // Se week 1 ficar vazia, paciência: o usuário começa a sério no
       // próximo dia. O prompt foi instruído a evitar isso.
       const filtered = weekIndex === 0
-        ? allSessions.filter(s => s.dayOfWeek >= todayDow)
+        ? allSessions.filter(s => s.dayOfWeek >= startDow)
         : allSessions;
 
       return {
@@ -906,7 +918,7 @@ ${repaired}`,
     return value;
   }
 
-  private async _ensureWeeksCount(weeks: PlanWeek[], weeksCount: number): Promise<PlanWeek[]> {
+  private async _ensureWeeksCount(weeks: PlanWeek[], weeksCount: number, startDate: string): Promise<PlanWeek[]> {
     const normalizedWeeks = this._renumberWeeks(weeks);
     if (normalizedWeeks.length === weeksCount) return normalizedWeeks;
     if (normalizedWeeks.length > weeksCount) {
@@ -933,7 +945,7 @@ ${JSON.stringify(normalizedWeeks)}`,
       },
     );
 
-    const rebalanced = this._normalizeWeeks(rebalancedRaw);
+    const rebalanced = this._normalizeWeeks(rebalancedRaw, startDate);
     if (rebalanced.length !== weeksCount) {
       logger.warn('plan.parse.weeks_rebalance_incomplete', {
         requestedWeeks: weeksCount,

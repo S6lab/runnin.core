@@ -27,6 +27,25 @@ class _PlanDetailPageState extends State<PlanDetailPage> {
   UserProfile? _profile;
   bool _loading = true;
   String? _error;
+  // GlobalKey por weekNumber — usado pra Scrollable.ensureVisible quando
+  // user clica numa semana na periodização.
+  final Map<int, GlobalKey> _weekKeys = {};
+
+  GlobalKey _keyFor(int weekNumber) =>
+      _weekKeys.putIfAbsent(weekNumber, () => GlobalKey());
+
+  Future<void> _jumpToWeek(int weekNumber) async {
+    final key = _weekKeys[weekNumber];
+    final ctx = key?.currentContext;
+    if (ctx != null) {
+      await Scrollable.ensureVisible(
+        ctx,
+        duration: const Duration(milliseconds: 350),
+        curve: Curves.easeOut,
+        alignment: 0.05,
+      );
+    }
+  }
 
   @override
   void initState() {
@@ -108,8 +127,19 @@ class _PlanDetailPageState extends State<PlanDetailPage> {
                             child: _StatsSection(plan: _plan!),
                           ),
                           const SizedBox(height: 10),
-                          // 6. Plano semana a semana (1 expansion tile por week)
-                          _WeeksBreakdown(plan: _plan!),
+                          // 6. Periodização clicável → scroll pra week
+                          _CollapsibleSection(
+                            icon: Icons.timeline,
+                            title: 'PERIODIZAÇÃO (clique pra abrir a semana)',
+                            initiallyExpanded: true,
+                            child: _PeriodizationChips(
+                              plan: _plan!,
+                              onTapWeek: _jumpToWeek,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          // 7. Plano semana a semana (1 expansion tile por week)
+                          _WeeksBreakdown(plan: _plan!, weekKey: _keyFor),
                           // 7. Histórico de revisões (se houver)
                           if (_plan!.revisions.isNotEmpty) ...[
                             const SizedBox(height: 10),
@@ -318,9 +348,14 @@ class _Header extends StatelessWidget {
   final UserProfile? profile;
   const _Header({required this.plan, this.profile});
 
+  static String _fmt(DateTime d) =>
+      '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
+
   @override
   Widget build(BuildContext context) {
     final palette = context.runninPalette;
+    final start = plan.effectiveStartDate;
+    final end = plan.mesocycleEndDate;
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -343,6 +378,23 @@ class _Header extends StatelessWidget {
                 fontSize: 18,
                 fontWeight: FontWeight.w500,
               )),
+          const SizedBox(height: 12),
+          // Mesociclo: D0 → final
+          Row(
+            children: [
+              Icon(Icons.event_outlined, size: 14, color: palette.primary),
+              const SizedBox(width: 6),
+              Text(
+                'D0 ${_fmt(start)} → ${_fmt(end)}',
+                style: GoogleFonts.jetBrainsMono(
+                  color: palette.primary,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  letterSpacing: 0.4,
+                ),
+              ),
+            ],
+          ),
           const SizedBox(height: 10),
           Wrap(
             spacing: 16,
@@ -621,7 +673,8 @@ class _StatsSection extends StatelessWidget {
 
 class _WeeksBreakdown extends StatelessWidget {
   final Plan plan;
-  const _WeeksBreakdown({required this.plan});
+  final GlobalKey Function(int weekNumber)? weekKey;
+  const _WeeksBreakdown({required this.plan, this.weekKey});
   static const _dayNames = ['', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
 
   @override
@@ -650,7 +703,15 @@ class _WeeksBreakdown extends StatelessWidget {
           ),
         ),
         for (var i = 0; i < plan.weeks.length; i++) ...[
-          _WeekTile(week: plan.weeks[i], initiallyExpanded: i == 0, dayNames: _dayNames),
+          KeyedSubtree(
+            key: weekKey?.call(plan.weeks[i].weekNumber),
+            child: _WeekTile(
+              week: plan.weeks[i],
+              initiallyExpanded: i == 0,
+              dayNames: _dayNames,
+              planStartDate: plan.effectiveStartDate,
+            ),
+          ),
           if (i < plan.weeks.length - 1) const SizedBox(height: 6),
         ],
       ],
@@ -662,11 +723,30 @@ class _WeekTile extends StatelessWidget {
   final PlanWeek week;
   final bool initiallyExpanded;
   final List<String> dayNames;
+  /// D0 do plano. Usada pra calcular a data real (DD/MM) de cada
+  /// dayOfWeek dessa semana — assim o user vê "Seg 19/05" e não só "Seg".
+  final DateTime planStartDate;
   const _WeekTile({
     required this.week,
     required this.initiallyExpanded,
     required this.dayNames,
+    required this.planStartDate,
   });
+
+  /// Calcula a data real do dayOfWeek nessa semana.
+  /// week.weekNumber 1-indexed; dayOfWeek 1=Seg..7=Dom.
+  DateTime _dateOf(int dayOfWeek) {
+    final start = planStartDate;
+    final startDow = start.weekday; // 1=Mon..7=Sun
+    // Dia 1 da semana 1 = startDate; ajusta pra dia escolhido.
+    final daysFromStart = (week.weekNumber - 1) * 7 + (dayOfWeek - startDow);
+    return start.add(Duration(days: daysFromStart));
+  }
+
+  String _dayDateLabel(int dayOfWeek) {
+    final d = _dateOf(dayOfWeek);
+    return '${dayNames[dayOfWeek]} ${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -731,12 +811,12 @@ class _WeekTile extends StatelessWidget {
               if (sessionDays.contains(d))
                 _SessionRow(
                   session: sorted.firstWhere((s) => s.dayOfWeek == d),
-                  dayLabel: dayNames[d],
+                  dayLabel: _dayDateLabel(d),
                 )
               else if (restTipsByDay.containsKey(d))
-                _RestDayRow(tip: restTipsByDay[d]!, dayLabel: dayNames[d])
+                _RestDayRow(tip: restTipsByDay[d]!, dayLabel: _dayDateLabel(d))
               else
-                _PlainRestRow(dayLabel: dayNames[d]),
+                _PlainRestRow(dayLabel: _dayDateLabel(d)),
             ],
           ],
         ),
@@ -804,7 +884,7 @@ class _SessionHeader extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         SizedBox(
-          width: 36,
+          width: 72,
           child: Text(
             dayLabel,
             style: GoogleFonts.jetBrainsMono(
@@ -942,7 +1022,7 @@ class _RestDayRow extends StatelessWidget {
           Row(
             children: [
               SizedBox(
-                width: 36,
+                width: 72,
                 child: Text(
                   dayLabel,
                   style: GoogleFonts.jetBrainsMono(
@@ -999,7 +1079,7 @@ class _PlainRestRow extends StatelessWidget {
       child: Row(
         children: [
           SizedBox(
-            width: 36,
+            width: 72,
             child: Text(
               dayLabel,
               style: GoogleFonts.jetBrainsMono(
@@ -1017,4 +1097,110 @@ class _PlainRestRow extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Periodização clicável — chips por semana com FASE inferida do
+/// volume/foco. Clicar dispara onTapWeek que faz Scrollable.ensureVisible
+/// pra week tile correspondente lá embaixo.
+class _PeriodizationChips extends StatelessWidget {
+  final Plan plan;
+  final void Function(int weekNumber) onTapWeek;
+  const _PeriodizationChips({required this.plan, required this.onTapWeek});
+
+  String _faseLabel(PlanWeek w, double avgKm) {
+    final totalKm = w.sessions.fold<double>(0, (s, x) => s + x.distanceKm);
+    final relative = avgKm > 0 ? totalKm / avgKm : 1;
+    if (w.focus != null && w.focus!.trim().isNotEmpty) {
+      return w.focus!.toUpperCase();
+    }
+    if (w.weekNumber == 1) return 'BASE';
+    if (relative < 0.75) return 'DELOAD';
+    if (relative > 1.15) return 'PEAK';
+    return 'BUILD';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    if (plan.weeks.isEmpty) {
+      return Text(
+        'Sem semanas geradas ainda.',
+        style: TextStyle(color: palette.muted, fontSize: 12),
+      );
+    }
+    final totalKm = plan.weeks
+        .fold<double>(0, (s, w) => s + w.sessions.fold<double>(0, (ss, x) => ss + x.distanceKm));
+    final avgKm = totalKm / plan.weeks.length;
+    final start = plan.effectiveStartDate;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Mesociclo: ${plan.weeksCount} semanas · ${totalKm.toStringAsFixed(0)}km totais',
+          style: TextStyle(color: palette.muted, fontSize: 11),
+        ),
+        const SizedBox(height: 10),
+        ...plan.weeks.map((w) {
+          final fase = _faseLabel(w, avgKm);
+          final wKm = w.sessions.fold<double>(0, (s, x) => s + x.distanceKm);
+          final wStart = start.add(Duration(days: (w.weekNumber - 1) * 7));
+          final wEnd = wStart.add(const Duration(days: 6));
+          return InkWell(
+            onTap: () => onTapWeek(w.weekNumber),
+            child: Container(
+              margin: const EdgeInsets.only(bottom: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: palette.background,
+                border: Border.all(color: palette.border, width: 1.0),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    color: palette.primary.withValues(alpha: 0.15),
+                    child: Text(
+                      'S${w.weekNumber}',
+                      style: GoogleFonts.jetBrainsMono(
+                        color: palette.primary,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          fase,
+                          style: GoogleFonts.jetBrainsMono(
+                            color: palette.text,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '${_fmtShort(wStart)}–${_fmtShort(wEnd)} · ${wKm.toStringAsFixed(0)}km',
+                          style: TextStyle(color: palette.muted, fontSize: 10.5),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Icon(Icons.chevron_right, size: 16, color: palette.muted),
+                ],
+              ),
+            ),
+          );
+        }),
+      ],
+    );
+  }
+
+  static String _fmtShort(DateTime d) =>
+      '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}';
 }

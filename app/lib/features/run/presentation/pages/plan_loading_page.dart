@@ -20,7 +20,10 @@ import 'package:runnin/shared/widgets/plan_task_row.dart';
 ///     fica polling /plans/current até status 'ready' (ou fallback timeout).
 ///  4. Animação dos 8 passos só serve pra preencher o tempo da chamada.
 class PlanLoadingPage extends StatefulWidget {
-  const PlanLoadingPage({super.key});
+  /// D0 do plano escolhida no onboarding (ISO YYYY-MM-DD). Passada via
+  /// `/plan-loading?startDate=...`. Null = default hoje (no server).
+  final String? startDate;
+  const PlanLoadingPage({super.key, this.startDate});
 
   @override
   State<PlanLoadingPage> createState() => _PlanLoadingPageState();
@@ -70,6 +73,7 @@ class _PlanLoadingPageState extends State<PlanLoadingPage> {
         goal: profile.goal,
         level: profile.level,
         frequency: profile.frequency,
+        startDate: widget.startDate,
       );
 
       // Roda animação enquanto faz polling de /plans/current

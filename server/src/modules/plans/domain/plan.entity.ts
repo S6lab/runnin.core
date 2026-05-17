@@ -70,6 +70,13 @@ export interface Plan {
   level: string;
   weeksCount: number;
   status: PlanStatus;
+  /**
+   * Data D0 escolhida pelo atleta no onboarding (ISO YYYY-MM-DD). O dia
+   * `dayOfWeek` da PRIMEIRA semana é o weekday dessa data. Mesociclo
+   * termina em startDate + (weeksCount × 7) - 1 dias.
+   * Default = createdAt date.
+   */
+  startDate?: string;
   weeks: PlanWeek[];
   mesocycleNarrative?: string; // texto LLM do mesociclo (3-4 frases)
   /**

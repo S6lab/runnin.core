@@ -33,9 +33,11 @@ class _OnboardingPageState extends State<OnboardingPage> {
   final _medicalOtherCtrl = TextEditingController();
   final Set<String> _medicalConditions = {};
 
-  // 3 intro slides + 10 assessment steps. Login mora em /login (antes do onboarding).
-  static const _totalSteps = 13;
-  static const _firstAssessmentStep = 3;
+  // 3 intro + 1 prep + 10 assessment + 1 start-date = 15 steps.
+  static const _totalSteps = 15;
+  static const _prepStep = 3;
+  static const _firstAssessmentStep = 4;
+  static const _startDateStep = 14;
 
   int _step = 0;
   String _level = 'iniciante';
@@ -49,6 +51,19 @@ class _OnboardingPageState extends State<OnboardingPage> {
   bool _hasWearable = false;
   bool _submitting = false;
   String? _error;
+  // D0 escolhida no último step do onboarding. Default = hoje.
+  late DateTime _startDate = _todayMidnight();
+  String _startDateChoice = 'today'; // 'today' | 'tomorrow' | 'next_monday' | 'custom'
+
+  static DateTime _todayMidnight() {
+    final n = DateTime.now();
+    return DateTime(n.year, n.month, n.day);
+  }
+
+  String _startDateIso() {
+    final d = _startDate;
+    return '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+  }
 
   @override
   void initState() {
@@ -91,10 +106,13 @@ class _OnboardingPageState extends State<OnboardingPage> {
     final profile = await _ds.getMe().catchError((_) => null);
     final premium = profile?.premium ?? false;
     if (!mounted) return;
+    final startIso = _startDateIso();
     if (!premium) {
-      context.go('/paywall?next=/home');
+      // Freemium não gera plano AI, mas mantemos startDate como query
+      // pra paywall passar adiante se ele assinar.
+      context.go('/paywall?next=/home&startDate=$startIso');
     } else {
-      context.push('/plan-loading');
+      context.push('/plan-loading?startDate=$startIso');
     }
   }
 
@@ -222,49 +240,51 @@ class _OnboardingPageState extends State<OnboardingPage> {
       case 1:
       case 2:
         return OnboardingStepIntro(slide: kOnboardingIntroSlides[_step]);
-      case 3:
+      case _prepStep:
+        return const _OnboardingPrepStep();
+      case 4:
         return OnboardingStepLevel(
           selected: _level,
           onSelect: (value) => setState(() => _level = value),
         );
-      case 4:
+      case 5:
         return OnboardingStepIdentity(
           nameController: _nameCtrl,
           birthDateController: _birthDateCtrl,
         );
-      case 5:
+      case 6:
         return OnboardingStepGender(
           selected: _gender,
           onSelect: (value) => setState(() => _gender = value),
         );
-      case 6:
+      case 7:
         return OnboardingStepBody(
           weightController: _weightCtrl,
           heightController: _heightCtrl,
         );
-      case 7:
+      case 8:
         return OnboardingStepMedical(
           selected: _medicalConditions,
           otherController: _medicalOtherCtrl,
           onToggle: _toggleMedicalCondition,
           onAddOther: _addOtherMedicalCondition,
         );
-      case 8:
+      case 9:
         return OnboardingStepGoal(
           selectedGoal: _goal,
           onGoalSelect: (value) => setState(() => _goal = value),
         );
-      case 9:
+      case 10:
         return OnboardingStepFrequency(
           frequency: _frequency,
           onFreqChange: (value) => setState(() => _frequency = value),
         );
-      case 10:
+      case 11:
         return OnboardingStepPace(
           selected: _pace,
           onSelect: (value) => setState(() => _pace = value),
         );
-      case 11:
+      case 12:
         return OnboardingStepRoutine(
           selectedPeriod: _runPeriod,
           selectedWakeTime: _wakeTime,
@@ -273,10 +293,19 @@ class _OnboardingPageState extends State<OnboardingPage> {
           onWakeTimeSelect: (v) => setState(() => _wakeTime = v),
           onSleepTimeSelect: (v) => setState(() => _sleepTime = v),
         );
-      case 12:
+      case 13:
         return OnboardingStepWearable(
           selected: _hasWearable,
           onSelect: (value) => setState(() => _hasWearable = value),
+        );
+      case _startDateStep:
+        return _OnboardingStartDateStep(
+          selected: _startDateChoice,
+          customDate: _startDate,
+          onSelect: (choice, date) => setState(() {
+            _startDateChoice = choice;
+            _startDate = date;
+          }),
         );
       default:
         return const SizedBox.shrink();
@@ -309,7 +338,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
                 : Text('$label /'),
           ),
         ),
-        if (_step == 7)
+        if (_step == 8)
           Padding(
             padding: const EdgeInsets.only(top: 8),
             child: Text(
@@ -335,12 +364,12 @@ class _OnboardingPageState extends State<OnboardingPage> {
     if (_submitting) return false;
 
     switch (_step) {
-      case 4:
+      case 5: // identity
         return _nameCtrl.text.trim().isNotEmpty &&
             _isValidBirthDate(_birthDateCtrl.text.trim());
-      case 5:
+      case 6: // gender
         return _gender != null;
-      case 6:
+      case 7: // body
         return _weightCtrl.text.trim().isNotEmpty &&
             _heightCtrl.text.trim().isNotEmpty;
       default:
@@ -413,4 +442,227 @@ class _OnboardingPageState extends State<OnboardingPage> {
   }
 
   void _nextStep() => setState(() => _step++);
+}
+
+// ───────────────────────── novos steps ──────────────────────────────
+
+/// Tela de preparação ANTES do assessment. Avisa que o que vem agora
+/// é o que vai personalizar o plano — pede atenção e honestidade.
+class _OnboardingPrepStep extends StatelessWidget {
+  const _OnboardingPrepStep();
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 12),
+        const FigmaAssessmentLabel(text: '// ASSESSMENT'),
+        const SizedBox(height: 14),
+        const FigmaAssessmentHeading(text: 'Vamos montar SEU plano.'),
+        const SizedBox(height: 18),
+        Text(
+          'Pra ter o melhor resultado, preciso da sua atenção total e honestidade nas próximas perguntas.',
+          style: context.runninType.bodyMd.copyWith(color: palette.text, height: 1.55),
+        ),
+        const SizedBox(height: 14),
+        Text(
+          'Essas informações são a BASE do seu plano individualizado — peso, altura, idade, condições médicas, frequência, objetivo e horários moldam cada sessão.',
+          style: context.runninType.bodyMd.copyWith(color: palette.muted, height: 1.55),
+        ),
+        const SizedBox(height: 18),
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: palette.primary.withValues(alpha: 0.08),
+            border: Border.all(color: palette.primary.withValues(alpha: 0.4), width: 1),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.info_outline, size: 18, color: palette.primary),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Sem dados precisos, o coach gera um plano genérico. Com eles, monta um treino feito pra você.',
+                  style: context.runninType.bodySm.copyWith(
+                    color: palette.text,
+                    height: 1.45,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 18),
+        Text(
+          'Bora? Toque CONTINUAR pra começar.',
+          style: context.runninType.bodyMd.copyWith(
+            color: palette.primary,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Último step do onboarding: D0 do plano. User escolhe entre HOJE,
+/// AMANHÃ, PRÓXIMA SEGUNDA ou data CUSTOM. Toda periodização (semana 1
+/// dia 1, mesociclo end) é calculada a partir daqui.
+class _OnboardingStartDateStep extends StatelessWidget {
+  final String selected;
+  final DateTime customDate;
+  final void Function(String choice, DateTime date) onSelect;
+
+  const _OnboardingStartDateStep({
+    required this.selected,
+    required this.customDate,
+    required this.onSelect,
+  });
+
+  static DateTime _today() {
+    final n = DateTime.now();
+    return DateTime(n.year, n.month, n.day);
+  }
+
+  static DateTime _tomorrow() => _today().add(const Duration(days: 1));
+
+  static DateTime _nextMonday() {
+    final t = _today();
+    final dow = t.weekday; // Mon=1...Sun=7
+    final daysAhead = dow == 1 ? 7 : (8 - dow);
+    return t.add(Duration(days: daysAhead));
+  }
+
+  String _fmt(DateTime d) {
+    const names = ['', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado', 'domingo'];
+    return '${names[d.weekday]} · ${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    final today = _today();
+    final tomorrow = _tomorrow();
+    final nextMonday = _nextMonday();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 12),
+        const FigmaAssessmentHeading(text: 'Quando você quer começar?'),
+        const SizedBox(height: 10),
+        FigmaAssessmentDescription(
+          text:
+              'A semana 1 e a periodização toda começam nessa data. O coach respeita o D0 que você escolher.',
+        ),
+        const SizedBox(height: 24),
+        _DateChoice(
+          label: 'COMEÇAR HOJE',
+          subtitle: _fmt(today),
+          selected: selected == 'today',
+          onTap: () => onSelect('today', today),
+        ),
+        const SizedBox(height: 8),
+        _DateChoice(
+          label: 'AMANHÃ',
+          subtitle: _fmt(tomorrow),
+          selected: selected == 'tomorrow',
+          onTap: () => onSelect('tomorrow', tomorrow),
+        ),
+        const SizedBox(height: 8),
+        _DateChoice(
+          label: 'PRÓXIMA SEGUNDA',
+          subtitle: _fmt(nextMonday),
+          selected: selected == 'next_monday',
+          onTap: () => onSelect('next_monday', nextMonday),
+        ),
+        const SizedBox(height: 8),
+        _DateChoice(
+          label: 'ESCOLHER DATA',
+          subtitle: selected == 'custom'
+              ? _fmt(customDate)
+              : 'toque pra abrir o calendário',
+          selected: selected == 'custom',
+          onTap: () async {
+            final picked = await showDatePicker(
+              context: context,
+              initialDate: customDate,
+              firstDate: today,
+              lastDate: today.add(const Duration(days: 60)),
+            );
+            if (picked != null) onSelect('custom', picked);
+          },
+        ),
+        const SizedBox(height: 18),
+        Padding(
+          padding: const EdgeInsets.all(12),
+          child: Text(
+            'Dica: começar amanhã ou próxima segunda dá tempo de ajustar a rotina e separar o material (tênis, garrafa, etc).',
+            style: context.runninType.bodySm.copyWith(
+              color: palette.muted,
+              height: 1.5,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _DateChoice extends StatelessWidget {
+  final String label;
+  final String subtitle;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _DateChoice({
+    required this.label,
+    required this.subtitle,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: selected
+              ? palette.primary.withValues(alpha: 0.12)
+              : palette.surface,
+          border: Border.all(
+            color: selected ? palette.primary : palette.border,
+            width: 1.041,
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: context.runninType.labelMd.copyWith(
+                color: selected ? palette.primary : palette.text,
+                fontWeight: FontWeight.w500,
+                letterSpacing: 1.2,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              subtitle,
+              style: context.runninType.bodySm.copyWith(
+                color: palette.muted,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }

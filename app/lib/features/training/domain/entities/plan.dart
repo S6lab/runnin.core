@@ -123,6 +123,9 @@ class Plan {
   final String status;
   final List<PlanWeek> weeks;
   final String createdAt;
+  /// D0 escolhida pelo user no onboarding (ISO YYYY-MM-DD). Periodização
+  /// (semana 1 dia 1, mesociclo end) é calculada a partir daqui.
+  final String? startDate;
   /// Markdown longo escrito pelo coach AI (gerado em background no server).
   /// Pode estar null se ainda não foi gerado ou se a chamada LLM falhou.
   final String? coachRationale;
@@ -138,6 +141,7 @@ class Plan {
     required this.status,
     required this.weeks,
     required this.createdAt,
+    this.startDate,
     this.coachRationale,
     this.mesocycleNarrative,
     this.revisions = const [],
@@ -153,6 +157,7 @@ class Plan {
             .map((w) => PlanWeek.fromJson(w as Map<String, dynamic>))
             .toList(),
         createdAt: j['createdAt'] as String,
+        startDate: j['startDate'] as String?,
         coachRationale: j['coachRationale'] as String?,
         mesocycleNarrative: j['mesocycleNarrative'] as String?,
         revisions: ((j['revisions'] as List?) ?? [])
@@ -162,4 +167,20 @@ class Plan {
 
   bool get isReady => status == 'ready';
   bool get isGenerating => status == 'generating';
+
+  /// D0 efetiva: startDate (escolhida no onboarding) ou createdAt como
+  /// fallback pra planos legados.
+  DateTime get effectiveStartDate {
+    final s = startDate;
+    if (s != null && s.isNotEmpty) {
+      final d = DateTime.tryParse(s);
+      if (d != null) return d;
+    }
+    return DateTime.tryParse(createdAt) ?? DateTime.now();
+  }
+
+  /// Última data do mesociclo (inclusive). Útil pra mostrar
+  /// "começa 18/05 → termina 12/07" no header do plan-detail.
+  DateTime get mesocycleEndDate =>
+      effectiveStartDate.add(Duration(days: weeksCount * 7 - 1));
 }
