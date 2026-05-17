@@ -2,9 +2,11 @@ import 'dart:async';
 import 'dart:math';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 import 'package:runnin/features/run/data/datasources/run_local_datasource.dart';
 import 'package:runnin/features/run/data/datasources/run_remote_datasource.dart';
 import 'package:runnin/features/run/data/datasources/run_coach_remote_datasource.dart';
+import 'package:runnin/features/run/data/live_coach_voice_service.dart';
 import 'package:runnin/features/run/domain/entities/run.dart';
 
 // ── Events ──────────────────────────────────────────────────────────────────
@@ -120,6 +122,8 @@ class RunState {
 class RunBloc extends Bloc<RunEvent, RunState> {
   final _remote = RunRemoteDatasource();
   final _coachRemote = RunCoachRemoteDatasource();
+  final _userRemote = UserRemoteDatasource();
+  final _liveVoice = LiveCoachVoiceService();
   final _local = RunLocalDatasource();
 
   StreamSubscription<Position>? _gpsSub;
@@ -205,10 +209,10 @@ class RunBloc extends Bloc<RunEvent, RunState> {
       );
 
       _lastCoachKm = 0;
-      // Saudação inicial via /coach/message. Cap de 3s do player foi
-      // removido + cascata Live→ElevenLabs→Google garante áudio mesmo
-      // se Live falhar. Bug "trava no nome" não acontece mais.
-      _requestCoachCue(event: 'start');
+      // Saudação inicial via Gemini Live DIRETO (sem /coach/message).
+      // App fala com Live → recebe áudio WAV → toca. Sem proxy, sem TTS
+      // estático, sem 504 no Cloud Run. Roda em background.
+      unawaited(_speakStartGreeting(event.type));
 
       // Timer de tempo decorrido
       _timer = Timer.periodic(
@@ -429,6 +433,40 @@ class RunBloc extends Bloc<RunEvent, RunState> {
   Future<void> close() {
     _stop();
     return super.close();
+  }
+
+  /// Saudação inicial via Gemini Live (client → Gemini direto, sem
+  /// proxy server). Texto montado localmente a partir do perfil em
+  /// cache (UserRemoteDatasource). Falha silenciosa — UI segue mesmo
+  /// se Live indisponível.
+  Future<void> _speakStartGreeting(String runType) async {
+    try {
+      final profile = await _userRemote.getMe().timeout(
+            const Duration(seconds: 3),
+            onTimeout: () => null,
+          );
+      final fullName = profile?.name.trim() ?? '';
+      final firstName = fullName.isEmpty
+          ? null
+          : fullName.split(RegExp(r'\s+')).first;
+      final typeNice = runType.toLowerCase().replaceFirst('free run', 'corrida livre');
+      final greeting = firstName != null && firstName.isNotEmpty
+          ? 'Bora $firstName! Começando a $typeNice. Vou te acompanhar.'
+          : 'Bora! Começando a $typeNice. Vou te acompanhar.';
+
+      final audio = await _liveVoice.synthesize(
+        greeting,
+        voiceId: profile?.coachVoiceId,
+      );
+      if (audio == null || isClosed) return;
+      add(_CoachChunk(CoachCue(
+        text: greeting,
+        audioBase64: audio.audioBase64,
+        audioMimeType: audio.mimeType,
+      )));
+    } catch (_) {
+      // best-effort; sem saudação em caso de erro
+    }
   }
 
   void _requestCoachCue({

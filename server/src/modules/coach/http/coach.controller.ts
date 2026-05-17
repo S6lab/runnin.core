@@ -4,6 +4,7 @@ import { CoachChatSchema, CoachChatUseCase } from '../use-cases/coach-chat.use-c
 import { GetCoachReportUseCase } from '../use-cases/get-coach-report.use-case';
 import { GenerateReportUseCase } from '../use-cases/generate-report.use-case';
 import { GeneratePeriodAnalysisUseCase } from '../use-cases/generate-period-analysis.use-case';
+import { CreateLiveEphemeralTokenUseCase } from '../use-cases/create-live-ephemeral-token.use-case';
 import { FirestoreCoachReportRepository } from '../infra/firestore-coach-report.repository';
 import { FirestoreRunRepository } from '@modules/runs/infra/firestore-run.repository';
 import { NotFoundError } from '@shared/errors/app-error';
@@ -16,6 +17,16 @@ const coachChat = new CoachChatUseCase();
 const getReport = new GetCoachReportUseCase(reportRepo);
 const generateReport = new GenerateReportUseCase(reportRepo, runRepoForReports);
 const generatePeriodAnalysis = new GeneratePeriodAnalysisUseCase(runRepoForReports);
+const createLiveToken = new CreateLiveEphemeralTokenUseCase();
+
+export async function postCoachLiveToken(_req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const result = await createLiveToken.execute();
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+}
 
 export async function postGenerateReport(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
