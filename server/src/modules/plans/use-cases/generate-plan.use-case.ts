@@ -2,7 +2,8 @@ import { v4 as uuid } from 'uuid';
 import { z } from 'zod';
 import { getAsyncLLM } from '@shared/infra/llm/llm.factory';
 import { PlanRepository } from '../domain/plan.repository';
-import { Plan, PlanSession, PlanWeek } from '../domain/plan.entity';
+import { Plan, PlanSegment, PlanSession, PlanWeek } from '../domain/plan.entity';
+import { buildExecutionSegments } from './build-execution-segments';
 import { logger } from '@shared/logger/logger';
 import { formatRunningKnowledgeContext } from '@shared/knowledge/running/running-knowledge';
 import { buildPlanInitPrompt } from '@shared/infra/llm/prompts';
@@ -530,19 +531,28 @@ ${repaired}`,
     const startDow = (start.getDay() || 7);
 
     const normalized = parsed.map((week, weekIndex) => {
-      const allSessions = week.sessions.map(session => ({
-        id: uuid(),
-        dayOfWeek: session.dayOfWeek,
-        type: session.type,
-        distanceKm: Number(session.distanceKm.toFixed(1)),
-        targetPace: session.targetPace,
-        durationMin: session.durationMin,
-        hydrationLiters: session.hydrationLiters,
-        nutritionPre: session.nutritionPre,
-        nutritionPost: session.nutritionPost,
-        executionSegments: session.executionSegments,
-        notes: session.notes,
-      }) satisfies PlanSession);
+      const allSessions = week.sessions.map(session => {
+        const base = {
+          id: uuid(),
+          dayOfWeek: session.dayOfWeek,
+          type: session.type,
+          distanceKm: Number(session.distanceKm.toFixed(1)),
+          targetPace: session.targetPace,
+          durationMin: session.durationMin,
+          hydrationLiters: session.hydrationLiters,
+          nutritionPre: session.nutritionPre,
+          nutritionPost: session.nutritionPost,
+          notes: session.notes,
+        } satisfies Omit<PlanSession, 'executionSegments'>;
+        // Segments: prioriza o que LLM mandou (caso futuro o prompt
+        // volte a pedir), senão gera deterministicamente a partir de
+        // distância + tipo + pace. Sem LLM, instantâneo.
+        const segments: PlanSegment[] | undefined =
+          (session.executionSegments?.length ?? 0) > 0
+            ? (session.executionSegments as PlanSegment[])
+            : buildExecutionSegments(base);
+        return { ...base, executionSegments: segments } satisfies PlanSession;
+      });
 
       // Week 1: descarta SEMPRE sessões com dayOfWeek < hoje (LLM não deveria
       // ter gerado, mas garante). Não há fallback "manter tudo" — sessão
