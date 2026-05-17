@@ -79,12 +79,28 @@ export function attachCoachLiveWebSocket(httpServer: HttpServer): void {
     const runtime = await runtimeService.getContext(uid);
     const tone = await resolvePersonaTone(runtime.profile?.coachPersonality);
 
+    // SystemInstruction curto. Antes mandávamos JSON.stringify do profile
+    // E plano completo — fechava o WS com 1008 (safety filter ou tamanho
+    // excedido). Agora só persona + snippet do perfil + próxima sessão.
+    const p = runtime.profile;
+    const profileSnippet = p
+      ? [
+          p.name ? `nome ${p.name}` : null,
+          p.level ? `nível ${p.level}` : null,
+          p.goal ? `objetivo "${p.goal}"` : null,
+          p.frequency ? `${p.frequency}x/semana` : null,
+        ].filter(Boolean).join(', ')
+      : 'sem perfil completo';
+    const planSnippet = runtime.currentPlan
+      ? `Plano em andamento (${runtime.currentPlan.weeksCount} semanas, ${runtime.currentPlan.goal}).`
+      : 'Sem plano ativo.';
+
     const systemInstruction = [
-      'Você é o Coach.AI do runnin em conversa por voz com o atleta.',
+      'Você é o Coach.AI do runnin em conversa por voz com o atleta. PT-BR.',
       `Persona: ${tone}`,
-      `Perfil do atleta: ${JSON.stringify(runtime.profile)}`,
-      runtime.currentPlan ? `Plano atual: ${JSON.stringify(runtime.currentPlan)}` : 'Sem plano ativo.',
-      'Responda de forma natural, conversacional. Respostas curtas (10-25 segundos de áudio).',
+      `Atleta: ${profileSnippet}.`,
+      planSnippet,
+      'Respostas curtas (1-3 frases, 10-20s de áudio). Tom direto e prático.',
     ].join('\n\n');
 
     const session = new GeminiLiveSession({

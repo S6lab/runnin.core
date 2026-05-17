@@ -2,7 +2,12 @@ import WebSocket, { RawData } from 'ws';
 import { logger } from '@shared/logger/logger';
 
 const GEMINI_LIVE_URL = 'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent';
-const DEFAULT_MODEL = 'models/gemini-2.0-flash-exp';
+// gemini-2.0-flash-exp foi sendo descontinuado/limitado durante 2025;
+// modelos Live ativos: gemini-2.5-flash-preview-native-audio-dialog
+// (audio nativo) ou gemini-live-2.5-flash-preview. Mantemos via env pra
+// flipar sem deploy se Google mudar de novo.
+const DEFAULT_MODEL = process.env['GEMINI_LIVE_MODEL']?.trim()
+  || 'models/gemini-live-2.5-flash-preview';
 
 export interface GeminiLiveConfig {
   model?: string;

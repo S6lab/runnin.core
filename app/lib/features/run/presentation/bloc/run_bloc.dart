@@ -205,12 +205,10 @@ class RunBloc extends Bloc<RunEvent, RunState> {
       );
 
       _lastCoachKm = 0;
-      // Saudação inicial via TTS REST foi REMOVIDA. Causava "áudio travado
-      // no nome" porque o cue ficava acima do cap de duração do player web,
-      // e o pipeline TTS estático não é o destino arquitetural (Gemini Live
-      // assume essa fala). Cues pontuais (km_reached, pace_alert) seguem
-      // por ora; migração completa pro Live é follow-up.
-      // _requestCoachCue(event: 'start');
+      // Saudação inicial via /coach/message. Cap de 3s do player foi
+      // removido + cascata Live→ElevenLabs→Google garante áudio mesmo
+      // se Live falhar. Bug "trava no nome" não acontece mais.
+      _requestCoachCue(event: 'start');
 
       // Timer de tempo decorrido
       _timer = Timer.periodic(
