@@ -10,7 +10,9 @@ export class GetCoachReportUseCase {
 
   async execute(userId: string, runId: string): Promise<GetCoachReportResult> {
     const report = await this.reports.findByRunId(userId, runId);
-    if (!report || report.status !== 'ready') return { status: 'pending' };
+    // Two-phase: aceita summary_ready/enriched/ready (legacy) como "tem texto pra mostrar".
+    // Sem isso, a UI ficava "Relatório não disponível" mesmo com summary gravado.
+    if (!report || !report.summary) return { status: 'pending' };
     return { status: 'ready', report };
   }
 }
