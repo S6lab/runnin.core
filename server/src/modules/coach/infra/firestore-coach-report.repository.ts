@@ -11,7 +11,32 @@ export class FirestoreCoachReportRepository implements CoachReportRepository {
   async findByRunId(userId: string, runId: string): Promise<CoachReport | null> {
     const snap = await this.doc(userId, runId).get();
     if (!snap.exists) return null;
-    const data = snap.data() ?? {};
+    return this.mapToReport(userId, runId, snap.data() ?? {});
+  }
+
+  async findByRunIds(userId: string, runIds: string[]): Promise<CoachReport[]> {
+    if (runIds.length === 0) return [];
+    const db = getFirestore();
+    const docRefs = runIds.map((runId) => this.doc(userId, runId));
+    const snapshots = await db.getAll(...docRefs);
+    return snapshots
+      .filter((s) => s.exists)
+      .map((s) => this.mapToReport(userId, s.id, s.data() ?? {}));
+  }
+
+  /**
+   * Two-phase save: fase A (summary_ready) grava `set` substituindo o doc;
+   * fase B (enriched) usa merge pra acrescentar sections + status sem
+   * perder o summary já gravado.
+   */
+  async save(report: CoachReport): Promise<void> {
+    const { runId, userId, sections, ...rest } = report;
+    const payload: Record<string, unknown> = { ...rest };
+    if (sections) payload['sections'] = sections;
+    await this.doc(userId, runId).set(payload, { merge: true });
+  }
+
+  private mapToReport(userId: string, runId: string, data: FirebaseFirestore.DocumentData): CoachReport {
     const sectionsRaw = data['sections'];
     const sections = sectionsRaw && typeof sectionsRaw === 'object'
       ? {
@@ -30,17 +55,5 @@ export class FirestoreCoachReportRepository implements CoachReportRepository {
       sections,
       enrichedAt: data['enrichedAt'],
     };
-  }
-
-  /**
-   * Two-phase save: a fase A (summary_ready) grava `set` substituindo o
-   * doc; fase B (enriched) usa merge pra acrescentar sections + status
-   * sem perder o summary já gravado.
-   */
-  async save(report: CoachReport): Promise<void> {
-    const { runId, userId, sections, ...rest } = report;
-    const payload: Record<string, unknown> = { ...rest };
-    if (sections) payload['sections'] = sections;
-    await this.doc(userId, runId).set(payload, { merge: true });
   }
 }
