@@ -4,11 +4,14 @@ import 'package:intl/intl.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/features/history/data/benchmark_remote_datasource.dart' show BenchmarkRemoteDatasource;
+import 'package:runnin/features/history/data/period_analysis_remote_datasource.dart';
+import 'package:runnin/features/history/domain/entities/period_analysis.dart';
 import 'package:runnin/features/history/presentation/widgets/hist_stat_card.dart';
 import 'package:runnin/features/run/data/datasources/run_remote_datasource.dart';
 import 'package:runnin/features/run/domain/entities/run.dart';
 import 'package:runnin/features/training/data/datasources/plan_remote_datasource.dart';
 import 'package:runnin/features/training/domain/entities/plan.dart';
+import 'package:runnin/shared/widgets/figma/figma_coach_ai_block.dart';
 import 'package:runnin/shared/widgets/figma/figma_top_nav.dart';
 import 'package:runnin/shared/widgets/chart_panel.dart';
 import 'package:runnin/shared/widgets/two_tone_bar_chart.dart';
@@ -38,12 +41,35 @@ class _HistoryPageState extends State<HistoryPage> {
   bool _benchmarkLoading = false;
   double? _benchmarkPercentile;
   List<BenchmarkRow> _benchmarkTableData = [];
+  int _benchmarkCohortSize = 0;
+  bool _benchmarkEmpty = false;
   final _benchmarkDatasource = BenchmarkRemoteDatasource();
+  final _periodAnalysisDatasource = PeriodAnalysisRemoteDatasource();
+  PeriodAnalysis? _periodAnalysis;
+  bool _loadingAnalysis = false;
+
+  int get _analysisLimit => switch (_period) {
+    _Period.week => 10,
+    _Period.month => 30,
+    _Period.threeMonths => 90,
+  };
 
   @override
   void initState() {
     super.initState();
     _load();
+    _loadPeriodAnalysis();
+  }
+
+  Future<void> _loadPeriodAnalysis() async {
+    if (!mounted) return;
+    setState(() => _loadingAnalysis = true);
+    try {
+      final result = await _periodAnalysisDatasource.getPeriodAnalysis(_analysisLimit);
+      if (mounted) setState(() { _periodAnalysis = result; _loadingAnalysis = false; });
+    } catch (e) {
+      if (mounted) setState(() => _loadingAnalysis = false);
+    }
   }
 
   Future<void> _load() async {
@@ -94,10 +120,13 @@ class _HistoryPageState extends State<HistoryPage> {
   Future<void> _loadBenchmarkTable(String runId) async {
     setState(() { });
     try {
-      final tableData = await _benchmarkDatasource.getBenchmark(runId);
+      final result = await _benchmarkDatasource.getBenchmark(runId);
       if (mounted) {
         setState(() { 
-          _benchmarkTableData = tableData;
+          _benchmarkTableData = result.items;
+          _benchmarkPercentile = result.percentileTop.toDouble();
+          _benchmarkCohortSize = result.cohortSize;
+          _benchmarkEmpty = result.cohortSize == 0;
         });
       }
     } catch (_) {
@@ -139,7 +168,10 @@ class _HistoryPageState extends State<HistoryPage> {
               child: SegmentedTabBar(
                 tabs: const ['SEMANA', 'MÊS', '3 MESES'],
                 selectedIndex: _Period.values.indexOf(_period),
-                onChanged: (i) => setState(() => _period = _Period.values[i]),
+                onChanged: (i) {
+                  setState(() => _period = _Period.values[i]);
+                  _loadPeriodAnalysis();
+                },
               ),
             ),
             const SizedBox(height: 12),
@@ -262,7 +294,7 @@ class _HistoryPageState extends State<HistoryPage> {
       backgroundColor: palette.surface,
       onRefresh: _load,
       child: _tab == _ContentTab.data
-          ? _DataView(runs: runs, plan: _plan, period: _period)
+          ? _DataView(runs: runs, plan: _plan, period: _period, periodAnalysis: _periodAnalysis, loadingAnalysis: _loadingAnalysis)
           : _tab == _ContentTab.runs
               ? _RunsListView(runs: runs)
               : benchmarkWidget,
@@ -276,7 +308,9 @@ class _DataView extends StatelessWidget {
   final List<Run> runs;
   final Plan? plan;
   final _Period period;
-  const _DataView({required this.runs, required this.plan, required this.period});
+  final PeriodAnalysis? periodAnalysis;
+  final bool loadingAnalysis;
+  const _DataView({required this.runs, required this.plan, required this.period, this.periodAnalysis, this.loadingAnalysis = false});
 
   @override
   Widget build(BuildContext context) {
@@ -403,10 +437,14 @@ class _DataView extends StatelessWidget {
 
         // Coach.AI Análise
         FigmaCoachAIBlock(
-          child: Text(
-            _buildCoachNarrative(stats),
-            style: context.runninType.bodyMd.copyWith(height: 1.6),
-          ),
+          child: loadingAnalysis
+              ? const Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)))
+              : Text(
+                  periodAnalysis?.status == PeriodAnalysisStatus.pending
+                      ? 'Coach analisando seu período...'
+                      : (periodAnalysis?.summary ?? 'Coach analisando seu período...'),
+                  style: context.runninType.bodyMd.copyWith(height: 1.6),
+                ),
         ),
       ],
     );
@@ -526,13 +564,6 @@ class _DataView extends StatelessWidget {
     );
   }
 
-  String _buildCoachNarrative(_HistoryStats s) {
-    if (s.count == 0) return 'Sem corridas no período para análise.';
-    return 'Você completou ${s.count} corridas com ${s.totalKm.toStringAsFixed(1)} km '
-        'e pace médio de ${s.avgPaceLabel}/km. '
-        '${s.streakDays > 2 ? "Excelente consistência de ${s.streakDays} dias! " : ""}'
-        'Continue mantendo a progressão de volume semanal para evoluir no ciclo.';
-  }
 }
 
 class _HistoryStats {
