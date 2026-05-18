@@ -87,6 +87,41 @@ workflows:
     scripts:
       - name: Pub get
         script: cd app && flutter pub get
+      # build.gradle.kts lê signing config de android/key.properties (mesma
+      # convenção do dev local). Em CI, Codemagic injeta CM_KEYSTORE_PATH /
+      # CM_KEYSTORE_PASSWORD / CM_KEY_ALIAS / CM_KEY_PASSWORD via
+      # `android_signing: - runnin_keystore`. Aqui só materializamos isso
+      # num key.properties efêmero antes do build.
+      #
+      # Fail-fast: se alguma variável estiver vazia, é sinal que o keystore
+      # `runnin_keystore` não foi uploaded no Codemagic UI (App settings →
+      # Code signing identities → Android keystores). Sem isso, o gradle
+      # cai em NPE no signReleaseBundle 8min depois — preferimos abortar já.
+      - name: Generate key.properties from Codemagic signing vars
+        script: |
+          set -e
+          missing=""
+          [ -z "$CM_KEYSTORE_PATH" ] && missing="$missing CM_KEYSTORE_PATH"
+          [ -z "$CM_KEYSTORE_PASSWORD" ] && missing="$missing CM_KEYSTORE_PASSWORD"
+          [ -z "$CM_KEY_ALIAS" ] && missing="$missing CM_KEY_ALIAS"
+          [ -z "$CM_KEY_PASSWORD" ] && missing="$missing CM_KEY_PASSWORD"
+          if [ -n "$missing" ]; then
+            echo "ERROR: Codemagic signing vars ausentes:$missing"
+            echo "Faça upload do keystore .jks em App settings → Code signing identities"
+            echo "→ Android keystores → reference name: runnin_keystore"
+            exit 1
+          fi
+          if [ ! -f "$CM_KEYSTORE_PATH" ]; then
+            echo "ERROR: CM_KEYSTORE_PATH=$CM_KEYSTORE_PATH não existe no FS do runner"
+            exit 1
+          fi
+          cat > app/android/key.properties <<EOF
+          storePassword=$CM_KEYSTORE_PASSWORD
+          keyPassword=$CM_KEY_PASSWORD
+          keyAlias=$CM_KEY_ALIAS
+          storeFile=$CM_KEYSTORE_PATH
+          EOF
+          echo "key.properties materializado (storeFile=$CM_KEYSTORE_PATH)"
       - name: Build release AAB (signed)
         script: |
           cd app
