@@ -87,7 +87,20 @@ export async function postCoachMessage(req: Request, res: Response, next: NextFu
     res.write('data: [DONE]\n\n');
     res.end();
   } catch (err) {
-    logger.warn('coach.message.failed', { event: rawEvent, err: String(err), uid: req.uid });
+    // Inclui body inteira (sanitizada) pra ver QUAL valor foi rejeitado
+    // pelo schema — Zod mostrava só os valid values, sem o input que falhou.
+    const safeBody: Record<string, unknown> = {};
+    if (req.body && typeof req.body === 'object') {
+      for (const [k, v] of Object.entries(req.body as Record<string, unknown>)) {
+        safeBody[k] = typeof v === 'string' && v.length > 80 ? `${v.slice(0, 80)}…` : v;
+      }
+    }
+    logger.warn('coach.message.failed', {
+      event: rawEvent,
+      body: safeBody,
+      err: String(err),
+      uid: req.uid,
+    });
     next(err);
   }
 }

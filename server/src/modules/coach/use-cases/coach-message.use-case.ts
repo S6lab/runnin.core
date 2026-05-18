@@ -22,16 +22,23 @@ const OptionalNumberSchema = z.preprocess(
 
 export const CoachContextSchema = z.object({
   runId: z.string().optional(),
-  event: z.enum(['pre_run', 'km_reached', 'km_split', 'pace_alert', 'motivation', 'question', 'start', 'finish']),
+  event: z.enum(['pre_run', 'km_reached', 'km_split', 'pace_alert', 'motivation', 'question', 'start', 'finish', 'preview']),
   runType: z.string().optional(),
-  currentPaceMinKm: z.number(),
+  // currentPaceMinKm / distanceM / elapsedS são contexto de corrida ativa.
+  // Para event=preview (settings) ou question (chat fora de run), não
+  // existem ainda — default 0 evita 422 de validação sem mudar a lógica
+  // dos events de runtime que sempre preenchem esses campos.
+  currentPaceMinKm: z.number().default(0),
   targetPaceMinKm: OptionalNumberSchema,
   targetDistance: z.string().optional(),
-  distanceM: z.number(),
-  elapsedS: z.number(),
+  distanceM: z.number().default(0),
+  elapsedS: z.number().default(0),
   bpm: OptionalNumberSchema,
   kmReached: OptionalNumberSchema,
   question: z.string().optional(),
+  /** ID da voz pra preview (event=preview). Mapeia pra Charon/Aoede/Kore
+   *  no GeminiLiveTtsService. */
+  voiceId: z.string().optional(),
 });
 
 export type CoachContext = z.infer<typeof CoachContextSchema>;
@@ -65,6 +72,11 @@ export class CoachMessageUseCase {
   private messageLog: CoachMessageLogRepository = new FirestoreCoachMessageLogRepository();
 
   async generate(ctx: CoachContext, userId: string): Promise<CoachGenerateResult> {
+    // Preview de voz no settings: sample short text via Live TTS, sem
+    // LLM nem runtime context. voiceId vem do request body.
+    if (ctx.event === 'preview') {
+      return this._generateVoicePreview(ctx);
+    }
     // Saudação inicial = caminho leve. Sem LLM, sem RAG, sem runtime
     // context pesado — só template baseado em nome do user + tipo de
     // corrida. Salva ~10s no entry da run e elimina ponto de falha.
@@ -215,6 +227,24 @@ export class CoachMessageUseCase {
     ]);
     return {
       text: greeting,
+      audioBase64: audio?.audioBase64,
+      audioMimeType: audio?.mimeType,
+    };
+  }
+
+  /**
+   * Preview de voz no settings page: sample text curto sintetizado com
+   * a voiceId escolhida. Sem LLM, sem RAG, sem decision layer. Cliente
+   * só precisa do áudio pra deixar o user ouvir antes de salvar.
+   */
+  private async _generateVoicePreview(ctx: CoachContext): Promise<CoachCueResponse> {
+    const sample = 'Eu vou te acompanhar do início ao fim. Vamos correr juntos.';
+    const audio = await Promise.race([
+      this._synthesize(sample, ctx.voiceId),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 10000)),
+    ]);
+    return {
+      text: sample,
       audioBase64: audio?.audioBase64,
       audioMimeType: audio?.mimeType,
     };
