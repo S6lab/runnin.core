@@ -41,6 +41,8 @@ export const PLAN_INIT_DEFAULTS = {
     'REGRA CRÍTICA — RESPEITAR PERFIL INDIVIDUAL:',
     '- Condições médicas listadas no perfil SÃO RESTRIÇÕES OBRIGATÓRIAS. Não prescreva sessões incompatíveis. Quando ajustar carga/intensidade por causa delas, cite a condição EXPLICITAMENTE na notes (ex: "intensidade reduzida pelo betabloqueador", "evitando impacto no joelho").',
     '- ≥3 comorbidades simultâneas, ou QUALQUER uma destas SÉRIAS (cirurgia recente <6m, hérnia de disco, lesão recente em atividade, anticoagulante, insulina): pode reduzir frequência em ATÉ 1 sessão a menos do solicitado (NUNCA mais que isso) E reduz volume das primeiras 2 semanas. Cite a condição explicitamente na notes da primeira sessão. Sem condição dessa lista, o frequency declarado é INTOCÁVEL.',
+    '- REGRA DE OURO ANTI-PARALISIA: NUNCA, em hipótese alguma, devolva uma semana com 0 sessões ou um plano com TOTAL de 0 sessões. Se o perfil é difícil (várias comorbidades + objetivo ambicioso + cirurgia prévia), o caminho é REDUZIR DISTÂNCIA E INTENSIDADE de cada sessão — NÃO zerar a semana. Mesmo um atleta com restrição forte precisa do HÁBITO de saída regular (caminhada 1km, easy walk-run 2km) — isso é mais terapêutico que ficar parado. Em casos extremos, mantenha frequency-1 sessões/semana com volume mínimo (1-3km Easy Run) e cite as condições nas notes.',
+    '- EXEMPLO concreto pra perfil "Maratona 42K + 6x/semana + intermediário + 3 comorbidades (incluindo cirurgia de tendão de Aquiles)": 5-6 sessões/semana, mas NA SEMANA 1-3 use Easy Run curto (3-4km) + 1 Long Run só na semana 3 (8km máx no início), zero intervalado nas 4 primeiras semanas, e POSTERGUE a fase Specific de Maratona pro mesociclo 2. Notes da semana 1: "[BASE] Volume reduzido pra proteger tendões operados — vamos construir base aeróbica em 4 semanas antes de pensar em distância." Esse perfil NUNCA deve gerar plano vazio.',
     '- Gênero, idade, peso, altura E BPM repouso/máx influenciam zonas-alvo e progressão. Calcule pace e volume considerando esses campos quando presentes (ex: feminino + 40+ anos pede progressão mais gradual; BPM máx baixo / uso de betabloqueador pede zonas reduzidas; BMI elevado pede redução de impacto e mais walk-runs).',
     '- Período preferido (manhã/tarde/noite) + horários de acordar/dormir definem a janela metabólica real: distribua as sessões mais exigentes onde sobra mais energia E há gap mínimo de 2-3h entre acordar/treinar e treinar/dormir. Ex: acorda 06h + treina manhã → sessão pode começar 06h30-07h; dorme 22h + treina noite → terminar até 20h30.',
     '- Frequência alvo é HARD CONSTRAINT: o atleta declarou X dias/semana e o plano DEVE entregar X sessões por semana. Reduzir é exceção e exige uma condição médica da lista séria (ver acima). Se reduzir, no máximo -1 sessão e cite a condição na notes.',
@@ -83,8 +85,19 @@ export const PLAN_INIT_DEFAULTS = {
     '5. Variedade: o objetivo demanda tipos específicos de sessão? Distribua respeitando restrições.',
     '6. Coerência semana-a-semana: cada semana deve ser entendida como CONSEQUÊNCIA da anterior (não independente). Long run cresce gradualmente; intensidade só aparece com base aeróbica formada.',
     '',
-    'Base de conhecimento baseada em evidência (PRIORIZE essas metodologias sobre templates genéricos — use citações implícitas, não literais):',
+    'Base de conhecimento baseada em evidência (USE APENAS essas metodologias — NÃO invente protocolos não documentados aqui; cite as referências de forma implícita no campo notes):',
     '{{rag}}',
+    '',
+    'REGRA CRÍTICA — RIQUEZA OBRIGATÓRIA NAS SEMANAS 1-2:',
+    'As DUAS PRIMEIRAS semanas DEVEM ter TODOS os campos por sessão preenchidos (não opcionais):',
+    '  - targetPace (calculado por nível + objetivo)',
+    '  - durationMin (= distanceKm × pace estimado)',
+    '  - hydrationLiters (litros DO DIA total, peso × 0.035L cap 3.5L)',
+    '  - nutritionPre (refeição 60-90min antes, específica do tipo de sessão)',
+    '  - nutritionPost (refeição até 1h depois, específica do tipo de sessão)',
+    '  - notes (3-5 frases: fase do mesociclo + foco técnico + cuidado contextual)',
+    'Semanas 3+: targetPace e durationMin OBRIGATÓRIOS; hydration/nutrition/notes podem ser mais breves mas NÃO podem ser genéricos. NUNCA use o padrão "Sessão preenchida automaticamente" — toda nota é específica da sessão.',
+    'restDayTips das semanas 1-2 também devem ter hydration/nutrition/focus preenchidos com guidance acionável (não "alongamento" genérico — diga QUAL alongamento, qual duração).',
     '',
     'Requisitos do JSON:',
     '- Retorne um array JSON com {{input.weeksCount}} objetos de semana.',
@@ -101,10 +114,11 @@ export const PLAN_INIT_DEFAULTS = {
   ].join('\n'),
 
   temperature: 0.6,
-  // 12000 pra plano main (sem executionSegments — esses vêm em 2º passo
-  // async). 20k anteriormente fazia LLM cuspir JSON quebrado com sessions
-  // vazias por excesso de payload. 12k é folgado pra plano de 8 semanas
-  // com todos campos por sessão (pace, duration, hydration, nutrition).
-  maxTokens: 12000,
-  ragChunks: 4,
+  // 16000 pra plano main: 12k era folgado pra 8 semanas mas apertado pras
+  // 2 PRIMEIRAS SEMANAS detalhadas (campos hydration/nutrition/targetPace/
+  // durationMin EM CADA sessão + notes ricas). User reportou plano "pobre"
+  // exatamente porque essas semanas chegavam com placeholders no fallback.
+  // 16k absorve a riqueza sem inflar pra 20k (lá cai em JSON quebrado).
+  maxTokens: 16000,
+  ragChunks: 5,
 };

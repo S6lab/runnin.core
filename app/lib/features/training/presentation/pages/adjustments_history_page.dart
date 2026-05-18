@@ -74,7 +74,7 @@ class _AdjustmentsHistoryPageState extends State<AdjustmentsHistoryPage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(_error!, style: TextStyle(color: palette.muted)),
+            Text(_error!, style: context.runninType.bodyMd.copyWith(color: palette.muted)),
             const SizedBox(height: 12),
             TextButton(onPressed: _load, child: const Text('TENTAR NOVAMENTE')),
           ],
@@ -107,7 +107,7 @@ class _AdjustmentsHistoryPageState extends State<AdjustmentsHistoryPage> {
         else ...[
           Text(
             'SOLICITAÇÕES ANTERIORES',
-            style: TextStyle(
+            style: context.runninType.labelCaps.copyWith(
               fontSize: 11,
               fontWeight: FontWeight.w500,
               letterSpacing: 0.08,
@@ -156,9 +156,8 @@ class _QuotaCard extends StatelessWidget {
               const Spacer(),
               Text(
                 '$usedThisWeek/1',
-                style: TextStyle(
+                style: context.runninType.dataSm.copyWith(
                   fontSize: 18,
-                  fontWeight: FontWeight.w500,
                   color: palette.secondary,
                 ),
               ),
@@ -178,7 +177,7 @@ class _QuotaCard extends StatelessWidget {
             remaining > 0
                 ? '$remaining alteração disponível esta semana'
                 : 'Próxima disponível na próxima semana',
-            style: TextStyle(color: palette.muted, fontSize: 12),
+            style: context.runninType.bodySm.copyWith(color: palette.muted),
           ),
         ],
       ),
@@ -204,7 +203,7 @@ class _CoachEducationalCard extends StatelessWidget {
             'Você pode solicitar 1 alteração por semana. O Coach.AI analisa seus dados '
             'clínicos, exames e histórico de treino para recalcular as semanas futuras '
             'do seu plano sem comprometer a periodização.',
-            style: TextStyle(color: palette.text, height: 1.5, fontSize: 13),
+            style: context.runninType.bodyMd.copyWith(color: palette.text, height: 1.5, fontSize: 13),
           ),
         ],
       ),
@@ -228,9 +227,7 @@ class _EmptyRevisions extends StatelessWidget {
           const SizedBox(height: 12),
           Text(
             'Nenhuma solicitação ainda',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w500,
+            style: context.runninType.dataSm.copyWith(
               color: palette.text,
             ),
           ),
@@ -238,7 +235,7 @@ class _EmptyRevisions extends StatelessWidget {
           Text(
             'Quando você solicitar alterações no plano, o histórico aparecerá aqui.',
             textAlign: TextAlign.center,
-            style: TextStyle(color: palette.muted, height: 1.5),
+            style: context.runninType.bodyMd.copyWith(color: palette.muted, height: 1.5),
           ),
         ],
       ),
@@ -272,9 +269,8 @@ class _RevisionCard extends StatelessWidget {
               Expanded(
                 child: Text(
                   'Semana ${revision.weekIndex + 1}',
-                  style: TextStyle(
+                  style: context.runninType.dataSm.copyWith(
                     fontSize: 18,
-                    fontWeight: FontWeight.w500,
                     color: palette.text,
                   ),
                 ),
@@ -287,15 +283,15 @@ class _RevisionCard extends StatelessWidget {
           Text(
             _revisionTypeLabel(revision.type) +
                 (revision.subOption != null ? ' · ${revision.subOption}' : ''),
-            style: TextStyle(color: palette.text, fontWeight: FontWeight.w600),
+            style: context.runninType.bodyMd.copyWith(color: palette.text, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 8),
           Text(
             revision.coachExplanation,
-            style: TextStyle(color: palette.muted, height: 1.5),
+            style: context.runninType.bodyMd.copyWith(color: palette.muted, height: 1.5),
           ),
           const SizedBox(height: 8),
-          Text(dateLabel, style: TextStyle(color: palette.border, fontSize: 11)),
+          Text(dateLabel, style: context.runninType.bodyXs.copyWith(color: palette.border)),
         ],
       ),
     );
@@ -331,7 +327,7 @@ class _CalendarVisualization extends StatelessWidget {
       children: [
         Text(
           'CALENDÁRIO DE REVISÕES',
-          style: TextStyle(
+          style: context.runninType.labelCaps.copyWith(
             fontSize: 11,
             fontWeight: FontWeight.w500,
             letterSpacing: 0.08,
@@ -362,7 +358,7 @@ class _CalendarVisualization extends StatelessWidget {
                   children: [
                     Text(
                       'S$weekNum',
-                      style: TextStyle(
+                      style: context.runninType.labelCaps.copyWith(
                         fontSize: 11,
                         fontWeight: FontWeight.w500,
                         color: hasRevision ? palette.primary : palette.muted,

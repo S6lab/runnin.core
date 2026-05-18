@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/shared/widgets/section_heading.dart';
@@ -45,23 +44,31 @@ class _GpsPermissionModalState extends State<GpsPermissionModal> {
   Future<void> _requestPermission() async {
     setState(() => _requesting = true);
     try {
-      final serviceOn = await Geolocator.isLocationServiceEnabled();
-      if (!serviceOn) {
-        setState(() {
-          _isBlocked = true;
-          _requesting = false;
-        });
+      // ORDEM IMPORTA NO WEB: o navegador exige que requestPermission()
+      // seja chamado DENTRO da cadeia síncrona do user gesture (clique).
+      // Versão anterior fazia 2 awaits antes (isLocationServiceEnabled
+      // + checkPermission) — alguns navegadores invalidavam o gesture
+      // entre os awaits e a prompt nativa nunca aparecia. Agora a
+      // PRIMEIRA chamada async é requestPermission, preservando gesture.
+      final perm = await Geolocator.requestPermission();
+      if (perm == LocationPermission.deniedForever) {
+        if (mounted) {
+          setState(() {
+            _isBlocked = true;
+            _requesting = false;
+          });
+        }
         return;
       }
-      var perm = await Geolocator.checkPermission();
-      if (perm == LocationPermission.denied) {
-        perm = await Geolocator.requestPermission();
-      }
-      if (perm == LocationPermission.deniedForever) {
-        setState(() {
-          _isBlocked = true;
-          _requesting = false;
-        });
+      // Agora sim verifica se o serviço (não permissão) está on.
+      final serviceOn = await Geolocator.isLocationServiceEnabled();
+      if (!serviceOn) {
+        if (mounted) {
+          setState(() {
+            _isBlocked = true;
+            _requesting = false;
+          });
+        }
         return;
       }
       final ok = perm == LocationPermission.always ||
@@ -126,9 +133,8 @@ class _GpsPermissionModalState extends State<GpsPermissionModal> {
         const SizedBox(height: 14),
         Text(
           'O coach precisa do GPS pra acompanhar sua corrida em tempo real.',
-          style: GoogleFonts.jetBrainsMono(
+          style: context.runninType.bodyMd.copyWith(
             color: palette.text,
-            fontSize: 14,
             height: 1.5,
             fontWeight: FontWeight.w500,
           ),
@@ -136,7 +142,7 @@ class _GpsPermissionModalState extends State<GpsPermissionModal> {
         const SizedBox(height: 10),
         Text(
           'Quando o navegador pedir, clique em "Permitir". Sem isso o mapa não consegue desenhar seu trajeto.',
-          style: TextStyle(
+          style: context.runninType.bodyMd.copyWith(
             color: palette.text.withValues(alpha: 0.78),
             fontSize: 13,
             height: 1.5,
@@ -160,7 +166,7 @@ class _GpsPermissionModalState extends State<GpsPermissionModal> {
                   ),
                   child: Text(
                     'AGORA NÃO',
-                    style: TextStyle(color: palette.muted),
+                    style: context.runninType.bodyMd.copyWith(color: palette.muted),
                   ),
                 ),
               ),
@@ -188,9 +194,9 @@ class _GpsPermissionModalState extends State<GpsPermissionModal> {
                             strokeWidth: 2,
                           ),
                         )
-                      : const Text(
+                      : Text(
                           'ATIVAR GPS',
-                          style: TextStyle(
+                          style: context.runninType.labelMd.copyWith(
                             fontWeight: FontWeight.w500,
                             letterSpacing: 1.2,
                           ),
@@ -216,9 +222,8 @@ class _GpsPermissionModalState extends State<GpsPermissionModal> {
         const SizedBox(height: 14),
         Text(
           'O navegador está bloqueando o GPS deste site.',
-          style: GoogleFonts.jetBrainsMono(
+          style: context.runninType.bodyMd.copyWith(
             color: palette.text,
-            fontSize: 14,
             height: 1.5,
             fontWeight: FontWeight.w500,
           ),
@@ -245,7 +250,7 @@ class _GpsPermissionModalState extends State<GpsPermissionModal> {
                   ),
                   child: Text(
                     'FECHAR',
-                    style: TextStyle(color: palette.muted),
+                    style: context.runninType.bodyMd.copyWith(color: palette.muted),
                   ),
                 ),
               ),
@@ -264,9 +269,9 @@ class _GpsPermissionModalState extends State<GpsPermissionModal> {
                       borderRadius: BorderRadius.zero,
                     ),
                   ),
-                  child: const Text(
+                  child: Text(
                     'VERIFIQUEI, TENTAR',
-                    style: TextStyle(
+                    style: context.runninType.labelMd.copyWith(
                       fontWeight: FontWeight.w500,
                       letterSpacing: 1.2,
                     ),
@@ -304,7 +309,7 @@ class _Step extends StatelessWidget {
           ),
           child: Text(
             num,
-            style: GoogleFonts.jetBrainsMono(
+            style: context.runninType.labelCaps.copyWith(
               color: FigmaColors.brandOrange,
               fontSize: 11,
               fontWeight: FontWeight.w500,
@@ -317,7 +322,7 @@ class _Step extends StatelessWidget {
             padding: const EdgeInsets.only(top: 3),
             child: Text(
               text,
-              style: TextStyle(
+              style: context.runninType.bodySm.copyWith(
                 color: palette.text.withValues(alpha: 0.85),
                 fontSize: 12.5,
                 height: 1.5,

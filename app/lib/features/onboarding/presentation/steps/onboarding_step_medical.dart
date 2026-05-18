@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/shared/widgets/figma/export.dart';
@@ -50,7 +49,7 @@ class OnboardingStepMedical extends StatelessWidget {
         const SizedBox(height: 10),
         Text(
           'Opcional, mas importante. Selecione condições relevantes para que o Coach ajuste intensidade, alertas e limites de segurança.',
-          style: TextStyle(color: palette.muted, height: 1.5),
+          style: context.runninType.bodyMd.copyWith(color: palette.muted),
         ),
         const SizedBox(height: 18),
         FigmaCoachAIBlock(
@@ -143,9 +142,8 @@ class _OtherConditionField extends StatelessWidget {
             alignment: Alignment.center,
             child: Text(
               '+',
-              style: GoogleFonts.jetBrainsMono(
-                fontSize: 22,
-                fontWeight: FontWeight.w500,
+              style: context.runninType.dataXs.copyWith(
+                letterSpacing: 0,
                 color: palette.background,
               ),
             ),

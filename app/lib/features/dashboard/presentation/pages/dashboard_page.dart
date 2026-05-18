@@ -39,9 +39,8 @@ class _DashboardView extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
             child: Text(
               'Métricas, evolução e plano',
-              style: TextStyle(
+              style: type.bodySm.copyWith(
                 color: palette.muted,
-                fontSize: 12,
                 height: 1.5,
               ),
             ),

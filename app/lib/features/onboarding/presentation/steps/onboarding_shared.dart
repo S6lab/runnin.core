@@ -34,7 +34,8 @@ class OnboardingInlineNotice extends StatelessWidget {
       padding: const EdgeInsets.all(12),
       color: color.withValues(alpha: 0.08),
       borderColor: color.withValues(alpha: 0.35),
-      child: Text(text, style: TextStyle(color: color, fontSize: 13)),
+      child: Text(text,
+          style: context.runninType.bodyMd.copyWith(color: color, fontSize: 13)),
     );
   }
 }

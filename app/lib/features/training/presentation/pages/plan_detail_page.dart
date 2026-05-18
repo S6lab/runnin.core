@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:runnin/core/theme/app_palette.dart';
+import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 import 'package:runnin/features/training/data/datasources/plan_remote_datasource.dart';
 import 'package:runnin/features/training/domain/entities/plan.dart';
@@ -94,12 +94,12 @@ class _PlanDetailPageState extends State<PlanDetailPage> {
           : _error != null
               ? Center(child: Padding(
                   padding: const EdgeInsets.all(24),
-                  child: Text(_error!, style: TextStyle(color: palette.error)),
+                  child: Text(_error!, style: context.runninType.bodyMd.copyWith(color: palette.error)),
                 ))
               : _plan == null
                   ? Center(child: Text(
                       'Nenhum plano ativo. Gere um plano em TREINO.',
-                      style: TextStyle(color: palette.muted),
+                      style: context.runninType.bodySm,
                     ))
                   : RefreshIndicator(
                       onRefresh: _load,
@@ -165,27 +165,18 @@ class _CheckpointDisclaimer extends StatelessWidget {
     final palette = context.runninPalette;
     return AppPanel(
       borderColor: palette.primary.withValues(alpha: 0.5),
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(AppSpacing.xl),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             '> AJUSTES DO PLANO',
-            style: GoogleFonts.jetBrainsMono(
-              fontSize: 11,
-              fontWeight: FontWeight.w500,
-              letterSpacing: 1.2,
-              color: palette.primary,
-            ),
+            style: context.runninType.labelCaps.copyWith(fontSize: 11, color: palette.primary, letterSpacing: 1.2),
           ),
           const SizedBox(height: 8),
           Text(
             'Seu plano é ajustável 1x por semana, no checkpoint do fim de cada semana. O coach lê tudo que você fez (corridas, pace, BPM, aderência) e cruza com o que você marcar nos chips (mais carga, dor específica, etc). Histórico dos ajustes fica visível abaixo.',
-            style: TextStyle(
-              color: palette.text.withValues(alpha: 0.85),
-              fontSize: 12.5,
-              height: 1.55,
-            ),
+            style: context.runninType.bodyMd,
           ),
         ],
       ),
@@ -241,12 +232,7 @@ class _CollapsibleSection extends StatelessWidget {
             softWrap: true,
             overflow: TextOverflow.visible,
             maxLines: null,
-            style: GoogleFonts.jetBrainsMono(
-              color: accent ? palette.primary : palette.text,
-              fontSize: 11,
-              letterSpacing: 1.2,
-              fontWeight: FontWeight.w500,
-            ),
+            style: context.runninType.labelCaps.copyWith(fontSize: 11, color: accent ? palette.primary : palette.text, letterSpacing: 1.2),
           ),
           children: [child],
         ),
@@ -272,7 +258,7 @@ class _RationaleAccordion extends StatelessWidget {
         initiallyExpanded: true,
         child: Text(
           'O coach está escrevendo a análise detalhada do seu plano. Volte em alguns minutos.',
-          style: TextStyle(color: palette.muted, fontSize: 13, height: 1.5),
+          style: context.runninType.bodyMd.copyWith(color: palette.muted),
         ),
       );
     }
@@ -313,12 +299,7 @@ class _RationaleAccordion extends StatelessWidget {
               const SizedBox(width: 8),
               Text(
                 'RACIONAL DO COACH',
-                style: GoogleFonts.jetBrainsMono(
-                  color: palette.primary,
-                  fontSize: 11,
-                  letterSpacing: 1.2,
-                  fontWeight: FontWeight.w500,
-                ),
+                style: context.runninType.labelCaps.copyWith(fontSize: 11, color: palette.primary, letterSpacing: 1.2),
               ),
             ],
           ),
@@ -363,16 +344,12 @@ class _RevisionsSection extends StatelessWidget {
                 children: [
                   Text(
                     'SEMANA ${r.weekNumber} · ${_shortDate(r.revisedAt)} · ${r.trigger}',
-                    style: GoogleFonts.jetBrainsMono(
-                      color: palette.muted,
-                      fontSize: 10,
-                      letterSpacing: 1.0,
-                    ),
+                    style: context.runninType.labelCaps.copyWith(color: palette.muted),
                   ),
                   const SizedBox(height: 6),
                   Text(
                     r.summary,
-                    style: TextStyle(color: palette.text, fontSize: 12, height: 1.5),
+                    style: context.runninType.bodySm.copyWith(color: palette.text, height: 1.5),
                   ),
                 ],
               ),
@@ -413,18 +390,10 @@ class _Header extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('OBJETIVO',
-              style: GoogleFonts.jetBrainsMono(
-                color: palette.muted,
-                fontSize: 10,
-                letterSpacing: 1.2,
-              )),
+              style: context.runninType.labelCaps.copyWith(color: palette.muted)),
           const SizedBox(height: 6),
           Text(plan.goal,
-              style: GoogleFonts.jetBrainsMono(
-                color: palette.text,
-                fontSize: 18,
-                fontWeight: FontWeight.w500,
-              )),
+              style: context.runninType.displaySm.copyWith(color: palette.text, fontSize: 18)),
           const SizedBox(height: 12),
           // Mesociclo: D0 → final
           Row(
@@ -433,12 +402,7 @@ class _Header extends StatelessWidget {
               const SizedBox(width: 6),
               Text(
                 'D0 ${_fmt(start)} → ${_fmt(end)}',
-                style: GoogleFonts.jetBrainsMono(
-                  color: palette.primary,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                  letterSpacing: 0.4,
-                ),
+                style: context.runninType.labelMd.copyWith(color: palette.primary, letterSpacing: 0.4),
               ),
             ],
           ),
@@ -470,14 +434,10 @@ class _PillStat extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(label.toUpperCase(),
-            style: GoogleFonts.jetBrainsMono(
-              color: palette.muted, fontSize: 9, letterSpacing: 1.0,
-            )),
+            style: context.runninType.labelCaps.copyWith(color: palette.muted)),
         const SizedBox(height: 2),
         Text(value,
-            style: GoogleFonts.jetBrainsMono(
-              color: palette.text, fontSize: 13, fontWeight: FontWeight.w500,
-            )),
+            style: context.runninType.labelMd.copyWith(color: palette.text, fontSize: 13)),
       ],
     );
   }
@@ -503,15 +463,12 @@ class _MesocycleCard extends StatelessWidget {
               Icon(Icons.timeline, size: 18, color: palette.primary),
               const SizedBox(width: 8),
               Text('ESTRATÉGIA DO MESOCICLO',
-                  style: GoogleFonts.jetBrainsMono(
-                    color: palette.primary, fontSize: 11, letterSpacing: 1.2,
-                    fontWeight: FontWeight.w500,
-                  )),
+                  style: context.runninType.labelCaps.copyWith(fontSize: 11, color: palette.primary, letterSpacing: 1.2)),
             ],
           ),
           const SizedBox(height: 10),
           Text(text,
-              style: TextStyle(color: palette.text, fontSize: 13, height: 1.55)),
+              style: context.runninType.bodyMd.copyWith(color: palette.text)),
         ],
       ),
     );
@@ -541,18 +498,13 @@ class _MarkdownText extends StatelessWidget {
         widgets.add(Padding(
           padding: const EdgeInsets.only(top: 8, bottom: 4),
           child: Text(line.substring(4),
-              style: GoogleFonts.jetBrainsMono(
-                color: palette.text, fontSize: 13, fontWeight: FontWeight.w500,
-              )),
+              style: context.runninType.labelMd.copyWith(color: palette.text, fontSize: 13)),
         ));
       } else if (line.startsWith('## ')) {
         widgets.add(Padding(
           padding: const EdgeInsets.only(top: 14, bottom: 6),
           child: Text(line.substring(3),
-              style: GoogleFonts.jetBrainsMono(
-                color: palette.primary, fontSize: 14, fontWeight: FontWeight.w500,
-                letterSpacing: 0.3,
-              )),
+              style: context.runninType.bodyMd.copyWith(color: palette.primary, fontWeight: FontWeight.w500, letterSpacing: 0.3)),
         ));
       } else if (line.startsWith('- ')) {
         widgets.add(Padding(
@@ -566,14 +518,14 @@ class _MarkdownText extends StatelessWidget {
               ),
               Expanded(
                 child: Text(_stripInlineMarks(line.substring(2)),
-                    style: TextStyle(color: palette.text, fontSize: 13, height: 1.5)),
+                    style: context.runninType.bodyMd),
               ),
             ],
           ),
         ));
       } else {
         widgets.add(Text(_stripInlineMarks(line),
-            style: TextStyle(color: palette.text, fontSize: 13, height: 1.55)));
+            style: context.runninType.bodyMd.copyWith(color: palette.text)));
       }
     }
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: widgets);
@@ -635,9 +587,7 @@ class _ProfileSummary extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('DADOS CONSIDERADOS',
-              style: GoogleFonts.jetBrainsMono(
-                color: palette.muted, fontSize: 11, letterSpacing: 1.2,
-              )),
+              style: context.runninType.labelCaps.copyWith(fontSize: 11, color: palette.muted, letterSpacing: 1.2)),
           const SizedBox(height: 10),
           ...items.map((e) => Padding(
                 padding: const EdgeInsets.symmetric(vertical: 3),
@@ -646,11 +596,11 @@ class _ProfileSummary extends StatelessWidget {
                     SizedBox(
                       width: 110,
                       child: Text(e.$1,
-                          style: TextStyle(color: palette.muted, fontSize: 12)),
+                          style: context.runninType.bodySm),
                     ),
                     Expanded(
                       child: Text(e.$2,
-                          style: TextStyle(color: palette.text, fontSize: 12)),
+                          style: context.runninType.bodySm.copyWith(color: palette.text)),
                     ),
                   ],
                 ),
@@ -686,29 +636,22 @@ class _StatsSection extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('VOLUME TOTAL',
-              style: GoogleFonts.jetBrainsMono(
-                color: palette.muted, fontSize: 11, letterSpacing: 1.2,
-              )),
+              style: context.runninType.labelCaps.copyWith(fontSize: 11, color: palette.muted, letterSpacing: 1.2)),
           const SizedBox(height: 6),
           Text('${totalKm.toStringAsFixed(0)} km em ${plan.weeksCount} semanas',
-              style: GoogleFonts.jetBrainsMono(
-                color: palette.text, fontSize: 16, fontWeight: FontWeight.w500,
-              )),
+              style: context.runninType.dataSm.copyWith(color: palette.text)),
           const SizedBox(height: 12),
           Text('DISTRIBUIÇÃO POR TIPO',
-              style: GoogleFonts.jetBrainsMono(
-                color: palette.muted, fontSize: 11, letterSpacing: 1.2,
-              )),
+              style: context.runninType.labelCaps.copyWith(fontSize: 11, color: palette.muted, letterSpacing: 1.2)),
           const SizedBox(height: 6),
           ...typeLines.map((e) => Padding(
                 padding: const EdgeInsets.symmetric(vertical: 2),
                 child: Row(
                   children: [
                     Expanded(child: Text(e.key,
-                        style: TextStyle(color: palette.text, fontSize: 12))),
+                        style: context.runninType.bodySm.copyWith(color: palette.text))),
                     Text('${e.value}x',
-                        style: TextStyle(color: palette.primary, fontSize: 12,
-                            fontWeight: FontWeight.w500)),
+                        style: context.runninType.labelMd.copyWith(color: palette.primary)),
                   ],
                 ),
               )),
@@ -739,12 +682,7 @@ class _WeeksBreakdown extends StatelessWidget {
               const SizedBox(width: 8),
               Text(
                 'PLANO SEMANA A SEMANA',
-                style: GoogleFonts.jetBrainsMono(
-                  color: palette.primary,
-                  fontSize: 11,
-                  letterSpacing: 1.2,
-                  fontWeight: FontWeight.w500,
-                ),
+                style: context.runninType.labelCaps.copyWith(fontSize: 11, color: palette.primary, letterSpacing: 1.2),
               ),
             ],
           ),
@@ -840,12 +778,7 @@ class _WeekTile extends StatelessWidget {
                     color: palette.primary.withValues(alpha: 0.15),
                     child: Text(
                       'SEM ${week.weekNumber}',
-                      style: GoogleFonts.jetBrainsMono(
-                        color: palette.primary,
-                        fontSize: 10,
-                        letterSpacing: 1.0,
-                        fontWeight: FontWeight.w500,
-                      ),
+                      style: context.runninType.labelCaps.copyWith(color: palette.primary),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -853,32 +786,19 @@ class _WeekTile extends StatelessWidget {
                     child: Text(
                       _phaseLabelFromFocus(week.focus, week.narrative),
                       overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.jetBrainsMono(
-                        color: palette.text,
-                        fontSize: 12,
-                        letterSpacing: 0.8,
-                        fontWeight: FontWeight.w500,
-                      ),
+                      style: context.runninType.labelMd.copyWith(color: palette.text, letterSpacing: 0.8),
                     ),
                   ),
                   Text(
                     '${week.sessions.length}s · ${wKm.toStringAsFixed(0)}km',
-                    style: GoogleFonts.jetBrainsMono(
-                      color: palette.muted,
-                      fontSize: 10,
-                      letterSpacing: 0.4,
-                    ),
+                    style: context.runninType.labelCaps.copyWith(color: palette.muted),
                   ),
                 ],
               ),
               const SizedBox(height: 4),
               Text(
                 _weekDateRange(planStartDate, week.weekNumber),
-                style: GoogleFonts.jetBrainsMono(
-                  color: palette.muted,
-                  fontSize: 10,
-                  letterSpacing: 0.4,
-                ),
+                style: context.runninType.labelCaps.copyWith(color: palette.muted),
               ),
             ],
           ),
@@ -888,11 +808,7 @@ class _WeekTile extends StatelessWidget {
                 padding: const EdgeInsets.only(bottom: 10),
                 child: Text(
                   week.narrative!.trim(),
-                  style: TextStyle(
-                    color: palette.text.withValues(alpha: 0.78),
-                    fontSize: 12,
-                    height: 1.5,
-                  ),
+                  style: context.runninType.bodySm.copyWith(color: palette.text.withValues(alpha: 0.78), height: 1.5),
                 ),
               ),
             // Renderiza TODOS os 7 dias da semana: sessões + rest tips +
@@ -1002,7 +918,7 @@ class _SessionRow extends StatelessWidget {
               ),
             )
           : Padding(
-              padding: const EdgeInsets.all(10),
+              padding: const EdgeInsets.all(AppSpacing.md),
               child: _SessionHeader(session: session, dayLabel: dayLabel),
             ),
     );
@@ -1028,22 +944,13 @@ class _SessionHeader extends StatelessWidget {
           width: 72,
           child: Text(
             dayLabel,
-            style: GoogleFonts.jetBrainsMono(
-              color: palette.primary,
-              fontSize: 11,
-              fontWeight: FontWeight.w500,
-              letterSpacing: 0.5,
-            ),
+            style: context.runninType.labelCaps.copyWith(fontSize: 11, color: palette.primary, letterSpacing: 0.5),
           ),
         ),
         Expanded(
           child: Text(
             '${session.type} · ${session.distanceKm.toStringAsFixed(1)}km$paceStr$durStr',
-            style: TextStyle(
-              color: palette.text,
-              fontSize: 12,
-              height: 1.4,
-            ),
+            style: context.runninType.bodySm.copyWith(color: palette.text),
           ),
         ),
       ],
@@ -1124,17 +1031,13 @@ class _DetailLine extends StatelessWidget {
             width: 84,
             child: Text(
               label,
-              style: GoogleFonts.jetBrainsMono(
-                color: palette.muted,
-                fontSize: 10,
-                letterSpacing: 0.8,
-              ),
+              style: context.runninType.labelCaps.copyWith(color: palette.muted),
             ),
           ),
           Expanded(
             child: Text(
               value,
-              style: TextStyle(color: palette.text, fontSize: 11, height: 1.4),
+              style: context.runninType.bodyXs.copyWith(color: palette.text),
             ),
           ),
         ],
@@ -1152,7 +1055,7 @@ class _RestDayRow extends StatelessWidget {
     final palette = context.runninPalette;
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 3),
-      padding: const EdgeInsets.all(10),
+      padding: const EdgeInsets.all(AppSpacing.md),
       decoration: BoxDecoration(
         color: palette.background,
         border: Border.all(color: palette.border, width: 1.0),
@@ -1166,17 +1069,13 @@ class _RestDayRow extends StatelessWidget {
                 width: 72,
                 child: Text(
                   dayLabel,
-                  style: GoogleFonts.jetBrainsMono(
-                    color: palette.muted,
-                    fontSize: 11,
-                    letterSpacing: 0.5,
-                  ),
+                  style: context.runninType.labelCaps.copyWith(fontSize: 11, color: palette.muted, letterSpacing: 0.5),
                 ),
               ),
               Expanded(
                 child: Text(
                   tip.focus ?? 'Descanso ativo',
-                  style: TextStyle(color: palette.muted, fontSize: 11),
+                  style: context.runninType.bodyXs,
                 ),
               ),
             ],
@@ -1190,14 +1089,14 @@ class _RestDayRow extends StatelessWidget {
                   if (tip.hydrationLiters != null)
                     Text(
                       '${tip.hydrationLiters!.toStringAsFixed(1)}L de hidratação',
-                      style: TextStyle(color: palette.text, fontSize: 10.5),
+                      style: context.runninType.labelCaps.copyWith(color: palette.text),
                     ),
                   if ((tip.nutrition ?? '').isNotEmpty)
                     Padding(
                       padding: const EdgeInsets.only(top: 2),
                       child: Text(
                         tip.nutrition!,
-                        style: TextStyle(color: palette.text, fontSize: 10.5, height: 1.4),
+                        style: context.runninType.bodyXs.copyWith(color: palette.text, fontSize: 11),
                       ),
                     ),
                 ],
@@ -1223,16 +1122,12 @@ class _PlainRestRow extends StatelessWidget {
             width: 72,
             child: Text(
               dayLabel,
-              style: GoogleFonts.jetBrainsMono(
-                color: palette.muted,
-                fontSize: 11,
-                letterSpacing: 0.5,
-              ),
+              style: context.runninType.labelCaps.copyWith(fontSize: 11, color: palette.muted, letterSpacing: 0.5),
             ),
           ),
           Text(
             'Descanso',
-            style: TextStyle(color: palette.muted, fontSize: 11),
+            style: context.runninType.bodyXs,
           ),
         ],
       ),
@@ -1266,7 +1161,7 @@ class _PeriodizationChips extends StatelessWidget {
     if (plan.weeks.isEmpty) {
       return Text(
         'Sem semanas geradas ainda.',
-        style: TextStyle(color: palette.muted, fontSize: 12),
+        style: context.runninType.bodySm,
       );
     }
     final totalKm = plan.weeks
@@ -1279,7 +1174,7 @@ class _PeriodizationChips extends StatelessWidget {
       children: [
         Text(
           'Mesociclo: ${plan.weeksCount} semanas · ${totalKm.toStringAsFixed(0)}km totais',
-          style: TextStyle(color: palette.muted, fontSize: 11),
+          style: context.runninType.bodyXs,
         ),
         const SizedBox(height: 10),
         ...plan.weeks.map((w) {
@@ -1299,15 +1194,11 @@ class _PeriodizationChips extends StatelessWidget {
               child: Row(
                 children: [
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.xs),
                     color: palette.primary.withValues(alpha: 0.15),
                     child: Text(
                       'S${w.weekNumber}',
-                      style: GoogleFonts.jetBrainsMono(
-                        color: palette.primary,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w500,
-                      ),
+                      style: context.runninType.labelCaps.copyWith(fontSize: 11, color: palette.primary),
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -1317,17 +1208,12 @@ class _PeriodizationChips extends StatelessWidget {
                       children: [
                         Text(
                           fase,
-                          style: GoogleFonts.jetBrainsMono(
-                            color: palette.text,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w500,
-                            letterSpacing: 0.5,
-                          ),
+                          style: context.runninType.labelCaps.copyWith(fontSize: 11, color: palette.text, letterSpacing: 0.5),
                         ),
                         const SizedBox(height: 2),
                         Text(
                           '${_fmtShort(wStart)}–${_fmtShort(wEnd)} · ${wKm.toStringAsFixed(0)}km',
-                          style: TextStyle(color: palette.muted, fontSize: 10.5),
+                          style: context.runninType.labelCaps.copyWith(color: palette.muted),
                         ),
                       ],
                     ),

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
@@ -95,7 +94,7 @@ class _CoachConversationReplayPageState extends State<CoachConversationReplayPag
                     children: [
                       Text(
                         'RUNIN.AI / COACH',
-                        style: GoogleFonts.jetBrainsMono(
+                        style: context.runninType.labelMd.copyWith(
                           fontSize: 13,
                           fontWeight: FontWeight.w500,
                           letterSpacing: 1.1,
@@ -105,8 +104,7 @@ class _CoachConversationReplayPageState extends State<CoachConversationReplayPag
                       if (_run != null)
                         Text(
                           _fmtDate(_run!.createdAt).toUpperCase(),
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: 10,
+                          style: context.runninType.labelCaps.copyWith(
                             fontWeight: FontWeight.w400,
                             letterSpacing: 0.8,
                             color: FigmaColors.textMuted,
@@ -148,8 +146,7 @@ class _CoachConversationReplayPageState extends State<CoachConversationReplayPag
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Text(
                 'CONVERSA.01',
-                style: GoogleFonts.jetBrainsMono(
-                  fontSize: 14,
+                style: context.runninType.bodyMd.copyWith(
                   fontWeight: FontWeight.w500,
                   letterSpacing: 1.3,
                   color: FigmaColors.textPrimary,
@@ -177,8 +174,7 @@ class _CoachConversationReplayPageState extends State<CoachConversationReplayPag
                   Expanded(
                     child: Text(
                       'ANÁLISE VERIFICADA — Baseada em dados reais',
-                      style: GoogleFonts.jetBrainsMono(
-                        fontSize: 10,
+                      style: context.runninType.labelCaps.copyWith(
                         fontWeight: FontWeight.w500,
                         letterSpacing: 0.8,
                         color: FigmaColors.textMuted,
@@ -201,7 +197,7 @@ class _CoachConversationReplayPageState extends State<CoachConversationReplayPag
       return Center(child: CircularProgressIndicator(color: palette.primary, strokeWidth: 2));
     }
     if (_error != null) {
-      return Center(child: Text(_error!, style: TextStyle(color: palette.muted)));
+      return Center(child: Text(_error!, style: context.runninType.bodyMd.copyWith(color: palette.muted)));
     }
     if (_messages == null || _messages!.isEmpty) {
       return Center(
@@ -212,13 +208,13 @@ class _CoachConversationReplayPageState extends State<CoachConversationReplayPag
             const SizedBox(height: 12),
             Text(
               'Nenhuma conversa com o coach nesta corrida.',
-              style: TextStyle(color: palette.muted),
+              style: context.runninType.bodyMd.copyWith(color: palette.muted),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 4),
             Text(
               'Corridas antigas podem não ter dados de conversa.',
-              style: GoogleFonts.jetBrainsMono(fontSize: 11, color: FigmaColors.textDim),
+              style: context.runninType.bodyXs.copyWith(color: FigmaColors.textDim),
               textAlign: TextAlign.center,
             ),
           ],
@@ -254,8 +250,7 @@ class _MiniStat extends StatelessWidget {
         children: [
           Text(
             label,
-            style: GoogleFonts.jetBrainsMono(
-              fontSize: 9,
+            style: context.runninType.labelCaps.copyWith(
               fontWeight: FontWeight.w600,
               letterSpacing: 1,
               color: FigmaColors.textMuted,
@@ -264,7 +259,7 @@ class _MiniStat extends StatelessWidget {
           const SizedBox(height: 2),
           Text(
             value,
-            style: GoogleFonts.jetBrainsMono(
+            style: context.runninType.bodyMd.copyWith(
               fontSize: 13,
               fontWeight: FontWeight.w500,
               color: FigmaColors.textPrimary,

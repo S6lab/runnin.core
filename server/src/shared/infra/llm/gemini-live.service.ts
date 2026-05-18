@@ -1,16 +1,21 @@
 import WebSocket, { RawData } from 'ws';
 import { logger } from '@shared/logger/logger';
 
+// v1beta + modelo native-audio-dialog (suporte oficial BidiGenerateContent).
+// 'gemini-live-2.5-flash-preview' só funciona com auth_tokens
+// (BidiGenerateContentConstrained), não com BidiGenerateContent direto.
+// 'gemini-2.5-flash-preview-native-audio-dialog' é o equivalente pro
+// endpoint não-constrained — capturado em prod tanto v1alpha quanto
+// v1beta rejeitavam o modelo anterior.
 const GEMINI_LIVE_URL = 'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent';
-// gemini-2.0-flash-exp foi sendo descontinuado/limitado durante 2025;
-// modelos Live ativos: gemini-2.5-flash-preview-native-audio-dialog
-// (audio nativo) ou gemini-live-2.5-flash-preview. Mantemos via env pra
-// flipar sem deploy se Google mudar de novo.
-// Modelo Live estável v1beta/bidiGenerateContent: gemini-2.0-flash-live-001.
-// Anteriormente tentamos gemini-live-2.5-flash-preview (404 not found) e
-// gemini-2.0-flash-exp (limitado). Override via GEMINI_LIVE_MODEL env.
+// Alinhado com create-live-ephemeral-token.use-case.ts (mesmo env var).
+// O modelo anterior 'gemini-2.0-flash-live-001' foi removido do v1beta —
+// Google rejeitou com "models/gemini-2.0-flash-live-001 is not found for
+// API version v1beta, or is not supported for bidiGenerateContent".
+// 'gemini-live-2.5-flash-preview' está ativo em v1alpha (auth_tokens)
+// E em v1beta (bidi WebSocket). Override via GEMINI_LIVE_MODEL env.
 const DEFAULT_MODEL = process.env['GEMINI_LIVE_MODEL']?.trim()
-  || 'models/gemini-2.0-flash-live-001';
+  || 'models/gemini-2.0-flash-exp';
 
 export interface GeminiLiveConfig {
   model?: string;

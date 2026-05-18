@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 class GpsPoint {
   final double lat;
   final double lng;
@@ -31,6 +33,48 @@ class GpsPoint {
         bpm: (j['bpm'] as num?)?.toInt(),
       );
 }
+
+/// Pace em segundos/km para cada km completado da corrida, calculado
+/// caminhando pelos pontos GPS. Retorna lista vazia se não houver pelo
+/// menos 2 pontos. Usado em widgets de share/relatório onde queremos
+/// mostrar evolução de pace por km baseado em dado real.
+List<double> computeKmSplitsSeconds(List<GpsPoint> points) {
+  if (points.length < 2) return const [];
+  final splits = <double>[];
+  double cumDist = 0; // m
+  int kmReached = 0;
+  int kmStartTs = points.first.ts;
+  double kmStartDist = 0;
+  for (int i = 1; i < points.length; i++) {
+    final p0 = points[i - 1];
+    final p1 = points[i];
+    cumDist += _haversineM(p0.lat, p0.lng, p1.lat, p1.lng);
+    while (cumDist >= (kmReached + 1) * 1000) {
+      final kmDistM = cumDist - kmStartDist;
+      final kmTimeS = (p1.ts - kmStartTs) / 1000.0;
+      if (kmDistM > 0 && kmTimeS > 0) {
+        // pace seg/km = (kmTimeS / kmDistM) * 1000
+        splits.add((kmTimeS / kmDistM) * 1000.0);
+      }
+      kmReached++;
+      kmStartTs = p1.ts;
+      kmStartDist = cumDist;
+    }
+  }
+  return splits;
+}
+
+double _haversineM(double lat1, double lng1, double lat2, double lng2) {
+  const earthR = 6371000.0;
+  final dLat = _toRad(lat2 - lat1);
+  final dLng = _toRad(lng2 - lng1);
+  final a = math.sin(dLat / 2) * math.sin(dLat / 2) +
+      math.cos(_toRad(lat1)) * math.cos(_toRad(lat2)) *
+          math.sin(dLng / 2) * math.sin(dLng / 2);
+  return 2 * earthR * math.asin(math.sqrt(a));
+}
+
+double _toRad(double deg) => deg * math.pi / 180.0;
 
 class Run {
   final String id;

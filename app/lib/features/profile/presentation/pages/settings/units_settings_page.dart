@@ -1,8 +1,8 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:runnin/core/network/api_client.dart';
+import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/core/units/units.dart';
 import 'package:runnin/shared/widgets/figma/figma_selection_button.dart';
@@ -197,8 +197,7 @@ class _UnitsSettingsPageState extends State<UnitsSettingsPage> {
                       children: [
                         Text(
                           'PRÉVIA',
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: 14,
+                          style: context.runninType.bodyMd.copyWith(
                             fontWeight: FontWeight.w500,
                             color: FigmaColors.brandCyan,
                             letterSpacing: 1.0,
@@ -208,32 +207,32 @@ class _UnitsSettingsPageState extends State<UnitsSettingsPage> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text('Distância:', style: GoogleFonts.jetBrainsMono(color: FigmaColors.textMuted, fontSize: 12)),
-                            Text(_formatDistance(5000), style: GoogleFonts.jetBrainsMono(color: FigmaColors.textPrimary, fontSize: 12)),
+                            Text('Distância:', style: context.runninType.bodySm.copyWith(color: FigmaColors.textMuted)),
+                            Text(_formatDistance(5000), style: context.runninType.bodySm.copyWith(color: FigmaColors.textPrimary)),
                           ],
                         ),
                         const SizedBox(height: 8),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text('Peso:', style: GoogleFonts.jetBrainsMono(color: FigmaColors.textMuted, fontSize: 12)),
-                            Text(_formatWeight(70), style: GoogleFonts.jetBrainsMono(color: FigmaColors.textPrimary, fontSize: 12)),
+                            Text('Peso:', style: context.runninType.bodySm.copyWith(color: FigmaColors.textMuted)),
+                            Text(_formatWeight(70), style: context.runninType.bodySm.copyWith(color: FigmaColors.textPrimary)),
                           ],
                         ),
                         const SizedBox(height: 8),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text('Altura:', style: GoogleFonts.jetBrainsMono(color: FigmaColors.textMuted, fontSize: 12)),
-                            Text(_formatHeight(175), style: GoogleFonts.jetBrainsMono(color: FigmaColors.textPrimary, fontSize: 12)),
+                            Text('Altura:', style: context.runninType.bodySm.copyWith(color: FigmaColors.textMuted)),
+                            Text(_formatHeight(175), style: context.runninType.bodySm.copyWith(color: FigmaColors.textPrimary)),
                           ],
                         ),
                         const SizedBox(height: 8),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text('Pace:', style: GoogleFonts.jetBrainsMono(color: FigmaColors.textMuted, fontSize: 12)),
-                            Text(_formatPace(5.5), style: GoogleFonts.jetBrainsMono(color: FigmaColors.textPrimary, fontSize: 12)),
+                            Text('Pace:', style: context.runninType.bodySm.copyWith(color: FigmaColors.textMuted)),
+                            Text(_formatPace(5.5), style: context.runninType.bodySm.copyWith(color: FigmaColors.textPrimary)),
                           ],
                         ),
                       ],
@@ -270,7 +269,7 @@ class _UnitsSettingsPageState extends State<UnitsSettingsPage> {
                       )
                     : Text(
                         'SALVAR',
-                        style: GoogleFonts.jetBrainsMono(
+                        style: context.runninType.bodyMd.copyWith(
                           color: FigmaColors.bgBase,
                           fontSize: 13,
                           fontWeight: FontWeight.w500,

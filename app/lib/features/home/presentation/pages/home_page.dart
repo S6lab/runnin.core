@@ -77,10 +77,11 @@ class _HomeViewState extends State<_HomeView> {
   @override
   void initState() {
     super.initState();
-    final cachedStatus = onboardingCacheStatus();
-    if (cachedStatus != true) {
-      _checkOnboarding(cachedStatus);
-    }
+    // SEMPRE valida contra server, mesmo se cache local diz "onboarded=true".
+    // Antes só checava quando cache != true → se Hive estava stale (ex: user
+    // perdeu profile no server mas o flag local sobreviveu), home nunca
+    // detectava e o user ficava preso vendo "perfil incompleto" eternamente.
+    _checkOnboarding(onboardingCacheStatus());
   }
 
   Future<void> _checkOnboarding(bool? cachedStatus) async {
@@ -98,7 +99,7 @@ class _HomeViewState extends State<_HomeView> {
       } else {
         markOnboardingDone();
       }
-    } catch (_) {}
+    } catch (_) {/* offline OU server down — segue com cache */}
   }
 
   @override

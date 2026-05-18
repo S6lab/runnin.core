@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:runnin/core/network/api_client.dart';
 import 'package:runnin/core/theme/app_palette.dart';
@@ -99,7 +98,7 @@ class _RunDetailPageState extends State<RunDetailPage> {
               child: _loadingRun
                   ? Center(child: CircularProgressIndicator(color: palette.primary, strokeWidth: 2))
                   : _run == null
-                      ? Center(child: Text('Corrida não encontrada.', style: TextStyle(color: palette.muted)))
+                      ? Center(child: Text('Corrida não encontrada.', style: type.bodySm.copyWith(color: palette.muted)))
                       : SingleChildScrollView(
                           padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
                           child: Column(
@@ -108,16 +107,14 @@ class _RunDetailPageState extends State<RunDetailPage> {
                               // Date & type
                               Text(
                                 _fmtDate(_run!.createdAt).toUpperCase(),
-                                style: GoogleFonts.jetBrainsMono(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w400,
+                                style: type.bodyXs.copyWith(
                                   letterSpacing: 1.1,
                                   color: FigmaColors.textMuted,
                                 ),
                               ),
                               const SizedBox(height: 4),
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.xs),
                                 color: palette.primary.withValues(alpha: 0.15),
                                 child: Text(
                                   _run!.type.toUpperCase(),
@@ -136,7 +133,7 @@ class _RunDetailPageState extends State<RunDetailPage> {
                               // XP badge
                               if (_run!.xpEarned != null && _run!.xpEarned! > 0) ...[
                                 Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.md),
                                   decoration: BoxDecoration(
                                     color: palette.primary.withValues(alpha: 0.1),
                                     border: Border.all(color: palette.primary.withValues(alpha: 0.3)),

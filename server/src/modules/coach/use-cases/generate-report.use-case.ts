@@ -19,6 +19,28 @@ export class GenerateReportUseCase {
   async execute(run: Run, userId: string): Promise<string> {
     const dist = (run.distanceM / 1000).toFixed(2);
     const minutes = Math.floor(run.durationS / 60);
+
+    // Short-circuit: corrida < 500m é teste ou cancelada. LLM gera lixo
+    // ("essa corrida de 0.01km mostra...") porque não tem dado pra analisar.
+    // Salvar texto fixo, não chamar LLM.
+    if (run.distanceM < 500) {
+      const summary =
+        'Corrida muito curta pra análise. Quando rolar uma sessão de 1km+ eu te mando um relatório completo com pace, esforço e recomendação pra próxima.';
+      await this.reports.save({
+        runId: run.id,
+        userId,
+        summary,
+        status: 'ready',
+        generatedAt: new Date().toISOString(),
+      });
+      await this.runs.update(run.id, userId, { coachReportId: run.id });
+      logger.info('coach.report.skipped_short_run', {
+        runId: run.id,
+        distanceM: run.distanceM,
+      });
+      return run.id;
+    }
+
     const runtime = await this.runtime.getContext(userId);
 
     const knowledgeContext = await formatRunningKnowledgeContext(

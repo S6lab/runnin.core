@@ -8,6 +8,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:runnin/features/coach/data/datasources/coach_report_remote_datasource.dart';
 import 'package:runnin/core/theme/app_palette.dart';
+import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 import 'package:runnin/features/run/data/datasources/run_remote_datasource.dart';
 import 'package:runnin/features/run/domain/entities/run.dart';
@@ -455,7 +456,7 @@ class _TrainingPageState extends State<TrainingPage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(_error!, style: TextStyle(color: palette.muted)),
+            Text(_error!, style: context.runninType.bodySm),
             const SizedBox(height: 16),
             TextButton(onPressed: _load, child: const Text('TENTAR NOVAMENTE')),
           ],
@@ -573,11 +574,7 @@ class _EmptyState extends StatelessWidget {
               Text(
                 'Gere seu plano de treino personalizado com IA. Leva em conta seu nível e objetivo.',
                 textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: palette.muted,
-                  fontSize: 13,
-                  height: 1.5,
-                ),
+                style: context.runninType.bodyMd.copyWith(color: palette.muted),
               ),
               const SizedBox(height: 24),
               SizedBox(
@@ -655,29 +652,21 @@ class _PlanGeneratingState extends StatelessWidget {
               Text(
                 'A criacao esta em progresso e pode levar alguns minutos.',
                 textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: palette.muted,
-                  fontSize: 13,
-                  height: 1.5,
-                ),
+                style: context.runninType.bodyMd.copyWith(color: palette.muted),
               ),
               const SizedBox(height: 14),
               AppTag(label: 'ID $shortPlanId', color: palette.primary),
               const SizedBox(height: 12),
               Text(
                 lastCheckedLabel,
-                style: TextStyle(color: palette.border, fontSize: 12),
+                style: context.runninType.bodySm.copyWith(color: palette.border),
               ),
               if (error != null) ...[
                 const SizedBox(height: 10),
                 Text(
                   error!,
                   textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: palette.secondary,
-                    fontSize: 12,
-                    height: 1.4,
-                  ),
+                  style: context.runninType.bodySm.copyWith(color: palette.secondary),
                 ),
               ],
               const SizedBox(height: 24),
@@ -739,11 +728,7 @@ class _PlanFailedState extends StatelessWidget {
               Text(
                 'A geracao falhou e nao vamos preencher com mock. Tente gerar novamente para buscar um plano real.',
                 textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: palette.muted,
-                  fontSize: 13,
-                  height: 1.5,
-                ),
+                style: context.runninType.bodyMd.copyWith(color: palette.muted),
               ),
               const SizedBox(height: 24),
               SizedBox(
@@ -794,7 +779,8 @@ class _TrainingWorkspace extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
+      // Padronizado em xxl (~24) — bate com padding horizontal da home.
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxl),
       child: Column(
         children: [
           _PlanContextCard(
@@ -864,14 +850,16 @@ class _PlanContextCard extends StatelessWidget {
               const SizedBox(width: 8),
               Text(
                 'Gerado em $planDateLabel',
-                style: TextStyle(color: palette.muted, fontSize: 11),
+                style: context.runninType.bodyXs,
               ),
             ],
           ),
           const SizedBox(height: 8),
           Text(
-            'Plano pronto: $planSummary. Agora é executar com constância e ajustar quando o corpo pedir.',
-            style: TextStyle(
+            'PLANO PRONTO: ${planSummary.toUpperCase()}. AGORA É EXECUTAR COM CONSTÂNCIA E AJUSTAR QUANDO O CORPO PEDIR.',
+            style: context.runninType.labelCaps.copyWith(
+              fontSize: 12,
+              letterSpacing: 0.4,
               color: palette.text.withValues(alpha: 0.86),
               height: 1.4,
             ),
@@ -879,7 +867,7 @@ class _PlanContextCard extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             'Perfil usado para gerar: $profileSummary',
-            style: TextStyle(
+            style: context.runninType.bodyMd.copyWith(
               color: palette.text.withValues(alpha: 0.86),
               height: 1.4,
             ),
@@ -978,9 +966,8 @@ class _TabButton extends StatelessWidget {
           children: [
             Text(
               label,
-              style: TextStyle(
+              style: context.runninType.labelCaps.copyWith(
                 fontSize: 11,
-                fontWeight: FontWeight.w500,
                 letterSpacing: 0.08,
                 color: selected ? palette.background : palette.muted,
               ),
@@ -994,9 +981,8 @@ class _TabButton extends StatelessWidget {
                     : palette.primary,
                 child: Text(
                   '$count',
-                  style: TextStyle(
+                  style: context.runninType.labelCaps.copyWith(
                     fontSize: 9,
-                    fontWeight: FontWeight.w500,
                     color: selected ? palette.background : palette.background,
                   ),
                 ),
@@ -1131,9 +1117,8 @@ class _ModeButton extends StatelessWidget {
         alignment: Alignment.center,
         child: Text(
           label,
-          style: TextStyle(
+          style: context.runninType.labelCaps.copyWith(
             fontSize: 11,
-            fontWeight: FontWeight.w500,
             letterSpacing: 0.08,
             color: selected ? palette.primary : palette.muted,
           ),
@@ -1275,17 +1260,15 @@ class _CheckpointEntry extends StatelessWidget {
       onTap: () => context.push('/training/checkpoint/$planId/$weekNumber'),
       child: AppPanel(
         borderColor: palette.primary.withValues(alpha: 0.55),
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(AppSpacing.xl),
         child: Row(
           children: [
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.xs),
               color: palette.primary.withValues(alpha: 0.18),
               child: Text(
                 'CHECKPOINT',
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w500,
+                style: context.runninType.labelCaps.copyWith(
                   color: palette.primary,
                   letterSpacing: 1.0,
                 ),
@@ -1295,10 +1278,9 @@ class _CheckpointEntry extends StatelessWidget {
             Expanded(
               child: Text(
                 'Fim de SEM $weekNumber · ajustar plano com base na sua semana',
-                style: TextStyle(
+                style: context.runninType.bodySm.copyWith(
                   color: palette.text,
                   fontSize: 12.5,
-                  height: 1.4,
                 ),
               ),
             ),
@@ -1424,7 +1406,7 @@ class _ReportsTab extends StatelessWidget {
         const SizedBox(height: 18),
         Text(
           'Feedback por corrida → HISTÓRICO > toque na corrida.',
-          style: TextStyle(color: palette.muted, fontSize: 11.5, height: 1.5),
+          style: context.runninType.bodyXs.copyWith(fontSize: 11.5, height: 1.5),
         ),
       ],
     );
@@ -1456,16 +1438,15 @@ class _WeeklyReportCard extends StatelessWidget {
               children: [
                 Text(
                   'Semana ${_formatWeekStart(report.weekStart)}',
-                  style: TextStyle(
+                  style: context.runninType.displaySm.copyWith(
                     fontSize: 18,
-                    fontWeight: FontWeight.w500,
                     color: palette.text,
                   ),
                 ),
                 const SizedBox(height: 6),
                 Text(
                   '${report.sessionsDone}/${report.sessionsPlanned} sessoes · ${report.totalKm.toStringAsFixed(1)}K',
-                  style: TextStyle(
+                  style: context.runninType.bodyMd.copyWith(
                     color: palette.muted,
                     fontSize: 13,
                   ),
@@ -1483,9 +1464,7 @@ class _WeeklyReportCard extends StatelessWidget {
               ),
               child: Text(
                 '${report.adherencePercent}%',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w500,
+                style: context.runninType.dataSm.copyWith(
                   color: palette.background,
                 ),
               ),
@@ -1526,7 +1505,7 @@ class _WeekChip extends StatelessWidget {
       onTap: onTap,
       child: Container(
         margin: const EdgeInsets.only(right: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.md),
         decoration: BoxDecoration(
           color: selected ? palette.primary : palette.surface,
           border: Border.all(
@@ -1536,9 +1515,8 @@ class _WeekChip extends StatelessWidget {
         ),
         child: Text(
           'S$weekNumber',
-          style: TextStyle(
+          style: context.runninType.labelCaps.copyWith(
             fontSize: 11,
-            fontWeight: FontWeight.w500,
             color: selected ? palette.background : palette.muted,
           ),
         ),
@@ -1567,7 +1545,7 @@ class _SectionTitle extends StatelessWidget {
       children: [
         Text(title, style: context.runninType.displayMd),
         const SizedBox(height: 6),
-        Text(subtitle, style: TextStyle(color: palette.muted)),
+        Text(subtitle, style: context.runninType.bodySm),
       ],
     );
   }
@@ -1602,7 +1580,7 @@ class _TabEmptyState extends StatelessWidget {
               Text(
                 body,
                 textAlign: TextAlign.center,
-                style: TextStyle(color: palette.muted, height: 1.5),
+                style: context.runninType.bodyMd.copyWith(color: palette.muted),
               ),
             ],
           ),
@@ -1716,7 +1694,7 @@ class _WeeklySessionRow extends StatelessWidget {
         color: rowBg,
         border: Border.all(color: rowBorder, width: rowBorderWidth),
       ),
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(AppSpacing.lg),
       child: Row(
         children: [
           Container(
@@ -1729,7 +1707,7 @@ class _WeeklySessionRow extends StatelessWidget {
               children: [
                 Text(
                   cellLabel,
-                  style: TextStyle(
+                  style: context.runninType.labelCaps.copyWith(
                     fontSize: 11,
                     fontWeight: isToday || hadPastSession
                         ? FontWeight.w700
@@ -1741,7 +1719,7 @@ class _WeeklySessionRow extends StatelessWidget {
                 const SizedBox(height: 2),
                 Text(
                   '$dd/$mm',
-                  style: TextStyle(
+                  style: context.runninType.bodyXs.copyWith(
                     fontSize: 9,
                     color: cellFg.withValues(alpha: 0.85),
                     letterSpacing: 0.3,
@@ -1765,9 +1743,8 @@ class _WeeklySessionRow extends StatelessWidget {
                     ],
                     Text(
                       _dayNames[dayOfWeek],
-                      style: TextStyle(
+                      style: context.runninType.displaySm.copyWith(
                         fontSize: 18,
-                        fontWeight: FontWeight.w500,
                         color: isPast && !isToday ? palette.muted : palette.text,
                       ),
                     ),
@@ -1775,7 +1752,7 @@ class _WeeklySessionRow extends StatelessWidget {
                       const SizedBox(width: 8),
                       Text(
                         hadPastSession ? '· feito' : '· passado',
-                        style: TextStyle(
+                        style: context.runninType.bodyXs.copyWith(
                           fontSize: 10,
                           color: palette.muted.withValues(alpha: 0.7),
                         ),
@@ -1786,13 +1763,13 @@ class _WeeklySessionRow extends StatelessWidget {
                 const SizedBox(height: 4),
                 Text(
                   isRest ? 'Descanso' : session!.type,
-                  style: TextStyle(color: palette.muted),
+                  style: context.runninType.bodySm,
                 ),
                 if (!isRest && session!.durationMin != null) ...[
                   const SizedBox(height: 2),
                   Text(
                     '~${session!.durationMin!.round()}min',
-                    style: TextStyle(color: palette.muted, fontSize: 11),
+                    style: context.runninType.bodyXs,
                   ),
                 ],
                 if (!isRest && session!.hydrationLiters != null) ...[
@@ -1805,7 +1782,7 @@ class _WeeklySessionRow extends StatelessWidget {
                       const SizedBox(width: 3),
                       Text(
                         '${session!.hydrationLiters!.toStringAsFixed(1)}L',
-                        style: TextStyle(color: palette.muted, fontSize: 11),
+                        style: context.runninType.bodyXs,
                       ),
                     ],
                   ),
@@ -1824,7 +1801,7 @@ class _WeeklySessionRow extends StatelessWidget {
                           session!.nutritionPre!,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
+                          style: context.runninType.bodyXs.copyWith(
                             color: palette.muted.withValues(alpha: 0.85),
                             fontSize: 10.5,
                             height: 1.35,
@@ -1843,16 +1820,15 @@ class _WeeklySessionRow extends StatelessWidget {
               children: [
                 Text(
                   _distanceLabel(session!),
-                  style: TextStyle(
+                  style: context.runninType.dataXs.copyWith(
                     fontSize: 24,
-                    fontWeight: FontWeight.w500,
                     color: palette.secondary,
                   ),
                 ),
                 if (session!.targetPace != null)
                   Text(
                     '${session!.targetPace!}/km',
-                    style: TextStyle(color: palette.muted),
+                    style: context.runninType.bodySm,
                   ),
               ],
             ),
@@ -1926,9 +1902,7 @@ class _MonthlyWeekCard extends StatelessWidget {
                         color: palette.primary.withValues(alpha: 0.15),
                         child: Text(
                           'SEM $weekNumber',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w500,
+                          style: context.runninType.labelCaps.copyWith(
                             color: palette.primary,
                             letterSpacing: 1.0,
                           ),
@@ -1937,8 +1911,7 @@ class _MonthlyWeekCard extends StatelessWidget {
                       const SizedBox(width: 8),
                       Text(
                         phaseLabel,
-                        style: TextStyle(
-                          fontSize: 14,
+                        style: context.runninType.bodyMd.copyWith(
                           fontWeight: FontWeight.w500,
                           color: palette.text,
                           letterSpacing: 0.5,
@@ -1949,7 +1922,7 @@ class _MonthlyWeekCard extends StatelessWidget {
                   const SizedBox(height: 6),
                   Text(
                     'Foco: $focus',
-                    style: TextStyle(
+                    style: context.runninType.bodySm.copyWith(
                       color: palette.text.withValues(alpha: 0.82),
                       fontSize: 12.5,
                     ),
@@ -1957,7 +1930,7 @@ class _MonthlyWeekCard extends StatelessWidget {
                   const SizedBox(height: 8),
                   Text(
                     summary,
-                    style: TextStyle(color: palette.muted, height: 1.5),
+                    style: context.runninType.bodyMd.copyWith(color: palette.muted),
                   ),
                 ],
               ),
@@ -1968,15 +1941,14 @@ class _MonthlyWeekCard extends StatelessWidget {
               children: [
                 Text(
                   '${totalDistance.toStringAsFixed(0)}K',
-                  style: TextStyle(
-                    fontSize: 28,
+                  style: context.runninType.dataMd.copyWith(
                     fontWeight: FontWeight.w500,
                     color: palette.secondary,
                   ),
                 ),
                 Text(
                   status,
-                  style: TextStyle(
+                  style: context.runninType.bodyMd.copyWith(
                     color: statusColor,
                     fontWeight: FontWeight.w500,
                     letterSpacing: 0.08,
@@ -2029,9 +2001,7 @@ class _ReportCard extends StatelessWidget {
               Expanded(
                 child: Text(
                   report.title,
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w500,
+                  style: context.runninType.dataXs.copyWith(
                     color: palette.text,
                   ),
                 ),
@@ -2045,9 +2015,8 @@ class _ReportCard extends StatelessWidget {
                   color: palette.primary,
                   child: Text(
                     'MAIS RECENTE',
-                    style: TextStyle(
+                    style: context.runninType.labelCaps.copyWith(
                       fontSize: 9,
-                      fontWeight: FontWeight.w500,
                       color: palette.background,
                     ),
                   ),
@@ -2080,9 +2049,8 @@ class _ReportCard extends StatelessWidget {
           const SizedBox(height: 12),
           Text(
             report.coachSummary,
-            style: TextStyle(
+            style: context.runninType.bodyMd.copyWith(
               color: palette.text.withValues(alpha: 0.8),
-              height: 1.5,
             ),
           ),
           const SizedBox(height: 12),
@@ -2108,9 +2076,8 @@ class _MetricColumn extends StatelessWidget {
       children: [
         Text(
           label,
-          style: TextStyle(
+          style: context.runninType.labelCaps.copyWith(
             fontSize: 9,
-            fontWeight: FontWeight.w500,
             color: palette.muted,
             letterSpacing: 0.08,
           ),
@@ -2118,9 +2085,8 @@ class _MetricColumn extends StatelessWidget {
         const SizedBox(height: 6),
         Text(
           value,
-          style: TextStyle(
+          style: context.runninType.dataXs.copyWith(
             fontSize: 24,
-            fontWeight: FontWeight.w500,
             color: palette.secondary,
           ),
         ),

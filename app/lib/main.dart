@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
@@ -17,6 +19,15 @@ import 'core/theme/theme_controller.dart';
 import 'firebase_options.dart';
 
 void main() async {
+  // Captura QUALQUER erro não tratado (Futures sem catch, microtasks órfãs).
+  // Sem isso, em release web o erro vira "Uncaught Error" sem mensagem.
+  runZonedGuarded(_runApp, (error, stack) {
+    // ignore: avoid_print
+    print('[ZONE_ERROR] $error\n$stack');
+  });
+}
+
+Future<void> _runApp() async {
   WidgetsFlutterBinding.ensureInitialized();
   usePathUrlStrategy();
 
@@ -65,6 +76,19 @@ void main() async {
 
   if (!kIsWeb) {
     FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
+  } else {
+    // Em release web, Dart strippa as mensagens de erro do bundle ("Uncaught
+    // Error" sem detalhes). Esses handlers convertem o erro pra string ANTES
+    // do strip, surfaçando msg + stacktrace no console pra diagnóstico.
+    FlutterError.onError = (FlutterErrorDetails details) {
+      // ignore: avoid_print
+      print('[FLUTTER_ERROR] ${details.exceptionAsString()}\n${details.stack}');
+    };
+    WidgetsBinding.instance.platformDispatcher.onError = (error, stack) {
+      // ignore: avoid_print
+      print('[PLATFORM_ERROR] $error\n$stack');
+      return true;
+    };
   }
 
   runApp(const ProviderScope(child: RunrunApp()));

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 import 'package:runnin/features/run/data/datasources/run_remote_datasource.dart';
@@ -380,10 +380,7 @@ class _SectionHeader extends StatelessWidget {
         children: [
           TextSpan(
             text: label,
-            style: GoogleFonts.jetBrainsMono(
-              fontSize: 22,
-              fontWeight: FontWeight.w500,
-              letterSpacing: -0.44,
+            style: context.runninType.dataXs.copyWith(
               color: FigmaColors.textPrimary,
               height: 24.2 / 22,
             ),
@@ -392,9 +389,10 @@ class _SectionHeader extends StatelessWidget {
             alignment: PlaceholderAlignment.top,
             child: Text(
               index,
-              style: GoogleFonts.jetBrainsMono(
+              style: context.runninType.labelCaps.copyWith(
                 fontSize: 6.6,
                 fontWeight: FontWeight.w400,
+                letterSpacing: 0,
                 color: FigmaColors.brandCyan,
               ),
             ),

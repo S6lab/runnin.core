@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:latlong2/latlong.dart';
 
 import 'package:runnin/core/theme/app_palette.dart';
@@ -90,9 +89,8 @@ class ShareMapCard extends StatelessWidget {
                 children: [
                   Text(
                     'RUNNIN.AI',
-                    style: GoogleFonts.jetBrainsMono(
+                    style: context.runninType.labelMd.copyWith(
                       color: palette.primary,
-                      fontSize: 12,
                       fontWeight: FontWeight.w500,
                       letterSpacing: 2,
                     ),
@@ -100,9 +98,8 @@ class ShareMapCard extends StatelessWidget {
                   const SizedBox(height: 4),
                   Text(
                     run.type.toUpperCase(),
-                    style: GoogleFonts.jetBrainsMono(
+                    style: context.runninType.bodyMd.copyWith(
                       color: Colors.white,
-                      fontSize: 14,
                       fontWeight: FontWeight.w500,
                       letterSpacing: 1.1,
                     ),
@@ -164,9 +161,8 @@ class _StatRow extends StatelessWidget {
       children: [
         Text(
           label,
-          style: GoogleFonts.jetBrainsMono(
+          style: context.runninType.labelCaps.copyWith(
             color: Colors.white70,
-            fontSize: 10,
             fontWeight: FontWeight.w600,
             letterSpacing: 1.5,
           ),
@@ -174,10 +170,8 @@ class _StatRow extends StatelessWidget {
         const SizedBox(height: 2),
         Text(
           value,
-          style: GoogleFonts.jetBrainsMono(
+          style: context.runninType.displayMd.copyWith(
             color: Colors.white,
-            fontSize: 32,
-            fontWeight: FontWeight.w500,
             height: 1.1,
           ),
         ),

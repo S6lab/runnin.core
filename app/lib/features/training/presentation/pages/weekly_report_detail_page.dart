@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/features/training/domain/entities/weekly_report.dart';
@@ -129,9 +128,7 @@ class _WeeklyReportDetailPageState extends State<WeeklyReportDetailPage> {
       children: [
         Text(
           '// RELATÓRIO SEMANAL',
-          style: GoogleFonts.jetBrainsMono(
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
+          style: context.runninType.labelMd.copyWith(
             letterSpacing: 0.6,
             color: palette.muted,
           ),
@@ -141,9 +138,8 @@ class _WeeklyReportDetailPageState extends State<WeeklyReportDetailPage> {
           children: [
             Text(
               'Semana ${_formatWeekStart(report.weekStart)}',
-              style: GoogleFonts.jetBrainsMono(
+              style: context.runninType.dataXs.copyWith(
                 fontSize: 24,
-                fontWeight: FontWeight.w500,
                 color: palette.text,
               ),
             ),
@@ -152,9 +148,8 @@ class _WeeklyReportDetailPageState extends State<WeeklyReportDetailPage> {
         const SizedBox(height: 4),
         Text(
           dateRange,
-          style: GoogleFonts.jetBrainsMono(
+          style: context.runninType.bodyMd.copyWith(
             fontSize: 13,
-            fontWeight: FontWeight.w400,
             color: palette.muted,
           ),
         ),
@@ -246,9 +241,7 @@ class _WeeklyReportDetailPageState extends State<WeeklyReportDetailPage> {
                   color: palette.secondary,
                   child: Text(
                     'ADAPTADO',
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: 9,
-                      fontWeight: FontWeight.w500,
+                    style: context.runninType.labelCaps.copyWith(
                       letterSpacing: 0.9,
                       color: FigmaColors.bgBase,
                     ),
@@ -259,9 +252,8 @@ class _WeeklyReportDetailPageState extends State<WeeklyReportDetailPage> {
           const SizedBox(height: 12),
           Text(
             '${report.totalFreeSessions} treinos livres • ${report.freeKm.toStringAsFixed(1)}K extras',
-            style: GoogleFonts.jetBrainsMono(
+            style: context.runninType.bodyMd.copyWith(
               fontSize: 13,
-              fontWeight: FontWeight.w400,
               color: palette.text,
             ),
           ),
@@ -287,9 +279,8 @@ class _WeeklyReportDetailPageState extends State<WeeklyReportDetailPage> {
           const SizedBox(height: 12),
           Text(
             analysis,
-            style: GoogleFonts.jetBrainsMono(
+            style: context.runninType.bodyMd.copyWith(
               fontSize: 13,
-              fontWeight: FontWeight.w400,
               height: 1.5,
               color: palette.text,
             ),
@@ -319,9 +310,7 @@ class _WeeklyReportDetailPageState extends State<WeeklyReportDetailPage> {
       children: [
         Text(
           'DESTAQUES',
-          style: GoogleFonts.jetBrainsMono(
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
+          style: context.runninType.labelMd.copyWith(
             letterSpacing: 0.6,
             color: palette.muted,
           ),
@@ -373,9 +362,8 @@ class _WeeklyReportDetailPageState extends State<WeeklyReportDetailPage> {
           const SizedBox(height: 12),
           Text(
             suggestion,
-            style: GoogleFonts.jetBrainsMono(
+            style: context.runninType.bodyMd.copyWith(
               fontSize: 13,
-              fontWeight: FontWeight.w400,
               height: 1.5,
               color: palette.text,
             ),
@@ -407,8 +395,7 @@ class _WeeklyReportDetailPageState extends State<WeeklyReportDetailPage> {
                 const SizedBox(width: 8),
                 Text(
                   'CONVERSAR COM COACH ↗',
-                  style: GoogleFonts.jetBrainsMono(
-                    fontSize: 14,
+                  style: context.runninType.bodyMd.copyWith(
                     fontWeight: FontWeight.w500,
                     color: palette.background,
                   ),
@@ -427,8 +414,7 @@ class _WeeklyReportDetailPageState extends State<WeeklyReportDetailPage> {
           child: Center(
             child: Text(
               'MANTER PLANO ATUAL',
-              style: GoogleFonts.jetBrainsMono(
-                fontSize: 14,
+              style: context.runninType.bodyMd.copyWith(
                 fontWeight: FontWeight.w500,
                 color: palette.text,
               ),
@@ -438,9 +424,7 @@ class _WeeklyReportDetailPageState extends State<WeeklyReportDetailPage> {
         const SizedBox(height: 16),
         Text(
           '1 revisão disponível por semana',
-          style: GoogleFonts.jetBrainsMono(
-            fontSize: 12,
-            fontWeight: FontWeight.w400,
+          style: context.runninType.bodySm.copyWith(
             color: palette.muted,
           ),
         ),
@@ -476,18 +460,14 @@ class _StatTile extends StatelessWidget {
         children: [
           Text(
             label,
-            style: GoogleFonts.jetBrainsMono(
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
+            style: context.runninType.labelMd.copyWith(
               letterSpacing: 0.6,
               color: palette.muted,
             ),
           ),
           Text(
             value,
-            style: GoogleFonts.jetBrainsMono(
-              fontSize: 16,
-              fontWeight: FontWeight.w500,
+            style: context.runninType.dataSm.copyWith(
               color: color,
             ),
           ),

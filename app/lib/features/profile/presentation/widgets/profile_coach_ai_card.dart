@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:runnin/core/theme/app_palette.dart';
 
 class ProfileCoachAICard extends StatefulWidget {
   const ProfileCoachAICard({super.key});
@@ -58,8 +58,7 @@ class _ProfileCoachAICardState extends State<ProfileCoachAICard> {
                       children: [
                         Text(
                           'COACH.AI > FECHAMENTO MENSAL',
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: 10,
+                          style: context.runninType.labelCaps.copyWith(
                             fontWeight: FontWeight.w500,
                             color: Colors.white,
                             letterSpacing: 0.1,
@@ -68,8 +67,7 @@ class _ProfileCoachAICardState extends State<ProfileCoachAICard> {
                         const SizedBox(height: 4),
                         Text(
                           'Resumo das métricas e evolução',
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: 14,
+                          style: context.runninType.bodyMd.copyWith(
                             fontWeight: FontWeight.w500,
                             color: Colors.white,
                           ),
@@ -87,8 +85,7 @@ class _ProfileCoachAICardState extends State<ProfileCoachAICard> {
                         duration: const Duration(milliseconds: 220),
                         child: Text(
                           '▼',
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: 10,
+                          style: context.runninType.labelCaps.copyWith(
                             height: 1,
                             color: Colors.white,
                           ),
@@ -101,8 +98,7 @@ class _ProfileCoachAICardState extends State<ProfileCoachAICard> {
                   const SizedBox(height: 14),
                   Text(
                     'Você completou ${DateTime.now().month == 1 ? 'Janeiro' : _monthName(DateTime.now().month - 1)}. O Coach.AI preparou um resumo com suas métricas, zonas de esforço e evolução. Deseja ver o fechamento completo?',
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: 11,
+                    style: context.runninType.bodyXs.copyWith(
                       height: 18 / 11,
                       fontWeight: FontWeight.w500,
                       color: Colors.white,
@@ -124,10 +120,9 @@ class _ProfileCoachAICardState extends State<ProfileCoachAICard> {
                               borderRadius: BorderRadius.circular(12),
                             ),
                           ),
-                          child: const Text(
+                          child: Text(
                             'VER FECHAMENTO',
-                            style: TextStyle(
-                              fontSize: 12,
+                            style: context.runninType.labelMd.copyWith(
                               fontWeight: FontWeight.w500,
                             ),
                           ),

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/shared/widgets/figma/export.dart';
 
@@ -54,9 +54,7 @@ class OnboardingStepWearable extends StatelessWidget {
                     const SizedBox(width: 8),
                     Text(
                       '> COACH.AI',
-                      style: GoogleFonts.jetBrainsMono(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w400,
+                      style: context.runninType.bodyXs.copyWith(
                         letterSpacing: 1.65,
                         color: FigmaColors.brandOrange,
                       ),
@@ -66,9 +64,7 @@ class OnboardingStepWearable extends StatelessWidget {
                 const SizedBox(height: 12),
                 Text(
                   'Tenho tudo que preciso — incluindo sua rotina de sono e horário preferido. Vou calcular a janela metabólica ideal para cada tipo de treino, enviar lembretes de hidratação e preparo nutricional, e sugerir o melhor horário com base no seu padrão de sono.',
-                  style: GoogleFonts.jetBrainsMono(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w400,
+                  style: context.runninType.bodyMd.copyWith(
                     height: 23.1 / 14,
                     color: const Color(0xCCFFFFFF),
                   ),
@@ -82,9 +78,7 @@ class OnboardingStepWearable extends StatelessWidget {
             title: 'Tem exames médicos recentes?',
             bodyWidget: Text.rich(
               TextSpan(
-                style: GoogleFonts.jetBrainsMono(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w400,
+                style: context.runninType.bodySm.copyWith(
                   height: 19.2 / 12,
                   color: FigmaColors.textSecondary,
                 ),
@@ -95,8 +89,7 @@ class OnboardingStepWearable extends StatelessWidget {
                   ),
                   TextSpan(
                     text: 'Perfil → Saúde → Exames',
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: 12,
+                    style: context.runninType.labelMd.copyWith(
                       fontWeight: FontWeight.w500,
                       height: 19.2 / 12,
                       color: FigmaColors.brandCyan,

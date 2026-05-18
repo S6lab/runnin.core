@@ -12,11 +12,15 @@ class FigmaShareCardPreview extends StatelessWidget {
     required this.run,
     required this.theme,
     this.skinAccent,
+    this.gpsPoints = const [],
   });
 
   final Run run;
   final ShareTheme theme;
   final Color? skinAccent;
+  /// Pontos GPS reais da corrida. Quando vazio, cai num split sintético
+  /// determinístico (mantém o sparkline visível mas sem dado fingido).
+  final List<GpsPoint> gpsPoints;
 
   Color _bg(RunninPalette palette) {
     switch (theme) {
@@ -178,6 +182,10 @@ class FigmaShareCardPreview extends StatelessWidget {
   }
 
   List<double> _generateSplitValues() {
+    // Splits reais a partir dos pontos GPS: pace em segundos/km por km.
+    final real = computeKmSplitsSeconds(gpsPoints);
+    if (real.length >= 2) return real;
+    // Fallback sintético quando não há GPS suficiente (corridas legacy).
     final km = run.distanceM / 1000;
     final splits = km.floor().clamp(2, 10);
     final basePace = run.durationS / km;

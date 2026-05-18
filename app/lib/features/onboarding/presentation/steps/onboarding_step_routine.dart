@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/shared/widgets/figma/export.dart';
 
@@ -36,9 +36,7 @@ class OnboardingStepRoutine extends StatelessWidget {
           const SizedBox(height: 24),
           Text(
             'QUANDO PREFERE CORRER?',
-            style: GoogleFonts.jetBrainsMono(
-              fontSize: 11,
-              fontWeight: FontWeight.w400,
+            style: context.runninType.bodyXs.copyWith(
               letterSpacing: 1.65,
               color: FigmaColors.brandCyan,
             ),
@@ -84,9 +82,7 @@ class OnboardingStepRoutine extends StatelessWidget {
                   children: [
                     Text(
                       'ACORDA',
-                      style: GoogleFonts.jetBrainsMono(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w400,
+                      style: context.runninType.bodyXs.copyWith(
                         letterSpacing: 1.65,
                         color: FigmaColors.textSecondary,
                       ),
@@ -112,9 +108,7 @@ class OnboardingStepRoutine extends StatelessWidget {
                   children: [
                     Text(
                       'DORME',
-                      style: GoogleFonts.jetBrainsMono(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w400,
+                      style: context.runninType.bodyXs.copyWith(
                         letterSpacing: 1.65,
                         color: FigmaColors.textSecondary,
                       ),
@@ -173,9 +167,7 @@ class _TimeOptionButton extends StatelessWidget {
         alignment: Alignment.center,
         child: Text(
           label,
-          style: GoogleFonts.jetBrainsMono(
-            fontSize: 14,
-            fontWeight: FontWeight.w400,
+          style: context.runninType.bodyMd.copyWith(
             color: selected
                 ? FigmaColors.textPrimary
                 : FigmaColors.textSecondary,

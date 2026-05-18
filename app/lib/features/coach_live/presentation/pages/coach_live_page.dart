@@ -4,7 +4,6 @@ import 'dart:typed_data';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:runnin/core/network/api_client.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/features/coach_live/data/live_audio_service.dart';
@@ -214,7 +213,7 @@ class _CoachLivePageState extends State<CoachLivePage> {
                   const SizedBox(width: 8),
                   Text(
                     _connecting ? 'CONECTANDO…' : _connected ? 'AO VIVO • GEMINI' : 'DESCONECTADO',
-                    style: GoogleFonts.jetBrainsMono(
+                    style: context.runninType.labelCaps.copyWith(
                       fontSize: 11, fontWeight: FontWeight.w500,
                       color: _connected ? palette.primary : palette.muted,
                       letterSpacing: 1.0,
@@ -224,7 +223,7 @@ class _CoachLivePageState extends State<CoachLivePage> {
                   if (!_connected && !_connecting)
                     TextButton(
                       onPressed: _connect,
-                      child: Text('RECONECTAR', style: GoogleFonts.jetBrainsMono(fontSize: 10, fontWeight: FontWeight.w500, color: palette.primary)),
+                      child: Text('RECONECTAR', style: context.runninType.labelCaps.copyWith(fontWeight: FontWeight.w500, color: palette.primary)),
                     ),
                 ],
               ),
@@ -232,7 +231,7 @@ class _CoachLivePageState extends State<CoachLivePage> {
             if (_error != null)
               Padding(
                 padding: const EdgeInsets.all(12),
-                child: Text(_error!, style: TextStyle(color: palette.error, fontSize: 12)),
+                child: Text(_error!, style: context.runninType.bodySm.copyWith(color: palette.error)),
               ),
             Expanded(
               child: ListView.builder(
@@ -258,7 +257,7 @@ class _CoachLivePageState extends State<CoachLivePage> {
                     child: TextField(
                       controller: _input,
                       enabled: _connected,
-                      style: GoogleFonts.jetBrainsMono(fontSize: 13, color: palette.text),
+                      style: context.runninType.bodyMd.copyWith(fontSize: 13, color: palette.text),
                       decoration: InputDecoration(
                         hintText: _connected ? 'Pergunte ao coach…' : '...',
                         border: OutlineInputBorder(borderRadius: BorderRadius.zero, borderSide: BorderSide(color: palette.border)),
@@ -324,7 +323,7 @@ class _MsgBubble extends StatelessWidget {
               ),
               child: Text(
                 msg.text,
-                style: GoogleFonts.jetBrainsMono(
+                style: context.runninType.bodyMd.copyWith(
                   fontSize: 13,
                   color: palette.text,
                   height: 1.5,

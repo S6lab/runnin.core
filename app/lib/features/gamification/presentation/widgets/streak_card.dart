@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:runnin/core/theme/app_palette.dart';
 
 class StreakCard extends StatelessWidget {
   final String label;
@@ -22,10 +23,10 @@ class StreakCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(label, style: const TextStyle(fontSize: 12)),
+            Text(label, style: context.runninType.bodySm),
             Text(value,
-                style:
-                    const TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
+                style: context.runninType.dataMd
+                    .copyWith(fontWeight: FontWeight.bold)),
             if (unit != null) Text(unit!),
           ],
         ),

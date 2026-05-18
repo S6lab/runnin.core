@@ -22,7 +22,7 @@ const OptionalNumberSchema = z.preprocess(
 
 export const CoachContextSchema = z.object({
   runId: z.string().optional(),
-  event: z.enum(['pre_run', 'km_reached', 'pace_alert', 'question', 'start', 'finish']),
+  event: z.enum(['pre_run', 'km_reached', 'km_split', 'pace_alert', 'motivation', 'question', 'start', 'finish']),
   runType: z.string().optional(),
   currentPaceMinKm: z.number(),
   targetPaceMinKm: OptionalNumberSchema,
@@ -270,10 +270,13 @@ function applyDecisionLayer(
   if (knobs.respectMessageFrequency) {
     const freq = profile?.coachMessageFrequency;
     if (freq === 'silent') return { skipped: true, reason: 'silent' };
-    if (ctx.event === 'km_reached') {
+    if (ctx.event === 'km_reached' || ctx.event === 'km_split') {
       const km = ctx.kmReached ?? 0;
       if (freq === 'alerts_only') return { skipped: true, reason: 'frequency' };
       if (freq === 'per_2km' && km > 0 && km % 2 !== 0) return { skipped: true, reason: 'frequency' };
+    }
+    if (ctx.event === 'motivation' && freq === 'alerts_only') {
+      return { skipped: true, reason: 'frequency' };
     }
     if (ctx.event === 'pace_alert' && freq === 'silent') return { skipped: true, reason: 'silent' };
   }

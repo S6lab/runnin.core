@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 
 /// Splash screen per `docs/figma/screens/SPLASH.md` (Figma node 1:4283).
@@ -102,11 +102,9 @@ class _SplashLockup extends StatelessWidget {
               child: Text(
                 'FEITO PARA VENCEDORES',
                 textAlign: TextAlign.center,
-                style: GoogleFonts.jetBrainsMono(
-                  fontSize: 12,
+                style: context.runninType.bodySm.copyWith(
                   height: 18 / 12,
                   letterSpacing: 2.4,
-                  fontWeight: FontWeight.w400,
                   color: FigmaColors.textSecondary,
                 ),
               ),
@@ -142,11 +140,10 @@ class _SplashWordmark extends StatelessWidget {
         children: [
           Text(
             'RUNNIN',
-            style: GoogleFonts.jetBrainsMono(
-              fontSize: 28,
+            style: context.runninType.dataMd.copyWith(
+              fontWeight: FontWeight.w500,
               height: 42 / 28,
               letterSpacing: 3.36,
-              fontWeight: FontWeight.w500,
               color: FigmaColors.textPrimary,
             ),
           ),
@@ -156,10 +153,9 @@ class _SplashWordmark extends StatelessWidget {
             color: FigmaColors.brandCyan,
             child: Text(
               '.AI',
-              style: GoogleFonts.jetBrainsMono(
-                fontSize: 12,
+              style: context.runninType.labelMd.copyWith(
                 height: 18 / 12,
-                fontWeight: FontWeight.w700, // exceção da regra: .AI é bold
+                fontWeight: FontWeight.w700,
                 color: FigmaColors.bgBase,
               ),
             ),

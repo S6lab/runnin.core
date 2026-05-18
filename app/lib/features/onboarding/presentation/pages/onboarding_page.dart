@@ -364,14 +364,33 @@ class _OnboardingPageState extends State<OnboardingPage> {
     if (_submitting) return false;
 
     switch (_step) {
-      case 5: // identity
-        return _nameCtrl.text.trim().isNotEmpty &&
+      case 4: // level
+        return _level.isNotEmpty;
+      case 5: // identity (name + birthDate)
+        return _nameCtrl.text.trim().length >= 2 &&
             _isValidBirthDate(_birthDateCtrl.text.trim());
       case 6: // gender
         return _gender != null;
-      case 7: // body
-        return _weightCtrl.text.trim().isNotEmpty &&
-            _heightCtrl.text.trim().isNotEmpty;
+      case 7: // body — alinhado com server (peso 25-300kg, altura 80-250cm).
+        final w = double.tryParse(_weightCtrl.text.trim().replaceAll(',', '.'));
+        final h = int.tryParse(_heightCtrl.text.trim());
+        return w != null && w >= 25 && w <= 300 &&
+            h != null && h >= 80 && h <= 250;
+      case 8: // medical — user pode legitimamente não ter condição.
+        // Array vazio é válido. Só passar pelo step já conta.
+        return true;
+      case 9: // goal
+        return _goal.isNotEmpty;
+      case 10: // frequency
+        return _frequency >= 1 && _frequency <= 7;
+      case 11: // pace — uma das opções deve estar selecionada
+        return _pace != null && _pace!.isNotEmpty;
+      case 12: // routine: período + hora acordar + hora dormir
+        return _runPeriod != null &&
+            _wakeTime != null && _wakeTime!.isNotEmpty &&
+            _sleepTime != null && _sleepTime!.isNotEmpty;
+      case 13: // wearable — bool já default false; sempre pode avançar
+        return true;
       default:
         return true;
     }

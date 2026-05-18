@@ -42,6 +42,11 @@ class PlanSession {
   /// agregado (distância/pace/tempo) pra não poluir.
   final List<PlanSegment> executionSegments;
   final String notes;
+  /// ID da Run que executou essa sessão. Server seta em CompleteRun
+  /// quando run.planSessionId == session.id. Null = sessão ainda
+  /// não foi feita.
+  final String? executedRunId;
+  final String? executedAt;
 
   const PlanSession({
     required this.id,
@@ -55,7 +60,11 @@ class PlanSession {
     this.nutritionPost,
     this.executionSegments = const [],
     required this.notes,
+    this.executedRunId,
+    this.executedAt,
   });
+
+  bool get isExecuted => executedRunId != null && executedRunId!.isNotEmpty;
 
   factory PlanSession.fromJson(Map<String, dynamic> j) => PlanSession(
     id: j['id'] as String,
@@ -71,6 +80,8 @@ class PlanSession {
         .map((e) => PlanSegment.fromJson(e as Map<String, dynamic>))
         .toList(),
     notes: j['notes'] as String? ?? '',
+    executedRunId: j['executedRunId'] as String?,
+    executedAt: j['executedAt'] as String?,
   );
 }
 

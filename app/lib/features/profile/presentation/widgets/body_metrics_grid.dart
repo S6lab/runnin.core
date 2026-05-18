@@ -24,11 +24,8 @@ class BodyMetricsGrid extends StatelessWidget {
         children: [
           Text(
             'MÉTRICAS CORPORAIS',
-            style: TextStyle(
-              fontSize: 9,
-              fontWeight: FontWeight.w500,
+            style: context.runninType.labelCaps.copyWith(
               color: palette.muted,
-              letterSpacing: 0.12,
             ),
           ),
           const SizedBox(height: 17.7),
@@ -93,19 +90,14 @@ class _MetricCard extends StatelessWidget {
         children: [
           Text(
             label,
-            style: TextStyle(
-              fontSize: 9,
-              fontWeight: FontWeight.w500,
+            style: context.runninType.labelCaps.copyWith(
               color: palette.muted,
-              letterSpacing: 0.12,
             ),
           ),
           const SizedBox(height: 8),
           Text(
             value,
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.w500,
+            style: context.runninType.displaySm.copyWith(
               color: enabled ? palette.text : palette.muted,
               letterSpacing: -0.02,
             ),
@@ -113,9 +105,7 @@ class _MetricCard extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             suffix,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w400,
+            style: context.runninType.bodySm.copyWith(
               color: palette.muted,
             ),
           ),

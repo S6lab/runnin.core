@@ -181,8 +181,8 @@ class _AccountAccessPageState extends State<AccountAccessPage> {
               child: const Text('CANCELAR')),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('EXCLUIR DEFINITIVAMENTE',
-                style: TextStyle(color: Colors.red)),
+            child: Text('EXCLUIR DEFINITIVAMENTE',
+                style: context.runninType.labelMd.copyWith(color: Colors.red)),
           ),
         ],
       ),
@@ -248,7 +248,7 @@ class _AccountAccessPageState extends State<AccountAccessPage> {
                         Expanded(
                           child: Text(
                             email?.isNotEmpty == true ? email! : 'sem email',
-                            style: TextStyle(color: palette.text, fontSize: 13),
+                            style: context.runninType.bodyMd.copyWith(color: palette.text, fontSize: 13),
                           ),
                         ),
                         Icon(Icons.lock_outline,
@@ -259,7 +259,7 @@ class _AccountAccessPageState extends State<AccountAccessPage> {
                   const SizedBox(height: 6),
                   Text(
                     'Email não pode ser alterado — está vinculado ao seu cadastro.',
-                    style: TextStyle(color: palette.muted, fontSize: 11, height: 1.4),
+                    style: context.runninType.bodyXs,
                   ),
                   const SizedBox(height: 24),
 
@@ -281,7 +281,7 @@ class _AccountAccessPageState extends State<AccountAccessPage> {
                                     ? phone!
                                     : 'sem telefone cadastrado',
                                 style:
-                                    TextStyle(color: palette.text, fontSize: 13),
+                                    context.runninType.bodyMd.copyWith(color: palette.text, fontSize: 13),
                               ),
                             ),
                             TextButton(
@@ -297,10 +297,9 @@ class _AccountAccessPageState extends State<AccountAccessPage> {
                                       }),
                               child: Text(
                                 _phoneEditing ? 'CANCELAR' : 'TROCAR',
-                                style: TextStyle(
-                                  color: palette.primary,
+                                style: context.runninType.labelCaps.copyWith(
                                   fontSize: 11,
-                                  fontWeight: FontWeight.w500,
+                                  color: palette.primary,
                                   letterSpacing: 0.5,
                                 ),
                               ),
@@ -365,11 +364,7 @@ class _AccountAccessPageState extends State<AccountAccessPage> {
                           const SizedBox(height: 8),
                           Text(
                             'Validação por SMS garante posse do número. Em breve: confirmação extra por email (2FA).',
-                            style: TextStyle(
-                              color: palette.muted,
-                              fontSize: 10.5,
-                              height: 1.4,
-                            ),
+                            style: context.runninType.bodyXs.copyWith(color: palette.muted),
                           ),
                         ],
                       ],
@@ -383,8 +378,7 @@ class _AccountAccessPageState extends State<AccountAccessPage> {
                       color: palette.error.withValues(alpha: 0.08),
                       borderColor: palette.error.withValues(alpha: 0.35),
                       child: Text(_error!,
-                          style: TextStyle(
-                              color: palette.error, fontSize: 12, height: 1.4)),
+                          style: context.runninType.bodySm.copyWith(color: palette.error)),
                     ),
                   ],
                   if (_message != null) ...[
@@ -394,10 +388,7 @@ class _AccountAccessPageState extends State<AccountAccessPage> {
                       color: palette.primary.withValues(alpha: 0.08),
                       borderColor: palette.primary.withValues(alpha: 0.35),
                       child: Text(_message!,
-                          style: TextStyle(
-                              color: palette.primary,
-                              fontSize: 12,
-                              height: 1.4)),
+                          style: context.runninType.bodySm.copyWith(color: palette.primary)),
                     ),
                   ],
 
@@ -414,8 +405,7 @@ class _AccountAccessPageState extends State<AccountAccessPage> {
                           const SizedBox(width: 12),
                           Text(
                             'SAIR DA CONTA',
-                            style: TextStyle(
-                              fontSize: 12,
+                            style: context.runninType.labelMd.copyWith(
                               fontWeight: FontWeight.w500,
                               color: palette.text,
                               letterSpacing: 0.6,
@@ -445,8 +435,7 @@ class _AccountAccessPageState extends State<AccountAccessPage> {
                               children: [
                                 Text(
                                   'EXCLUIR MINHA CONTA',
-                                  style: TextStyle(
-                                    fontSize: 12,
+                                  style: context.runninType.labelMd.copyWith(
                                     fontWeight: FontWeight.w500,
                                     color: palette.error,
                                     letterSpacing: 0.6,
@@ -455,10 +444,7 @@ class _AccountAccessPageState extends State<AccountAccessPage> {
                                 const SizedBox(height: 4),
                                 Text(
                                   'Apaga tudo. Sem volta.',
-                                  style: TextStyle(
-                                    color: palette.muted,
-                                    fontSize: 11,
-                                  ),
+                                  style: context.runninType.bodyXs,
                                 ),
                               ],
                             ),
@@ -485,11 +471,10 @@ class _SectionLabel extends StatelessWidget {
     final palette = context.runninPalette;
     return Text(
       label,
-      style: TextStyle(
-        color: palette.muted,
+      style: context.runninType.labelCaps.copyWith(
         fontSize: 11,
+        color: palette.muted,
         letterSpacing: 1.2,
-        fontWeight: FontWeight.w500,
       ),
     );
   }

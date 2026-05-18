@@ -1,8 +1,8 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:runnin/core/network/api_client.dart';
+import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/shared/widgets/figma/figma_selection_button.dart';
 import 'package:runnin/shared/widgets/figma/figma_top_nav.dart';
@@ -302,7 +302,7 @@ class _CoachSettingsPageState extends State<CoachSettingsPage> {
                       )
                     : Text(
                         'SALVAR',
-                        style: GoogleFonts.jetBrainsMono(
+                        style: context.runninType.bodyMd.copyWith(
                           color: FigmaColors.bgBase,
                           fontSize: 13,
                           fontWeight: FontWeight.w500,
@@ -360,16 +360,14 @@ class _VoiceOption extends StatelessWidget {
                 children: [
                   Text(
                     label,
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: 14,
+                    style: context.runninType.bodyMd.copyWith(
                       fontWeight: FontWeight.w500,
                       color: selected ? FigmaColors.textPrimary : const Color(0xB3FFFFFF),
                     ),
                   ),
                   Text(
                     subtitle,
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: 10,
+                    style: context.runninType.labelCaps.copyWith(
                       fontWeight: FontWeight.w400,
                       color: FigmaColors.textMuted,
                     ),
@@ -429,8 +427,7 @@ class _FeedbackToggle extends StatelessWidget {
             Expanded(
               child: Text(
                 label,
-                style: GoogleFonts.jetBrainsMono(
-                  fontSize: 14,
+                style: context.runninType.bodyMd.copyWith(
                   fontWeight: FontWeight.w500,
                   color: value ? FigmaColors.textPrimary : const Color(0xB3FFFFFF),
                 ),

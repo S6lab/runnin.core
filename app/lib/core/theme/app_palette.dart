@@ -38,10 +38,17 @@ class RunninTypography {
   final TextStyle dataXl;
   final TextStyle dataMd;
   final TextStyle dataSm;
+  /// Data secundário (22px, w500) — pra _BigHeading da home (SEMANA,
+  /// PERFORMANCE, etc). Antes só existia em AppTextStyles; promovido
+  /// pra cá pra ser usado universalmente via context.runninType.
+  final TextStyle dataXs;
 
   // Body — textos narrativos do Coach, descrições
   final TextStyle bodyMd;
   final TextStyle bodySm;
+  /// Body compacto (11px, w400) — pra captions, sub-labels, timestamps.
+  /// Antes só existia em AppTextStyles.
+  final TextStyle bodyXs;
 
   // Label — microcopy, tags, nav labels
   final TextStyle labelCaps;
@@ -54,8 +61,10 @@ class RunninTypography {
     required this.dataXl,
     required this.dataMd,
     required this.dataSm,
+    required this.dataXs,
     required this.bodyMd,
     required this.bodySm,
+    required this.bodyXs,
     required this.labelCaps,
     required this.labelMd,
   });
@@ -104,6 +113,13 @@ class RunninTypography {
         height: 1.2,
         color: textColor,
       ),
+      dataXs: GoogleFonts.jetBrainsMono(
+        fontSize: 22,
+        fontWeight: FontWeight.w500,
+        letterSpacing: -0.44,
+        height: 1.1,
+        color: textColor,
+      ),
       bodyMd: GoogleFonts.jetBrainsMono(
         fontSize: 14,
         fontWeight: FontWeight.w400,
@@ -113,6 +129,13 @@ class RunninTypography {
       ),
       bodySm: GoogleFonts.jetBrainsMono(
         fontSize: 12,
+        fontWeight: FontWeight.w400,
+        letterSpacing: 0.0,
+        height: 1.4,
+        color: mutedColor,
+      ),
+      bodyXs: GoogleFonts.jetBrainsMono(
+        fontSize: 11,
         fontWeight: FontWeight.w400,
         letterSpacing: 0.0,
         height: 1.4,

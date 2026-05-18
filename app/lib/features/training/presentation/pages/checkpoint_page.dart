@@ -1,7 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/features/training/data/datasources/checkpoint_remote_datasource.dart';
@@ -196,7 +195,7 @@ class _CheckpointPageState extends State<CheckpointPage> {
               title: '> ANÁLISE DA SEMANA',
               child: Text(
                 cp.autoAnalysis!,
-                style: TextStyle(
+                style: context.runninType.bodyMd.copyWith(
                   color: palette.text.withValues(alpha: 0.86),
                   fontSize: 13,
                   height: 1.55,
@@ -213,7 +212,7 @@ class _CheckpointPageState extends State<CheckpointPage> {
                 title: '> RACIONAL DO AJUSTE',
                 child: Text(
                   _coachExplanation!,
-                  style: TextStyle(
+                  style: context.runninType.bodyMd.copyWith(
                     color: palette.text.withValues(alpha: 0.86),
                     fontSize: 13,
                     height: 1.55,
@@ -260,9 +259,8 @@ class _CheckpointPageState extends State<CheckpointPage> {
                 ),
                 child: Text(
                   _applyError!,
-                  style: const TextStyle(
-                    color: Color(0xFFFF6B35),
-                    fontSize: 12,
+                  style: context.runninType.bodySm.copyWith(
+                    color: const Color(0xFFFF6B35),
                     height: 1.5,
                   ),
                 ),
@@ -290,10 +288,9 @@ class _CheckpointPageState extends State<CheckpointPage> {
                           color: Colors.black,
                         ),
                       )
-                    : const Text(
+                    : Text(
                         'APLICAR AJUSTE',
-                        style: TextStyle(
-                          fontSize: 12,
+                        style: context.runninType.labelMd.copyWith(
                           fontWeight: FontWeight.w500,
                           letterSpacing: 1.2,
                         ),
@@ -303,9 +300,8 @@ class _CheckpointPageState extends State<CheckpointPage> {
             const SizedBox(height: 8),
             Text(
               'Ao aplicar, o coach ajusta as semanas seguintes do plano. Você pode usar 1x por semana.',
-              style: TextStyle(
+              style: context.runninType.bodyXs.copyWith(
                 color: palette.muted,
-                fontSize: 11,
                 height: 1.45,
               ),
             ),
@@ -328,7 +324,7 @@ class _DisclaimerCard extends StatelessWidget {
         children: [
           Text(
             '> REGRA DO CHECKPOINT',
-            style: GoogleFonts.jetBrainsMono(
+            style: context.runninType.labelCaps.copyWith(
               fontSize: 11,
               fontWeight: FontWeight.w500,
               letterSpacing: 1.2,
@@ -338,7 +334,7 @@ class _DisclaimerCard extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             'Seu plano é ajustável 1x por semana — no checkpoint. O coach lê tudo que você fez (corridas, pace, BPM, aderência) e cruza com o que você marcar aqui. As semanas SEGUINTES são recalculadas; o passado fica como referência.',
-            style: TextStyle(
+            style: context.runninType.bodySm.copyWith(
               color: palette.text.withValues(alpha: 0.85),
               fontSize: 12.5,
               height: 1.55,
@@ -375,8 +371,7 @@ class _MetaRow extends StatelessWidget {
           color: statusColor.withValues(alpha: 0.15),
           child: Text(
             statusLabel,
-            style: TextStyle(
-              fontSize: 10,
+            style: context.runninType.labelCaps.copyWith(
               fontWeight: FontWeight.w500,
               color: statusColor,
               letterSpacing: 1.0,
@@ -386,9 +381,8 @@ class _MetaRow extends StatelessWidget {
         const SizedBox(width: 10),
         Text(
           'Vence ${checkpoint.scheduledDate}',
-          style: TextStyle(
+          style: context.runninType.bodyXs.copyWith(
             color: palette.muted,
-            fontSize: 11,
             letterSpacing: 0.4,
           ),
         ),
@@ -410,7 +404,7 @@ class _Section extends StatelessWidget {
       children: [
         Text(
           title,
-          style: GoogleFonts.jetBrainsMono(
+          style: context.runninType.labelCaps.copyWith(
             fontSize: 11,
             fontWeight: FontWeight.w500,
             letterSpacing: 1.1,
@@ -472,8 +466,7 @@ class _ChipBtn extends StatelessWidget {
         ),
         child: Text(
           kind.label,
-          style: TextStyle(
-            fontSize: 12,
+          style: context.runninType.bodySm.copyWith(
             color: selected ? palette.text : palette.muted,
             fontWeight: selected ? FontWeight.w500 : FontWeight.w400,
             letterSpacing: 0.3,
@@ -504,8 +497,7 @@ class _NoteField extends StatelessWidget {
       children: [
         Text(
           '> ${label.toUpperCase()}',
-          style: GoogleFonts.jetBrainsMono(
-            fontSize: 10,
+          style: context.runninType.labelCaps.copyWith(
             color: palette.secondary,
             letterSpacing: 1.0,
           ),
@@ -517,11 +509,11 @@ class _NoteField extends StatelessWidget {
           minLines: 1,
           maxLines: 3,
           onChanged: onChanged,
-          style: TextStyle(color: palette.text, fontSize: 13),
+          style: context.runninType.bodyMd.copyWith(color: palette.text, fontSize: 13),
           decoration: InputDecoration(
             counterText: '',
             hintText: hint,
-            hintStyle: TextStyle(color: palette.muted, fontSize: 12.5),
+            hintStyle: context.runninType.bodySm.copyWith(color: palette.muted, fontSize: 12.5),
             contentPadding:
                 const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
             border: OutlineInputBorder(
@@ -558,7 +550,7 @@ class _CompletedBanner extends StatelessWidget {
         children: [
           Text(
             '> AJUSTE APLICADO',
-            style: GoogleFonts.jetBrainsMono(
+            style: context.runninType.labelCaps.copyWith(
               fontSize: 11,
               fontWeight: FontWeight.w500,
               letterSpacing: 1.1,
@@ -568,7 +560,7 @@ class _CompletedBanner extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             'O coach já ajustou as semanas seguintes do seu plano com base nos inputs e nos seus dados. Próximo checkpoint disponível na próxima semana.',
-            style: TextStyle(
+            style: context.runninType.bodySm.copyWith(
               color: palette.text.withValues(alpha: 0.85),
               fontSize: 12.5,
               height: 1.55,
@@ -578,9 +570,8 @@ class _CompletedBanner extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               'Aplicado em ${checkpoint.completedAt!.substring(0, 10)}',
-              style: TextStyle(
+              style: context.runninType.bodyXs.copyWith(
                 color: palette.muted,
-                fontSize: 11,
               ),
             ),
           ],
@@ -607,7 +598,7 @@ class _ErrorState extends StatelessWidget {
             Text(
               message,
               textAlign: TextAlign.center,
-              style: TextStyle(color: palette.text, fontSize: 13),
+              style: context.runninType.bodyMd.copyWith(color: palette.text, fontSize: 13),
             ),
             const SizedBox(height: 12),
             OutlinedButton(
@@ -618,9 +609,9 @@ class _ErrorState extends StatelessWidget {
                   borderRadius: BorderRadius.zero,
                 ),
               ),
-              child: const Text(
+              child: Text(
                 'TENTAR DE NOVO',
-                style: TextStyle(
+                style: context.runninType.labelCaps.copyWith(
                   color: FigmaColors.brandCyan,
                   fontSize: 11,
                   letterSpacing: 0.8,

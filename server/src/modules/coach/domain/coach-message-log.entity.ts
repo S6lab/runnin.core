@@ -9,8 +9,10 @@ export type CoachMessageEvent =
   | 'pre_run'
   | 'start'
   | 'km_reached'
+  | 'km_split'
   | 'pace_alert'
   | 'bpm_alert'
+  | 'motivation'
   | 'finish'
   | 'question'
   | 'preview';

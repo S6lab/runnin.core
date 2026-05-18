@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 import 'package:runnin/features/profile/presentation/pages/health/zones_utils.dart';
@@ -93,9 +93,8 @@ class _Body extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             'Distribuição de frequência cardíaca',
-            style: GoogleFonts.jetBrainsMono(
+            style: context.runninType.bodyMd.copyWith(
               fontSize: 13,
-              fontWeight: FontWeight.w400,
               color: FigmaColors.textMuted,
               height: 19.5 / 13,
             ),
@@ -145,7 +144,7 @@ class _MaxBpmHeader extends StatelessWidget {
         children: [
           Text(
             'FC MÁX',
-            style: GoogleFonts.jetBrainsMono(
+            style: context.runninType.labelMd.copyWith(
               fontSize: 13,
               fontWeight: FontWeight.w500,
               color: FigmaColors.textMuted,
@@ -153,9 +152,9 @@ class _MaxBpmHeader extends StatelessWidget {
           ),
           Text(
             '$maxBpm bpm',
-            style: GoogleFonts.jetBrainsMono(
+            style: context.runninType.dataXs.copyWith(
               fontSize: 24,
-              fontWeight: FontWeight.w500,
+              letterSpacing: 0,
               color: FigmaColors.textPrimary,
             ),
           ),
@@ -190,8 +189,7 @@ class _ZoneDescription extends StatelessWidget {
                 color: zone.color,
                 child: Text(
                   'Z${zone.number}',
-                  style: GoogleFonts.jetBrainsMono(
-                    fontSize: 10,
+                  style: context.runninType.labelCaps.copyWith(
                     fontWeight: FontWeight.w500,
                     color: FigmaColors.bgBase,
                   ),
@@ -200,8 +198,7 @@ class _ZoneDescription extends StatelessWidget {
               const SizedBox(width: 8),
               Text(
                 zone.label,
-                style: GoogleFonts.jetBrainsMono(
-                  fontSize: 14,
+                style: context.runninType.bodyMd.copyWith(
                   fontWeight: FontWeight.w500,
                   color: FigmaColors.textPrimary,
                 ),
@@ -211,9 +208,7 @@ class _ZoneDescription extends StatelessWidget {
           const SizedBox(height: 12),
           Text(
             zone.description,
-            style: GoogleFonts.jetBrainsMono(
-              fontSize: 12,
-              fontWeight: FontWeight.w400,
+            style: context.runninType.bodySm.copyWith(
               color: FigmaColors.textSecondary,
             ),
           ),
@@ -235,10 +230,7 @@ class _SectionHeader extends StatelessWidget {
         children: [
           TextSpan(
             text: label,
-            style: GoogleFonts.jetBrainsMono(
-              fontSize: 22,
-              fontWeight: FontWeight.w500,
-              letterSpacing: -0.44,
+            style: context.runninType.dataXs.copyWith(
               color: FigmaColors.textPrimary,
               height: 24.2 / 22,
             ),
@@ -247,7 +239,7 @@ class _SectionHeader extends StatelessWidget {
             alignment: PlaceholderAlignment.top,
             child: Text(
               index,
-              style: GoogleFonts.jetBrainsMono(
+              style: context.runninType.labelCaps.copyWith(
                 fontSize: 6.6,
                 fontWeight: FontWeight.w400,
                 color: FigmaColors.brandCyan,

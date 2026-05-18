@@ -6,28 +6,28 @@ import 'package:dio/dio.dart';
 import 'package:gemini_live/gemini_live.dart';
 import 'package:runnin/core/network/api_client.dart';
 
-/// Cliente direto Gemini Live (sem proxy) pra cues curtos de voz durante
-/// a corrida. One-shot por chamada: abre WS, envia texto, coleta chunks
-/// de áudio até turnComplete, fecha e devolve WAV base64.
+/// Cliente Gemini Live via EPHEMERAL TOKEN direto no Google.
 ///
-/// Auth via ephemeral token: app pede ao server (POST /coach/live-token),
-/// server gera token efêmero via Google auth_tokens API e devolve. App
-/// usa o token como apiKey + apiVersion='v1alpha' no LiveService. API key
-/// real nunca sai do server.
+/// Por que não proxy: `BidiGenerateContent` plain está sendo rejeitado
+/// pelo Google em todos os modelos testados ("not found for API version
+/// v1beta"). O único endpoint vivo é `BidiGenerateContentConstrained`
+/// (v1alpha) que EXIGE ephemeral token. Esse é o caminho recomendado
+/// pela documentação atual (2025-2026).
 ///
-/// Por que client-side direto:
-///  - sem ida-e-volta pelo Cloud Run pra cada TTS (estava dando 504)
-///  - usa o mesmo motor Live do chat modal (consistência de voz)
-///  - permite multimodal nativo (audio in/out) em features futuras
+/// Estratégia: server cria token via auth_tokens com constraint COMPLETO
+/// (modelo + modalities + voiceConfig). App passa o token como apiKey
+/// no LiveService E envia config IGUAL ao constraint — assim Google
+/// aceita o setup e retorna setupComplete.
 class LiveCoachVoiceService {
   final Dio _dio;
   LiveCoachVoiceService({Dio? dio}) : _dio = dio ?? apiClient;
 
-  static const _model = 'gemini-live-2.5-flash-preview';
-  static const _voiceDefault = 'Charon'; // masculina firme; outras: Aoede/Kore
+  // PRECISA bater com DEFAULT_MODEL em create-live-ephemeral-token.use-case.ts
+  // Native-audio é o modelo Live oficial pra AUDIO modality em bidi.
+  // gemini-live-2.5-flash-preview suporta TEXT mas não AUDIO no bidi.
+  static const _model = 'gemini-2.5-flash-native-audio-preview-12-2025';
+  static const _voiceDefault = 'Charon';
 
-  /// Cache simples do último token. Reusa quando ainda válido (margem 1min).
-  /// Cada token vale 30min e 1 uso de sessão — vamos pedir um por cue.
   String? _cachedToken;
   DateTime? _cachedExpire;
 
@@ -43,26 +43,28 @@ class LiveCoachVoiceService {
         options: Options(receiveTimeout: const Duration(seconds: 6)),
       );
       final token = res.data?['token'] as String?;
-      final exp = res.data?['expireTime'] as String?;
+      final expStr = res.data?['expireTime'] as String?;
       if (token != null && token.isNotEmpty) {
         _cachedToken = token;
-        _cachedExpire = exp != null ? DateTime.tryParse(exp) : null;
+        _cachedExpire = expStr != null ? DateTime.tryParse(expStr) : null;
+        // ignore: avoid_print
+        print('coach.live.token.fetched len=${token.length} exp=$expStr');
         return token;
       }
-    } catch (_) {/* sem token → retorna null, sem áudio */}
+      // ignore: avoid_print
+      print('coach.live.token.empty data=${res.data}');
+    } catch (e) {
+      // ignore: avoid_print
+      print('coach.live.token.fetch_failed: $e');
+    }
     return null;
   }
 
-  /// Sintetiza áudio do texto recebido via Gemini Live. Retorna
-  /// `{wavBase64, mimeType}` ou null se Live indisponível/falhar.
-  /// Timeout total 15s — pra não travar o /run.
   Future<LiveSynthesisResult?> synthesize(
     String text, {
     String? voiceId,
   }) async {
     if (text.trim().isEmpty) return null;
-    // 1 retry: se Live falhar (token expirou, resource_exhausted, etc),
-    // invalida cache e pede token novo.
     var result = await _trySynthesize(text, voiceId: voiceId);
     if (result == null && _cachedToken != null) {
       _cachedToken = null;
@@ -84,7 +86,11 @@ class LiveCoachVoiceService {
     LiveSession? session;
 
     try {
-      // Ephemeral tokens exigem apiVersion 'v1alpha' (vide docs do package).
+      // ignore: avoid_print
+      print('coach.live.connect.attempt model=$_model voice=${voiceId ?? _voiceDefault}');
+      // Ephemeral tokens exigem apiVersion 'v1alpha'.
+      // Config MATCH com o que o server declarou no auth_tokens body
+      // (responseModalities AUDIO + speechConfig.voiceConfig).
       session = await LiveService(apiKey: token, apiVersion: 'v1alpha')
           .connect(
         LiveConnectParameters(
@@ -100,7 +106,10 @@ class LiveCoachVoiceService {
             ),
           ),
           callbacks: LiveCallbacks(
-            onOpen: () {},
+            onOpen: () {
+              // ignore: avoid_print
+              print('coach.live.ws.open');
+            },
             onMessage: (msg) {
               final b64 = msg.data;
               if (b64 != null) {
@@ -108,13 +117,19 @@ class LiveCoachVoiceService {
               }
               if (msg.serverContent?.turnComplete == true &&
                   !completer.isCompleted) {
+                // ignore: avoid_print
+                print('coach.live.ws.turn_complete chunks=${pcmChunks.length}');
                 completer.complete();
               }
             },
             onError: (err, _) {
+              // ignore: avoid_print
+              print('coach.live.ws.callback_error: $err');
               if (!completer.isCompleted) completer.completeError(err);
             },
             onClose: (code, reason) {
+              // ignore: avoid_print
+              print('coach.live.ws.close code=$code reason=$reason chunks=${pcmChunks.length}');
               if (!completer.isCompleted) {
                 if (pcmChunks.isEmpty) {
                   completer.completeError(
@@ -129,11 +144,15 @@ class LiveCoachVoiceService {
         ),
       );
 
+      // ignore: avoid_print
+      print('coach.live.send_text len=${text.length}');
       session.sendText(text);
 
       await completer.future.timeout(
         const Duration(seconds: 15),
         onTimeout: () {
+          // ignore: avoid_print
+          print('coach.live.timeout_15s chunks=${pcmChunks.length}');
           if (pcmChunks.isEmpty) throw TimeoutException('live_timeout_15s');
         },
       );
@@ -146,13 +165,16 @@ class LiveCoachVoiceService {
         pcm.setRange(off, off + c.length, c);
         off += c.length;
       }
-      // Gemini Live output: PCM 16-bit signed LE mono @ 24kHz.
-      final wav = addWavHeader(pcm, sampleRate: 24000);
+      final wav = _pcmToWav(pcm, sampleRate: 24000);
+      // ignore: avoid_print
+      print('coach.live.synthesize.ok chunks=${pcmChunks.length} bytes=$totalLen');
       return LiveSynthesisResult(
         audioBase64: base64Encode(wav),
         mimeType: 'audio/wav',
       );
-    } catch (_) {
+    } catch (e, st) {
+      // ignore: avoid_print
+      print('coach.live.synthesize.failed: $e\n$st');
       return null;
     } finally {
       try {
@@ -160,6 +182,37 @@ class LiveCoachVoiceService {
       } catch (_) {}
     }
   }
+}
+
+Uint8List _pcmToWav(Uint8List pcm, {required int sampleRate}) {
+  const channels = 1;
+  const bitsPerSample = 16;
+  final byteRate = sampleRate * channels * bitsPerSample ~/ 8;
+  final blockAlign = channels * bitsPerSample ~/ 8;
+  final dataLen = pcm.length;
+  final riffLen = 36 + dataLen;
+  final header = ByteData(44);
+  header.setUint8(0, 0x52); header.setUint8(1, 0x49);
+  header.setUint8(2, 0x46); header.setUint8(3, 0x46);
+  header.setUint32(4, riffLen, Endian.little);
+  header.setUint8(8, 0x57); header.setUint8(9, 0x41);
+  header.setUint8(10, 0x56); header.setUint8(11, 0x45);
+  header.setUint8(12, 0x66); header.setUint8(13, 0x6d);
+  header.setUint8(14, 0x74); header.setUint8(15, 0x20);
+  header.setUint32(16, 16, Endian.little);
+  header.setUint16(20, 1, Endian.little);
+  header.setUint16(22, channels, Endian.little);
+  header.setUint32(24, sampleRate, Endian.little);
+  header.setUint32(28, byteRate, Endian.little);
+  header.setUint16(32, blockAlign, Endian.little);
+  header.setUint16(34, bitsPerSample, Endian.little);
+  header.setUint8(36, 0x64); header.setUint8(37, 0x61);
+  header.setUint8(38, 0x74); header.setUint8(39, 0x61);
+  header.setUint32(40, dataLen, Endian.little);
+  final out = Uint8List(44 + dataLen);
+  out.setRange(0, 44, header.buffer.asUint8List());
+  out.setRange(44, 44 + dataLen, pcm);
+  return out;
 }
 
 class LiveSynthesisResult {

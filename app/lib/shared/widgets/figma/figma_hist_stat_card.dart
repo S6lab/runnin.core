@@ -49,16 +49,23 @@ class FigmaHistStatCard extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
+              // FittedBox+scaleDown: value cabe na largura do card mesmo
+              // em valores longos (ex: "5:42" + "/km" no PACE em 3-col grid
+              // que cropava antes em ~74px de content width). Não cresce
+              // acima de 28px, só reduz se preciso.
               Flexible(
-                child: Text(
-                  value,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.jetBrainsMono(
-                    fontSize: 28,
-                    height: 1,
-                    fontWeight: FontWeight.w500,
-                    color: valueColor,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.bottomLeft,
+                  child: Text(
+                    value,
+                    maxLines: 1,
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 28,
+                      height: 1,
+                      fontWeight: FontWeight.w500,
+                      color: valueColor,
+                    ),
                   ),
                 ),
               ),

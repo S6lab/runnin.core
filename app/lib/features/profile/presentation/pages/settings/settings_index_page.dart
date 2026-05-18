@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/shared/widgets/figma/figma_top_nav.dart';
@@ -28,9 +27,7 @@ class SettingsIndexPage extends StatelessWidget {
                   const SizedBox(height: AppSpacing.md),
                   Text(
                     'Coach, alertas e unidades',
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w400,
+                    style: context.runninType.bodySm.copyWith(
                       color: palette.muted,
                       height: 1.5,
                     ),
@@ -101,9 +98,8 @@ class _SettingsCard extends StatelessWidget {
                 children: [
                   Text(
                     title,
-                    style: GoogleFonts.jetBrainsMono(
+                    style: context.runninType.bodyMd.copyWith(
                       color: palette.text,
-                      fontSize: 14,
                       fontWeight: FontWeight.w500,
                       height: 1.4,
                     ),
@@ -111,10 +107,8 @@ class _SettingsCard extends StatelessWidget {
                   const SizedBox(height: 2),
                   Text(
                     subtitle,
-                    style: GoogleFonts.jetBrainsMono(
+                    style: context.runninType.bodyXs.copyWith(
                       color: palette.muted,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w400,
                       height: 1.5,
                     ),
                   ),

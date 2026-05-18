@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/features/biometrics/data/health_sync_service.dart';
 import 'package:runnin/shared/widgets/figma/figma_device_card.dart';
@@ -102,8 +102,7 @@ class _HealthDevicesPageState extends State<HealthDevicesPage> {
         backgroundColor: FigmaColors.surfaceCard,
         title: Text(
           'Em breve: ${p.name}',
-          style: GoogleFonts.jetBrainsMono(
-            fontSize: 14,
+          style: context.runninType.bodyMd.copyWith(
             fontWeight: FontWeight.w500,
             color: FigmaColors.textPrimary,
           ),
@@ -111,8 +110,7 @@ class _HealthDevicesPageState extends State<HealthDevicesPage> {
         content: Text(
           'Integração com ${p.name} está em desenvolvimento. '
           'Em breve você poderá sincronizar BPM, sono, HRV e passos automaticamente.',
-          style: GoogleFonts.jetBrainsMono(
-            fontSize: 12,
+          style: context.runninType.bodySm.copyWith(
             height: 1.5,
             color: FigmaColors.textSecondary,
           ),
@@ -122,9 +120,7 @@ class _HealthDevicesPageState extends State<HealthDevicesPage> {
             onPressed: () => Navigator.pop(dialogContext),
             child: Text(
               'OK',
-              style: GoogleFonts.jetBrainsMono(
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
+              style: context.runninType.labelMd.copyWith(
                 color: FigmaColors.brandCyan,
               ),
             ),
@@ -144,9 +140,8 @@ class _FieldLabel extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       label,
-      style: GoogleFonts.jetBrainsMono(
+      style: context.runninType.labelCaps.copyWith(
         color: FigmaColors.textMuted,
-        fontSize: 9,
         fontWeight: FontWeight.w500,
         letterSpacing: FigmaDimensions.borderUniversal,
       ),
@@ -183,8 +178,7 @@ class _EmptyConnectedState extends StatelessWidget {
               Expanded(
                 child: Text(
                   'NENHUM DISPOSITIVO',
-                  style: GoogleFonts.jetBrainsMono(
-                    fontSize: 12,
+                  style: context.runninType.labelMd.copyWith(
                     letterSpacing: 1.0,
                     fontWeight: FontWeight.w500,
                     color: FigmaColors.textPrimary,
@@ -196,10 +190,8 @@ class _EmptyConnectedState extends StatelessWidget {
           const SizedBox(height: AppSpacing.sm),
           Text(
             'Conecte um wearable abaixo para sincronizar BPM, sono e passos.',
-            style: GoogleFonts.jetBrainsMono(
-              fontSize: 11,
+            style: context.runninType.bodyXs.copyWith(
               height: 1.5,
-              fontWeight: FontWeight.w400,
               color: FigmaColors.textMuted,
             ),
           ),

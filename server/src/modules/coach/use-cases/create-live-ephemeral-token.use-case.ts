@@ -2,9 +2,13 @@ import { logger } from '@shared/logger/logger';
 
 const AUTH_TOKENS_URL =
   'https://generativelanguage.googleapis.com/v1alpha/auth_tokens';
+// gemini-live-2.5-flash-preview funciona pra TEXT response em bidi mas
+// é rejeitado pra AUDIO. O modelo native-audio é o suportado pra AUDIO
+// modality em BidiGenerateContentConstrained (vide README do pacote
+// gemini_live e docs Google Live API).
 const DEFAULT_MODEL =
   process.env['GEMINI_LIVE_MODEL']?.trim() ||
-  'models/gemini-live-2.5-flash-preview';
+  'models/gemini-2.5-flash-native-audio-preview-12-2025';
 
 /**
  * Cria token efêmero pra app Flutter conectar direto no Gemini Live
@@ -41,27 +45,32 @@ export class CreateLiveEphemeralTokenUseCase {
     let res: Response;
     try {
       // Formato CORRETO da AuthToken REST API (Google AI docs):
-      // wrapper `authToken`, NÃO `config`. Campos `bidiGenerateContentSetup`
-      // (não liveConnectConstraints), `generationConfig` (não config).
+      // body é o objeto AuthToken FLAT no top-level. Sem wrapper `config`
+      // (Python SDK) nem wrapper `authToken` (especulação anterior que o
+      // Google rejeitou com 400 "Unknown name authToken at 'auth_token'").
       // uses: 0 = unlimited (token reutilizável até expirar em 30min).
-      //
-      // O body anterior usava nomenclatura do Python SDK (config +
-      // liveConnectConstraints), que NÃO bate com a REST API direta —
-      // Google rejeitava com 400 "Unknown name config at auth_token".
-      // Token nunca foi gerado, Live nunca funcionou pra TTS na corrida.
       res = await fetch(url, {
         method: 'POST',
         signal: ctrl.signal,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          authToken: {
-            expireTime,
-            newSessionExpireTime,
-            uses: 0,
-            bidiGenerateContentSetup: {
-              model: DEFAULT_MODEL,
-              generationConfig: {
-                responseModalities: ['AUDIO'],
+          expireTime,
+          newSessionExpireTime,
+          uses: 0,
+          // bidiGenerateContentSetup = "constraint" do token. App é OBRIGADO
+          // a mandar config compatível na hora de abrir bidi. Setup anterior
+          // só declarava responseModalities; o app mandava speechConfig
+          // (voiceName='Charon') → Google rejeitava silenciosamente E o
+          // setupComplete nunca chegava → app travava em "WebSocket setup
+          // timed out after 10s". Agora declaramos tudo que o app vai usar.
+          bidiGenerateContentSetup: {
+            model: DEFAULT_MODEL,
+            generationConfig: {
+              responseModalities: ['AUDIO'],
+              speechConfig: {
+                voiceConfig: {
+                  prebuiltVoiceConfig: { voiceName: 'Charon' },
+                },
               },
             },
           },

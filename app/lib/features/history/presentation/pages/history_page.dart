@@ -7,8 +7,11 @@ import 'package:runnin/features/history/data/benchmark_remote_datasource.dart' s
 import 'package:runnin/features/history/presentation/widgets/hist_stat_card.dart';
 import 'package:runnin/features/run/data/datasources/run_remote_datasource.dart';
 import 'package:runnin/features/run/domain/entities/run.dart';
+import 'package:runnin/features/training/data/datasources/plan_remote_datasource.dart';
+import 'package:runnin/features/training/domain/entities/plan.dart';
 import 'package:runnin/shared/widgets/figma/figma_top_nav.dart';
 import 'package:runnin/shared/widgets/chart_panel.dart';
+import 'package:runnin/shared/widgets/two_tone_bar_chart.dart';
 import 'package:runnin/shared/widgets/figma/export.dart';
 import 'package:runnin/shared/widgets/segmented_tab_bar.dart';
 
@@ -25,7 +28,9 @@ class HistoryPage extends StatefulWidget {
 
 class _HistoryPageState extends State<HistoryPage> {
   final _remote = RunRemoteDatasource();
+  final _planRemote = PlanRemoteDatasource();
   List<Run>? _allRuns;
+  Plan? _plan;
   bool _loading = true;
   String? _error;
   _Period _period = _Period.month;
@@ -44,11 +49,19 @@ class _HistoryPageState extends State<HistoryPage> {
   Future<void> _load() async {
     setState(() { _loading = true; _error = null; });
     try {
-      final runs = await _remote.listRuns(limit: 200);
+      // Carrega runs e plano em paralelo. Plano pode falhar (freemium /
+      // user sem plano) — não bloqueia listagem de runs.
+      final results = await Future.wait<dynamic>([
+        _remote.listRuns(limit: 200),
+        _planRemote.getCurrentPlan().catchError((_) => null),
+      ]);
+      final runs = results[0] as List<Run>;
+      final plan = results[1] as Plan?;
       if (mounted) {
-        setState(() { 
-          _allRuns = runs; 
-          _loading = false; 
+        setState(() {
+          _allRuns = runs;
+          _plan = plan;
+          _loading = false;
           if (runs.isNotEmpty) {
             _benchmarkPercentile = HistStatCard.computeBenchmarkPercentile(runs);
           }
@@ -122,7 +135,7 @@ class _HistoryPageState extends State<HistoryPage> {
             const FigmaTopNav(breadcrumb: 'HISTÓRICO'),
             const SizedBox(height: 16),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxl),
               child: SegmentedTabBar(
                 tabs: const ['SEMANA', 'MÊS', '3 MESES'],
                 selectedIndex: _Period.values.indexOf(_period),
@@ -131,7 +144,7 @@ class _HistoryPageState extends State<HistoryPage> {
             ),
             const SizedBox(height: 12),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxl),
               child: SegmentedTabBar(
                 tabs: const ['DADOS', 'CORRIDAS', 'BENCH'],
                 selectedIndex: _ContentTab.values.indexOf(_tab),
@@ -164,7 +177,7 @@ class _HistoryPageState extends State<HistoryPage> {
     }
     if (_error != null) {
       return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
-        Text(_error!, style: TextStyle(color: palette.muted)),
+        Text(_error!, style: context.runninType.bodySm.copyWith(color: palette.muted)),
         const SizedBox(height: 16),
         TextButton(onPressed: _load, child: const Text('TENTAR NOVAMENTE')),
       ]));
@@ -176,7 +189,7 @@ class _HistoryPageState extends State<HistoryPage> {
       return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
         Icon(Icons.directions_run_outlined, size: 40, color: palette.border),
         const SizedBox(height: 12),
-        Text('Nenhuma corrida no período.', style: TextStyle(color: palette.muted)),
+        Text('Nenhuma corrida no período.', style: context.runninType.bodySm.copyWith(color: palette.muted)),
       ]));
     }
 
@@ -198,9 +211,12 @@ class _HistoryPageState extends State<HistoryPage> {
               ),
               child: Column(
                 children: [
-                  const Text(
+                  Text(
                     'BENCHMARK',
-                    style: TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
+                    style: context.runninType.bodyMd.copyWith(
+                      fontWeight: FontWeight.w500,
+                      fontSize: 13,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   FigmaBenchmarkBellCurve(userPercentile: _benchmarkPercentile!),
@@ -209,7 +225,7 @@ class _HistoryPageState extends State<HistoryPage> {
                     'Você está no ${_benchmarkPercentile!.toInt()}º percentil '
                     'em relação à média dos usuários.',
                     textAlign: TextAlign.center,
-                    style: TextStyle(color: palette.muted, fontSize: 12),
+                    style: context.runninType.bodySm,
                   ),
                 ],
               ),
@@ -232,7 +248,7 @@ class _HistoryPageState extends State<HistoryPage> {
                 child: Center(
                   child: Text(
                     'Carregando dados de benchmark...',
-                    style: TextStyle(color: palette.muted),
+                    style: context.runninType.bodySm.copyWith(color: palette.muted),
                   ),
                 ),
               ),
@@ -246,7 +262,7 @@ class _HistoryPageState extends State<HistoryPage> {
       backgroundColor: palette.surface,
       onRefresh: _load,
       child: _tab == _ContentTab.data
-          ? _DataView(runs: runs)
+          ? _DataView(runs: runs, plan: _plan, period: _period)
           : _tab == _ContentTab.runs
               ? _RunsListView(runs: runs)
               : benchmarkWidget,
@@ -258,7 +274,9 @@ class _HistoryPageState extends State<HistoryPage> {
 
 class _DataView extends StatelessWidget {
   final List<Run> runs;
-  const _DataView({required this.runs});
+  final Plan? plan;
+  final _Period period;
+  const _DataView({required this.runs, required this.plan, required this.period});
 
   @override
   Widget build(BuildContext context) {
@@ -267,6 +285,8 @@ class _DataView extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
       children: [
+        // Ciclo de cores [primary, secondary, white] alternados nos cards
+        // pra criar ritmo visual sem ter que escolher caso a caso.
         Row(children: [
           Expanded(child: FigmaHistStatCard(
             label: 'CORRIDAS',
@@ -278,34 +298,35 @@ class _DataView extends StatelessWidget {
             label: 'VOLUME',
             value: stats.totalKm.toStringAsFixed(1),
             unit: 'km',
+            valueColor: context.runninPalette.secondary,
           )),
           const SizedBox(width: 8),
           Expanded(child: FigmaHistStatCard(
             label: 'TEMPO',
             value: stats.totalTimeLabel,
+            valueColor: FigmaColors.textPrimary,
           )),
         ]),
         const SizedBox(height: 8),
         Row(children: [
           Expanded(child: FigmaHistStatCard(
-            label: 'PACE MÉD.',
+            label: 'PACE',
             value: stats.avgPaceLabel,
             unit: '/km',
+            valueColor: context.runninPalette.primary,
           )),
           const SizedBox(width: 8),
           Expanded(child: FigmaHistStatCard(
             label: 'STREAK',
             value: '${stats.streakDays}',
             unit: 'd',
-            valueColor: stats.streakDays > 2
-                ? context.runninPalette.secondary
-                : FigmaColors.textPrimary,
+            valueColor: context.runninPalette.secondary,
           )),
           const SizedBox(width: 8),
           Expanded(child: FigmaHistStatCard(
             label: 'XP',
             value: '${stats.totalXp}',
-            valueColor: context.runninPalette.primary,
+            valueColor: FigmaColors.textPrimary,
           )),
         ]),
         const SizedBox(height: 8),
@@ -314,6 +335,7 @@ class _DataView extends StatelessWidget {
             label: 'BPM MÉD.',
             value: stats.avgBpm?.toString() ?? '--',
             unit: 'BPM',
+            valueColor: context.runninPalette.primary,
           )),
         ]),
         const SizedBox(height: 16),
@@ -329,16 +351,18 @@ class _DataView extends StatelessWidget {
           ),
         const SizedBox(height: 16),
 
-        // Volume semanal
-        if (stats.weeklyVolume.isNotEmpty)
-          ChartPanel(
-            title: 'VOLUME SEMANAL',
-            subtitle: 'Km total por semana — carga de treino progressiva',
-            child: SimpleBarChart(
-              values: stats.weeklyVolume.map((e) => e.km).toList(),
-              labels: stats.weeklyVolume.map((e) => e.label).toList(),
-            ),
+        // Volume dinâmico: agrupa por dia/semana/mês baseado no period
+        // selecionado. Two-tone planned (palette.primary) vs executed
+        // (palette.secondary). Quando user não tem plano, mostra só
+        // executed (planned=0 em todos buckets).
+        ChartPanel(
+          title: _volumeTitle(period),
+          subtitle: _volumeSubtitle(period),
+          height: 200,
+          child: TwoToneBarChart(
+            data: _buildVolumeBuckets(period, plan, runs),
           ),
+        ),
         const SizedBox(height: 16),
 
         // Evolução Resumo
@@ -551,6 +575,162 @@ class _WeeklyEntry {
   const _WeeklyEntry({required this.label, required this.km});
 }
 
+// ── Volume two-tone helpers ──────────────────────────────────────────────────
+
+String _volumeTitle(_Period p) {
+  switch (p) {
+    case _Period.week: return 'VOLUME DIÁRIO';
+    case _Period.month: return 'VOLUME SEMANAL';
+    case _Period.threeMonths: return 'VOLUME MENSAL';
+  }
+}
+
+String _volumeSubtitle(_Period p) {
+  switch (p) {
+    case _Period.week:
+      return 'Km por dia da semana — planejado vs feito';
+    case _Period.month:
+      return 'Km por semana do mês — planejado vs feito';
+    case _Period.threeMonths:
+      return 'Km por mês — planejado vs feito';
+  }
+}
+
+/// Constrói os buckets de volume baseado no período selecionado.
+/// Para cada bucket, soma planned (do Plan) e executed (das Runs).
+List<TwoToneBarData> _buildVolumeBuckets(
+  _Period period,
+  Plan? plan,
+  List<Run> runs,
+) {
+  final now = DateTime.now();
+  switch (period) {
+    case _Period.week:
+      return _bucketByDayOfWeek(now, plan, runs);
+    case _Period.month:
+      return _bucketByWeekOfMonth(now, plan, runs);
+    case _Period.threeMonths:
+      return _bucketByMonth(now, plan, runs);
+  }
+}
+
+/// 7 buckets — Seg..Dom da semana atual.
+List<TwoToneBarData> _bucketByDayOfWeek(DateTime now, Plan? plan, List<Run> runs) {
+  // Domingo = 7 no padrão do plano, então mapeamos cronologicamente.
+  const dayLabels = ['SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB', 'DOM'];
+  final monday = now.subtract(Duration(days: now.weekday - 1));
+  final mondayDate = DateTime(monday.year, monday.month, monday.day);
+
+  // Sessão planejada para esta semana (se plano ativo cobrir esses dias).
+  final plannedByDay = <int, double>{};
+  if (plan != null && plan.isReady) {
+    final daysFromStart = mondayDate.difference(plan.effectiveStartDate).inDays;
+    final weekIdx = (daysFromStart / 7).floor();
+    if (weekIdx >= 0 && weekIdx < plan.weeks.length) {
+      for (final s in plan.weeks[weekIdx].sessions) {
+        plannedByDay[s.dayOfWeek] = (plannedByDay[s.dayOfWeek] ?? 0) + s.distanceKm;
+      }
+    }
+  }
+
+  // Executed por dia (das runs desta semana).
+  final executedByDay = <int, double>{};
+  for (final r in runs) {
+    final d = DateTime.tryParse(r.createdAt);
+    if (d == null) continue;
+    final localDate = DateTime(d.year, d.month, d.day);
+    if (localDate.isBefore(mondayDate) ||
+        localDate.isAfter(mondayDate.add(const Duration(days: 6)))) {
+      continue;
+    }
+    final dow = localDate.weekday; // 1=Mon..7=Sun
+    executedByDay[dow] = (executedByDay[dow] ?? 0) + r.distanceM / 1000;
+  }
+
+  return List.generate(7, (i) {
+    final dow = i + 1;
+    return TwoToneBarData(
+      planned: plannedByDay[dow] ?? 0,
+      executed: executedByDay[dow] ?? 0,
+      label: dayLabels[i],
+    );
+  });
+}
+
+/// 4-5 buckets — semanas do mês atual.
+List<TwoToneBarData> _bucketByWeekOfMonth(DateTime now, Plan? plan, List<Run> runs) {
+  final firstOfMonth = DateTime(now.year, now.month, 1);
+  final lastOfMonth = DateTime(now.year, now.month + 1, 0);
+  final weekStarts = <DateTime>[];
+  // Começa na segunda da semana que contém o dia 1.
+  var cursor = firstOfMonth.subtract(Duration(days: firstOfMonth.weekday - 1));
+  while (cursor.isBefore(lastOfMonth) ||
+      cursor.isAtSameMomentAs(lastOfMonth)) {
+    weekStarts.add(cursor);
+    cursor = cursor.add(const Duration(days: 7));
+  }
+
+  return List.generate(weekStarts.length, (i) {
+    final start = weekStarts[i];
+    final end = start.add(const Duration(days: 6));
+    double planned = 0;
+    if (plan != null && plan.isReady) {
+      final daysFromStart = start.difference(plan.effectiveStartDate).inDays;
+      final weekIdx = (daysFromStart / 7).floor();
+      if (weekIdx >= 0 && weekIdx < plan.weeks.length) {
+        planned = plan.weeks[weekIdx].sessions
+            .fold(0.0, (a, s) => a + s.distanceKm);
+      }
+    }
+    double executed = 0;
+    for (final r in runs) {
+      final d = DateTime.tryParse(r.createdAt);
+      if (d == null) continue;
+      final localDate = DateTime(d.year, d.month, d.day);
+      if (localDate.isBefore(start) || localDate.isAfter(end)) continue;
+      executed += r.distanceM / 1000;
+    }
+    return TwoToneBarData(
+      planned: planned,
+      executed: executed,
+      label: 'S${i + 1}',
+    );
+  });
+}
+
+/// 3 buckets — últimos 3 meses (incluindo o atual).
+List<TwoToneBarData> _bucketByMonth(DateTime now, Plan? plan, List<Run> runs) {
+  const monthLabels = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN',
+      'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
+  return List.generate(3, (i) {
+    final month = DateTime(now.year, now.month - (2 - i), 1);
+    final monthEnd = DateTime(now.year, now.month - (2 - i) + 1, 0);
+    double planned = 0;
+    if (plan != null && plan.isReady) {
+      for (var wi = 0; wi < plan.weeks.length; wi++) {
+        final weekStart = plan.effectiveStartDate.add(Duration(days: wi * 7));
+        if (weekStart.isBefore(month) || weekStart.isAfter(monthEnd)) {
+          continue;
+        }
+        planned += plan.weeks[wi].sessions
+            .fold(0.0, (a, s) => a + s.distanceKm);
+      }
+    }
+    double executed = 0;
+    for (final r in runs) {
+      final d = DateTime.tryParse(r.createdAt);
+      if (d == null) continue;
+      if (d.year != month.year || d.month != month.month) continue;
+      executed += r.distanceM / 1000;
+    }
+    return TwoToneBarData(
+      planned: planned,
+      executed: executed,
+      label: monthLabels[month.month - 1],
+    );
+  });
+}
+
 // ── Aba Corridas ─────────────────────────────────────────────────────────────
 
 class _RunsListView extends StatelessWidget {
@@ -592,11 +772,9 @@ class _RunsListView extends StatelessWidget {
                         bottomLeft: Radius.circular(4),
                       ),
                     ),
-                    child: const Text(
+                    child: Text(
                       'FREE',
-                      style: TextStyle(
-                        fontSize: 9,
-                        fontWeight: FontWeight.w500,
+                      style: context.runninType.labelCaps.copyWith(
                         color: Colors.white,
                       ),
                     ),

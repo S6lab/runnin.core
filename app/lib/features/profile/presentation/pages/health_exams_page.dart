@@ -1,6 +1,6 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/features/profile/data/exam_remote_datasource.dart';
 import 'package:runnin/shared/widgets/figma/figma_exam_card.dart';
@@ -195,10 +195,9 @@ class _FieldLabel extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       label,
-      style: GoogleFonts.jetBrainsMono(
+      style: context.runninType.labelCaps.copyWith(
         color: FigmaColors.textMuted,
-        fontSize: 9,
-        fontWeight: FontWeight.w500,
+        fontSize: 10,
         letterSpacing: FigmaDimensions.borderUniversal,
       ),
     );
@@ -230,7 +229,7 @@ class _EmptyState extends StatelessWidget {
           const SizedBox(height: AppSpacing.lg),
           Text(
             'Nenhum exame registrado',
-            style: GoogleFonts.jetBrainsMono(
+            style: context.runninType.bodyMd.copyWith(
               fontSize: 13,
               fontWeight: FontWeight.w500,
               color: FigmaColors.textSecondary,
@@ -240,8 +239,7 @@ class _EmptyState extends StatelessWidget {
           Text(
             'Anexe seus primeiros exames para que o Coach.AI possa adaptar seu plano.',
             textAlign: TextAlign.center,
-            style: GoogleFonts.jetBrainsMono(
-              fontSize: 10,
+            style: context.runninType.labelCaps.copyWith(
               height: 1.5,
               color: FigmaColors.textMuted,
             ),
@@ -269,8 +267,7 @@ class _ErrorBanner extends StatelessWidget {
       ),
       child: Text(
         message,
-        style: GoogleFonts.jetBrainsMono(
-          fontSize: 11,
+        style: context.runninType.bodyXs.copyWith(
           color: FigmaColors.brandOrange,
         ),
       ),
@@ -291,8 +288,7 @@ class _UploadCounter extends StatelessWidget {
       children: [
         Text(
           '$used/$max uploads este mês',
-          style: GoogleFonts.jetBrainsMono(
-            fontSize: 11,
+          style: context.runninType.bodyXs.copyWith(
             fontWeight: FontWeight.w500,
             color: reached ? FigmaColors.brandOrange : FigmaColors.textMuted,
           ),
@@ -300,9 +296,7 @@ class _UploadCounter extends StatelessWidget {
         if (reached)
           Text(
             'Premium = ilimitado',
-            style: GoogleFonts.jetBrainsMono(
-              fontSize: 10,
-              fontWeight: FontWeight.w500,
+            style: context.runninType.labelCaps.copyWith(
               color: FigmaColors.brandCyan,
             ),
           ),
@@ -347,8 +341,7 @@ class _RecommendedExamCard extends StatelessWidget {
           Expanded(
             child: Text(
               spec.name,
-              style: GoogleFonts.jetBrainsMono(
-                fontSize: 12,
+              style: context.runninType.labelMd.copyWith(
                 fontWeight: FontWeight.w500,
                 color: FigmaColors.textPrimary,
               ),
@@ -362,9 +355,7 @@ class _RecommendedExamCard extends StatelessWidget {
             ),
             child: Text(
               spec.priority,
-              style: GoogleFonts.jetBrainsMono(
-                fontSize: 9,
-                fontWeight: FontWeight.w500,
+              style: context.runninType.labelCaps.copyWith(
                 letterSpacing: 0.8,
                 color: priorityColor,
               ),

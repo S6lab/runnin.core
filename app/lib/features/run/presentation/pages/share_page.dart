@@ -5,7 +5,6 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:go_router/go_router.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:share_plus/share_plus.dart';
 
@@ -140,9 +139,8 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
         ),
         title: Text(
           'COMPARTILHAR',
-          style: GoogleFonts.jetBrainsMono(
+          style: context.runninType.labelCaps.copyWith(
             fontSize: 13,
-            fontWeight: FontWeight.w500,
             letterSpacing: 1.1,
             color: FigmaColors.textPrimary,
           ),
@@ -155,7 +153,7 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
               ? Center(
                   child: Text(
                     'Corrida não encontrada',
-                    style: GoogleFonts.jetBrainsMono(color: FigmaColors.textMuted),
+                    style: context.runninType.bodyMd.copyWith(color: FigmaColors.textMuted),
                   ),
                 )
               : Column(
@@ -188,14 +186,12 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
         indicator: BoxDecoration(color: context.runninPalette.primary),
         labelColor: FigmaColors.bgBase,
         unselectedLabelColor: FigmaColors.textSecondary,
-        labelStyle: GoogleFonts.jetBrainsMono(
+        labelStyle: context.runninType.labelCaps.copyWith(
           fontSize: 11,
-          fontWeight: FontWeight.w500,
           letterSpacing: 1.1,
         ),
-        unselectedLabelStyle: GoogleFonts.jetBrainsMono(
+        unselectedLabelStyle: context.runninType.labelCaps.copyWith(
           fontSize: 11,
-          fontWeight: FontWeight.w500,
           letterSpacing: 1.1,
         ),
         dividerHeight: 0,
@@ -220,7 +216,11 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
           // Preview
           RepaintBoundary(
             key: _cardBoundaryKey,
-            child: FigmaShareCardPreview(run: _run!, theme: _selectedTheme),
+            child: FigmaShareCardPreview(
+              run: _run!,
+              theme: _selectedTheme,
+              gpsPoints: _gpsPoints,
+            ),
           ),
           const SizedBox(height: 20),
 
@@ -279,9 +279,7 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
               ),
               child: Text(
                 label,
-                style: GoogleFonts.jetBrainsMono(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w500,
+                style: context.runninType.labelCaps.copyWith(
                   letterSpacing: 1.1,
                   color: active ? FigmaColors.bgBase : FigmaColors.textSecondary,
                 ),
@@ -311,8 +309,8 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
             const SizedBox(height: 12),
             Text(
               'Sem GPS suficiente nessa corrida — card mostra fundo neutro.',
-              style: GoogleFonts.jetBrainsMono(
-                color: FigmaColors.textMuted, fontSize: 11,
+              style: context.runninType.bodyXs.copyWith(
+                color: FigmaColors.textMuted,
               ),
             ),
           ],
@@ -363,9 +361,8 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
               children: [
                 Text(
                   _photoBytes == null ? 'TIRAR FOTO' : 'TIRAR OUTRA FOTO',
-                  style: GoogleFonts.jetBrainsMono(
+                  style: context.runninType.labelCaps.copyWith(
                     fontSize: 11,
-                    fontWeight: FontWeight.w500,
                     letterSpacing: 1.1,
                     color: context.runninPalette.primary,
                   ),
@@ -380,9 +377,8 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
           // Toggle section header
           Text(
             'DADOS NO OVERLAY',
-            style: GoogleFonts.jetBrainsMono(
+            style: context.runninType.labelCaps.copyWith(
               fontSize: 11,
-              fontWeight: FontWeight.w500,
               letterSpacing: 1.1,
               color: FigmaColors.textSecondary,
             ),
@@ -414,9 +410,8 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
                   ),
                   child: Text(
                     _overlayToggleLabels[i],
-                    style: GoogleFonts.jetBrainsMono(
+                    style: context.runninType.labelMd.copyWith(
                       fontSize: 10,
-                      fontWeight: FontWeight.w600,
                       letterSpacing: 0.8,
                       color: active ? FigmaColors.bgBase : FigmaColors.textSecondary,
                     ),
@@ -484,8 +479,7 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
                       const SizedBox(height: 12),
                       Text(
                         'TOQUE PARA ADICIONAR FOTO',
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: 10,
+                        style: context.runninType.labelCaps.copyWith(
                           color: FigmaColors.textMuted,
                           letterSpacing: 1,
                         ),
@@ -500,13 +494,12 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
               top: 16,
               left: 16,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.xs),
                 color: Colors.black.withValues(alpha: 0.5),
                 child: Text(
                   'RUNNIN.AI',
-                  style: GoogleFonts.jetBrainsMono(
+                  style: context.runninType.labelCaps.copyWith(
                     fontSize: 9,
-                    fontWeight: FontWeight.w500,
                     letterSpacing: 2,
                     color: context.runninPalette.primary,
                   ),
@@ -557,11 +550,11 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
               left: 16,
               right: 100,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.xs),
                 color: Colors.black.withValues(alpha: 0.5),
                 child: Text(
                   'Corrida ${_run?.type ?? ''} concluída',
-                  style: GoogleFonts.jetBrainsMono(
+                  style: context.runninType.bodyXs.copyWith(
                     fontSize: 10,
                     color: Colors.white.withValues(alpha: 0.9),
                   ),
@@ -577,7 +570,12 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
   }
 
   List<double> _generateSplits() {
+    // Splits reais a partir do GPS. Fallback determinístico quando
+    // pontos insuficientes (run legacy / GPS pobre).
+    final real = computeKmSplitsSeconds(_gpsPoints);
+    if (real.length >= 2) return real;
     final km = (_run?.distanceM ?? 0) / 1000;
+    if (km < 2) return const [1, 1];
     final splits = km.floor().clamp(2, 10);
     final basePace = (_run?.durationS ?? 0) / km;
     return List.generate(splits, (i) {
@@ -628,9 +626,9 @@ class _ShareTarget extends StatelessWidget {
             Expanded(
               child: Text(
                 label,
-                style: GoogleFonts.jetBrainsMono(
-                  fontSize: 12,
+                style: context.runninType.labelMd.copyWith(
                   fontWeight: FontWeight.w500,
+                  letterSpacing: 0,
                   color: FigmaColors.textPrimary,
                 ),
               ),
@@ -651,13 +649,11 @@ class _OverlayChip extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       margin: const EdgeInsets.only(top: 4),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.xs),
       color: Colors.black.withValues(alpha: 0.6),
       child: Text(
         label,
-        style: GoogleFonts.jetBrainsMono(
-          fontSize: 10,
-          fontWeight: FontWeight.w500,
+        style: context.runninType.labelCaps.copyWith(
           color: context.runninPalette.primary,
         ),
       ),

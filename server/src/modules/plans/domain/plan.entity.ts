@@ -42,6 +42,12 @@ export interface PlanSession {
    *  agregado (pace/distância/tempo). */
   executionSegments?: PlanSegment[];
   notes: string;
+  /** ID da Run que executou essa sessão. Setado em CompleteRunUseCase
+   *  quando run.planSessionId == session.id. Null = sessão não feita
+   *  ainda. App usa pra: (1) mostrar sessão "feita" no plano, (2) avisar
+   *  o user antes de re-executar (sobrescreveria a anterior). */
+  executedRunId?: string;
+  executedAt?: string;
 }
 
 /**

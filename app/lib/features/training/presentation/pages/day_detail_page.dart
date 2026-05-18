@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:runnin/core/theme/app_palette.dart';
+import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/features/run/data/datasources/run_remote_datasource.dart';
 import 'package:runnin/features/run/domain/entities/run.dart';
 import 'package:runnin/features/training/data/datasources/plan_remote_datasource.dart';
@@ -130,14 +130,15 @@ class _DayDetailPageState extends State<DayDetailPage> {
                   child: Padding(
                     padding: const EdgeInsets.all(24),
                     child: Text(_error!,
-                        style: TextStyle(color: palette.error)),
+                        style: context.runninType.bodyMd
+                            .copyWith(color: palette.error)),
                   ),
                 )
               : _plan == null
                   ? Center(
                       child: Text(
                         'Nenhum plano ativo.',
-                        style: TextStyle(color: palette.muted),
+                        style: context.runninType.bodySm,
                       ),
                     )
                   : _buildContent(palette),
@@ -186,7 +187,7 @@ class _DateHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final palette = context.runninPalette;
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(AppSpacing.xl),
       decoration: BoxDecoration(
         color: palette.surface,
         border: Border.all(
@@ -200,19 +201,17 @@ class _DateHeader extends StatelessWidget {
           const SizedBox(width: 10),
           Text(
             date,
-            style: GoogleFonts.jetBrainsMono(
+            style: context.runninType.dataSm.copyWith(
               color: palette.text,
-              fontSize: 16,
-              fontWeight: FontWeight.w500,
               letterSpacing: 0.5,
             ),
           ),
           const Spacer(),
           Text(
             'SEMANA $weekNumber',
-            style: GoogleFonts.jetBrainsMono(
-              color: palette.muted,
+            style: context.runninType.labelCaps.copyWith(
               fontSize: 11,
+              color: palette.muted,
               letterSpacing: 1.0,
             ),
           ),
@@ -240,15 +239,13 @@ class _PlannedSessionCard extends StatelessWidget {
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.md),
                 color: palette.primary,
                 child: Text(
                   'SESSÃO PLANEJADA',
-                  style: GoogleFonts.jetBrainsMono(
+                  style: context.runninType.labelCaps.copyWith(
                     color: palette.background,
-                    fontSize: 10,
                     letterSpacing: 1.2,
-                    fontWeight: FontWeight.w500,
                   ),
                 ),
               ),
@@ -257,10 +254,8 @@ class _PlannedSessionCard extends StatelessWidget {
           const SizedBox(height: 16),
           Text(
             session.type.toUpperCase(),
-            style: GoogleFonts.jetBrainsMono(
+            style: context.runninType.dataXs.copyWith(
               color: palette.text,
-              fontSize: 22,
-              fontWeight: FontWeight.w500,
               letterSpacing: 0.5,
             ),
           ),
@@ -386,7 +381,7 @@ class _PrepChecklistState extends State<_PrepChecklist> {
     final total = items.length;
 
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(AppSpacing.xl),
       decoration: BoxDecoration(
         color: palette.background,
         border: Border.all(color: palette.border, width: 1.0),
@@ -400,11 +395,10 @@ class _PrepChecklistState extends State<_PrepChecklist> {
               const SizedBox(width: 8),
               Text(
                 'CHECKLIST DE PREPARO · $done/$total',
-                style: GoogleFonts.jetBrainsMono(
-                  color: palette.primary,
+                style: context.runninType.labelCaps.copyWith(
                   fontSize: 11,
+                  color: palette.primary,
                   letterSpacing: 1.0,
-                  fontWeight: FontWeight.w500,
                 ),
               ),
             ],
@@ -412,7 +406,7 @@ class _PrepChecklistState extends State<_PrepChecklist> {
           const SizedBox(height: 4),
           Text(
             'Toque pra marcar conforme se preparar. Lista some quando você sair desta tela.',
-            style: TextStyle(color: palette.muted, fontSize: 11, height: 1.4),
+            style: context.runninType.bodyXs,
           ),
           const SizedBox(height: 10),
           for (var i = 0; i < items.length; i++)
@@ -442,7 +436,7 @@ class _PrepChecklistState extends State<_PrepChecklist> {
                     Expanded(
                       child: Text(
                         items[i],
-                        style: TextStyle(
+                        style: context.runninType.bodyMd.copyWith(
                           color: _checked.contains(i)
                               ? palette.muted
                               : palette.text,
@@ -492,11 +486,10 @@ class _ExecutionTimeline extends StatelessWidget {
             const SizedBox(width: 8),
             Text(
               'ROTEIRO DA SESSÃO · ${segments.length} fases',
-              style: GoogleFonts.jetBrainsMono(
-                color: palette.primary,
+              style: context.runninType.labelCaps.copyWith(
                 fontSize: 11,
+                color: palette.primary,
                 letterSpacing: 1.0,
-                fontWeight: FontWeight.w500,
               ),
             ),
           ],
@@ -504,7 +497,7 @@ class _ExecutionTimeline extends StatelessWidget {
         const SizedBox(height: 4),
         Text(
           'O que o coach vai te dizer em cada km. Use o fone — ele acompanha em tempo real.',
-          style: TextStyle(color: palette.muted, fontSize: 11, height: 1.4),
+          style: context.runninType.bodyXs,
         ),
         const SizedBox(height: 12),
         for (var i = 0; i < segments.length; i++)
@@ -580,10 +573,10 @@ class _SegmentCard extends StatelessWidget {
                   ),
                   child: Text(
                     '$index',
-                    style: GoogleFonts.jetBrainsMono(
+                    style: context.runninType.labelMd.copyWith(
                       color: accent,
-                      fontSize: 12,
                       fontWeight: FontWeight.w500,
+                      letterSpacing: 0,
                     ),
                   ),
                 ),
@@ -622,20 +615,18 @@ class _SegmentCard extends StatelessWidget {
                           color: accent.withValues(alpha: 0.15),
                           child: Text(
                             phaseLabel,
-                            style: GoogleFonts.jetBrainsMono(
-                              color: accent,
+                            style: context.runninType.labelCaps.copyWith(
                               fontSize: 9,
+                              color: accent,
                               letterSpacing: 0.8,
-                              fontWeight: FontWeight.w500,
                             ),
                           ),
                         ),
                         const SizedBox(width: 8),
                         Text(
                           _kmRange(),
-                          style: GoogleFonts.jetBrainsMono(
+                          style: context.runninType.labelCaps.copyWith(
                             color: palette.muted,
-                            fontSize: 10,
                             letterSpacing: 0.6,
                           ),
                         ),
@@ -650,9 +641,8 @@ class _SegmentCard extends StatelessWidget {
                             const SizedBox(width: 4),
                             Text(
                               '${segment.targetPace}/km',
-                              style: TextStyle(
+                              style: context.runninType.bodyXs.copyWith(
                                 color: palette.text,
-                                fontSize: 11,
                                 fontWeight: FontWeight.w500,
                               ),
                             ),
@@ -664,9 +654,8 @@ class _SegmentCard extends StatelessWidget {
                             const SizedBox(width: 4),
                             Text(
                               '~${segment.durationMin!.round()}min',
-                              style: TextStyle(
+                              style: context.runninType.bodyXs.copyWith(
                                 color: palette.text,
-                                fontSize: 11,
                                 fontWeight: FontWeight.w500,
                               ),
                             ),
@@ -677,9 +666,8 @@ class _SegmentCard extends StatelessWidget {
                     const SizedBox(height: 8),
                     Text(
                       segment.instruction,
-                      style: TextStyle(
+                      style: context.runninType.bodySm.copyWith(
                         color: palette.text,
-                        fontSize: 12,
                         height: 1.5,
                       ),
                     ),
@@ -712,15 +700,13 @@ class _RestDayCard extends StatelessWidget {
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.md),
                 color: palette.muted.withValues(alpha: 0.3),
                 child: Text(
                   'DIA DE DESCANSO',
-                  style: GoogleFonts.jetBrainsMono(
+                  style: context.runninType.labelCaps.copyWith(
                     color: palette.text,
-                    fontSize: 10,
                     letterSpacing: 1.2,
-                    fontWeight: FontWeight.w500,
                   ),
                 ),
               ),
@@ -730,10 +716,9 @@ class _RestDayCard extends StatelessWidget {
           if (tip.focus != null && tip.focus!.isNotEmpty)
             Text(
               tip.focus!.toUpperCase(),
-              style: GoogleFonts.jetBrainsMono(
+              style: context.runninType.displaySm.copyWith(
                 color: palette.text,
                 fontSize: 18,
-                fontWeight: FontWeight.w500,
               ),
             ),
           const SizedBox(height: 14),
@@ -774,16 +759,20 @@ class _GenericRestCard extends StatelessWidget {
         children: [
           Text(
             'DIA DE DESCANSO',
-            style: GoogleFonts.jetBrainsMono(
-              color: palette.muted,
+            style: context.runninType.labelCaps.copyWith(
               fontSize: 11,
+              color: palette.muted,
               letterSpacing: 1.2,
             ),
           ),
           const SizedBox(height: 10),
           Text(
             'Sem sessão planejada — aproveita pra descansar, hidratar (~peso × 0.035L) e alimentação leve. O coach ajusta o próximo plano se quiser mudar essa rotina.',
-            style: TextStyle(color: palette.text, fontSize: 12.5, height: 1.55),
+            style: context.runninType.bodyMd.copyWith(
+              color: palette.text,
+              fontSize: 12.5,
+              height: 1.55,
+            ),
           ),
         ],
       ),
@@ -835,11 +824,10 @@ class _PlanVsRealCard extends StatelessWidget {
               const SizedBox(width: 8),
               Text(
                 hitAll ? 'METAS ATINGIDAS' : 'PLANEJADO vs REALIZADO',
-                style: GoogleFonts.jetBrainsMono(
-                  color: hitAll ? palette.primary : palette.text,
+                style: context.runninType.labelCaps.copyWith(
                   fontSize: 11,
+                  color: hitAll ? palette.primary : palette.text,
                   letterSpacing: 1.2,
-                  fontWeight: FontWeight.w500,
                 ),
               ),
             ],
@@ -883,7 +871,7 @@ class _MissedSessionCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final palette = context.runninPalette;
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(AppSpacing.xl),
       decoration: BoxDecoration(
         color: palette.error.withValues(alpha: 0.08),
         border: Border.all(color: palette.error.withValues(alpha: 0.35)),
@@ -896,9 +884,8 @@ class _MissedSessionCard extends StatelessWidget {
           Expanded(
             child: Text(
               'Sessão não registrada nesta data. O coach vai realocar carga nos próximos dias.',
-              style: TextStyle(
+              style: context.runninType.bodySm.copyWith(
                 color: palette.text,
-                fontSize: 12,
                 height: 1.45,
               ),
             ),
@@ -931,9 +918,8 @@ class _ComparisonRow extends StatelessWidget {
             width: 90,
             child: Text(
               label,
-              style: GoogleFonts.jetBrainsMono(
+              style: context.runninType.labelCaps.copyWith(
                 color: palette.muted,
-                fontSize: 10,
                 letterSpacing: 0.8,
               ),
             ),
@@ -941,15 +927,14 @@ class _ComparisonRow extends StatelessWidget {
           Expanded(
             child: Text(
               planned,
-              style: TextStyle(color: palette.muted, fontSize: 12),
+              style: context.runninType.bodySm,
             ),
           ),
           Expanded(
             child: Text(
               real,
-              style: TextStyle(
+              style: context.runninType.bodySm.copyWith(
                 color: palette.text,
-                fontSize: 12,
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -999,9 +984,8 @@ class _DetailGrid extends StatelessWidget {
                         const SizedBox(width: 6),
                         Text(
                           d.label,
-                          style: GoogleFonts.jetBrainsMono(
+                          style: context.runninType.labelCaps.copyWith(
                             color: palette.muted,
-                            fontSize: 10,
                             letterSpacing: 0.8,
                           ),
                         ),
@@ -1010,9 +994,8 @@ class _DetailGrid extends StatelessWidget {
                     const SizedBox(height: 6),
                     Text(
                       d.value,
-                      style: GoogleFonts.jetBrainsMono(
+                      style: context.runninType.bodyMd.copyWith(
                         color: palette.text,
-                        fontSize: 14,
                         fontWeight: FontWeight.w500,
                       ),
                     ),
@@ -1051,11 +1034,9 @@ class _NutritionBlock extends StatelessWidget {
               const SizedBox(width: 8),
               Text(
                 label,
-                style: GoogleFonts.jetBrainsMono(
+                style: context.runninType.labelCaps.copyWith(
                   color: palette.primary,
-                  fontSize: 10,
                   letterSpacing: 0.8,
-                  fontWeight: FontWeight.w500,
                 ),
               ),
             ],
@@ -1063,7 +1044,7 @@ class _NutritionBlock extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             text,
-            style: TextStyle(
+            style: context.runninType.bodyMd.copyWith(
               color: palette.text,
               fontSize: 12.5,
               height: 1.5,
@@ -1100,11 +1081,9 @@ class _OrientationBlock extends StatelessWidget {
               const SizedBox(width: 8),
               Text(
                 'ORIENTAÇÕES DO COACH',
-                style: GoogleFonts.jetBrainsMono(
+                style: context.runninType.labelCaps.copyWith(
                   color: palette.primary,
-                  fontSize: 10,
                   letterSpacing: 0.8,
-                  fontWeight: FontWeight.w500,
                 ),
               ),
             ],
@@ -1112,7 +1091,11 @@ class _OrientationBlock extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             text,
-            style: TextStyle(color: palette.text, fontSize: 12.5, height: 1.55),
+            style: context.runninType.bodyMd.copyWith(
+              color: palette.text,
+              fontSize: 12.5,
+              height: 1.55,
+            ),
           ),
         ],
       ),

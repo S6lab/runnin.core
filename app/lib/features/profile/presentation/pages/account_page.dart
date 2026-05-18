@@ -1,7 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:runnin/core/gamification/levels.dart';
 import 'package:runnin/core/router/app_router.dart';
 import 'package:runnin/core/theme/app_palette.dart';
@@ -197,10 +196,8 @@ class _ProfileHeader extends StatelessWidget {
               alignment: Alignment.center,
               child: Text(
                 initial,
-                style: GoogleFonts.jetBrainsMono(
+                style: context.runninType.displayMd.copyWith(
                   color: FigmaColors.bgBase,
-                  fontSize: 32,
-                  fontWeight: FontWeight.w500,
                 ),
               ),
             ),
@@ -211,10 +208,8 @@ class _ProfileHeader extends StatelessWidget {
                 children: [
                   Text(
                     name,
-                    style: GoogleFonts.jetBrainsMono(
+                    style: context.runninType.displaySm.copyWith(
                       color: FigmaColors.textPrimary,
-                      fontSize: 20,
-                      fontWeight: FontWeight.w500,
                     ),
                   ),
                   const SizedBox(height: AppSpacing.xs),
@@ -222,9 +217,8 @@ class _ProfileHeader extends StatelessWidget {
                     children: [
                       Text(
                         'Nível ${data.level.currentLevel} · ${data.level.currentName}',
-                        style: GoogleFonts.jetBrainsMono(
+                        style: context.runninType.bodyXs.copyWith(
                           color: FigmaColors.textSecondary,
-                          fontSize: 11,
                           fontWeight: FontWeight.w500,
                         ),
                       ),
@@ -241,10 +235,8 @@ class _ProfileHeader extends StatelessWidget {
                           ),
                           child: Text(
                             'PREMIUM',
-                            style: GoogleFonts.jetBrainsMono(
+                            style: context.runninType.labelCaps.copyWith(
                               color: FigmaColors.bgBase,
-                              fontSize: 8,
-                              fontWeight: FontWeight.w500,
                               letterSpacing: 0.8,
                             ),
                           ),
@@ -262,9 +254,8 @@ class _ProfileHeader extends StatelessWidget {
           alignment: Alignment.centerLeft,
           child: Text(
             runsLabel,
-            style: GoogleFonts.jetBrainsMono(
+            style: context.runninType.bodyXs.copyWith(
               color: FigmaColors.textMuted,
-              fontSize: 11,
               fontWeight: FontWeight.w500,
             ),
           ),
@@ -329,7 +320,9 @@ class _StatCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: 14),
+      // BUG fix: era AppSpacing.sm (~6px) horizontal → quebrava ritmo da
+      // página vs home (24px). Agora xl (~16px) pra match card padrão.
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl, vertical: 14),
       decoration: BoxDecoration(
         color: FigmaColors.surfaceCard,
         border: Border.all(
@@ -342,20 +335,17 @@ class _StatCard extends StatelessWidget {
         children: [
           Text(
             label,
-            style: GoogleFonts.jetBrainsMono(
+            style: context.runninType.labelCaps.copyWith(
               color: FigmaColors.textMuted,
-              fontSize: 9,
-              fontWeight: FontWeight.w500,
               letterSpacing: AppDimensions.borderUniversal,
             ),
           ),
           const SizedBox(height: 8),
           Text(
             value,
-            style: GoogleFonts.jetBrainsMono(
+            style: context.runninType.dataSm.copyWith(
               color: valueColor,
               fontSize: 18,
-              fontWeight: FontWeight.w500,
             ),
           ),
         ],
@@ -423,9 +413,8 @@ class _UserInfoCards extends StatelessWidget {
             onTap: () => context.push('/profile/edit'),
             child: Text(
               'Preencher dados →',
-              style: GoogleFonts.jetBrainsMono(
+              style: context.runninType.bodyXs.copyWith(
                 color: context.runninPalette.primary,
-                fontSize: 11,
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -463,28 +452,23 @@ class _InfoCard extends StatelessWidget {
         children: [
           Text(
             label,
-            style: GoogleFonts.jetBrainsMono(
+            style: context.runninType.labelCaps.copyWith(
               color: FigmaColors.textMuted,
-              fontSize: 8,
-              fontWeight: FontWeight.w500,
               letterSpacing: AppDimensions.borderUniversal - 0.2,
             ),
           ),
           const SizedBox(height: 6),
           Text(
             value,
-            style: GoogleFonts.jetBrainsMono(
+            style: context.runninType.bodyMd.copyWith(
               color: FigmaColors.textPrimary,
-              fontSize: 14,
               fontWeight: FontWeight.w500,
             ),
           ),
           Text(
             unit,
-            style: GoogleFonts.jetBrainsMono(
+            style: context.runninType.labelCaps.copyWith(
               color: FigmaColors.textDim,
-              fontSize: 9,
-              fontWeight: FontWeight.w500,
             ),
           ),
         ],
@@ -505,18 +489,16 @@ class _SkinSection extends StatelessWidget {
       children: [
         Text(
           'SKIN',
-          style: GoogleFonts.jetBrainsMono(
+          style: context.runninType.bodyMd.copyWith(
             color: FigmaColors.textPrimary,
-            fontSize: 14,
             fontWeight: FontWeight.w500,
           ),
         ),
         const SizedBox(height: AppSpacing.md),
         Text(
           'Escolha a paleta de cores do app',
-          style: GoogleFonts.jetBrainsMono(
+          style: context.runninType.bodyXs.copyWith(
             color: FigmaColors.textMuted,
-            fontSize: 11,
             fontWeight: FontWeight.w500,
           ),
         ),
@@ -611,7 +593,7 @@ class _ThemeCard extends StatelessWidget {
                     children: [
                       Text(
                         label,
-                        style: GoogleFonts.jetBrainsMono(
+                        style: context.runninType.bodyMd.copyWith(
                           color: isActive
                               ? FigmaColors.textPrimary
                               : FigmaColors.textSecondary,
@@ -658,11 +640,10 @@ class _ThemeCard extends StatelessWidget {
                 right: 8,
                 child: Text(
                   'ATIVA',
-                  style: GoogleFonts.jetBrainsMono(
+                  // BUG fix: fontSize 8 estava abaixo do threshold legível.
+                  // Substituído por labelCaps (10px) — micro-label padrão.
+                  style: context.runninType.labelCaps.copyWith(
                     color: palette.primary,
-                    fontSize: 8,
-                    fontWeight: FontWeight.w500,
-                    letterSpacing: AppDimensions.borderUniversal,
                   ),
                 ),
               ),
@@ -685,18 +666,16 @@ class _AccessibilitySection extends StatelessWidget {
       children: [
         Text(
           'ACESSIBILIDADE',
-          style: GoogleFonts.jetBrainsMono(
+          style: context.runninType.bodyMd.copyWith(
             color: FigmaColors.textPrimary,
-            fontSize: 14,
             fontWeight: FontWeight.w500,
           ),
         ),
         const SizedBox(height: AppSpacing.md),
         Text(
           'Tamanho da fonte do app (afeta todas as telas)',
-          style: GoogleFonts.jetBrainsMono(
+          style: context.runninType.bodyXs.copyWith(
             color: FigmaColors.textMuted,
-            fontSize: 11,
             fontWeight: FontWeight.w500,
           ),
         ),
@@ -748,7 +727,7 @@ class _TextScaleChip extends StatelessWidget {
           children: [
             Text(
               scale.label,
-              style: TextStyle(
+              style: context.runninType.bodyMd.copyWith(
                 color: isActive ? palette.primary : palette.text,
                 fontSize: labelSize,
                 fontWeight: FontWeight.w500,
@@ -758,9 +737,8 @@ class _TextScaleChip extends StatelessWidget {
             const SizedBox(height: 2),
             Text(
               scale.description,
-              style: TextStyle(
+              style: context.runninType.labelCaps.copyWith(
                 color: palette.muted,
-                fontSize: 9,
                 letterSpacing: 0.4,
               ),
             ),
@@ -783,9 +761,8 @@ class _MenuSection extends StatelessWidget {
       children: [
         Text(
           'MENU',
-          style: GoogleFonts.jetBrainsMono(
+          style: context.runninType.bodyMd.copyWith(
             color: FigmaColors.textPrimary,
-            fontSize: 14,
             fontWeight: FontWeight.w500,
           ),
         ),
@@ -876,9 +853,8 @@ class _MenuItem extends StatelessWidget {
                 children: [
                   Text(
                     title,
-                    style: GoogleFonts.jetBrainsMono(
+                    style: context.runninType.bodyXs.copyWith(
                       color: FigmaColors.textPrimary,
-                      fontSize: 11,
                       fontWeight: FontWeight.w500,
                       letterSpacing: AppDimensions.borderUniversal - 0.7,
                     ),
@@ -886,10 +862,9 @@ class _MenuItem extends StatelessWidget {
                   const SizedBox(height: 3),
                   Text(
                     subtitle,
-                    style: GoogleFonts.jetBrainsMono(
+                    style: context.runninType.labelCaps.copyWith(
                       color: FigmaColors.textMuted,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w500,
+                      letterSpacing: 0,
                     ),
                   ),
                 ],
@@ -897,9 +872,8 @@ class _MenuItem extends StatelessWidget {
             ),
             Text(
               '↗',
-              style: GoogleFonts.jetBrainsMono(
+              style: context.runninType.bodyMd.copyWith(
                 color: FigmaColors.textDim,
-                fontSize: 14,
               ),
             ),
           ],
@@ -942,7 +916,7 @@ class _BottomActions extends StatelessWidget {
                     const SizedBox(width: AppSpacing.sm),
                     Text(
                       'Editar perfil ↗',
-                      style: GoogleFonts.jetBrainsMono(
+                      style: context.runninType.bodyMd.copyWith(
                         fontSize: 13,
                         fontWeight: FontWeight.w500,
                         color: FigmaColors.textSecondary,
@@ -968,7 +942,7 @@ class _BottomActions extends StatelessWidget {
             child: Center(
               child: Text(
                 'Logout',
-                style: GoogleFonts.jetBrainsMono(
+                style: context.runninType.bodyMd.copyWith(
                   fontSize: 13,
                   fontWeight: FontWeight.w500,
                   color: FigmaColors.textGhost,

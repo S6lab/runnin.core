@@ -53,15 +53,30 @@ export function triggerReportGeneration(runId: string, userId: string): void {
 }
 
 export async function postCoachMessage(req: Request, res: Response, next: NextFunction): Promise<void> {
+  // Logamos o event ANTES do parse pra capturar até payloads que falham
+  // validação (sem isso, eventos novos rejeitados ficavam invisíveis nos logs
+  // — usuário via "coach não fala" mas nada aparecia aqui).
+  const rawEvent = (req.body as { event?: unknown })?.event;
+  const rawKm = (req.body as { kmReached?: unknown })?.kmReached;
+  const rawRunId = (req.body as { runId?: unknown })?.runId;
+  logger.info('coach.message.received', { event: rawEvent, kmReached: rawKm, runId: rawRunId, uid: req.uid });
+
   try {
     const ctx = CoachContextSchema.parse(req.body);
     const result = await coachMessage.generate(ctx, req.uid);
 
     if (isCueSkipped(result)) {
-      // Decision layer pulou esta mensagem (frequency / DND / silent)
+      logger.info('coach.message.skipped', { event: ctx.event, reason: result.reason, uid: req.uid });
       res.status(204).setHeader('X-Coach-Skip-Reason', result.reason).end();
       return;
     }
+
+    logger.info('coach.message.completed', {
+      event: ctx.event,
+      textLen: result.text.length,
+      hasAudio: !!result.audioBase64,
+      uid: req.uid,
+    });
 
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
@@ -72,6 +87,7 @@ export async function postCoachMessage(req: Request, res: Response, next: NextFu
     res.write('data: [DONE]\n\n');
     res.end();
   } catch (err) {
+    logger.warn('coach.message.failed', { event: rawEvent, err: String(err), uid: req.uid });
     next(err);
   }
 }

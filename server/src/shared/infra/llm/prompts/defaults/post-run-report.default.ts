@@ -30,6 +30,8 @@ export const POST_RUN_REPORT_DEFAULTS = {
   ].join('\n'),
 
   temperature: 0.7,
-  maxTokens: 400,
+  // 400 estava truncando relatórios no meio (ex: "Eduardo, essa corrida
+  // de 0.01km mostra" — fim). 900 cobre 2-4 parágrafos pedidos pelo system.
+  maxTokens: 900,
   ragChunks: 3,
 };

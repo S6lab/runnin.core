@@ -1,5 +1,17 @@
 import 'package:flutter/material.dart';
 
+/// Tabela canônica de uso (referência da home page como benchmark):
+/// - `xxl` (~24): padding horizontal de page, gap entre seções grandes
+/// - `xl`  (~16): padding interno de card (RunninCard default)
+/// - `lg`  (~12): sub-cards, micro-padding interno, tight columns
+/// - `md`  (~8):  ícone-texto inline, tight groups
+/// - `sm`  (~6):  raríssimo — use apenas em chips/badges
+/// - `xs`  (~4):  raríssimo — gap entre label/value stacked
+///
+/// Gap vertical padrão entre SECTIONS: 20px (`SizedBox(height: 20)`).
+/// Page padding canônico: `EdgeInsets.fromLTRB(20, 20, 20, 32)`.
+///
+/// ⚠️ Evitar padding em valores 10, 14, 18 — quebram o ritmo visual.
 abstract final class AppSpacing {
   // Figma gap values (px)
   static const double xs = 3.985;   // gap-xs: ~4px

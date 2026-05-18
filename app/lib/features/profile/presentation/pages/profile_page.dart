@@ -1,7 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
@@ -71,10 +70,9 @@ class _ProfileCoachAICardState extends State<_ProfileCoachAICard> {
                           'Como foi o seu mês de treino?',
                           maxLines: _expanded ? null : 1,
                           overflow: _expanded ? null : TextOverflow.ellipsis,
-                          style: GoogleFonts.jetBrainsMono(
+                          style: context.runninType.labelCaps.copyWith(
                             fontSize: 11,
                             height: 16.5 / 11,
-                            fontWeight: FontWeight.w500,
                             color: FigmaColors.textSecondary,
                           ),
                         ),
@@ -87,8 +85,7 @@ class _ProfileCoachAICardState extends State<_ProfileCoachAICard> {
                     duration: const Duration(milliseconds: 220),
                     child: Text(
                       '▼',
-                      style: GoogleFonts.jetBrainsMono(
-                        fontSize: 10,
+                      style: context.runninType.labelCaps.copyWith(
                         height: 1,
                         color: FigmaColors.textSecondary,
                       ),
@@ -100,10 +97,8 @@ class _ProfileCoachAICardState extends State<_ProfileCoachAICard> {
                 const SizedBox(height: 14),
                 Text(
                   'Você completou ${DateTime.now().month == 1 ? 'Janeiro' : _monthName(DateTime.now().month - 1)}. O Coach.AI preparou um resumo com suas métricas, zonas de esforço e evolução. Deseja ver o fechamento completo?',
-                  style: GoogleFonts.jetBrainsMono(
-                    fontSize: 11,
+                  style: context.runninType.bodyXs.copyWith(
                     height: 18 / 11,
-                    fontWeight: FontWeight.w400,
                     color: FigmaColors.textSecondary,
                   ),
                 ),
@@ -397,7 +392,7 @@ class _ProfilePageState extends State<ProfilePage> {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text(_error!, style: TextStyle(color: palette.muted)),
+                          Text(_error!, style: context.runninType.bodySm),
                           const SizedBox(height: 16),
                           TextButton(
                             onPressed: _loadProfile,
@@ -407,7 +402,7 @@ class _ProfilePageState extends State<ProfilePage> {
                       ),
                     )
                   : SingleChildScrollView(
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxl),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -500,11 +495,10 @@ class _ProfilePageState extends State<ProfilePage> {
                                       .withValues(alpha: 0.35),
                               child: Text(
                                 _saveMessage ?? _error ?? '',
-                                style: TextStyle(
+                                style: context.runninType.bodySm.copyWith(
                                   color: _saveMessage != null
                                       ? palette.primary
                                       : palette.error,
-                                  fontSize: 12,
                                 ),
                               ),
                             ),
@@ -620,11 +614,8 @@ class _ProfileEditor extends StatelessWidget {
       children: [
         Text(
           enabled ? 'MODO EDIÇÃO' : 'VISÃO GERAL',
-          style: TextStyle(
-            fontSize: 10,
-            fontWeight: FontWeight.w500,
+          style: context.runninType.labelCaps.copyWith(
             color: enabled ? palette.primary : palette.muted,
-            letterSpacing: 0.12,
           ),
         ),
         const SizedBox(height: 14),
@@ -901,7 +892,7 @@ class _WearableConnectRowState extends State<_WearableConnectRow> {
         if (mounted) await _refresh();
       },
       child: Container(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(AppSpacing.xl),
         decoration: BoxDecoration(
           color: palette.surface,
           border: Border.all(color: palette.border),
@@ -920,15 +911,12 @@ class _WearableConnectRowState extends State<_WearableConnectRow> {
                 children: [
                   Text(
                     _connected ? 'DISPOSITIVO CONECTADO' : 'CONECTAR DISPOSITIVO',
-                    style: TextStyle(
-                      color: palette.text,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
+                    style: context.runninType.labelMd.copyWith(
                       letterSpacing: 0.5,
                     ),
                   ),
                   const SizedBox(height: 2),
-                  Text(statusText, style: TextStyle(color: palette.muted, fontSize: 11)),
+                  Text(statusText, style: context.runninType.bodyXs),
                 ],
               ),
             ),
@@ -981,9 +969,8 @@ class _TimePickerField extends StatelessWidget {
         ),
         child: Text(
           display,
-          style: TextStyle(
+          style: context.runninType.bodyMd.copyWith(
             color: enabled ? palette.text : palette.muted,
-            fontSize: 14,
           ),
         ),
       ),
@@ -1011,9 +998,8 @@ class _FieldLabel extends StatelessWidget {
 
     return Text(
       label,
-      style: TextStyle(
-        fontSize: 9,
-        fontWeight: FontWeight.w500,
+      style: context.runninType.labelCaps.copyWith(
+        fontSize: 10,
         color: palette.muted,
         letterSpacing: 0.1,
       ),
@@ -1046,9 +1032,8 @@ class _StatCard extends StatelessWidget {
         children: [
           Text(
             label,
-            style: TextStyle(
-              fontSize: 9,
-              fontWeight: FontWeight.w500,
+            style: context.runninType.labelCaps.copyWith(
+              fontSize: 10,
               color: palette.muted,
               letterSpacing: 0.1,
             ),
@@ -1056,9 +1041,7 @@ class _StatCard extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             value,
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.w500,
+            style: context.runninType.displaySm.copyWith(
               color: accent ? palette.primary : palette.text,
               letterSpacing: -0.02,
             ),
@@ -1095,16 +1078,16 @@ class _AnonPromoBanner extends StatelessWidget {
                 children: [
                   Text(
                     'CRIE SUA CONTA',
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: 11, fontWeight: FontWeight.w500,
-                      color: palette.primary, letterSpacing: 1.0,
+                    style: context.runninType.labelCaps.copyWith(
+                      fontSize: 11,
+                      color: palette.primary,
+                      letterSpacing: 1.0,
                     ),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     'Você está como visitante. Conecte e-mail, telefone ou Google para não perder seus dados.',
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: 11, fontWeight: FontWeight.w400,
+                    style: context.runninType.bodyXs.copyWith(
                       color: palette.text.withValues(alpha: 0.75),
                       height: 1.5,
                     ),
@@ -1163,7 +1146,7 @@ class _ProfileEditorMinimal extends StatelessWidget {
                   Expanded(
                     child: Text(
                       value?.isNotEmpty == true ? value! : hint,
-                      style: TextStyle(
+                      style: context.runninType.bodyMd.copyWith(
                         color: value?.isNotEmpty == true
                             ? palette.text
                             : palette.muted,

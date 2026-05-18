@@ -1,8 +1,8 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:runnin/core/network/api_client.dart';
+import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/shared/widgets/figma/figma_selection_button.dart';
 import 'package:runnin/shared/widgets/figma/figma_top_nav.dart';
@@ -391,9 +391,7 @@ class _Section3State extends State<_Section3> {
                     children: [
                       Text(
                         'Início',
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: 8,
-                          fontWeight: FontWeight.w500,
+                        style: context.runninType.labelCaps.copyWith(
                           color: FigmaColors.textMuted,
                         ),
                       ),
@@ -417,9 +415,7 @@ class _Section3State extends State<_Section3> {
                         ),
                         child: Text(
                           widget.dndStart,
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w500,
+                          style: context.runninType.dataSm.copyWith(
                             color: FigmaColors.textPrimary,
                           ),
                         ),
@@ -435,9 +431,7 @@ class _Section3State extends State<_Section3> {
                     children: [
                       Text(
                         'Fim',
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: 8,
-                          fontWeight: FontWeight.w500,
+                        style: context.runninType.labelCaps.copyWith(
                           color: FigmaColors.textMuted,
                         ),
                       ),
@@ -461,9 +455,7 @@ class _Section3State extends State<_Section3> {
                         ),
                         child: Text(
                           widget.dndEnd,
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w500,
+                          style: context.runninType.dataSm.copyWith(
                             color: FigmaColors.textPrimary,
                           ),
                         ),
@@ -518,11 +510,9 @@ class _SaveButton extends StatelessWidget {
               )
             : Text(
                 'SALVAR',
-                style: GoogleFonts.jetBrainsMono(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w500,
-                      letterSpacing:
-                          AppDimensions.borderUniversal - 0.2,
+                style: context.runninType.dataSm.copyWith(
+                  letterSpacing:
+                      AppDimensions.borderUniversal - 0.2,
                 ),
               ),
       ),

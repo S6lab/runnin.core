@@ -1,10 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:runnin/core/audio/coach_audio_player.dart';
 import 'package:runnin/core/theme/app_palette.dart';
@@ -23,7 +24,15 @@ class ActiveRunPage extends StatelessWidget {
   /// Tipo da corrida selecionado no /prep (Free Run, Long Run, etc.)
   /// Usado pra dispatch StartRun quando user pressionar INICIAR.
   final String initialType;
-  const ActiveRunPage({super.key, this.initialType = 'Free Run'});
+  /// ID da sessão do plano que essa run vai executar. Vem via query
+  /// (?planSessionId=...) ou deep link de TREINO. Server marca a sessão
+  /// como "feita" ao completar.
+  final String? planSessionId;
+  const ActiveRunPage({
+    super.key,
+    this.initialType = 'Free Run',
+    this.planSessionId,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -38,7 +47,7 @@ class ActiveRunPage extends StatelessWidget {
           context.pushReplacement('/report', extra: runId);
         }
       },
-      child: _ActiveRunView(initialType: initialType),
+      child: _ActiveRunView(initialType: initialType, planSessionId: planSessionId),
     );
   }
 
@@ -92,7 +101,8 @@ class ActiveRunPage extends StatelessWidget {
 
 class _ActiveRunView extends StatefulWidget {
   final String initialType;
-  const _ActiveRunView({required this.initialType});
+  final String? planSessionId;
+  const _ActiveRunView({required this.initialType, this.planSessionId});
 
   @override
   State<_ActiveRunView> createState() => _ActiveRunViewState();
@@ -101,25 +111,36 @@ class _ActiveRunView extends StatefulWidget {
 class _ActiveRunViewState extends State<_ActiveRunView> {
   bool _coachMuted = false;
   bool _coachAudioPlaying = false;
+  // Coach banner auto-fade. Mostra mensagem por 10s e depois esconde
+  // (mas o áudio continua tocando se ainda não terminou).
+  String? _lastBannerMessageShown;
+  bool _bannerVisible = false;
+  Timer? _bannerHideTimer;
+
+  @override
+  void dispose() {
+    _bannerHideTimer?.cancel();
+    super.dispose();
+  }
   _GpsStatus _gpsStatus = _GpsStatus.unknown;
 
   @override
   void initState() {
     super.initState();
-    _refreshGpsStatus();
-    // Modal de GPS só abre AUTOMATICAMENTE se status != ok. Antes abria
-    // em TODA entrada idle, criando UX hostil (modal repetido, possível
-    // loop em rebuild). Chip retry continua disponível pra abrir manual.
+    // Modal SÓ abre quando GPS precisa de ação do user (permissão negada
+    // ou serviço desligado). Pra status 'unknown' (ainda resolvendo) e
+    // 'ok', não mostra nada — o navegador/SO pede permissão nativa
+    // automaticamente quando getCurrentPosition é chamado.
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
-      // Aguarda _refreshGpsStatus terminar — sem isso o status ainda
-      // é unknown e o modal abriria sempre.
-      await Future.delayed(const Duration(milliseconds: 300));
+      await _refreshGpsStatus();
       if (!mounted) return;
-      if (_gpsStatus == _GpsStatus.ok) return;
+      final needsAction = _gpsStatus == _GpsStatus.denied ||
+          _gpsStatus == _GpsStatus.off;
+      if (!needsAction) return;
       final granted = await GpsPermissionModal.show(
         context,
-        blocked: _gpsStatus == _GpsStatus.denied || _gpsStatus == _GpsStatus.off,
+        blocked: true,
       );
       if (granted && mounted) await _refreshGpsStatus();
     });
@@ -159,10 +180,33 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
     return Scaffold(
       backgroundColor: palette.background,
       body: BlocListener<RunBloc, RunState>(
-        listenWhen: (_, curr) =>
-            curr.coachAudioBase64 != null && curr.coachAudioBase64!.isNotEmpty,
+        // Tocar SÓ quando o audio MUDA. Antes só checava "tem audio?",
+        // então cada tick do timer/GPS update reemitia o player → áudio
+        // repetia em loop curto. Comparar prev != curr garante 1 play por cue.
+        listenWhen: (prev, curr) =>
+            (curr.coachAudioBase64 != null &&
+                curr.coachAudioBase64!.isNotEmpty &&
+                curr.coachAudioBase64 != prev.coachAudioBase64) ||
+            (curr.coachLiveMessage != null &&
+                curr.coachLiveMessage!.isNotEmpty &&
+                curr.coachLiveMessage != _lastBannerMessageShown),
         listener: (context, state) {
+          // Banner: mostra mensagem nova + auto-hide após 10s.
+          // Áudio segue tocando mesmo após banner sumir.
+          if (state.coachLiveMessage != null &&
+              state.coachLiveMessage!.isNotEmpty &&
+              state.coachLiveMessage != _lastBannerMessageShown) {
+            _lastBannerMessageShown = state.coachLiveMessage;
+            setState(() => _bannerVisible = true);
+            _bannerHideTimer?.cancel();
+            _bannerHideTimer = Timer(const Duration(seconds: 10), () {
+              if (mounted) setState(() => _bannerVisible = false);
+            });
+          }
           if (_coachMuted) return;
+          if (state.coachAudioBase64 == null || state.coachAudioBase64!.isEmpty) {
+            return;
+          }
           playCoachAudio(
             state.coachAudioBase64!,
             mimeType: state.coachAudioMimeType ?? 'audio/mpeg',
@@ -187,104 +231,150 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
                     : _GpsStatus.unknown);
             return Stack(
               children: [
-                _RouteMap(points: state.points),
-                if (state.coachLiveMessage != null &&
+                // Background: hero image quando idle (foto do runner igual
+                // à home), mapa real durante corrida ativa/paused.
+                if (isIdle)
+                  const _IdleHeroBackground()
+                else
+                  _RouteMap(points: state.points),
+                // Coach banner: aparece quando cue novo + some após 10s.
+                // Posicionado bem mais abaixo pra não sobrepor os chips.
+                if (_bannerVisible &&
+                    state.coachLiveMessage != null &&
                     state.coachLiveMessage!.isNotEmpty)
                   Positioned(
-                    top: 56,
+                    top: 130,
                     left: 16,
                     right: 16,
                     child: _CoachLiveBanner(message: state.coachLiveMessage!),
                   ),
-                // Status chips topo-esquerda: GPS, COACH, MÚSICA, WEARABLE.
+                // Topo: voltar (idle) + linha de chips em Wrap.
+                // GPS, COACH, MÚSICA, BPM. Tudo passível de toque (futuro).
                 Positioned(
                   top: 12,
                   left: 14,
                   right: 80,
                   child: SafeArea(
-                    child: Wrap(
-                      spacing: 6,
-                      runSpacing: 6,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _StatusChip(
-                          icon: Icons.gps_fixed,
-                          label: switch (gpsChipStatus) {
-                            _GpsStatus.unknown => isIdle
-                                ? 'GPS · CONECTANDO'
-                                : 'GPS · AGUARDANDO',
-                            _GpsStatus.ok => !isIdle && state.points.isNotEmpty
-                                // Mostra contagem de points pra ficar VISÍVEL
-                                // que tá vivo (não estático).
-                                ? 'GPS · ${state.points.length} pts'
-                                : 'GPS · OK',
-                            _GpsStatus.denied => 'GPS · NEGADO',
-                            _GpsStatus.off => 'GPS · OFF',
-                          },
-                          color: gpsChipStatus == _GpsStatus.ok
-                              ? palette.primary
-                              : gpsChipStatus == _GpsStatus.unknown
-                                  ? palette.muted
-                                  : FigmaColors.brandOrange,
-                          onTap: gpsChipStatus == _GpsStatus.ok
-                              ? null
-                              : _refreshGpsStatus,
-                          pulsing: gpsChipStatus == _GpsStatus.unknown,
-                        ),
-                        _StatusChip(
-                          icon: _coachAudioPlaying
-                              ? Icons.graphic_eq
-                              : _coachMuted
-                                  ? Icons.volume_off_outlined
-                                  : Icons.headphones_outlined,
-                          label: _coachAudioPlaying
-                              ? 'COACH · FALANDO'
-                              : _coachMuted
-                                  ? 'COACH · MUTE'
-                                  : 'COACH · PRONTO',
-                          color: _coachAudioPlaying
-                              ? palette.primary
-                              : _coachMuted
-                                  ? palette.muted
-                                  : palette.secondary,
-                          pulsing: _coachAudioPlaying,
+                        if (isIdle)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: GestureDetector(
+                              onTap: () {
+                                if (context.canPop()) {
+                                  context.pop();
+                                } else {
+                                  context.go('/home');
+                                }
+                              },
+                              child: Container(
+                                width: 36,
+                                height: 36,
+                                alignment: Alignment.center,
+                                decoration: BoxDecoration(
+                                  color: palette.surface,
+                                  border: Border.all(color: palette.border),
+                                ),
+                                child: Icon(
+                                  Icons.arrow_back,
+                                  size: 18,
+                                  color: palette.text,
+                                ),
+                              ),
+                            ),
+                          ),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          children: [
+                            _StatusChip(
+                              icon: Icons.gps_fixed,
+                              label: switch (gpsChipStatus) {
+                                _GpsStatus.unknown => isIdle
+                                    ? 'GPS · CONECTANDO'
+                                    : 'GPS · AGUARDANDO',
+                                _GpsStatus.ok => !isIdle && state.points.isNotEmpty
+                                    ? 'GPS · ${state.points.length} pts'
+                                    : 'GPS · OK',
+                                _GpsStatus.denied => 'GPS · NEGADO',
+                                _GpsStatus.off => 'GPS · OFF',
+                              },
+                              color: gpsChipStatus == _GpsStatus.ok
+                                  ? palette.primary
+                                  : gpsChipStatus == _GpsStatus.unknown
+                                      ? palette.muted
+                                      : FigmaColors.brandOrange,
+                              onTap: gpsChipStatus == _GpsStatus.ok
+                                  ? null
+                                  : _refreshGpsStatus,
+                              pulsing: gpsChipStatus == _GpsStatus.unknown,
+                            ),
+                            _StatusChip(
+                              icon: _coachAudioPlaying
+                                  ? Icons.graphic_eq
+                                  : _coachMuted
+                                      ? Icons.volume_off_outlined
+                                      : Icons.headphones_outlined,
+                              label: _coachAudioPlaying
+                                  ? 'COACH · FALANDO'
+                                  : _coachMuted
+                                      ? 'COACH · MUTE'
+                                      : 'COACH · PRONTO',
+                              color: _coachAudioPlaying
+                                  ? palette.primary
+                                  : _coachMuted
+                                      ? palette.muted
+                                      : palette.secondary,
+                              pulsing: _coachAudioPlaying,
+                            ),
+                            _StatusChip(
+                              icon: Icons.music_note_outlined,
+                              label: 'MÚSICA · OFF',
+                              color: palette.muted,
+                            ),
+                            _StatusChip(
+                              icon: Icons.favorite_outline,
+                              label: 'BPM · —',
+                              color: palette.muted,
+                            ),
+                          ],
                         ),
                       ],
                     ),
                   ),
                 ),
                 // Mute + Talk no canto superior direito (apenas em active).
+                // Apenas botão MUTE no topo direito durante a corrida.
+                // CoachTalkButton (balão) removido — falar com coach via voz
+                // contínua não fazia parte do fluxo padrão e poluía a UI.
                 if (!isIdle)
                   Positioned(
                     top: 12,
                     right: 14,
                     child: SafeArea(
-                      child: Row(
+                      child: Stack(
+                        alignment: Alignment.center,
                         children: [
-                          _CoachTalkButton(runId: state.runId ?? ''),
-                          const SizedBox(width: 8),
-                          Stack(
-                            alignment: Alignment.center,
-                            children: [
-                              _CoachMuteButton(
-                                muted: _coachMuted,
-                                onTap: () => setState(
-                                    () => _coachMuted = !_coachMuted),
-                              ),
-                              if (_coachAudioPlaying)
-                                Positioned(
-                                  bottom: 0,
-                                  right: 4,
-                                  child: Container(
-                                    width: 8,
-                                    height: 8,
-                                    decoration: BoxDecoration(
-                                      shape: BoxShape.circle,
-                                      color: palette.primary,
-                                    ),
-                                  ),
-                                ),
-                            ],
+                          _CoachMuteButton(
+                            muted: _coachMuted,
+                            onTap: () => setState(
+                                () => _coachMuted = !_coachMuted),
                           ),
+                          if (_coachAudioPlaying)
+                            Positioned(
+                              bottom: 0,
+                              right: 4,
+                              child: Container(
+                                width: 8,
+                                height: 8,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: palette.primary,
+                                ),
+                              ),
+                            ),
                         ],
                       ),
                     ),
@@ -305,7 +395,10 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
                       unlockAudioContext();
                       context
                           .read<RunBloc>()
-                          .add(StartRun(type: widget.initialType));
+                          .add(StartRun(
+                            type: widget.initialType,
+                            planSessionId: widget.planSessionId,
+                          ));
                     },
                   ),
                 ),
@@ -366,9 +459,8 @@ class _StatusChip extends StatelessWidget {
             const SizedBox(width: 6),
             Text(
               label,
-              style: GoogleFonts.jetBrainsMono(
+              style: context.runninType.labelCaps.copyWith(
                 color: color,
-                fontSize: 10,
                 fontWeight: FontWeight.w500,
                 letterSpacing: 1.0,
               ),
@@ -431,6 +523,35 @@ class _RouteMap extends StatelessWidget {
   Widget build(BuildContext context) => _RouteMapBody(points: points);
 }
 
+/// Background do estado IDLE — foto do runner (mesma da home, alternada
+/// por dia ímpar/par). Usado em vez do mapa quando user ainda não iniciou.
+/// Durante corrida ativa, o mapa real substitui esse hero.
+class _IdleHeroBackground extends StatelessWidget {
+  const _IdleHeroBackground();
+
+  @override
+  Widget build(BuildContext context) {
+    final dayOfYear = DateTime.now().difference(DateTime(DateTime.now().year, 1, 1)).inDays;
+    final heroAsset = dayOfYear.isEven
+        ? 'assets/img/hero/runner_1.png'
+        : 'assets/img/hero/runner_2.png';
+    return Positioned.fill(
+      child: Container(
+        decoration: BoxDecoration(
+          color: const Color(0xFF0A0A1A),
+          image: DecorationImage(
+            image: AssetImage(heroAsset),
+            fit: BoxFit.cover,
+            onError: (e, _) {
+              debugPrint('IDLE_HERO image error: $e');
+            },
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _RouteMapBody extends StatefulWidget {
   final List<GpsPoint> points;
   const _RouteMapBody({required this.points});
@@ -441,6 +562,13 @@ class _RouteMapBody extends StatefulWidget {
 
 class _RouteMapBodyState extends State<_RouteMapBody> {
   final _mapController = MapController();
+
+  /// Deslocamento de latitude pra centralizar o mapa "abaixo" do marker
+  /// — efetivamente puxa o marker pra parte superior da viewport, entre
+  /// o chip row (top) e o footer overlay com "RUN.ACTIVE". 0.002° ≈ 220m
+  /// em zoom 16, que coloca o marker em ~30% do topo (visualmente entre
+  /// os chips e o título).
+  static const _mapCenterLatOffset = 0.002;
 
   @override
   void didUpdateWidget(covariant _RouteMapBody oldWidget) {
@@ -456,30 +584,54 @@ class _RouteMapBodyState extends State<_RouteMapBody> {
       return;
     }
 
-    _mapController.move(LatLng(lastPoint.lat, lastPoint.lng), 16);
+    // Quando o PRIMEIRO ponto chega (oldWidget tinha points vazio →
+    // build retornava _WaitingForGpsMap, sem FlutterMap), o FlutterMap
+    // ainda não foi renderizado neste frame — chamar _mapController.move
+    // aqui crasha com "You need to have the FlutterMap widget rendered
+    // at least once before using the MapController". Adiar pro próximo
+    // frame garante que a árvore já tem o FlutterMap montado.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      try {
+        _mapController.move(
+          LatLng(lastPoint.lat - _mapCenterLatOffset, lastPoint.lng),
+          16,
+        );
+      } catch (_) {
+        // Se ainda assim falhar (frame muito apertado), próximo ponto
+        // GPS dispara outro didUpdateWidget e tenta de novo.
+      }
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final palette = context.runninPalette;
     final latLngs = widget.points.map((p) => LatLng(p.lat, p.lng)).toList();
-    if (latLngs.isEmpty) {
-      return _WaitingForGpsMap();
-    }
 
-    final center = latLngs.last;
+    // FlutterMap SEMPRE montado pra evitar "MapController before render".
+    // Sem fix ainda: center neutro (0,0) com zoom muito baixo — tiles
+    // do OSM nesse zoom é só água/grade, fica praticamente invisível
+    // atrás do overlay de stats. Quando primeiro fix chega, didUpdateWidget
+    // re-centraliza via postFrameCallback.
+    final hasFix = latLngs.isNotEmpty;
+    final center = hasFix
+        ? LatLng(latLngs.last.latitude - _mapCenterLatOffset, latLngs.last.longitude)
+        : const LatLng(0, 0);
 
-    return FlutterMap(
-      mapController: _mapController,
-      options: MapOptions(
-        initialCenter: center,
-        initialZoom: 16,
-        backgroundColor: palette.background,
-      ),
+    return Stack(
       children: [
-        TileLayer(
-          urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-          userAgentPackageName: 'com.reniuslab.runnin',
+        FlutterMap(
+          mapController: _mapController,
+          options: MapOptions(
+            initialCenter: center,
+            initialZoom: hasFix ? 16 : 4,
+            backgroundColor: palette.background,
+          ),
+          children: [
+            TileLayer(
+              urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+              userAgentPackageName: 'com.reniuslab.runnin',
           tileBuilder: (context, child, tile) => ColorFiltered(
             colorFilter: const ColorFilter.matrix([
               -0.2126,
@@ -529,6 +681,12 @@ class _RouteMapBodyState extends State<_RouteMapBody> {
               ),
             ],
           ),
+          ],
+        ),
+        // Sem overlay "AGUARDANDO GPS" — antes ocupava a tela inteira.
+        // Pedido do user: mapa fica blank silencioso até primeiro fix
+        // (apenas o chip de status no topo já comunica isso). Modal de
+        // permissão só aparece se _gpsStatus != ok (vide _ActiveRunViewState).
       ],
     );
   }
@@ -612,6 +770,29 @@ class _StatsOverlay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // UI única pra idle e active (PNG): header brand + 2x2 stats + timer
+    // + splits + botões. INICIAR muda só os botões (não troca a tela).
+    return _ActiveStatsLayout(
+      state: state,
+      initialType: initialType,
+      gpsOk: gpsOk,
+      onStart: onStart,
+      onRetryGps: onRetryGps,
+      onPauseResume: () {
+        final bloc = context.read<RunBloc>();
+        if (state.status == RunStatus.paused) {
+          bloc.add(ResumeRun());
+        } else {
+          bloc.add(PauseRun());
+        }
+      },
+      onFinish: () => _finishRun(context, state),
+    );
+  }
+
+  // Legacy idle layout — removido. Tudo passou pro _ActiveStatsLayout.
+  // ignore: unused_element
+  Widget _buildLegacy(BuildContext context) {
     final palette = context.runninPalette;
     final type = context.runninType;
     final isIdle = state.status == RunStatus.idle ||
@@ -632,21 +813,18 @@ class _StatsOverlay extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(24, 32, 24, 48),
       child: Column(
         children: [
-          if (isIdle)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: Text(
-                initialType.toUpperCase(),
-                style: GoogleFonts.jetBrainsMono(
-                  color: palette.muted,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                  letterSpacing: 1.6,
-                ),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Text(
+              initialType.toUpperCase(),
+              style: context.runninType.labelMd.copyWith(
+                color: palette.muted,
+                fontWeight: FontWeight.w500,
+                letterSpacing: 1.6,
               ),
             ),
+          ),
           // FittedBox protege contra overflow em telas estreitas (ex: 360dp).
-          // Sem isso, "12.34km" pode cortar.
           FittedBox(
             fit: BoxFit.scaleDown,
             child: Text(
@@ -702,8 +880,7 @@ class _StatsOverlay extends StatelessWidget {
                       )
                     : Text(
                         'INICIAR CORRIDA',
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: 14,
+                        style: context.runninType.bodyMd.copyWith(
                           fontWeight: FontWeight.w500,
                           letterSpacing: 1.4,
                         ),
@@ -713,9 +890,8 @@ class _StatsOverlay extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               'O tempo só começa ao tocar INICIAR.',
-              style: TextStyle(
+              style: context.runninType.bodyXs.copyWith(
                 color: palette.muted,
-                fontSize: 11,
                 height: 1.4,
               ),
             ),
@@ -732,7 +908,7 @@ class _StatsOverlay extends StatelessWidget {
                   icon: Icon(Icons.gps_fixed, size: 16, color: FigmaColors.brandOrange),
                   label: Text(
                     'TENTAR LOCALIZAÇÃO',
-                    style: TextStyle(
+                    style: context.runninType.labelCaps.copyWith(
                       color: FigmaColors.brandOrange,
                       fontSize: 11,
                       letterSpacing: 1.2,
@@ -798,7 +974,7 @@ class _StatsOverlay extends StatelessWidget {
     final choice = await showDialog<_ZeroDistanceChoice>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Salvar corrida sem distância?'),
+        title: const Text('SALVAR CORRIDA SEM DISTÂNCIA?'),
         content: const Text(
           'Você iniciou a corrida, mas o GPS não registrou deslocamento relevante. Salvar mesmo assim pode interferir nas métricas de pace, volume e progresso.',
         ),
@@ -904,5 +1080,456 @@ class _CoachLiveBanner extends StatelessWidget {
         ],
       ),
     ).animate().fadeIn(duration: 220.ms);
+  }
+}
+
+/// Layout do active run conforme PNG do design: header brand + grid
+/// 2x2 (PACE/DIST/BPM/CAL) + timer central + splits row + botões.
+/// Mapa fica embaixo como background (via Stack do _ActiveRunView).
+class _ActiveStatsLayout extends StatelessWidget {
+  final RunState state;
+  final String initialType;
+  final bool gpsOk;
+  final VoidCallback onStart;
+  final VoidCallback onRetryGps;
+  final VoidCallback onPauseResume;
+  final VoidCallback onFinish;
+  const _ActiveStatsLayout({
+    required this.state,
+    required this.initialType,
+    required this.gpsOk,
+    required this.onStart,
+    required this.onRetryGps,
+    required this.onPauseResume,
+    required this.onFinish,
+  });
+
+  String _bpmZone(int? bpm) {
+    if (bpm == null) return 'Z—';
+    if (bpm < 100) return 'Z1:WARMUP';
+    if (bpm < 130) return 'Z2:EASY';
+    if (bpm < 150) return 'Z3:AEROBIC';
+    if (bpm < 170) return 'Z4:THRESHOLD';
+    return 'Z5:VO2';
+  }
+
+  String _typeAsExe(String t) {
+    final norm = t.toUpperCase().replaceAll(' ', '_').replaceAll(RegExp(r'[^A-Z0-9_]'), '');
+    return '$norm.exe';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    final type = context.runninType;
+    final runType = state.runType?.isNotEmpty == true ? state.runType! : initialType;
+    final paceVal = state.formattedPace == '--:--' ? '--:--' : state.formattedPace;
+    // BPM ainda não capturado no RunState (depende de wearable). Mostra '—'.
+    // Kcal estimado simples: distância (km) × 60 (média runner ~60 kcal/km).
+    final int? bpm = null;
+    final kcal = ((state.distanceM / 1000) * 60).round();
+
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.bottomCenter,
+          end: Alignment.topCenter,
+          colors: [
+            palette.background,
+            palette.background.withValues(alpha: 0.85),
+            palette.background.withValues(alpha: 0.40),
+            Colors.transparent,
+          ],
+          stops: const [0.0, 0.45, 0.80, 1.0],
+        ),
+      ),
+      padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
+      child: SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Header: brand chip + run type como .exe
+            Row(
+              children: [
+                Container(width: 10, height: 10, color: FigmaColors.brandCyan),
+                const SizedBox(width: 8),
+                Text(
+                  'RUN.ACTIVE',
+                  style: type.labelMd.copyWith(
+                    color: FigmaColors.brandCyan,
+                    letterSpacing: 1.4,
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  _typeAsExe(runType),
+                  style: type.labelMd.copyWith(
+                    color: palette.muted,
+                    letterSpacing: 1.0,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+
+            // Grid 2x2 de stats. Cores conforme palette do user:
+            // PACE → primary (cyan), DIST → secondary (orange),
+            // BPM → secondary (orange), CAL → text default.
+            _StatGridRow(
+              left: _GridStat(
+                index: '01',
+                label: 'PACE',
+                value: paceVal,
+                unit: '/km',
+                valueColor: palette.primary,
+              ),
+              right: _GridStat(
+                index: '02',
+                label: 'DIST',
+                value: state.formattedDistance.replaceAll('km', '').trim(),
+                unit: 'km',
+                valueColor: palette.secondary,
+              ),
+            ),
+            Container(height: 1, color: palette.border, margin: const EdgeInsets.symmetric(vertical: 14)),
+            _StatGridRow(
+              left: _GridStat(
+                index: '03',
+                label: 'BPM',
+                value: bpm?.toString() ?? '—',
+                unit: _bpmZone(bpm),
+                valueColor: palette.secondary,
+              ),
+              right: _GridStat(
+                index: '04',
+                label: 'CAL',
+                value: kcal.toString(),
+                unit: 'KCAL',
+                valueColor: palette.text,
+              ),
+            ),
+            const SizedBox(height: 24),
+
+            // Timer central grande
+            Text(
+              state.formattedElapsed,
+              style: type.dataXl.copyWith(fontSize: 64, color: palette.text),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'TEMPO DECORRIDO',
+              style: type.labelCaps.copyWith(color: palette.muted, letterSpacing: 1.4),
+            ),
+            const SizedBox(height: 20),
+
+            // Splits row: SPLITS → + horizontal scroll de km cards
+            if (state.distanceM > 0) ...[
+              Row(
+                children: [
+                  Text(
+                    'SPLITS  →',
+                    style: type.labelMd.copyWith(
+                      color: palette.muted,
+                      letterSpacing: 1.2,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              SizedBox(
+                height: 76,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: 5,
+                  separatorBuilder: (_, _) => const SizedBox(width: 8),
+                  itemBuilder: (_, i) {
+                    final kmIdx = i + 1;
+                    final reached = (state.distanceM / 1000).floor();
+                    final done = kmIdx <= reached;
+                    return _SplitCard(
+                      kmLabel: 'KM${kmIdx.toString().padLeft(2, '0')}',
+                      paceLabel: done ? state.formattedPace : '--:--',
+                      statusLabel: done ? 'OK' : 'PEND',
+                      done: done,
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 18),
+            ],
+
+            // Buttons row: idle → INICIAR; active → PAUSAR + FINALIZAR; paused → RETOMAR + FINALIZAR.
+            _ButtonsRow(
+              isIdle: state.status == RunStatus.idle ||
+                  state.status == RunStatus.starting,
+              isStarting: state.status == RunStatus.starting,
+              isPaused: state.status == RunStatus.paused,
+              isCompleting: state.status == RunStatus.completing,
+              gpsOk: gpsOk,
+              onStart: onStart,
+              onRetryGps: onRetryGps,
+              onPauseResume: onPauseResume,
+              onFinish: onFinish,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ButtonsRow extends StatelessWidget {
+  final bool isIdle;
+  final bool isStarting;
+  final bool isPaused;
+  final bool isCompleting;
+  final bool gpsOk;
+  final VoidCallback onStart;
+  final VoidCallback onRetryGps;
+  final VoidCallback onPauseResume;
+  final VoidCallback onFinish;
+  const _ButtonsRow({
+    required this.isIdle,
+    required this.isStarting,
+    required this.isPaused,
+    required this.isCompleting,
+    required this.gpsOk,
+    required this.onStart,
+    required this.onRetryGps,
+    required this.onPauseResume,
+    required this.onFinish,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    final type = context.runninType;
+
+    if (isIdle) {
+      return Column(
+        children: [
+          SizedBox(
+            width: double.infinity,
+            height: 52,
+            child: ElevatedButton(
+              onPressed: isStarting ? null : onStart,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: FigmaColors.brandCyan,
+                foregroundColor: palette.background,
+                disabledBackgroundColor: FigmaColors.brandCyan.withValues(alpha: 0.4),
+                shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+              ),
+              child: isStarting
+                  ? CircularProgressIndicator(color: palette.background, strokeWidth: 2)
+                  : Text(
+                      'INICIAR CORRIDA  ↗',
+                      style: type.labelMd.copyWith(
+                        color: palette.background,
+                        letterSpacing: 1.2,
+                      ),
+                    ),
+            ),
+          ),
+          if (!gpsOk) ...[
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              height: 44,
+              child: OutlinedButton.icon(
+                onPressed: onRetryGps,
+                icon: const Icon(Icons.gps_fixed, size: 16, color: FigmaColors.brandOrange),
+                label: Text(
+                  'TENTAR LOCALIZAÇÃO',
+                  style: type.labelMd.copyWith(
+                    color: FigmaColors.brandOrange,
+                    letterSpacing: 1.2,
+                  ),
+                ),
+                style: OutlinedButton.styleFrom(
+                  side: BorderSide(color: FigmaColors.brandOrange.withValues(alpha: 0.55)),
+                  shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+                ),
+              ),
+            ),
+          ],
+        ],
+      );
+    }
+
+    return Row(
+      children: [
+        Expanded(
+          child: SizedBox(
+            height: 52,
+            child: OutlinedButton(
+              onPressed: onPauseResume,
+              style: OutlinedButton.styleFrom(
+                side: BorderSide(
+                  color: isPaused ? FigmaColors.brandCyan : palette.border,
+                ),
+                shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+              ),
+              child: Text(
+                isPaused ? 'RETOMAR' : 'PAUSAR',
+                style: type.labelMd.copyWith(
+                  color: isPaused ? FigmaColors.brandCyan : palette.muted,
+                  letterSpacing: 1.2,
+                ),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          flex: 2,
+          child: SizedBox(
+            height: 52,
+            child: ElevatedButton(
+              onPressed: isCompleting ? null : onFinish,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: FigmaColors.brandCyan,
+                foregroundColor: palette.background,
+                disabledBackgroundColor: FigmaColors.brandCyan.withValues(alpha: 0.4),
+                shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+              ),
+              child: isCompleting
+                  ? CircularProgressIndicator(color: palette.background, strokeWidth: 2)
+                  : Text(
+                      'FINALIZAR  ↗',
+                      style: type.labelMd.copyWith(
+                        color: palette.background,
+                        letterSpacing: 1.2,
+                      ),
+                    ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _GridStat {
+  final String index;
+  final String label;
+  final String value;
+  final String unit;
+  final Color valueColor;
+  const _GridStat({
+    required this.index,
+    required this.label,
+    required this.value,
+    required this.unit,
+    required this.valueColor,
+  });
+}
+
+class _StatGridRow extends StatelessWidget {
+  final _GridStat left;
+  final _GridStat right;
+  const _StatGridRow({required this.left, required this.right});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(child: _StatCell(stat: left)),
+        Expanded(child: _StatCell(stat: right)),
+      ],
+    );
+  }
+}
+
+class _StatCell extends StatelessWidget {
+  final _GridStat stat;
+  const _StatCell({required this.stat});
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    final type = context.runninType;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              stat.label,
+              style: type.labelCaps.copyWith(color: palette.muted, fontSize: 11, letterSpacing: 1.2),
+            ),
+            Text(
+              stat.index,
+              style: type.labelCaps.copyWith(color: palette.muted.withValues(alpha: 0.5), fontSize: 9),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          stat.value,
+          style: type.dataMd.copyWith(color: stat.valueColor, fontSize: 30, letterSpacing: -0.4),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          stat.unit,
+          style: type.labelCaps.copyWith(color: palette.muted, fontSize: 10, letterSpacing: 1.0),
+        ),
+      ],
+    );
+  }
+}
+
+class _SplitCard extends StatelessWidget {
+  final String kmLabel;
+  final String paceLabel;
+  final String statusLabel;
+  final bool done;
+  const _SplitCard({
+    required this.kmLabel,
+    required this.paceLabel,
+    required this.statusLabel,
+    required this.done,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    final type = context.runninType;
+    final accent = done ? FigmaColors.brandOrange : palette.muted;
+    return Container(
+      width: 84,
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+      decoration: BoxDecoration(
+        color: palette.surface,
+        border: Border.all(color: palette.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            kmLabel,
+            style: type.labelCaps.copyWith(color: palette.muted, letterSpacing: 1.2),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            paceLabel,
+            style: type.labelMd.copyWith(
+              color: done ? palette.text : palette.muted.withValues(alpha: 0.6),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            statusLabel,
+            style: type.labelCaps.copyWith(
+              color: accent,
+              fontSize: 9,
+              letterSpacing: 1.0,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

@@ -29,8 +29,12 @@ export function buildEventPrompt(ctx: RunContextInput): string {
       return `O corredor quer iniciar uma corrida do tipo ${ctx.runType ?? 'livre'}. Prepare o atleta com foco no objetivo, no plano atual e no cuidado com intensidade.\n\n${base}`;
     case 'km_reached':
       return `O corredor acabou de completar o km ${ctx.kmReached}. Dê feedback rápido sobre o pace e uma ação simples.\n\n${base}`;
+    case 'km_split':
+      return `O corredor fechou o km ${ctx.kmReached}. Compare o pace deste km com o anterior e diga se acelerou, manteve ou caiu, em 1-2 frases.\n\n${base}`;
     case 'pace_alert':
       return `O pace do corredor desviou do plano. Corrija com firmeza e cuidado.\n\n${base}`;
+    case 'motivation':
+      return `Mensagem de motivação no meio da corrida — nenhum alerta específico, apenas mantenha o corredor engajado. 1 frase curta, foco na constância.\n\n${base}`;
     case 'start':
       return `Corredor iniciando treino. Dê uma frase de largada com foco claro.\n\n${base}`;
     case 'finish':

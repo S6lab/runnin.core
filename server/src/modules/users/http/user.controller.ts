@@ -111,6 +111,29 @@ export async function postOnboarding(req: Request, res: Response, next: NextFunc
     const result = await completeOnboarding.execute(req.uid, input);
     res.status(201).json(result);
   } catch (err) {
+    // Surfaçar erro Zod com nome do campo que falhou — antes voltava 500
+    // genérico pelo middleware e ninguém sabia qual campo o app mandou
+    // errado. Agora app pode mostrar "Campo X é obrigatório" pro user.
+    if (err instanceof Error && err.name === 'ZodError') {
+      const issues = (err as Error & { issues?: Array<{ path: (string | number)[]; message: string }> }).issues;
+      const missingFields = (issues ?? []).map(i => ({
+        field: i.path.join('.'),
+        message: i.message,
+      }));
+      // Log estruturado pro Cloud Run: precisamos saber EXATAMENTE o que o
+      // app mandou pra debug. Antes víamos só "422" sem detalhe.
+      (await import('@shared/logger/logger')).logger.warn('users.onboarding.validation_failed', {
+        uid: req.uid,
+        fields: missingFields,
+        receivedKeys: Object.keys((req.body ?? {}) as object),
+      });
+      res.status(422).json({
+        error: 'ONBOARDING_VALIDATION_FAILED',
+        message: 'Alguns campos do onboarding estão inválidos ou faltando.',
+        fields: missingFields,
+      });
+      return;
+    }
     next(err);
   }
 }

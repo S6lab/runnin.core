@@ -4,8 +4,8 @@ import 'dart:math' as math;
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:runnin/core/router/app_router.dart';
+import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 import 'package:runnin/features/training/data/datasources/plan_remote_datasource.dart';
@@ -133,8 +133,7 @@ class _PlanLoadingPageState extends State<PlanLoadingPage>
 
               Text(
                 'Montando seu plano',
-                style: GoogleFonts.jetBrainsMono(
-                  fontSize: 28,
+                style: context.runninType.dataMd.copyWith(
                   fontWeight: FontWeight.w500,
                   letterSpacing: -0.4,
                   height: 1.1,
@@ -154,8 +153,8 @@ class _PlanLoadingPageState extends State<PlanLoadingPage>
                   ),
                   child: Text(
                     _error!,
-                    style: const TextStyle(
-                      color: Color(0xFFFF6B35),
+                    style: context.runninType.bodyMd.copyWith(
+                      color: const Color(0xFFFF6B35),
                       fontSize: 13,
                       height: 1.5,
                     ),
@@ -167,8 +166,7 @@ class _PlanLoadingPageState extends State<PlanLoadingPage>
                   'O coach AI está cruzando seu perfil, objetivo, '
                   'condições e horários pra montar um plano único '
                   'pra você — não é um template.',
-                  style: TextStyle(
-                    fontSize: 14,
+                  style: context.runninType.bodyMd.copyWith(
                     color: Colors.white.withValues(alpha: 0.78),
                     height: 1.55,
                   ),
@@ -178,8 +176,7 @@ class _PlanLoadingPageState extends State<PlanLoadingPage>
                 const SizedBox(height: 14),
                 Text(
                   'Você pode ir pra HOME — quando o plano ficar pronto, aparece automaticamente em TREINO.',
-                  style: TextStyle(
-                    fontSize: 12,
+                  style: context.runninType.bodySm.copyWith(
                     color: Colors.white.withValues(alpha: 0.55),
                     height: 1.5,
                   ),
@@ -206,9 +203,9 @@ class _PlanLoadingPageState extends State<PlanLoadingPage>
                       borderRadius: BorderRadius.zero,
                     ),
                   ),
-                  child: const Text(
+                  child: Text(
                     'IR PRA HOME AGORA',
-                    style: TextStyle(
+                    style: context.runninType.labelCaps.copyWith(
                       color: FigmaColors.brandCyan,
                       fontSize: 11,
                       letterSpacing: 0.8,
@@ -307,8 +304,7 @@ class _StepRow extends StatelessWidget {
         const SizedBox(width: 10),
         Text(
           label,
-          style: GoogleFonts.jetBrainsMono(
-            fontSize: 12,
+          style: context.runninType.bodySm.copyWith(
             color: color,
             fontWeight: done || active ? FontWeight.w500 : FontWeight.w400,
             letterSpacing: 0.4,
@@ -337,9 +333,8 @@ class _ClockCountdown extends StatelessWidget {
             child: Center(
               child: Text(
                 '$remaining',
-                style: GoogleFonts.jetBrainsMono(
+                style: context.runninType.displayLg.copyWith(
                   fontSize: 56,
-                  fontWeight: FontWeight.w500,
                   color: Colors.white,
                   letterSpacing: -1.4,
                   height: 1.0,

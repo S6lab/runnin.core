@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:runnin/core/network/api_client.dart';
 import 'package:runnin/core/theme/app_palette.dart';
+import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/features/run/data/datasources/run_remote_datasource.dart';
 import 'package:runnin/features/run/domain/entities/run.dart';
 
@@ -20,6 +21,7 @@ class _ReportPageState extends State<ReportPage> {
   String? _summary;
   bool _loadingRun = true;
   bool _loadingReport = true;
+  String? _reportError;
   Timer? _pollTimer;
 
   @override
@@ -40,10 +42,20 @@ class _ReportPageState extends State<ReportPage> {
 
   Future<void> _pollReport() async {
     int attempts = 0;
+    // 30 × 3s = 90s. Era 30s antes, mas Gemini regularmente leva 40-60s pro
+    // post-run report — usuário via "Relatório não disponível" mesmo com
+    // server tendo gerado com sucesso 30s depois do polling parar.
+    const maxAttempts = 30;
     _pollTimer = Timer.periodic(const Duration(seconds: 3), (timer) async {
-      if (attempts++ > 10) {
+      if (attempts++ > maxAttempts) {
         timer.cancel();
-        if (mounted) setState(() => _loadingReport = false);
+        if (mounted) {
+          setState(() {
+            _loadingReport = false;
+            _reportError =
+                'Relatório demorando mais que o normal. Volta em alguns minutos no histórico.';
+          });
+        }
         return;
       }
       try {
@@ -51,9 +63,19 @@ class _ReportPageState extends State<ReportPage> {
         final data = res.data as Map<String, dynamic>;
         if (data['status'] == 'ready') {
           timer.cancel();
-          if (mounted) setState(() { _summary = data['summary'] as String?; _loadingReport = false; });
+          if (mounted) {
+            setState(() {
+              _summary = data['summary'] as String?;
+              _loadingReport = false;
+              _reportError = null;
+            });
+          }
         }
-      } catch (_) {}
+      } catch (e) {
+        // Antes: catch (_) {} silencioso. Agora guarda último erro pra
+        // mostrar caso polling termine sem sucesso.
+        if (mounted) _reportError = 'Erro buscando relatório: $e';
+      }
     });
   }
 
@@ -117,12 +139,12 @@ class _ReportPageState extends State<ReportPage> {
                         ),
                         const SizedBox(width: 10),
                         Text(
-                          'Analisando sua corrida...',
+                          'Analisando sua corrida... (até 60s)',
                           style: context.runninType.bodySm,
                         ),
                       ])
                     : Text(
-                        _summary ?? 'Relatório não disponível.',
+                        _summary ?? _reportError ?? 'Relatório não disponível.',
                         style: context.runninType.bodyMd.copyWith(height: 1.6),
                       ),
                 ],
@@ -241,7 +263,7 @@ class _XpBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final palette = context.runninPalette;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.md),
       decoration: BoxDecoration(
         color: palette.primary.withValues(alpha: 0.1),
         border: Border.all(color: palette.primary.withValues(alpha: 0.3)),

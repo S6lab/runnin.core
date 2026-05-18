@@ -73,17 +73,36 @@ class _PrepViewState extends State<_PrepView> {
     'motivation': true,
   };
 
+  /// Items do checklist marcados (índice). Gate do step 2 fica liberado
+  /// só quando todos os items estão marcados. Reseta sempre que o
+  /// conjunto de items muda (troca de tipo de corrida).
+  final Set<int> _checkedItems = {};
+  int? _checkedItemsLen;
+
   static const _alertLabels = {
-    'kmAlert': 'Alerta a cada km',
-    'paceOutOfRange': 'Pace fora do range',
-    'highBpm': 'BPM elevado',
-    'kmSplits': 'Splits por km',
-    'motivation': 'Motivação',
+    'kmAlert': 'ALERTA A CADA KM',
+    'paceOutOfRange': 'PACE FORA DO RANGE',
+    'highBpm': 'BPM ELEVADO',
+    'kmSplits': 'SPLITS POR KM',
+    'motivation': 'MOTIVAÇÃO',
+  };
+
+  static const _alertDescriptions = {
+    'kmAlert': 'Coach comenta pace e distância',
+    'paceOutOfRange': 'Avisa se sair do alvo',
+    'highBpm': 'Alerta se BPM entrar zona 5',
+    'kmSplits': 'Mostra split detalhado',
+    'motivation': 'Mensagens de motivação durante a corrida',
   };
 
   @override
   void initState() {
     super.initState();
+    // Gate: se user nunca viu o briefing inicial do coach, redireciona
+    // pro /coach-intro antes de mostrar prep. Cobre TODOS os caminhos
+    // de entrada (home button, nav bar, deep link) — antes só 1 callsite
+    // checava `coachIntroSeen` e os outros pulavam o briefing.
+    _redirectToCoachIntroIfFirstTime();
     _resolvePremiumThenLoadCue();
     _loadTodaySessionFromPlan();
     _loadExercises();
@@ -138,11 +157,14 @@ class _PrepViewState extends State<_PrepView> {
         if (mounted) setState(() => _gpsStatus = _GpsStatus.denied);
         return;
       }
-      // Web usa medium + timeLimit pra resolver via WiFi rapido.
+      // Web usa medium + timeLimit pra resolver via WiFi.
+      // Alinhado em 20s pro run_bloc (antes 8s) — WiFi triangulation em
+      // primeira chamada às vezes leva 10-15s e o cancelamento aqui
+      // estava deixando o chip eternamente "PROCURANDO" no prep.
       final settings = kIsWeb
           ? const LocationSettings(
               accuracy: LocationAccuracy.medium,
-              timeLimit: Duration(seconds: 8),
+              timeLimit: Duration(seconds: 20),
             )
           : const LocationSettings(accuracy: LocationAccuracy.high);
       try {
@@ -191,6 +213,27 @@ class _PrepViewState extends State<_PrepView> {
         _loadExercises();
       }
     } catch (_) {/* Sem plano OU erro de network — segue free run */}
+  }
+
+  /// Se profile.coachIntroSeen != true, manda o user pro briefing inicial
+  /// e SAI desse prep (redirect imediato). Best-effort: se fetch falhar
+  /// (offline, etc), segue sem redirect — user pode acessar o briefing
+  /// depois pelo menu de PERFIL.
+  Future<void> _redirectToCoachIntroIfFirstTime() async {
+    try {
+      final profile = await _userRemote.getMe().timeout(
+            const Duration(seconds: 2),
+            onTimeout: () => null,
+          );
+      if (!mounted) return;
+      final seen = profile?.coachIntroSeen ?? false;
+      if (!seen) {
+        // Pequena espera pra evitar race com transitions do GoRouter.
+        await Future.delayed(const Duration(milliseconds: 50));
+        if (!mounted) return;
+        context.go('/coach-intro');
+      }
+    } catch (_) {/* segue sem redirect */}
   }
 
   Future<void> _resolvePremiumThenLoadCue() async {
@@ -349,12 +392,13 @@ class _PrepViewState extends State<_PrepView> {
   // Coach card REMOVIDO daqui — coach só fala na tela 4 (corrida ativa)
   // via saudação disparada no INICIAR. Evita áudio inesperado no prep.
   Widget _buildConfigStep(BuildContext context, RunninTypography type) {
+    final palette = context.runninPalette;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
-            const SectionHeading(label: '> GPS'),
+            Text('GPS', style: type.displaySm),
             const SizedBox(width: 10),
             _GpsStatusChip(
               status: _gpsStatus,
@@ -362,33 +406,55 @@ class _PrepViewState extends State<_PrepView> {
             ),
           ],
         ),
-        const SizedBox(height: 24),
-        const SectionHeading(label: '> ALERTAS PRÉ-CORRIDA'),
-        const SizedBox(height: 8),
+        const SizedBox(height: 32),
+        Text('ALERTAS', style: type.displaySm),
+        const SizedBox(height: 14),
         ..._alerts.entries.map(
           (e) => _AlertToggleRow(
             label: _alertLabels[e.key] ?? e.key,
+            description: _alertDescriptions[e.key],
             value: e.value,
             onChanged: (v) => _toggleAlert(e.key, v),
           ),
         ),
-        const SizedBox(height: 24),
-        const SectionHeading(label: '> MÚSICA'),
-        const SizedBox(height: 12),
-        Row(
-          children: _MusicProvider.values.map((p) {
-            return Expanded(
-              child: Padding(
-                padding: EdgeInsets.only(
-                  right: p != _MusicProvider.values.last ? 8 : 0,
-                ),
-                child: _MusicProviderButton(
-                  provider: p,
-                  onTap: () => _openMusicApp(p),
-                ),
+        const SizedBox(height: 32),
+        Text('MÚSICA', style: type.displaySm),
+        const SizedBox(height: 14),
+        // Intro card explicativo — coach abaixa o volume automaticamente.
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: palette.surface,
+            border: Border.all(color: palette.border),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Abra seu app de música', style: type.labelMd),
+              const SizedBox(height: 6),
+              Text(
+                'O Coach fala por cima — volume abaixa automaticamente.',
+                style: type.bodySm.copyWith(color: palette.muted),
               ),
-            );
-          }).toList(),
+              const SizedBox(height: 14),
+              Row(
+                children: _MusicProvider.values.map((p) {
+                  return Expanded(
+                    child: Padding(
+                      padding: EdgeInsets.only(
+                        right: p != _MusicProvider.values.last ? 8 : 0,
+                      ),
+                      child: _MusicProviderButton(
+                        provider: p,
+                        onTap: () => _openMusicApp(p),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ],
+          ),
         ),
       ],
     );
@@ -396,54 +462,52 @@ class _PrepViewState extends State<_PrepView> {
 
   // ─── Step 2: Tipo de corrida ────────────────────────────────────
   Widget _buildTypeStep(BuildContext context, RunninTypography type) {
+    final session = _planTodaySession;
+    final hasPlanned = session != null && _isPro == true;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SectionHeading(label: '> COMO VOCÊ VAI CORRER HOJE'),
-        const SizedBox(height: 12),
-        if (_planTodaySession != null && _isPro == true) ...[
-          _RunModeCard(
-            icon: Icons.assignment_outlined,
-            title: _planTodaySession!.type.toUpperCase(),
-            subtitle:
-                'SESSÃO DO PLANO DE HOJE · ${_planTodaySession!.distanceKm.toStringAsFixed(1)}km'
-                '${_planTodaySession!.targetPace != null ? " · ${_planTodaySession!.targetPace}/km" : ""}'
-                '${_planTodaySession!.durationMin != null ? " · ~${_planTodaySession!.durationMin!.round()}min" : ""}',
-            description: _planTodaySession!.notes.isNotEmpty
-                ? _planTodaySession!.notes
-                : 'Sessão estruturada pra seu objetivo. Coach acompanha pace alvo e BPM.',
-            selected: _selectedType == _planTodaySession!.type,
-            accent: true,
-            onTap: () => _selectType(_planTodaySession!.type),
+        // Header mono cyan estilo "// INICIAR CORRIDA" (sem >).
+        Text(
+          '// INICIAR CORRIDA',
+          style: type.bodyMd.copyWith(
+            color: FigmaColors.brandCyan,
+            fontWeight: FontWeight.w500,
+            letterSpacing: 1.5,
           ),
-          const SizedBox(height: 10),
-          _RunModeCard(
-            icon: Icons.directions_run_outlined,
-            title: 'FREE RUN',
-            subtitle: 'Corrida livre, sem meta',
+        ),
+        const SizedBox(height: 24),
+        if (hasPlanned) ...[
+          _PlanSessionHeroCard(
+            session: session,
+            selected: _selectedType == session.type,
+            onTap: () => _selectType(session.type),
+          ),
+          const SizedBox(height: 12),
+          // Free Run continua disponível, mas como opção secundária menor.
+          // Pill "Integrado ao relatório semanal" mora DENTRO desse card
+          // pra deixar claro que mesmo Free Run alimenta o report semanal.
+          _SecondaryModeCard(
+            label: 'CORRIDA LIVRE',
             description:
-                'Sai sem protocolo. O coach observa o que você faz e ajusta a próxima sessão do plano com base nesses dados.',
+                'Sai sem protocolo. Coach observa e ajusta a próxima sessão do plano.',
             selected: _selectedType == 'Free Run',
-            accent: false,
+            footerLabel: 'Integrado ao relatório semanal',
             onTap: () => _selectType('Free Run'),
           ),
         ] else
-          _RunModeCard(
-            icon: Icons.directions_run_outlined,
-            title: 'FREE RUN',
-            subtitle: 'Corrida livre, sem meta',
-            description: _isPro == true
-                ? 'Não há sessão planejada pra hoje. Free run registra a corrida e ajusta o plano.'
-                : 'Versão grátis. Plano AI personalizado é premium — assine pra ter sessões estruturadas.',
+          _PlanSessionHeroCard(
+            session: null,
+            isFreeOnly: true,
+            isPro: _isPro == true,
             selected: true,
-            accent: false,
             onTap: () => _selectType('Free Run'),
           ),
       ],
     );
   }
 
-  // ─── Step 2: Checklist da sessão (mesmo padrão DayDetail) ───────
+  // ─── Step 2: Checklist da sessão ────────────────────────────────
   Widget _buildChecklistStep(BuildContext context, RunninTypography type) {
     final palette = context.runninPalette;
     final isPlanned = _planTodaySession != null &&
@@ -451,61 +515,73 @@ class _PrepViewState extends State<_PrepView> {
     final session = isPlanned ? _planTodaySession : null;
 
     final items = _buildChecklistItems(session);
+    // Reseta marcações se mudou o tamanho do checklist (troca de tipo).
+    // Sem isso, marcar item 3 num checklist de 5 e trocar pro de 7 deixa
+    // item 3 "marcado" no novo conjunto que pode ser outro item.
+    if (_checkedItemsLen != items.length) {
+      _checkedItems.clear();
+      _checkedItemsLen = items.length;
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SectionHeading(label: '> CHECKLIST DA SESSÃO'),
-        const SizedBox(height: 12),
-        Text(
-          isPlanned
-              ? 'Sessão planejada: ${session!.type} · ${session.distanceKm.toStringAsFixed(1)}km'
-              : 'Free Run · roteiro genérico de preparo',
-          style: TextStyle(
-            color: palette.muted,
-            fontSize: 12,
-            height: 1.4,
-          ),
+        Text('CHECKLIST DA SESSÃO', style: type.displaySm),
+        const SizedBox(height: 14),
+        // Coach card de contexto: o que/quanto/por quê dessa sessão.
+        _CoachAccentCard(
+          topic: 'PREPARO',
+          body: isPlanned
+              ? '${session!.type} · ${session.distanceKm.toStringAsFixed(session.distanceKm % 1 == 0 ? 0 : 1)}km. '
+                  'Revise os itens abaixo antes de sair — economia de fôlego no quilômetro 1.'
+              : 'Corrida livre. Faça uma revisão rápida — hidratação, calçado e telefone carregado evitam dor de cabeça no meio do trajeto.',
+          accent: FigmaColors.brandCyan,
         ),
         const SizedBox(height: 14),
-        Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: palette.surface,
-            border: Border.all(color: palette.border, width: 1.0),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              for (var i = 0; i < items.length; i++)
-                Padding(
-                  padding: EdgeInsets.only(top: i == 0 ? 0 : 8),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.only(top: 6, right: 10),
-                        child: Container(
-                          width: 4,
-                          height: 4,
-                          color: palette.primary,
-                        ),
-                      ),
-                      Expanded(
-                        child: Text(
-                          items[i],
-                          style: TextStyle(
-                            color: palette.text.withValues(alpha: 0.92),
-                            fontSize: 13,
-                            height: 1.5,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
+        // Tiles checkáveis. Gate do CONTINUAR depende de todos marcados.
+        for (var i = 0; i < items.length; i++) ...[
+          if (i > 0) const SizedBox(height: 8),
+          InkWell(
+            onTap: () => setState(() {
+              if (_checkedItems.contains(i)) {
+                _checkedItems.remove(i);
+              } else {
+                _checkedItems.add(i);
+              }
+            }),
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(14, 12, 16, 12),
+              decoration: BoxDecoration(
+                color: palette.surface,
+                border: Border.all(
+                  color: _checkedItems.contains(i) ? palette.primary : palette.border,
                 ),
-            ],
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2, right: 10),
+                    child: Icon(
+                      _checkedItems.contains(i)
+                          ? Icons.check_box_outlined
+                          : Icons.check_box_outline_blank,
+                      size: 18,
+                      color: _checkedItems.contains(i) ? palette.primary : palette.muted,
+                    ),
+                  ),
+                  Expanded(
+                    child: Text(
+                      items[i],
+                      style: type.bodySm.copyWith(
+                        color: _checkedItems.contains(i) ? palette.text : palette.muted,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
-        ),
+        ],
       ],
     );
   }
@@ -549,32 +625,118 @@ class _PrepViewState extends State<_PrepView> {
 
   // ─── Step 3: Aquecimento ────────────────────────────────────────
   Widget _buildWarmupStep(BuildContext context, RunninTypography type) {
+    final palette = context.runninPalette;
+    final session = _planTodaySession;
+    final hasPlanned = session != null;
+
+    // Briefing dinâmico: usa notes da sessão se houver, senão monta linha
+    // genérica com tipo + km + pace.
+    final briefingText = !hasPlanned
+        ? 'Corrida livre. Sem distância pré-definida — coach observa e adapta a próxima sessão do plano com base nesses dados.'
+        : (session.notes.trim().isNotEmpty
+            ? session.notes.trim()
+            : '${session.type} hoje — '
+                '${session.distanceKm.toStringAsFixed(session.distanceKm % 1 == 0 ? 0 : 1)}km'
+                '${session.targetPace != null ? ", pace alvo ${session.targetPace}/km" : ""}. '
+                'Foco em consistência.');
+
+    final tipText = !hasPlanned
+        ? 'Faça 5min de trote leve antes de começar — articulações soltas + frequência cardíaca elevada gradualmente reduzem chance de lesão e melhoram o desempenho.'
+        : 'Pra sessões de ${session.type.toLowerCase()}, foque em tornozelos, quadril e panturrilha. Em dias de intervalados, adicione Skip A e leg swings pra ativar fibras rápidas.';
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SectionHeading(label: '> AQUECIMENTO'),
-        const SizedBox(height: 12),
+        Text('BRIEFING', style: type.displaySm),
+        const SizedBox(height: 14),
+        _CoachAccentCard(
+          topic: 'BRIEFING',
+          body: briefingText,
+          accent: FigmaColors.brandOrange,
+        ),
+        const SizedBox(height: 32),
+        Text(
+          'AQUECIMENTO & MOBILIDADE',
+          style: type.displaySm,
+        ),
+        const SizedBox(height: 14),
+        _CoachAccentCard(
+          topic: 'MOBILIDADE PRÉ-CORRIDA',
+          body:
+              'Prepare articulações e ative cadeias musculares antes de correr. 5-8 minutos reduzem risco de lesão e melhoram economia de corrida.',
+          accent: FigmaColors.brandCyan,
+        ),
+        const SizedBox(height: 14),
         if (_exercises.isEmpty)
           Padding(
-            padding: const EdgeInsets.symmetric(vertical: 24),
+            padding: const EdgeInsets.symmetric(vertical: 16),
             child: Text(
-              'Sem exercícios específicos pra esse tipo. Faça 5min de trote leve + mobilidade básica de quadril/tornozelo antes de começar.',
-              style: TextStyle(
-                color: context.runninPalette.muted,
-                fontSize: 13,
-                height: 1.5,
-              ),
+              'Sem exercícios específicos pra esse tipo. Faça 5min de trote leve + mobilidade básica de quadril/tornozelo.',
+              style: type.bodySm.copyWith(color: palette.muted),
             ),
           )
         else
           ..._exercises.map((ex) => _WarmupExerciseTile(exercise: ex)),
+        const SizedBox(height: 8),
+        _CoachAccentCard(
+          topic: 'DICA',
+          body: tipText,
+          accent: FigmaColors.brandOrange,
+        ),
       ],
     );
+  }
+
+  /// Navega pra /run passando type + planSessionId quando for sessão
+  /// do plano. Se a sessão já foi executada antes (executedRunId !=
+  /// null), avisa o user que a nova run vai sobrescrever a anterior.
+  Future<void> _continueToRun(BuildContext context) async {
+    final isPlannedSession = _planTodaySession != null &&
+        _selectedType == _planTodaySession!.type;
+    final session = isPlannedSession ? _planTodaySession : null;
+
+    if (session != null && session.isExecuted) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('SOBRESCREVER CORRIDA ANTERIOR?'),
+          content: Text(
+            'Você já completou a sessão "${session.type} · ${session.distanceKm.toStringAsFixed(session.distanceKm % 1 == 0 ? 0 : 1)}km" do plano hoje. '
+            'Iniciar de novo vai SOBRESCREVER o registro anterior dessa sessão.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('CANCELAR'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('SOBRESCREVER'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !context.mounted) return;
+    }
+
+    final extra = session != null
+        ? <String, dynamic>{
+            'type': _selectedType,
+            'planSessionId': session.id,
+          }
+        : _selectedType as Object;
+    if (!context.mounted) return;
+    context.push('/run', extra: extra);
   }
 
   // ─── Bottom navigation ──────────────────────────────────────────
   Widget _buildStepNav(BuildContext context, RunninPalette palette) {
     final isLast = _step == 3;
+    // Gate do step 1 (CHECKLIST): só libera CONTINUAR quando todos os
+    // items estão marcados. Item explícito do produto pra forçar revisão.
+    final checklistBlocked = _step == 1 &&
+        _checkedItemsLen != null &&
+        _checkedItems.length < _checkedItemsLen!;
     return Row(
       children: [
         if (_step > 0) ...[
@@ -589,7 +751,7 @@ class _PrepViewState extends State<_PrepView> {
                     borderRadius: BorderRadius.zero,
                   ),
                 ),
-                child: Text('VOLTAR', style: TextStyle(color: palette.muted)),
+                child: Text('VOLTAR', style: context.runninType.bodyMd.copyWith(color: palette.muted)),
               ),
             ),
           ),
@@ -600,12 +762,14 @@ class _PrepViewState extends State<_PrepView> {
           child: SizedBox(
             height: 52,
             child: ElevatedButton(
-              onPressed: isLast
-                  // Última tela do wizard → vai pra /run em modo IDLE.
-                  // INICIAR de verdade acontece na /run (vide ActiveRunPage)
-                  // pra dar tempo do user revisar tudo antes do timer rodar.
-                  ? () => context.push('/run', extra: _selectedType)
-                  : () => setState(() => _step++),
+              onPressed: checklistBlocked
+                  ? null
+                  : (isLast
+                      // Última tela do wizard → vai pra /run em modo IDLE.
+                      // INICIAR de verdade acontece na /run (vide ActiveRunPage)
+                      // pra dar tempo do user revisar tudo antes do timer rodar.
+                      ? () => _continueToRun(context)
+                      : () => setState(() => _step++)),
               child: Text(isLast ? 'CONTINUAR' : 'CONTINUAR'),
             ),
           ),
@@ -651,8 +815,7 @@ class _GpsStatusChip extends StatelessWidget {
             const SizedBox(width: 6),
             Text(
               label,
-              style: TextStyle(
-                fontSize: 10,
+              style: context.runninType.labelCaps.copyWith(
                 fontWeight: FontWeight.w500,
                 color: color,
                 letterSpacing: 1.0,
@@ -832,7 +995,6 @@ class _WarmupExerciseTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final palette = context.runninPalette;
     final type = context.runninType;
-
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Container(
@@ -842,40 +1004,44 @@ class _WarmupExerciseTile extends StatelessWidget {
           border: Border.all(color: palette.border),
         ),
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(exercise.icon, color: palette.primary, size: 22),
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Icon(exercise.icon, color: palette.primary, size: 20),
+            ),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    exercise.title,
-                    style: type.bodySm.copyWith(fontWeight: FontWeight.w500),
+                  // Linha 1: título à esquerda, reps mono cyan à direita.
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          exercise.title.toUpperCase(),
+                          style: type.labelCaps.copyWith(
+                            color: palette.text,
+                            fontSize: 12,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Text(
+                        exercise.reps,
+                        style: type.labelCaps.copyWith(color: palette.primary),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 2),
+                  const SizedBox(height: 4),
                   Text(
                     exercise.description,
-                    style: type.bodySm.copyWith(
-                      color: palette.muted,
-                      fontSize: 11,
-                    ),
+                    style: type.labelCaps.copyWith(color: palette.muted),
                   ),
                 ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: palette.primary.withValues(alpha: 0.12),
-              ),
-              child: Text(
-                exercise.reps,
-                style: type.labelCaps.copyWith(
-                  color: palette.primary,
-                  fontSize: 10,
-                ),
               ),
             ),
           ],
@@ -885,10 +1051,60 @@ class _WarmupExerciseTile extends StatelessWidget {
   }
 }
 
+/// Card de contexto do coach (BRIEFING / MOBILIDADE / DICA). Borda
+/// esquerda colorida + "COACH.AI > TOPIC" header em mono + corpo em
+/// aspas. Cor configurável (cyan, orange, vermelho/orange forte).
+class _CoachAccentCard extends StatelessWidget {
+  final String topic;
+  final String body;
+  final Color accent;
+  const _CoachAccentCard({
+    required this.topic,
+    required this.body,
+    required this.accent,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    final type = context.runninType;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+      decoration: BoxDecoration(
+        color: palette.surface,
+        border: Border(
+          left: BorderSide(color: accent, width: 2.5),
+          top: BorderSide(color: palette.border),
+          right: BorderSide(color: palette.border),
+          bottom: BorderSide(color: palette.border),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'COACH.AI > $topic',
+            style: type.labelMd.copyWith(color: accent),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            '"$body"',
+            style: type.bodySm.copyWith(
+              color: palette.text.withValues(alpha: 0.78),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 // --- Alert Toggle Row ---
 
 class _AlertToggleRow extends StatelessWidget {
   final String label;
+  final String? description;
   final bool value;
   final ValueChanged<bool> onChanged;
 
@@ -896,6 +1112,7 @@ class _AlertToggleRow extends StatelessWidget {
     required this.label,
     required this.value,
     required this.onChanged,
+    this.description,
   });
 
   @override
@@ -904,18 +1121,45 @@ class _AlertToggleRow extends StatelessWidget {
     final type = context.runninType;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(label, style: type.bodySm),
-          ),
-          Switch.adaptive(
-            value: value,
-            onChanged: onChanged,
-            activeTrackColor: palette.primary,
-          ),
-        ],
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
+        decoration: BoxDecoration(
+          color: palette.surface,
+          border: Border.all(color: palette.border),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: type.labelCaps.copyWith(
+                      color: palette.text,
+                      fontSize: 12,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                  if (description != null && description!.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      description!,
+                      style: type.labelCaps.copyWith(color: palette.muted),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Switch.adaptive(
+              value: value,
+              onChanged: onChanged,
+              activeTrackColor: palette.primary,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1095,6 +1339,279 @@ class _RunModeCard extends StatelessWidget {
               size: 20,
               color: selected ? palette.primary : palette.muted,
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Card hero da sessão planejada — destaca tipo, distância, pace alvo
+/// e indica que coach vai guiar a sessão. Tag "RECOMENDADO" no canto.
+/// Fallback pra Free Run quando não há plano (mostra como única opção).
+class _PlanSessionHeroCard extends StatelessWidget {
+  final PlanSession? session;
+  final bool selected;
+  final VoidCallback onTap;
+  final bool isFreeOnly;
+  final bool isPro;
+  const _PlanSessionHeroCard({
+    required this.session,
+    required this.selected,
+    required this.onTap,
+    this.isFreeOnly = false,
+    this.isPro = false,
+  });
+
+  String _fmtKm(double km) =>
+      km % 1 == 0 ? '${km.toInt()}K' : '${km.toStringAsFixed(1)}K';
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    final type = context.runninType;
+    final label = isFreeOnly ? 'FREE RUN' : 'SESSÃO DO PLANO';
+    final title = isFreeOnly
+        ? 'Corrida livre'
+        : (session?.type ?? '').replaceAll('_', ' ');
+    final dist = session?.distanceKm;
+    final pace = session?.targetPace;
+    final desc = isFreeOnly
+        ? (isPro
+            ? 'Sem sessão planejada hoje. Coach observa o que você faz.'
+            : 'Versão grátis. Plano AI personalizado é premium ↗')
+        : 'Coach IA irá te guiar durante toda a sessão ↗';
+    final borderColor = selected
+        ? FigmaColors.brandCyan
+        : FigmaColors.brandCyan.withValues(alpha: 0.4);
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: selected
+              ? FigmaColors.brandCyan.withValues(alpha: 0.06)
+              : palette.surface,
+          border: Border.all(color: borderColor, width: selected ? 2 : 1.5),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header row: label (mono cyan) + RECOMENDADO badge.
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    label,
+                    style: type.labelMd.copyWith(
+                      color: FigmaColors.brandCyan,
+                      fontWeight: FontWeight.w500,
+                      letterSpacing: 1.5,
+                    ),
+                  ),
+                ),
+                if (!isFreeOnly)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    color: FigmaColors.brandCyan,
+                    child: Text(
+                      'RECOMENDADO',
+                      style: type.labelCaps.copyWith(
+                        color: palette.background,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 1.2,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            // Título grande (sentence case) — Easy Run, Tempo Run, etc.
+            Text(
+              title,
+              style: type.displayMd.copyWith(
+                color: palette.text,
+                letterSpacing: -0.6,
+              ),
+            ),
+            if (dist != null || pace != null) ...[
+              const SizedBox(height: 20),
+              // 2-column stat grid: DIST | PACE ALV.
+              Row(
+                children: [
+                  if (dist != null)
+                    Expanded(
+                      child: _HeroStatCell(
+                        label: 'DIST',
+                        value: _fmtKm(dist),
+                      ),
+                    ),
+                  if (pace != null)
+                    Expanded(
+                      child: _HeroStatCell(
+                        label: 'PACE ALV',
+                        value: '$pace/km',
+                      ),
+                    ),
+                ],
+              ),
+            ],
+            const SizedBox(height: 18),
+            Text(
+              desc,
+              style: type.bodyMd.copyWith(
+                color: palette.text.withValues(alpha: 0.55),
+                fontSize: 13,
+                height: 1.5,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _HeroStatCell extends StatelessWidget {
+  final String label;
+  final String value;
+  const _HeroStatCell({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    final type = context.runninType;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: type.labelCaps.copyWith(
+            color: palette.text.withValues(alpha: 0.5),
+            fontSize: 11,
+            fontWeight: FontWeight.w500,
+            letterSpacing: 1.2,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          value,
+          style: type.dataXs.copyWith(
+            color: FigmaColors.brandOrange,
+            fontSize: 24,
+            letterSpacing: -0.5,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Card secundário compacto pra Free Run quando há plano (opção
+/// alternativa de-emphasized).
+class _SecondaryModeCard extends StatelessWidget {
+  final String label;
+  final String description;
+  final bool selected;
+  final VoidCallback onTap;
+  final String? footerLabel;
+  const _SecondaryModeCard({
+    required this.label,
+    required this.description,
+    required this.selected,
+    required this.onTap,
+    this.footerLabel,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    final type = context.runninType;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: selected
+              ? palette.primary.withValues(alpha: 0.08)
+              : palette.surface,
+          border: Border.all(
+            color: selected ? palette.primary : palette.border,
+            width: selected ? 1.5 : 1.0,
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        label,
+                        style: type.labelMd.copyWith(
+                          color: palette.text,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          letterSpacing: 1.2,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        description,
+                        style: type.bodySm.copyWith(
+                          color: palette.text.withValues(alpha: 0.6),
+                          height: 1.4,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Icon(
+                  selected
+                      ? Icons.radio_button_checked
+                      : Icons.radio_button_unchecked,
+                  size: 18,
+                  color: selected ? palette.primary : palette.muted,
+                ),
+              ],
+            ),
+            if (footerLabel != null) ...[
+              const SizedBox(height: 12),
+              // Pill compacto laranja — sinaliza que mesmo Free Run
+              // alimenta o relatório semanal pro coach ajustar a próxima.
+              Row(
+                children: [
+                  Container(
+                    width: 8,
+                    height: 8,
+                    color: FigmaColors.brandOrange,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      footerLabel!,
+                      style: type.labelCaps.copyWith(
+                        color: FigmaColors.brandOrange,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                        letterSpacing: 0.4,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ],
         ),
       ),

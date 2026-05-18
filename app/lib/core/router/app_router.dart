@@ -183,14 +183,26 @@ final appRouter = GoRouter(
         GoRoute(path: '/prep', builder: (_, _) => const PrepPage()),
         GoRoute(
           path: '/run',
-          // extra agora é o TIPO da corrida (ex: "Free Run") selecionado
-          // no /prep. ActiveRunPage entra em modo IDLE — só dispara
-          // StartRun quando user pressionar INICIAR.
-          builder: (_, state) => ActiveRunPage(
-            initialType: (state.extra as String?)?.isNotEmpty == true
-                ? state.extra as String
-                : 'Free Run',
-          ),
+          // extra pode ser String (tipo da corrida) ou Map com
+          // {type, planSessionId} quando vier de TREINO (sessão do plano).
+          // Map mantém backwards-compat com callers antigos que passam só
+          // o tipo. ActiveRunPage entra em modo IDLE — só dispara StartRun
+          // quando user pressionar INICIAR.
+          builder: (_, state) {
+            final extra = state.extra;
+            String type = 'Free Run';
+            String? planSessionId;
+            if (extra is String && extra.isNotEmpty) {
+              type = extra;
+            } else if (extra is Map<String, dynamic>) {
+              type = (extra['type'] as String?) ?? 'Free Run';
+              planSessionId = extra['planSessionId'] as String?;
+            }
+            return ActiveRunPage(
+              initialType: type,
+              planSessionId: planSessionId,
+            );
+          },
         ),
         GoRoute(
           path: '/report',

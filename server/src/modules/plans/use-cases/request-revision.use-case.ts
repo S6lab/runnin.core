@@ -135,6 +135,10 @@ export class RequestRevisionUseCase {
         systemPrompt: built.systemPrompt,
         maxTokens: built.maxTokens,
         temperature: built.temperature,
+        // Antes LLM cuspia texto fora do JSON ou stoppava no meio
+        // de string ("Unterminated string at position 4030"). JSON mode
+        // (responseMimeType) força saída sintaticamente válida.
+        responseJson: true,
       });
 
       const parsed = this._parseRevisionResponse(raw);

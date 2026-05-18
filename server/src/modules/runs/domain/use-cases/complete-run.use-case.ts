@@ -5,6 +5,8 @@ import { NotFoundError } from '@shared/errors/app-error';
 import { BenchmarkRepository } from '@modules/benchmark/domain/benchmark.repository';
 import { FirestoreUserRepository } from '@modules/users/infra/firestore-user.repository';
 import { GetProfileUseCase } from '@modules/users/domain/use-cases/get-profile.use-case';
+import { FirestorePlanRepository } from '@modules/plans/infra/firestore-plan.repository';
+import { logger } from '@shared/logger/logger';
 
 export const CompleteRunSchema = z.object({
   distanceM: z.number().nonnegative(),
@@ -96,6 +98,19 @@ export class CompleteRunUseCase {
 
     await this.runRepo.update(runId, userId, updates);
 
+    // Marca a sessão do plano como executada quando a run carrega um
+    // planSessionId. Permite o app destacar a sessão "feita" na agenda
+    // e avisar o user antes de re-executar (sobrescreveria).
+    if (run.planSessionId) {
+      try {
+        await this.flagPlanSessionExecuted(userId, run.planSessionId, runId);
+      } catch (err) {
+        logger.warn('plan.session.flag_executed_failed', {
+          runId, planSessionId: run.planSessionId, err: String(err),
+        });
+      }
+    }
+
     if (this.benchmarkRepo) {
       try {
         await this.triggerBenchmarkUpdate(runId, userId, updates);
@@ -105,6 +120,33 @@ export class CompleteRunUseCase {
     }
 
     return { ...run, ...updates };
+  }
+
+  /**
+   * Encontra a sessão `planSessionId` no plano atual do user e seta
+   * `executedRunId` + `executedAt`. Idempotente: re-executar uma sessão
+   * sobrescreve o ID anterior (cliente deve avisar antes de chamar).
+   */
+  private async flagPlanSessionExecuted(
+    userId: string,
+    planSessionId: string,
+    runId: string,
+  ): Promise<void> {
+    const planRepo = new FirestorePlanRepository();
+    const plan = await planRepo.findCurrent(userId);
+    if (!plan) return;
+    let touched = false;
+    const updatedWeeks = plan.weeks.map(w => ({
+      ...w,
+      sessions: w.sessions.map(s => {
+        if (s.id !== planSessionId) return s;
+        touched = true;
+        return { ...s, executedRunId: runId, executedAt: new Date().toISOString() };
+      }),
+    }));
+    if (!touched) return;
+    await planRepo.update(plan.id, userId, { weeks: updatedWeeks });
+    logger.info('plan.session.flagged_executed', { planSessionId, runId, planId: plan.id });
   }
 
   private async triggerBenchmarkUpdate(runId: string, userId: string, updates: Partial<Run>): Promise<void> {

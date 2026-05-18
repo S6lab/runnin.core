@@ -1,7 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:runnin/core/network/api_client.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
@@ -90,21 +89,18 @@ class _PaywallPageState extends State<PaywallPage> {
                   children: [
                     Text(
                       'Libere todo o coach.',
-                      style: GoogleFonts.jetBrainsMono(
+                      style: context.runninType.displayMd.copyWith(
                         fontSize: 28,
-                        fontWeight: FontWeight.w500,
                         color: palette.text,
                         letterSpacing: -0.8,
-                        height: 1.1,
                       ),
                     ),
                     const SizedBox(height: 10),
                     Text(
                       'Sem premium você corre, registra e compartilha. Com premium, o coach AI '
                       'cria seu plano, te guia ao vivo e usa seus exames + wearable.',
-                      style: GoogleFonts.jetBrainsMono(
+                      style: context.runninType.bodyMd.copyWith(
                         fontSize: 13,
-                        fontWeight: FontWeight.w400,
                         color: palette.muted,
                         height: 1.55,
                       ),
@@ -118,14 +114,13 @@ class _PaywallPageState extends State<PaywallPage> {
                     ),
                     if (_error != null) ...[
                       const SizedBox(height: 12),
-                      Text(_error!, style: TextStyle(color: palette.error, fontSize: 12)),
+                      Text(_error!, style: context.runninType.bodySm.copyWith(color: palette.error)),
                     ],
                     const SizedBox(height: 28),
                     Text(
                       'COMPARAÇÃO',
-                      style: GoogleFonts.jetBrainsMono(
-                        fontSize: 11, fontWeight: FontWeight.w500,
-                        color: palette.muted, letterSpacing: 1.0,
+                      style: context.runninType.labelCaps.copyWith(
+                        fontSize: 11, color: palette.muted, letterSpacing: 1.0,
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -148,8 +143,7 @@ class _PaywallPageState extends State<PaywallPage> {
                       ),
                       child: Text(
                         'CONTINUAR GRÁTIS',
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: 12,
+                        style: context.runninType.labelMd.copyWith(
                           fontWeight: FontWeight.w500,
                           color: palette.text,
                           letterSpacing: 1.2,
@@ -187,8 +181,8 @@ class _PricingCard extends StatelessWidget {
             children: [
               Container(width: 8, height: 8, decoration: BoxDecoration(color: context.runninPalette.primary, shape: BoxShape.circle)),
               const SizedBox(width: 8),
-              Text('PREMIUM', style: GoogleFonts.jetBrainsMono(
-                fontSize: 11, fontWeight: FontWeight.w500, color: palette.primary, letterSpacing: 1.4,
+              Text('PREMIUM', style: context.runninType.labelCaps.copyWith(
+                fontSize: 11, color: palette.primary, letterSpacing: 1.4,
               )),
             ],
           ),
@@ -196,13 +190,13 @@ class _PricingCard extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Text(price, style: GoogleFonts.jetBrainsMono(
-                fontSize: 36, fontWeight: FontWeight.w500, color: palette.text, letterSpacing: -1.0, height: 1.0,
+              Text(price, style: context.runninType.dataXl.copyWith(
+                fontSize: 36, color: palette.text,
               )),
               const SizedBox(width: 6),
               Padding(
                 padding: const EdgeInsets.only(bottom: 6),
-                child: Text(period, style: GoogleFonts.jetBrainsMono(
+                child: Text(period, style: context.runninType.bodyMd.copyWith(
                   fontSize: 13, fontWeight: FontWeight.w600, color: palette.muted,
                 )),
               ),
@@ -222,7 +216,7 @@ class _PricingCard extends StatelessWidget {
                     )
                   : Text(
                       'ASSINAR ↗',
-                      style: GoogleFonts.jetBrainsMono(
+                      style: context.runninType.labelMd.copyWith(
                         fontSize: 13, fontWeight: FontWeight.w500, color: Colors.black, letterSpacing: 1.4,
                       ),
                     ),
@@ -248,8 +242,8 @@ class _ComparisonRow extends StatelessWidget {
       child: Row(
         children: [
           Expanded(
-            child: Text(label, style: GoogleFonts.jetBrainsMono(
-              fontSize: 12, fontWeight: FontWeight.w500, color: palette.text,
+            child: Text(label, style: context.runninType.labelMd.copyWith(
+              fontWeight: FontWeight.w500, color: palette.text,
             )),
           ),
           SizedBox(width: 60, child: Center(child: _Mark(active: free))),

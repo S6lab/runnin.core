@@ -84,6 +84,13 @@ export class GeneratePlanUseCase {
     // user perde a percepção de "plano feito pra mim".
     const profile = await container.repos.users.findById(userId);
     if (!profile?.onboarded) {
+      // Log explícito pra debug: antes só víamos "422" sem saber se era
+      // user inexistente, profile sem flag, ou outro motivo.
+      logger.warn('plan.generate.onboarding_required', {
+        userId,
+        hasProfile: !!profile,
+        onboarded: profile?.onboarded ?? null,
+      });
       const err = new Error('Onboarding incompleto. Termine o onboarding antes de gerar o plano.');
       (err as Error & { code?: string }).code = 'ONBOARDING_REQUIRED';
       throw err;
@@ -95,6 +102,10 @@ export class GeneratePlanUseCase {
     if (!profile.weight) missingCritical.push('peso');
     if (!profile.height) missingCritical.push('altura');
     if (missingCritical.length > 0) {
+      logger.warn('plan.generate.onboarding_incomplete', {
+        userId,
+        missing: missingCritical,
+      });
       const err = new Error(`Onboarding incompleto: faltam ${missingCritical.join(', ')}.`);
       (err as Error & { code?: string }).code = 'ONBOARDING_INCOMPLETE';
       throw err;
@@ -492,6 +503,14 @@ ${weeksDigest}`;
       logger.warn('plan.parse.initial_failed', {
         err: firstErrorMessage,
       });
+      // Sem isso, diagnosticar falhas de parse é impossível: o erro do Zod
+      // diz "field X invalid at path Y" mas a gente nunca vê o JSON real
+      // que veio do LLM. 800 chars cobre o início do array de weeks, que
+      // é onde os bugs aparecem (weekNumber missing, sessions: []).
+      logger.warn('plan.parse.raw_sample', {
+        sample: raw.slice(0, 800),
+        rawLen: raw.length,
+      });
 
       const repaired = await this.llm.generate(
         `Converta a resposta abaixo em JSON valido estritamente no formato esperado.
@@ -590,13 +609,26 @@ ${repaired}`,
       const newSessions: PlanSession[] = [];
       for (let i = 0; i < needed && i < freeDays.length; i++) {
         const dow = freeDays[i]!;
+        // Pace easy padrão por nível (estimativa segura). Sessão Easy Run
+        // é sempre conversável (zona 1-2), pace 6:00-7:30/km serve bem
+        // pra qualquer nível como base. Fallback usa 6:30.
+        const targetPace = '6:30';
+        const durationMin = Math.round(padDistanceKm * 6.5);
         const base = {
           id: uuid(),
           dayOfWeek: dow,
           type: 'Easy Run',
           distanceKm: padDistanceKm,
-          notes: `[BASE] Sessão preenchida automaticamente pra atingir frequência alvo de ${targetFreq}x/semana. Easy run conversável.`,
-        } satisfies Omit<PlanSession, 'executionSegments' | 'targetPace' | 'durationMin' | 'hydrationLiters' | 'nutritionPre' | 'nutritionPost'>;
+          targetPace,
+          durationMin,
+          hydrationLiters: 2.5,
+          nutritionPre: 'Banana + pão integral com mel 60min antes.',
+          nutritionPost: 'Whey ou ovos + 1 fruta em até 30min; refeição completa em 1h.',
+          // Nota acionável (não-placeholder). Explica o objetivo da sessão
+          // sem usar "[BASE] Sessão preenchida automaticamente" que o
+          // user reportou como sinal de plano pobre.
+          notes: `Easy Run complementar pra fechar a frequência de ${targetFreq}x/semana. Mantenha pace conversável (você consegue falar frases curtas). Foco em consistência, não em performance.`,
+        } satisfies Omit<PlanSession, 'executionSegments'>;
         const segs = buildExecutionSegments(base as PlanSession);
         newSessions.push({ ...base, executionSegments: segs } satisfies PlanSession);
         totalPadded++;
@@ -683,12 +715,15 @@ ${repaired}`,
       0,
     );
     if (totalSessions === 0) {
-      // Plano com 0 sessões no total é parse failure mascarado (LLM
-      // devolveu weeks com sessions: []). Joga pro retry/repair loop em
-      // vez de salvar plano vazio no Firestore.
-      throw new Error(
-        `Plan parsed with 0 total sessions across ${normalized.length} weeks — treating as parse failure`,
-      );
+      // Antes a gente jogava exception aqui pra forçar retry/repair, mas
+      // isso desperdiçava 2× ~25s de LLM e ainda assim falhava no padrão
+      // "LLM cuspiu N semanas com sessions: []". Os recoveries
+      // `_ensureWeeksCount` + `_padToFrequency` JÁ sabem preencher semanas
+      // vazias com Easy Run respeitando frequency-alvo. Melhor logar e
+      // seguir — o user recebe plano funcional em vez de erro.
+      logger.warn('plan.parse.zero_sessions_recovered', {
+        weeks: normalized.length,
+      });
     }
 
     return normalized;
@@ -960,7 +995,17 @@ ${repaired}`,
     const coerced = value.map((rawWeek, weekIdx) => {
       if (!rawWeek || typeof rawWeek !== 'object') return rawWeek;
       const w = rawWeek as Record<string, unknown>;
-      if (!Array.isArray(w.sessions)) return w;
+      // weekNumber undefined/null/non-number: derivar do index (1-based).
+      // Caso real capturado em prod: LLM cuspiu 3 weeks, terceira sem
+      // weekNumber, Zod rejeitava o array inteiro.
+      if (typeof w.weekNumber !== 'number' || !Number.isFinite(w.weekNumber)) {
+        w.weekNumber = weekIdx + 1;
+      }
+      // sessions undefined: tratar como vazio. Pad downstream cobre.
+      if (!Array.isArray(w.sessions)) {
+        w.sessions = [];
+        return w;
+      }
       const validSessions = w.sessions.map(s => {
         if (!s || typeof s !== 'object') return null;
         const sess = s as Record<string, unknown>;

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 
 /// 3 slides pré-login que vendem o app antes de pedir compromisso (psicologia:
@@ -95,15 +95,15 @@ class _IntroPageState extends State<IntroPage> {
                 children: [
                   Row(
                     children: [
-                      Text('RUNNIN', style: GoogleFonts.jetBrainsMono(
-                        fontSize: 14, fontWeight: FontWeight.w500, color: Colors.white, letterSpacing: 1.4,
+                      Text('RUNNIN', style: context.runninType.bodyMd.copyWith(
+                        fontWeight: FontWeight.w500, color: Colors.white, letterSpacing: 1.4,
                       )),
                       const SizedBox(width: 4),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
                         color: FigmaColors.brandCyan,
-                        child: Text('.AI', style: GoogleFonts.jetBrainsMono(
-                          color: FigmaColors.bgBase, fontSize: 9, fontWeight: FontWeight.w500,
+                        child: Text('.AI', style: context.runninType.labelCaps.copyWith(
+                          color: FigmaColors.bgBase, fontWeight: FontWeight.w500,
                         )),
                       ),
                     ],
@@ -112,7 +112,7 @@ class _IntroPageState extends State<IntroPage> {
                     onPressed: _skip,
                     child: Text(
                       'PULAR',
-                      style: GoogleFonts.jetBrainsMono(
+                      style: context.runninType.labelCaps.copyWith(
                         fontSize: 11, fontWeight: FontWeight.w500,
                         color: Colors.white.withValues(alpha: 0.6),
                         letterSpacing: 1.0,
@@ -160,7 +160,7 @@ class _IntroPageState extends State<IntroPage> {
                     alignment: Alignment.center,
                     child: Text(
                       _index == _slides.length - 1 ? 'COMEÇAR ↗' : 'PRÓXIMO ↗',
-                      style: GoogleFonts.jetBrainsMono(
+                      style: context.runninType.bodyMd.copyWith(
                         color: FigmaColors.bgBase,
                         fontSize: 13,
                         fontWeight: FontWeight.w500,
@@ -210,7 +210,7 @@ class _IntroSlideView extends StatelessWidget {
           const SizedBox(height: 32),
           Text(
             slide.eyebrow,
-            style: GoogleFonts.jetBrainsMono(
+            style: context.runninType.labelCaps.copyWith(
               fontSize: 11,
               fontWeight: FontWeight.w500,
               color: FigmaColors.brandCyan,
@@ -220,9 +220,7 @@ class _IntroSlideView extends StatelessWidget {
           const SizedBox(height: 14),
           Text(
             slide.title,
-            style: GoogleFonts.jetBrainsMono(
-              fontSize: 28,
-              fontWeight: FontWeight.w500,
+            style: context.runninType.dataMd.copyWith(
               color: Colors.white,
               letterSpacing: -0.8,
               height: 1.1,
@@ -231,9 +229,7 @@ class _IntroSlideView extends StatelessWidget {
           const SizedBox(height: 18),
           Text(
             slide.body,
-            style: GoogleFonts.jetBrainsMono(
-              fontSize: 14,
-              fontWeight: FontWeight.w400,
+            style: context.runninType.bodyMd.copyWith(
               color: Colors.white.withValues(alpha: 0.72),
               height: 1.6,
             ),

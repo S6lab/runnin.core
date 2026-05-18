@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/shared/widgets/figma/figma_top_nav.dart';
@@ -29,9 +28,7 @@ class HealthIndexPage extends StatelessWidget {
                     const SizedBox(height: AppSpacing.md),
                     Text(
                       'BPM, Zonas, Wearable, Exames',
-                      style: GoogleFonts.jetBrainsMono(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w400,
+                      style: context.runninType.bodySm.copyWith(
                         color: palette.muted,
                         height: 1.5,
                       ),
@@ -114,8 +111,7 @@ class _HealthCard extends StatelessWidget {
                 children: [
                   Text(
                     title,
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: 14,
+                    style: context.runninType.bodyMd.copyWith(
                       fontWeight: FontWeight.w500,
                       color: palette.text,
                       height: 1.4,
@@ -123,9 +119,7 @@ class _HealthCard extends StatelessWidget {
                   ),
                   Text(
                     subtitle,
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w400,
+                    style: context.runninType.bodyXs.copyWith(
                       color: palette.muted,
                       height: 1.5,
                     ),

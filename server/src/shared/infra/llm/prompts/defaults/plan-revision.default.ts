@@ -38,6 +38,10 @@ export const PLAN_REVISION_DEFAULTS = {
   ].join('\n'),
 
   temperature: 0.2,
-  maxTokens: 4000,
+  // 4000 cortava em 4030 chars; 6000 cortou em 14473 chars (capturado
+  // ao vivo). Plano de 14 semanas × 5-6 sessões com notes detalhados
+  // facilmente passa de 10k chars de JSON. 10000 tokens = ~30-40k chars
+  // de saída, folga grande pra qualquer plano.
+  maxTokens: 10000,
   ragChunks: 5,
 };

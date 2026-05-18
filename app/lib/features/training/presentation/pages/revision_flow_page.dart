@@ -131,16 +131,14 @@ class _RevisionFlowPageState extends State<RevisionFlowPage> {
       children: [
         Text(
           'O que você quer mudar?',
-          style: TextStyle(
-            fontSize: 22,
-            fontWeight: FontWeight.w500,
+          style: context.runninType.dataXs.copyWith(
             color: palette.text,
           ),
         ),
         const SizedBox(height: 6),
         Text(
           'Baseado no seu relatório semanal e dados clínicos',
-          style: TextStyle(color: palette.muted, height: 1.4),
+          style: context.runninType.bodyMd.copyWith(color: palette.muted, height: 1.4),
         ),
         const SizedBox(height: 20),
         GridView.count(
@@ -170,7 +168,7 @@ class _RevisionFlowPageState extends State<RevisionFlowPage> {
                 Expanded(
                   child: Text(
                     '1 ALTERAÇÃO SELECIONADA',
-                    style: TextStyle(
+                    style: context.runninType.labelCaps.copyWith(
                       fontSize: 11,
                       fontWeight: FontWeight.w500,
                       color: palette.primary,
@@ -212,7 +210,7 @@ class _RevisionFlowPageState extends State<RevisionFlowPage> {
       children: [
         Text(
           'SESSÃO DE AJUSTE · $typeLabel',
-          style: TextStyle(
+          style: context.runninType.labelCaps.copyWith(
             fontSize: 11,
             fontWeight: FontWeight.w500,
             letterSpacing: 0.08,
@@ -222,14 +220,14 @@ class _RevisionFlowPageState extends State<RevisionFlowPage> {
         const SizedBox(height: 4),
         Text(
           '✓ Exames integrados · Limites clínicos ativos',
-          style: TextStyle(color: palette.primary, fontSize: 12),
+          style: context.runninType.bodySm.copyWith(color: palette.primary),
         ),
         const SizedBox(height: 20),
         AppPanel(
           borderColor: palette.primary.withValues(alpha: 0.5),
           child: Text(
             'Quero: $typeLabel',
-            style: TextStyle(color: palette.text, fontWeight: FontWeight.w600),
+            style: context.runninType.bodyMd.copyWith(color: palette.text, fontWeight: FontWeight.w600),
           ),
         ),
         const SizedBox(height: 12),
@@ -240,7 +238,7 @@ class _RevisionFlowPageState extends State<RevisionFlowPage> {
             children: [
               Text(
                 'Qual ajuste específico?',
-                style: TextStyle(
+                style: context.runninType.bodyMd.copyWith(
                   color: palette.text,
                   fontWeight: FontWeight.w500,
                 ),
@@ -269,7 +267,7 @@ class _RevisionFlowPageState extends State<RevisionFlowPage> {
         const SizedBox(height: 16),
         TextButton(
           onPressed: () => setState(() => _step = _Step.choice),
-          child: Text('← Voltar', style: TextStyle(color: palette.muted)),
+          child: Text('← Voltar', style: context.runninType.bodyMd.copyWith(color: palette.muted)),
         ),
       ],
     );
@@ -283,7 +281,7 @@ class _RevisionFlowPageState extends State<RevisionFlowPage> {
           borderColor: palette.primary.withValues(alpha: 0.5),
           child: Text(
             _selectedSubOption ?? _typeLabel(_selectedType!),
-            style: TextStyle(color: palette.text, fontWeight: FontWeight.w600),
+            style: context.runninType.bodyMd.copyWith(color: palette.text, fontWeight: FontWeight.w600),
           ),
         ),
         const SizedBox(height: 12),
@@ -302,7 +300,7 @@ class _RevisionFlowPageState extends State<RevisionFlowPage> {
             variant: CoachAIBlockVariant.appGeneral,
             child: Text(
               _error!,
-              style: TextStyle(color: palette.text, height: 1.5),
+              style: context.runninType.bodyMd.copyWith(color: palette.text, height: 1.5),
             ),
           ),
           const SizedBox(height: 16),
@@ -331,7 +329,7 @@ class _RevisionFlowPageState extends State<RevisionFlowPage> {
             variant: CoachAIBlockVariant.appGeneral,
             child: Text(
               _coachExplanation!,
-              style: TextStyle(color: palette.text, height: 1.5),
+              style: context.runninType.bodyMd.copyWith(color: palette.text, height: 1.5),
             ),
           ),
           const SizedBox(height: 20),
@@ -378,9 +376,8 @@ class _RevisionFlowPageState extends State<RevisionFlowPage> {
         Center(
           child: Text(
             'Plano recalculado!',
-            style: TextStyle(
+            style: context.runninType.dataXs.copyWith(
               fontSize: 24,
-              fontWeight: FontWeight.w500,
               color: palette.text,
             ),
           ),
@@ -390,7 +387,7 @@ class _RevisionFlowPageState extends State<RevisionFlowPage> {
           child: Text(
             'As mudanças entram em vigor a partir da próxima sessão.',
             textAlign: TextAlign.center,
-            style: TextStyle(color: palette.muted, height: 1.5),
+            style: context.runninType.bodyMd.copyWith(color: palette.muted, height: 1.5),
           ),
         ),
         const SizedBox(height: 32),

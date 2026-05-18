@@ -9,6 +9,8 @@ import 'package:runnin/features/run/data/datasources/run_remote_datasource.dart'
 import 'package:runnin/features/run/data/datasources/run_coach_remote_datasource.dart';
 import 'package:runnin/features/run/data/live_coach_voice_service.dart';
 import 'package:runnin/features/run/domain/entities/run.dart';
+import 'package:runnin/features/training/data/datasources/plan_remote_datasource.dart';
+import 'package:runnin/features/training/domain/entities/plan.dart';
 
 // ── Events ──────────────────────────────────────────────────────────────────
 abstract class RunEvent {}
@@ -17,7 +19,22 @@ class StartRun extends RunEvent {
   final String type;
   final String? targetPace;
   final String? targetDistance;
-  StartRun({required this.type, this.targetPace, this.targetDistance});
+  /// Preferências de alerta do coach (do prep page).
+  /// Keys: kmAlert, paceOutOfRange, highBpm, kmSplits, motivation.
+  /// Defaults true (exceto kmSplits) caso o caller não passe — comportamento
+  /// anterior era hardcode sempre-on, então default-on mantém retro-compat.
+  final Map<String, bool>? alertPrefs;
+  /// ID da sessão do plano que essa run está executando. Quando setado,
+  /// server marca a sessão como "feita" ao completar a run. Null = corrida
+  /// livre não vinculada a sessão planejada.
+  final String? planSessionId;
+  StartRun({
+    required this.type,
+    this.targetPace,
+    this.targetDistance,
+    this.alertPrefs,
+    this.planSessionId,
+  });
 }
 
 class _GpsUpdate extends RunEvent {
@@ -36,8 +53,12 @@ class CompleteRun extends RunEvent {}
 
 class AbandonRun extends RunEvent {}
 
+class PauseRun extends RunEvent {}
+
+class ResumeRun extends RunEvent {}
+
 // ── State ────────────────────────────────────────────────────────────────────
-enum RunStatus { idle, starting, active, completing, completed, error }
+enum RunStatus { idle, starting, active, paused, completing, completed, error }
 
 class RunState {
   final RunStatus status;
@@ -126,6 +147,7 @@ class RunBloc extends Bloc<RunEvent, RunState> {
   final _userRemote = UserRemoteDatasource();
   final _liveVoice = LiveCoachVoiceService();
   final _local = RunLocalDatasource();
+  final _planRemote = PlanRemoteDatasource();
 
   StreamSubscription<Position>? _gpsSub;
   /// Web only: timer de polling pra getCurrentPosition (browser nao
@@ -136,6 +158,22 @@ class RunBloc extends Bloc<RunEvent, RunState> {
   int _pendingFlushCount = 0;
   bool _coachRequestInFlight = false;
   int _lastCoachKm = 0;
+
+  // Preferências de alerta do user (set em _onStart via StartRun.alertPrefs).
+  // Defaults conservadores: tudo on exceto kmSplits (mais ruidoso).
+  Map<String, bool> _alertPrefs = const {
+    'kmAlert': true,
+    'paceOutOfRange': true,
+    'highBpm': true,
+    'kmSplits': false,
+    'motivation': true,
+  };
+  // Cooldown por tipo: timestamp do último cue daquele tipo (ms). Sem
+  // isso, pace_alert disparava em CADA poll GPS (5s) quando user fora
+  // do range — inundava o coach. 60s entre cues iguais é razoável.
+  final Map<String, int> _lastCueAt = {};
+  Timer? _motivationTimer;
+  double? _lastKmPace; // pace médio do km anterior pra splits
 
   // Native: GPS preciso, rejeita pontos ruins.
   // Web: browser usa WiFi/IP triangulation com accuracy 100-5000m+ —
@@ -153,10 +191,38 @@ class RunBloc extends Bloc<RunEvent, RunState> {
     on<_CoachChunk>(_onCoachChunk);
     on<CompleteRun>(_onComplete);
     on<AbandonRun>(_onAbandon);
+    on<PauseRun>(_onPause);
+    on<ResumeRun>(_onResume);
     _local.init();
   }
 
   Future<void> _onStart(StartRun event, Emitter<RunState> emit) async {
+    // Consolida prefs: prioridade evento > profile > defaults. Sem isso,
+    // _alertPrefs ficava nos defaults hardcoded e ignorava o que o user
+    // selecionou no prep page. Fetch de profile é best-effort com
+    // timeout curto pra não atrasar o start.
+    if (event.alertPrefs != null) {
+      _alertPrefs = {..._alertPrefs, ...event.alertPrefs!};
+    } else {
+      try {
+        final profile = await _userRemote.getMe().timeout(
+              const Duration(seconds: 2),
+              onTimeout: () => null,
+            );
+        final saved = profile?.preRunAlerts;
+        if (saved != null && saved.isNotEmpty) {
+          final merged = <String, bool>{..._alertPrefs};
+          for (final e in saved.entries) {
+            if (merged.containsKey(e.key)) merged[e.key] = e.value;
+          }
+          _alertPrefs = merged;
+        }
+      } catch (_) {/* mantém defaults */}
+    }
+    // ignore: avoid_print
+    print('coach.alert_prefs.resolved=$_alertPrefs');
+    _lastCueAt.clear();
+    _lastKmPace = null;
     emit(
       state.copyWith(
         status: RunStatus.starting,
@@ -194,6 +260,7 @@ class RunBloc extends Bloc<RunEvent, RunState> {
           type: event.type,
           targetPace: event.targetPace,
           targetDistance: event.targetDistance,
+          planSessionId: event.planSessionId,
         );
         runId = run.id;
       } catch (_) {
@@ -226,6 +293,10 @@ class RunBloc extends Bloc<RunEvent, RunState> {
         const Duration(seconds: 1),
         (_) => add(_TimerTick()),
       );
+
+      // Motivação: dispara cue a cada 5min se não houver outro cue ativo.
+      // Respeita _alertPrefs['motivation'] (no-op se false).
+      _startMotivationTimer();
 
       // GPS: web browser não emite stream confiável (depende de
       // movimento real >5m, e WiFi-based geolocation tem accuracy 1000m+
@@ -272,15 +343,26 @@ class RunBloc extends Bloc<RunEvent, RunState> {
         }();
         // Polling 5s — antes era 3s + timeLimit 8s, conflitava (poll
         // dispara antes do timeout). Agora 5s + timeLimit 20s.
+        int consecutiveFails = 0;
         _gpsPollTimer = Timer.periodic(const Duration(seconds: 5), (_) {
           Geolocator.getCurrentPosition(locationSettings: webSettings)
               .then((pos) {
+            consecutiveFails = 0;
             // ignore: avoid_print
             print('gps.web.poll.success accuracy=${pos.accuracy.toStringAsFixed(0)}m');
             if (!isClosed) add(_GpsUpdate(pos));
           }).catchError((err) {
+            consecutiveFails++;
             // ignore: avoid_print
-            print('gps.web.poll.failed: $err');
+            print('gps.web.poll.failed count=$consecutiveFails: $err');
+            // Após 3 falhas seguidas (~15s sem fix) loga warning bem
+            // visível. Recovery UI (avisar user, repedir permissão) é
+            // follow-up; chip de GPS na ActiveRunPage já oferece retry
+            // manual via tap (GpsPermissionModal).
+            if (consecutiveFails == 3) {
+              // ignore: avoid_print
+              print('gps.web.poll.DEGRADED: 3 falhas seguidas — usuário precisa rechecar permissão');
+            }
           });
         });
       } else {
@@ -361,8 +443,21 @@ class RunBloc extends Bloc<RunEvent, RunState> {
 
     final pos = event.pos;
 
-    // Filtra ruído extremo, mas mantém precisão moderada para mostrar o mapa no web.
-    if (pos.accuracy > _displayAccuracyThreshold) return;
+    // Antes: descartávamos pontos com accuracy > 10km no web. Resultado:
+    // toda fix por WiFi-triangulation (5-20km de raio comum em desktop)
+    // sumia silenciosamente, chip ficava AGUARDANDO eternamente.
+    // Agora no web aceitamos qualquer accuracy pra display (chip acende,
+    // mapa centraliza), mas só contamos distância se accuracy ≤ 5km
+    // (vide _accuracyThreshold mais abaixo). Log das descartadas pra
+    // saber se algo ainda some.
+    if (kIsWeb) {
+      // ignore: avoid_print
+      print('gps.web.point.accept accuracy=${pos.accuracy.toStringAsFixed(0)}m');
+    } else if (pos.accuracy > _displayAccuracyThreshold) {
+      // ignore: avoid_print
+      print('gps.point.dropped accuracy=${pos.accuracy.toStringAsFixed(0)}m threshold=${_displayAccuracyThreshold.toStringAsFixed(0)}m');
+      return;
+    }
 
     final newPoint = GpsPoint(
       lat: pos.latitude,
@@ -412,20 +507,43 @@ class RunBloc extends Bloc<RunEvent, RunState> {
 
     final kmReached = (newDistance / 1000).floor();
     if (kmReached > _lastCoachKm && kmReached > 0) {
+      final prevKm = _lastCoachKm;
       _lastCoachKm = kmReached;
-      _requestCoachCue(
-        event: 'km_reached',
-        kmReached: kmReached,
-        distanceM: newDistance,
-        elapsedS: state.elapsedS,
-        currentPaceMinKm: smoothedPace,
-      );
+      // km_reached: dispara só se pref `kmAlert` ligado. _lastCoachKm já
+      // dedup (1x por km), sem cooldown adicional.
+      if (_alertPrefs['kmAlert'] == true) {
+        _requestCoachCue(
+          event: 'km_reached',
+          kmReached: kmReached,
+          distanceM: newDistance,
+          elapsedS: state.elapsedS,
+          currentPaceMinKm: smoothedPace,
+        );
+        _lastCueAt['km_reached'] = DateTime.now().millisecondsSinceEpoch;
+      }
+      // kmSplits: ao fechar um km, manda delta de pace vs km anterior.
+      // Só dispara do 2º km em diante (precisa ter referência).
+      if (_alertPrefs['kmSplits'] == true && prevKm > 0 && smoothedPace != null && _lastKmPace != null) {
+        _requestCoachCue(
+          event: 'km_split',
+          kmReached: kmReached,
+          distanceM: newDistance,
+          elapsedS: state.elapsedS,
+          currentPaceMinKm: smoothedPace,
+          targetPaceMinKm: _lastKmPace,
+        );
+        _lastCueAt['km_split'] = DateTime.now().millisecondsSinceEpoch;
+      }
+      _lastKmPace = smoothedPace;
     }
 
-    // Pace alert trigger: when pace deviates from target by ±10%
-    if (smoothedPace != null &&
+    // Pace alert: dispara só se pref ligada + cooldown 60s entre cues
+    // (antes inundava em cada poll GPS quando user fora do range).
+    if (_alertPrefs['paceOutOfRange'] == true &&
+        smoothedPace != null &&
         state.targetPace != null &&
-        state.status == RunStatus.active) {
+        state.status == RunStatus.active &&
+        _cooldownOk('pace_alert', seconds: 60)) {
       final targetPace = _parsePaceMinKm(state.targetPace);
       if (targetPace != null) {
         final deviation = (smoothedPace - targetPace).abs() / targetPace;
@@ -437,9 +555,13 @@ class RunBloc extends Bloc<RunEvent, RunState> {
             distanceM: newDistance,
             elapsedS: state.elapsedS,
           );
+          _lastCueAt['pace_alert'] = DateTime.now().millisecondsSinceEpoch;
         }
       }
     }
+    // TODO highBpm: depende de stream do wearable (Bluetooth/HealthKit).
+    // Quando stream chegar, gate similar: if (_alertPrefs['highBpm'] &&
+    // bpm > maxBpm * 0.92) _requestCoachCue(event: 'high_bpm', ...);
 
     // Salva localmente (local-first)
     if (state.runId != null) {
@@ -512,15 +634,61 @@ class RunBloc extends Bloc<RunEvent, RunState> {
     emit(const RunState());
   }
 
+  /// Pause: para timer + GPS poll mas mantém runId, distância e elapsed.
+  /// Status vira `paused` — UI mostra botão RETOMAR. Sem reset de state.
+  void _onPause(PauseRun event, Emitter<RunState> emit) {
+    _timer?.cancel();
+    _gpsPollTimer?.cancel();
+    _gpsSub?.cancel();
+    _motivationTimer?.cancel();
+    _timer = null;
+    _gpsPollTimer = null;
+    _gpsSub = null;
+    _motivationTimer = null;
+    emit(state.copyWith(status: RunStatus.paused));
+  }
+
+  /// Resume: re-inicia timer + GPS poll mantendo elapsed/distância atuais.
+  /// Não dispara nova saudação (coach só fala no INICIAR original).
+  Future<void> _onResume(ResumeRun event, Emitter<RunState> emit) async {
+    if (state.status != RunStatus.paused) return;
+    emit(state.copyWith(status: RunStatus.active));
+    _timer = Timer.periodic(
+      const Duration(seconds: 1),
+      (_) => add(_TimerTick()),
+    );
+    _startMotivationTimer();
+    if (kIsWeb) {
+      const webSettings = LocationSettings(
+        accuracy: LocationAccuracy.medium,
+        timeLimit: Duration(seconds: 20),
+      );
+      _gpsPollTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+        Geolocator.getCurrentPosition(locationSettings: webSettings).then((pos) {
+          if (!isClosed) add(_GpsUpdate(pos));
+        }).catchError((_) {});
+      });
+    } else {
+      _gpsSub = Geolocator.getPositionStream(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          distanceFilter: 5,
+        ),
+      ).listen((pos) => add(_GpsUpdate(pos)));
+    }
+  }
+
   void _stop() {
     _gpsSub?.cancel();
     _gpsPollTimer?.cancel();
     _timer?.cancel();
     _flushTimer?.cancel();
+    _motivationTimer?.cancel();
     _gpsSub = null;
     _gpsPollTimer = null;
     _timer = null;
     _flushTimer = null;
+    _motivationTimer = null;
     _coachRequestInFlight = false;
   }
 
@@ -536,18 +704,67 @@ class RunBloc extends Bloc<RunEvent, RunState> {
   /// se Live indisponível.
   Future<void> _speakStartGreeting(String runType) async {
     try {
-      final profile = await _userRemote.getMe().timeout(
-            const Duration(seconds: 3),
-            onTimeout: () => null,
-          );
-      final fullName = profile?.name.trim() ?? '';
+      // Profile + plano em paralelo — economiza ~300-500ms vs sequencial.
+      final results = await Future.wait<dynamic>([
+        _userRemote.getMe().timeout(
+              const Duration(seconds: 3),
+              onTimeout: () => null,
+            ),
+        _planRemote.getCurrentPlan().timeout(
+              const Duration(seconds: 3),
+              onTimeout: () => null,
+            ).catchError((_) => null),
+      ]);
+      final profile = results[0];
+      final plan = results[1] as Plan?;
+
+      final fullName = (profile?.name as String?)?.trim() ?? '';
       final firstName = fullName.isEmpty
           ? null
           : fullName.split(RegExp(r'\s+')).first;
-      final typeNice = runType.toLowerCase().replaceFirst('free run', 'corrida livre');
-      final greeting = firstName != null && firstName.isNotEmpty
-          ? 'Bora $firstName! Começando a $typeNice. Vou te acompanhar.'
-          : 'Bora! Começando a $typeNice. Vou te acompanhar.';
+
+      // Sessão planejada pra hoje (se houver plano ativo).
+      PlanSession? todaySession;
+      if (plan != null && plan.isReady && plan.weeks.isNotEmpty) {
+        final today = DateTime.now().weekday; // 1=Mon..7=Sun
+        final daysFromStart = DateTime.now().difference(plan.effectiveStartDate).inDays;
+        final weekIdx = (daysFromStart / 7).floor().clamp(0, plan.weeks.length - 1);
+        final week = plan.weeks[weekIdx];
+        try {
+          todaySession = week.sessions.firstWhere((s) => s.dayOfWeek == today);
+        } catch (_) {/* sem sessão hoje */}
+      }
+
+      // Tipo escolhido pelo user (Free Run ou tipo do plano).
+      final typeLower = runType.toLowerCase();
+      final isFree = typeLower.contains('free');
+      final typeNice = typeLower.replaceFirst('free run', 'corrida livre');
+
+      // Monta contexto da sessão pra greeting natural.
+      final ctxParts = <String>[];
+      if (todaySession != null) {
+        final km = todaySession.distanceKm.toStringAsFixed(
+          todaySession.distanceKm % 1 == 0 ? 0 : 1,
+        );
+        if (isFree) {
+          // User escolheu Free Run mesmo tendo plano hoje — coach reconhece.
+          ctxParts.add('Você tinha planejado ${todaySession.type.toLowerCase()} de ${km}km hoje, mas escolheu corrida livre');
+        } else {
+          ctxParts.add('Hoje é ${todaySession.type.toLowerCase()} de ${km}km');
+          if (todaySession.targetPace != null) {
+            ctxParts.add('pace alvo ${todaySession.targetPace}/km');
+          }
+        }
+      } else {
+        // Sem plano OU sem sessão hoje
+        ctxParts.add(isFree ? 'Corrida livre, sem distância pré-definida' : 'Começando a $typeNice');
+      }
+
+      final nameStr = firstName != null && firstName.isNotEmpty ? ', $firstName' : '';
+      final greeting = 'Bora$nameStr! ${ctxParts.join('. ')}. Vou te acompanhar do início ao fim.';
+
+      // ignore: avoid_print
+      print('coach.greeting.text=$greeting');
 
       final audio = await _liveVoice.synthesize(
         greeting,
@@ -564,6 +781,33 @@ class RunBloc extends Bloc<RunEvent, RunState> {
     }
   }
 
+  /// True se passou `seconds` desde o último cue desse tipo (ou nunca rolou).
+  /// Anti-flood pra triggers que podem disparar várias vezes.
+  bool _cooldownOk(String cueType, {required int seconds}) {
+    final last = _lastCueAt[cueType];
+    if (last == null) return true;
+    final elapsed = DateTime.now().millisecondsSinceEpoch - last;
+    return elapsed >= seconds * 1000;
+  }
+
+  /// Inicia timer de motivação: a cada 5min, se nenhum outro cue rolou
+  /// nos últimos 5min, dispara um cue motivacional. Mantém o coach
+  /// presente em corridas longas sem outros gatilhos.
+  void _startMotivationTimer() {
+    _motivationTimer?.cancel();
+    if (_alertPrefs['motivation'] != true) return;
+    _motivationTimer = Timer.periodic(const Duration(minutes: 5), (_) {
+      if (state.status != RunStatus.active || isClosed) return;
+      // Só dispara se NÃO teve outro cue nos últimos 5min — evita
+      // sobrepor motivação a alertas reais.
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final lastAny = _lastCueAt.values.fold<int>(0, (a, b) => a > b ? a : b);
+      if (now - lastAny < 5 * 60 * 1000) return;
+      _requestCoachCue(event: 'motivation');
+      _lastCueAt['motivation'] = now;
+    });
+  }
+
   void _requestCoachCue({
     required String event,
     int? kmReached,
@@ -572,9 +816,30 @@ class RunBloc extends Bloc<RunEvent, RunState> {
     double? currentPaceMinKm,
     double? targetPaceMinKm,
   }) {
-    if (state.runId == null || _coachRequestInFlight) return;
+    if (state.runId == null) {
+      // ignore: avoid_print
+      print('coach.cue.skip event=$event reason=no_run_id');
+      return;
+    }
+    if (_coachRequestInFlight) {
+      // ignore: avoid_print
+      print('coach.cue.skip event=$event reason=in_flight');
+      return;
+    }
 
+    // ignore: avoid_print
+    print('coach.cue.fire event=$event km=$kmReached distanceM=${distanceM ?? state.distanceM}');
     _coachRequestInFlight = true;
+    // Safety net: se onError/onDone não dispararem por algum motivo (ex:
+    // request travado), libera a flag em 30s pra próximo cue não ficar
+    // bloqueado pra sempre. Cues normais respondem em <5s.
+    Timer(const Duration(seconds: 30), () {
+      if (_coachRequestInFlight) {
+        // ignore: avoid_print
+        print('coach.cue.safety_release event=$event');
+        _coachRequestInFlight = false;
+      }
+    });
     _coachRemote
         .streamCoachCue(
           runId: state.runId!,
@@ -589,13 +854,19 @@ class RunBloc extends Bloc<RunEvent, RunState> {
         )
         .listen(
           (cue) {
+            // ignore: avoid_print
+            print('coach.cue.chunk event=$event textLen=${cue.text.length} hasAudio=${(cue.audioBase64 ?? '').isNotEmpty}');
             if (isClosed) return;
             add(_CoachChunk(cue));
           },
-          onError: (_) {
+          onError: (err) {
+            // ignore: avoid_print
+            print('coach.cue.error event=$event err=$err');
             _coachRequestInFlight = false;
           },
           onDone: () {
+            // ignore: avoid_print
+            print('coach.cue.done event=$event');
             _coachRequestInFlight = false;
           },
         );
