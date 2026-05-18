@@ -755,7 +755,7 @@ class _RunsListView extends StatelessWidget {
               pace: run.avgPace ?? '--:--',
               duration: _fmtDuration(run.durationS),
               coachPreview: run.type,
-              onTap: () => context.push('/report', extra: run.id),
+              onTap: () => context.push('/history/run/${run.id}'),
             ),
             if (run.planSessionId == null)
               Positioned(
