@@ -225,10 +225,18 @@ export class RequestRevisionUseCase {
     let normalized = raw.replace(/\r/g, '').trim();
     normalized = this._stripMarkdownFences(normalized);
 
-    const firstArray = normalized.indexOf('[');
-    const lastArray = normalized.lastIndexOf(']');
-    if (firstArray !== -1 && lastArray !== -1 && lastArray > firstArray) {
-      normalized = normalized.slice(firstArray, lastArray + 1);
+    // Bug histórico: slice por `[`/`]` cortava o JSON OBJECT do revision
+    // (que tem shape {coachExplanation, newWeeks}) em só o array de
+    // newWeeks → Zod falhava com "expected object, received array".
+    // Detecta o shape esperado pelo primeiro char não-whitespace e
+    // recorta os boundaries corretos.
+    const firstChar = normalized[0];
+    if (firstChar === '{') {
+      const lastBrace = normalized.lastIndexOf('}');
+      if (lastBrace > 0) normalized = normalized.slice(0, lastBrace + 1);
+    } else if (firstChar === '[') {
+      const lastBracket = normalized.lastIndexOf(']');
+      if (lastBracket > 0) normalized = normalized.slice(0, lastBracket + 1);
     }
 
     return JSON.parse(normalized) as unknown;
