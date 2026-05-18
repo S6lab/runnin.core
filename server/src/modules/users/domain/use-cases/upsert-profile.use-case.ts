@@ -31,6 +31,7 @@ export const UpsertProfileSchema = z.object({
   coachPersonality: z.enum(['motivador', 'tecnico', 'sereno']).optional(),
   coachMessageFrequency: z.enum(['per_km', 'per_2km', 'alerts_only', 'silent']).optional(),
   coachFeedbackEnabled: z.record(z.string(), z.boolean()).optional(),
+  allowCriticalAlertsInSilent: z.boolean().optional(),
 
   // PREP alerts
   preRunAlerts: z.record(z.string(), z.boolean()).optional(),
@@ -95,6 +96,7 @@ export class UpsertProfileUseCase {
       coachPersonality: input.coachPersonality ?? existing?.coachPersonality,
       coachMessageFrequency: input.coachMessageFrequency ?? existing?.coachMessageFrequency,
       coachFeedbackEnabled: (input.coachFeedbackEnabled as Record<string, boolean> | undefined) ?? existing?.coachFeedbackEnabled,
+      allowCriticalAlertsInSilent: input.allowCriticalAlertsInSilent ?? existing?.allowCriticalAlertsInSilent,
 
       // PREP alerts
       preRunAlerts: input.preRunAlerts ?? existing?.preRunAlerts,

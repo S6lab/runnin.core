@@ -2,6 +2,7 @@ export { buildPlanInitPrompt } from './builders/plan-init.builder';
 export { buildPlanRevisionPrompt } from './builders/plan-revision.builder';
 export { buildLiveCoachPrompt } from './builders/live-coach.builder';
 export { buildPostRunReportPrompt } from './builders/post-run-report.builder';
+export { buildPostRunReportEnrichedPrompt } from './builders/post-run-report-enriched.builder';
 export { buildPeriodAnalysisPrompt } from './builders/period-analysis.builder';
 export { buildCoachChatPrompt } from './builders/coach-chat.builder';
 export { buildExamAnalysisPrompt } from './builders/exam-analysis.builder';

@@ -13,6 +13,7 @@ const _hiveKeyPersonality = 'coach_personality';
 const _hiveKeyVoice = 'coach_voice_id';
 const _hiveKeyFrequency = 'coach_message_frequency';
 const _hiveKeyFeedback = 'coach_feedback_enabled';
+const _hiveKeyAllowCriticalInSilent = 'coach_allow_critical_in_silent';
 
 class CoachSettingsPage extends StatefulWidget {
   const CoachSettingsPage({super.key});
@@ -25,6 +26,10 @@ class _CoachSettingsPageState extends State<CoachSettingsPage> {
   String _personality = 'motivador';
   String _voiceId = 'bruno';
   String _frequency = 'per_km';
+  // Quando frequency=silent, deixa pace_alert/segment_pace_off/finish furarem
+  // o silêncio. Default true (silêncio é pra ruído, não pra risco).
+  // UI esconde toggle se frequency != silent — sem efeito nas outras.
+  bool _allowCriticalInSilent = true;
   Map<String, bool> _feedback = {
     'pre_training': true,
     'pace_alerts': true,
@@ -50,6 +55,7 @@ class _CoachSettingsPageState extends State<CoachSettingsPage> {
       _personality = box.get(_hiveKeyPersonality, defaultValue: 'motivador') as String;
       _voiceId = box.get(_hiveKeyVoice, defaultValue: 'bruno') as String;
       _frequency = box.get(_hiveKeyFrequency, defaultValue: 'per_km') as String;
+      _allowCriticalInSilent = box.get(_hiveKeyAllowCriticalInSilent, defaultValue: true) as bool;
       final stored = box.get(_hiveKeyFeedback);
       if (stored is Map) {
         _feedback = Map<String, bool>.from(stored.map(
@@ -65,6 +71,7 @@ class _CoachSettingsPageState extends State<CoachSettingsPage> {
     await box.put(_hiveKeyPersonality, _personality);
     await box.put(_hiveKeyVoice, _voiceId);
     await box.put(_hiveKeyFrequency, _frequency);
+    await box.put(_hiveKeyAllowCriticalInSilent, _allowCriticalInSilent);
     await box.put(_hiveKeyFeedback, _feedback);
   }
 
@@ -75,6 +82,7 @@ class _CoachSettingsPageState extends State<CoachSettingsPage> {
         'coachPersonality': _personality,
         'coachVoiceId': _voiceId,
         'coachMessageFrequency': _frequency,
+        'allowCriticalAlertsInSilent': _allowCriticalInSilent,
         'coachFeedbackEnabled': _feedback,
       });
       await _saveToHive();
@@ -224,6 +232,20 @@ class _CoachSettingsPageState extends State<CoachSettingsPage> {
                     selected: _frequency == 'silent',
                     onTap: () => setState(() => _frequency = 'silent'),
                   ),
+
+                  // Sub-controle do modo silencioso: permitir furo pra
+                  // alertas críticos (pace fora do alvo, fim de run).
+                  // Aparece só quando frequency=silent — nas outras a flag
+                  // não tem efeito e a UI sumir reduz ruído.
+                  if (_frequency == 'silent') ...[
+                    const SizedBox(height: AppSpacing.sm),
+                    _FeedbackToggle(
+                      label: 'Permitir alertas críticos (pace fora do alvo / fim)',
+                      feedbackKey: 'allow_critical_in_silent',
+                      value: _allowCriticalInSilent,
+                      onChanged: (v) => setState(() => _allowCriticalInSilent = v),
+                    ),
+                  ],
 
                   const SizedBox(height: AppSpacing.xxl),
 

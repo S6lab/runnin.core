@@ -39,6 +39,11 @@ export interface UserProfile {
   coachPersonality?: 'motivador' | 'tecnico' | 'sereno';
   coachMessageFrequency?: 'per_km' | 'per_2km' | 'alerts_only' | 'silent';
   coachFeedbackEnabled?: Record<string, boolean>;
+  /** Quando frequency=silent, permite ainda assim alertas críticos
+   *  (pace_alert, segment_pace_off, finish). Default true — assume
+   *  que silencio é pra ruído, não pra risco. UI expõe toggle só
+   *  quando frequency=silent (sem essa, não tem efeito). */
+  allowCriticalAlertsInSilent?: boolean;
 
   // Run/PREP alerts
   preRunAlerts?: Record<string, boolean>;

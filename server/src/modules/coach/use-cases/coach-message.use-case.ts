@@ -22,7 +22,25 @@ const OptionalNumberSchema = z.preprocess(
 
 export const CoachContextSchema = z.object({
   runId: z.string().optional(),
-  event: z.enum(['pre_run', 'km_reached', 'km_split', 'pace_alert', 'motivation', 'question', 'start', 'finish', 'preview']),
+  event: z.enum([
+    'pre_run',
+    'km_reached',
+    'km_split',
+    'pace_alert',
+    'motivation',
+    'question',
+    'start',
+    'finish',
+    'preview',
+    // Eventos estruturais ligados ao executionSegments da PlanSession.
+    // segment_start: cliente cruzou a fronteira pro próximo segmento.
+    // segment_pace_off: pace desviou do alvo DESTE segmento (substitui
+    //   pace_alert quando há plano com segments). Cooldown 60s no client.
+    // segment_end: último ponto GPS dentro do segmento final.
+    'segment_start',
+    'segment_pace_off',
+    'segment_end',
+  ]),
   runType: z.string().optional(),
   // currentPaceMinKm / distanceM / elapsedS são contexto de corrida ativa.
   // Para event=preview (settings) ou question (chat fora de run), não
@@ -39,6 +57,15 @@ export const CoachContextSchema = z.object({
   /** ID da voz pra preview (event=preview). Mapeia pra Charon/Aoede/Kore
    *  no GeminiLiveTtsService. */
   voiceId: z.string().optional(),
+  /** ID da PlanSession que está sendo executada. Quando presente, server
+   *  resolve a sessão via runtime.getContext(userId, planSessionId) e
+   *  inclui briefing completo (notes, segments, nutrição) no contexto
+   *  do LLM. Null = Free Run, contexto sem plano. */
+  planSessionId: z.string().optional(),
+  /** Índice (0-based) do segment ativo dentro da PlanSession. Setado
+   *  pelo client em eventos segment_*. Server usa pra extrair o segment
+   *  específico e referenciá-lo no prompt. */
+  currentSegmentIndex: z.number().int().nonnegative().optional(),
 });
 
 export type CoachContext = z.infer<typeof CoachContextSchema>;
@@ -60,6 +87,33 @@ export function isCueSkipped(result: CoachGenerateResult): result is CoachCueSki
   return (result as CoachCueSkipped).skipped === true;
 }
 
+// Eventos estruturais que merecem o contexto completo da PlanSession
+// no prompt (notes, segments, nutrição). Eventos de "ruído" recebem só
+// um sessionSummary curto pra evitar token bloat — 10+ cues/run × 300
+// tokens vira custo perceptível e o LLM não precisa do briefing inteiro
+// pra dizer "ritmo bom no km 5".
+const STRUCTURAL_SESSION_EVENTS = new Set([
+  'start',
+  'finish',
+  'pace_alert',
+  'segment_start',
+  'segment_pace_off',
+  'segment_end',
+]);
+
+// TTL do cache de runtime context por (userId, runId). Durante uma run,
+// profile/plano/recentRuns não mudam — basta refetchar quando começa
+// nova run. 5min é folga suficiente até pro warmup mais lento sem
+// guardar dados velhos entre execuções.
+const RUNTIME_CACHE_TTL_MS = 5 * 60 * 1000;
+
+interface CachedRuntime {
+  expiresAt: number;
+  // Cache armazena por planSessionId distinto — runs Free Run e planejadas
+  // resolvem currentSession diferente mesmo dentro da mesma sessão de cache.
+  byPlanSession: Map<string, import('./coach-runtime-context.service').CoachRuntimeContext>;
+}
+
 export class CoachMessageUseCase {
   private llm = getRealtimeLLM();
   private googleTts = new GoogleTtsService();
@@ -70,6 +124,7 @@ export class CoachMessageUseCase {
   private config = new CoachConfigService();
   private runtime = new CoachRuntimeContextService();
   private messageLog: CoachMessageLogRepository = new FirestoreCoachMessageLogRepository();
+  private runtimeCache = new Map<string, CachedRuntime>();
 
   async generate(ctx: CoachContext, userId: string): Promise<CoachGenerateResult> {
     // Preview de voz no settings: sample short text via Live TTS, sem
@@ -86,7 +141,7 @@ export class CoachMessageUseCase {
 
     const [config, runtime, knobs] = await Promise.all([
       this.config.getConfig(),
-      this.runtime.getContext(userId),
+      this._getCachedRuntime(userId, ctx.runId, ctx.planSessionId),
       getKnobs(),
     ]);
 
@@ -98,9 +153,30 @@ export class CoachMessageUseCase {
       2,
     );
 
+    // Adaptive context: estruturais recebem briefing completo da sessão
+    // (notes + segments + nutrição); ruído (km_reached/km_split/motivation)
+    // recebe só sessionSummary curto pra economizar tokens sem perder
+    // a referência ao plano do dia.
+    const runtimeForPrompt = STRUCTURAL_SESSION_EVENTS.has(ctx.event)
+      ? runtime
+      : { ...runtime, currentSession: null };
+    const sessionSummary = formatSessionSummary(runtime.currentSession);
+    const currentSegment = pickSegment(runtime.currentSession, ctx.currentSegmentIndex);
+    const runtimeContextJson = JSON.stringify(
+      {
+        ...runtimeForPrompt,
+        // Sempre publica o sessionSummary, mesmo nos eventos compactos —
+        // 1 linha não custa nada e mantém o LLM ciente do objetivo do dia.
+        sessionSummary,
+        currentSegment,
+      },
+      null,
+      2,
+    );
+
     const built = await buildLiveCoachPrompt({
       profile: runtime.profile,
-      runtimeContextJson: JSON.stringify(runtime, null, 2),
+      runtimeContextJson,
       ctx,
       ragContext: knowledgeContext,
       legacyLivePrompt: config.livePrompt,
@@ -174,6 +250,39 @@ export class CoachMessageUseCase {
 
   async listForRun(userId: string, runId: string): Promise<CoachMessageLog[]> {
     return this.messageLog.listByRun(userId, runId);
+  }
+
+  /**
+   * Cache de runtime context por (userId, runId, planSessionId).
+   * Durante uma run, profile/plano não mudam — refetch a cada cue
+   * (8-12/run) custa Firestore reads desnecessários. TTL 5min cobre
+   * runs longas sem virar dado velho entre execuções.
+   *
+   * Quando runId não é setado (questions, previews), pula cache —
+   * são chamadas pontuais.
+   */
+  private async _getCachedRuntime(
+    userId: string,
+    runId: string | undefined,
+    planSessionId: string | undefined,
+  ): Promise<import('./coach-runtime-context.service').CoachRuntimeContext> {
+    if (!runId) {
+      return this.runtime.getContext(userId, planSessionId);
+    }
+    const key = `${userId}:${runId}`;
+    const planKey = planSessionId ?? '__none__';
+    const now = Date.now();
+    let entry = this.runtimeCache.get(key);
+    if (!entry || entry.expiresAt < now) {
+      entry = { expiresAt: now + RUNTIME_CACHE_TTL_MS, byPlanSession: new Map() };
+      this.runtimeCache.set(key, entry);
+    }
+    let cached = entry.byPlanSession.get(planKey);
+    if (!cached) {
+      cached = await this.runtime.getContext(userId, planSessionId);
+      entry.byPlanSession.set(planKey, cached);
+    }
+    return cached;
   }
 
   /**
@@ -292,32 +401,79 @@ export class CoachMessageUseCase {
   }
 }
 
+// Eventos "narrativos" são apenas conversa do coach (cor, ânimo, transição).
+// Não geram risco se ficarem mudos. silent/alerts_only os bloqueiam.
+const NARRATIVE_EVENTS = new Set([
+  'km_reached',
+  'km_split',
+  'motivation',
+  'segment_start',
+  'segment_end',
+]);
+
+// Eventos "críticos" sinalizam risco real (pace muito fora, fim de run).
+// Sob silent, podem furar a regra se profile.allowCriticalAlertsInSilent
+// === true (default true). pace_alert e segment_pace_off entram aqui;
+// finish sempre passa.
+const CRITICAL_ALERT_EVENTS = new Set(['pace_alert', 'segment_pace_off']);
+
 function applyDecisionLayer(
   ctx: CoachContext,
-  profile: { coachMessageFrequency?: string; dndWindow?: { start: string; end: string } } | null | undefined,
+  profile: {
+    coachMessageFrequency?: string;
+    dndWindow?: { start: string; end: string };
+    allowCriticalAlertsInSilent?: boolean;
+  } | null | undefined,
   knobs: { respectMessageFrequency: boolean; respectDndWindow: boolean },
 ): CoachCueSkipped | null {
   if (knobs.respectMessageFrequency) {
     const freq = profile?.coachMessageFrequency;
-    if (freq === 'silent') return { skipped: true, reason: 'silent' };
+    // silent: bloqueia tudo, exceto críticos quando user permitiu (default true)
+    // e finish (sempre passa por ser fechamento da run).
+    if (freq === 'silent') {
+      if (ctx.event === 'finish') return null;
+      const allowCritical = profile?.allowCriticalAlertsInSilent ?? true;
+      if (allowCritical && CRITICAL_ALERT_EVENTS.has(ctx.event)) return null;
+      return { skipped: true, reason: 'silent' };
+    }
     if (ctx.event === 'km_reached' || ctx.event === 'km_split') {
       const km = ctx.kmReached ?? 0;
       if (freq === 'alerts_only') return { skipped: true, reason: 'frequency' };
       if (freq === 'per_2km' && km > 0 && km % 2 !== 0) return { skipped: true, reason: 'frequency' };
     }
-    if (ctx.event === 'motivation' && freq === 'alerts_only') {
+    if (freq === 'alerts_only' && NARRATIVE_EVENTS.has(ctx.event)) {
       return { skipped: true, reason: 'frequency' };
     }
-    if (ctx.event === 'pace_alert' && freq === 'silent') return { skipped: true, reason: 'silent' };
   }
 
   if (knobs.respectDndWindow && profile?.dndWindow && isInDndWindow(profile.dndWindow)) {
-    if (ctx.event !== 'pace_alert' && ctx.event !== 'finish') {
+    // DND deixa passar alertas críticos e fechamento — risco de lesão e
+    // confirmação de término da run são prioritários sobre janela DND.
+    if (!CRITICAL_ALERT_EVENTS.has(ctx.event) && ctx.event !== 'finish') {
       return { skipped: true, reason: 'dnd' };
     }
   }
 
   return null;
+}
+
+function formatSessionSummary(
+  session: import('@modules/plans/domain/plan.entity').PlanSession | null | undefined,
+): string | null {
+  if (!session) return null;
+  const parts = [session.type];
+  if (typeof session.distanceKm === 'number') parts.push(`${session.distanceKm}km`);
+  if (session.targetPace) parts.push(`@ ${session.targetPace}`);
+  if (typeof session.durationMin === 'number') parts.push(`~${session.durationMin}min`);
+  return parts.join(' ');
+}
+
+function pickSegment(
+  session: import('@modules/plans/domain/plan.entity').PlanSession | null | undefined,
+  idx: number | undefined,
+): import('@modules/plans/domain/plan.entity').PlanSegment | null {
+  if (!session?.executionSegments || typeof idx !== 'number') return null;
+  return session.executionSegments[idx] ?? null;
 }
 
 function cleanCueText(text: string): string {

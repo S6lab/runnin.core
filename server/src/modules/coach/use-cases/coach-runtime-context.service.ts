@@ -1,5 +1,5 @@
 import { getFirestore } from '@shared/infra/firebase/firebase.client';
-import { Plan, PlanWeek } from '@modules/plans/domain/plan.entity';
+import { Plan, PlanSession, PlanWeek } from '@modules/plans/domain/plan.entity';
 import { Run } from '@modules/runs/domain/run.entity';
 import { UserProfile } from '@modules/users/domain/user.entity';
 import { logger } from '@shared/logger/logger';
@@ -25,6 +25,7 @@ export type CoachRuntimeProfile = Pick<
   | 'coachPersonality'
   | 'coachMessageFrequency'
   | 'coachFeedbackEnabled'
+  | 'allowCriticalAlertsInSilent'
   | 'preRunAlerts'
   | 'dndWindow'
   | 'unitsSystem'
@@ -40,6 +41,13 @@ export interface CoachRuntimeContext {
     status: string;
     currentWeek: PlanWeek | null;
   } | null;
+  /** Sessão planejada referente à run em andamento. Setada quando o
+   *  cliente passa `planSessionId` no payload — server resolve via
+   *  lookup no plano vigente. Carrega o briefing completo (notes,
+   *  segments, nutrição, hidratação) que o LLM usa pra contextualizar
+   *  intervenções estruturais (segment_start, segment_pace_off, finish).
+   *  Null quando run é Free Run ou planSessionId inválido. */
+  currentSession: PlanSession | null;
   recentRuns: Array<{
     type: string;
     distanceKm: number;
@@ -70,7 +78,7 @@ export interface CoachRuntimeContext {
 }
 
 export class CoachRuntimeContextService {
-  async getContext(userId: string): Promise<CoachRuntimeContext> {
+  async getContext(userId: string, planSessionId?: string): Promise<CoachRuntimeContext> {
     try {
       const db = getFirestore();
       // Cada fetch é INDEPENDENTE. Antes era Promise.all com try/catch
@@ -104,7 +112,7 @@ export class CoachRuntimeContextService {
       // Se profile falhou de vez, sai com profile=null mas mantemos
       // arrays vazios pro resto.
       if (!profileDoc) {
-        return { profile: null, currentPlan: null, recentRuns: [], recentExams: [] };
+        return { profile: null, currentPlan: null, currentSession: null, recentRuns: [], recentExams: [] };
       }
 
       const profile = profileDoc.exists
@@ -118,6 +126,13 @@ export class CoachRuntimeContextService {
           ...doc.data(),
         }) as Plan)
       );
+
+      // Lookup da sessão específica que está sendo executada na run atual.
+      // Procura por id em qualquer semana do plano vigente. Se não achar,
+      // currentSession fica null e o prompt cai no fallback genérico.
+      const currentSession = planSessionId && plan
+        ? findSessionById(plan, planSessionId)
+        : null;
 
       const runs: Run[] = (runsSnap.docs as Array<{ id: string; data: () => Record<string, unknown> }>)
         .map((doc) => ({
@@ -170,6 +185,7 @@ export class CoachRuntimeContextService {
               coachPersonality: profile.coachPersonality,
               coachMessageFrequency: profile.coachMessageFrequency,
               coachFeedbackEnabled: profile.coachFeedbackEnabled,
+              allowCriticalAlertsInSilent: profile.allowCriticalAlertsInSilent,
               preRunAlerts: profile.preRunAlerts,
               dndWindow: profile.dndWindow,
               unitsSystem: profile.unitsSystem,
@@ -185,6 +201,7 @@ export class CoachRuntimeContextService {
               currentWeek: currentPlanWeek(plan),
             }
           : null,
+        currentSession,
         recentRuns: runs.map((run: Run) => ({
           type: run.type,
           distanceKm: Number((run.distanceM / 1000).toFixed(2)),
@@ -217,9 +234,17 @@ export class CoachRuntimeContextService {
         userId,
         err: err instanceof Error ? err.message : String(err),
       });
-      return { profile: null, currentPlan: null, recentRuns: [], recentExams: [] };
+      return { profile: null, currentPlan: null, currentSession: null, recentRuns: [], recentExams: [] };
     }
   }
+}
+
+function findSessionById(plan: Plan, sessionId: string): PlanSession | null {
+  for (const week of plan.weeks) {
+    const session = week.sessions.find((s) => s.id === sessionId);
+    if (session) return session;
+  }
+  return null;
 }
 
 function latestPlan(plans: Plan[]): Plan | null {

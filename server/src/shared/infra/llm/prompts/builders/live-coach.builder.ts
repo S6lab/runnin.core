@@ -7,7 +7,17 @@ import { RunContextInput, buildEventPrompt } from '../context/run-context';
 import { stampVersion } from '../versions';
 import { BuiltPrompt } from './types';
 
-const RUN_TIME_EVENTS = new Set(['km_reached', 'pace_alert', 'start', 'finish']);
+const RUN_TIME_EVENTS = new Set([
+  'km_reached',
+  'km_split',
+  'pace_alert',
+  'motivation',
+  'start',
+  'finish',
+  'segment_start',
+  'segment_pace_off',
+  'segment_end',
+]);
 
 export interface LiveCoachBuildInput {
   profile: Partial<UserProfile> | null | undefined;

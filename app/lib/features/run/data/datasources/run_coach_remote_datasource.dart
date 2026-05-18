@@ -26,6 +26,14 @@ class RunCoachRemoteDatasource {
     double? targetPaceMinKm,
     String? targetDistance,
     int? kmReached,
+    /// ID da PlanSession sendo executada. Server usa pra puxar briefing
+    /// completo (notes, segments, nutrição) no contexto do LLM. Null em
+    /// Free Run.
+    String? planSessionId,
+    /// Índice (0-based) do segment ativo dentro da PlanSession. Setado
+    /// pelo bloc em eventos segment_*. Server resolve o segment alvo
+    /// pra ancorar a fala do coach na fase correta.
+    int? currentSegmentIndex,
   }) async* {
     final res = await _dio.post<Object>(
       '/coach/message',
@@ -39,6 +47,8 @@ class RunCoachRemoteDatasource {
         'targetPaceMinKm': ?targetPaceMinKm,
         'targetDistance': ?targetDistance,
         'kmReached': ?kmReached,
+        'planSessionId': ?planSessionId,
+        'currentSegmentIndex': ?currentSegmentIndex,
       },
       options: Options(
         responseType: ResponseType.stream,

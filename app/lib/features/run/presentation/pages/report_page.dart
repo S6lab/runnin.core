@@ -15,12 +15,29 @@ class ReportPage extends StatefulWidget {
   State<ReportPage> createState() => _ReportPageState();
 }
 
+class _ReportSections {
+  final String runAnalysis;
+  final String planEvolution;
+  final String nextSessions;
+  final String recommendations;
+  const _ReportSections({
+    required this.runAnalysis,
+    required this.planEvolution,
+    required this.nextSessions,
+    required this.recommendations,
+  });
+}
+
 class _ReportPageState extends State<ReportPage> {
   final _remote = RunRemoteDatasource();
   Run? _run;
   String? _summary;
+  _ReportSections? _sections;
+  // Status segue o backend: pending | summary_ready | enriched | ready (legacy).
+  // Render por estado: pending=skeleton, summary_ready/ready=card único,
+  // enriched=4 cards expansíveis.
+  String _reportStatus = 'pending';
   bool _loadingRun = true;
-  bool _loadingReport = true;
   String? _reportError;
   Timer? _pollTimer;
 
@@ -42,18 +59,21 @@ class _ReportPageState extends State<ReportPage> {
 
   Future<void> _pollReport() async {
     int attempts = 0;
-    // 30 × 3s = 90s. Era 30s antes, mas Gemini regularmente leva 40-60s pro
-    // post-run report — usuário via "Relatório não disponível" mesmo com
-    // server tendo gerado com sucesso 30s depois do polling parar.
-    const maxAttempts = 30;
+    // 50 × 3s = 150s. Two-phase: summary_ready chega em ~30s, enriched
+    // (fase B com adaptPlan + 4 seções) leva +30s a +60s. Polling para
+    // ao atingir 'enriched' ou esgotar tentativas.
+    const maxAttempts = 50;
     _pollTimer = Timer.periodic(const Duration(seconds: 3), (timer) async {
       if (attempts++ > maxAttempts) {
         timer.cancel();
         if (mounted) {
           setState(() {
-            _loadingReport = false;
-            _reportError =
-                'Relatório demorando mais que o normal. Volta em alguns minutos no histórico.';
+            if (_reportStatus == 'pending') {
+              _reportError =
+                  'Relatório demorando mais que o normal. Volta em alguns minutos no histórico.';
+            }
+            // Se já temos summary_ready, mantém o que está sem flag de erro —
+            // user vê o que tem e enriched pode aparecer no histórico depois.
           });
         }
         return;
@@ -61,15 +81,33 @@ class _ReportPageState extends State<ReportPage> {
       try {
         final res = await apiClient.get('/coach/report/${widget.runId}');
         final data = res.data as Map<String, dynamic>;
-        if (data['status'] == 'ready') {
+        final status = (data['status'] as String?) ?? 'pending';
+        final summary = data['summary'] as String?;
+        final sectionsRaw = data['sections'];
+
+        _ReportSections? parsedSections;
+        if (sectionsRaw is Map<String, dynamic>) {
+          parsedSections = _ReportSections(
+            runAnalysis: (sectionsRaw['runAnalysis'] as String?)?.trim() ?? '',
+            planEvolution: (sectionsRaw['planEvolution'] as String?)?.trim() ?? '',
+            nextSessions: (sectionsRaw['nextSessions'] as String?)?.trim() ?? '',
+            recommendations: (sectionsRaw['recommendations'] as String?)?.trim() ?? '',
+          );
+        }
+
+        if (mounted) {
+          setState(() {
+            _reportStatus = status;
+            if (summary != null && summary.isNotEmpty) _summary = summary;
+            if (parsedSections != null) _sections = parsedSections;
+            _reportError = null;
+          });
+        }
+
+        // Para o polling em estados terminais: enriched é o destino final,
+        // ready é legacy (reports antigos) — não tem fase B pra esperar.
+        if (status == 'enriched' || status == 'ready') {
           timer.cancel();
-          if (mounted) {
-            setState(() {
-              _summary = data['summary'] as String?;
-              _loadingReport = false;
-              _reportError = null;
-            });
-          }
         }
       } catch (e) {
         // Antes: catch (_) {} silencioso. Agora guarda último erro pra
@@ -116,39 +154,16 @@ class _ReportPageState extends State<ReportPage> {
             if (_run?.xpEarned != null && _run!.xpEarned! > 0)
               const SizedBox(height: 24),
 
-            // Coach narrative card
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                border: Border(left: BorderSide(color: palette.secondary, width: 3)),
-                color: palette.secondary.withValues(alpha: 0.05),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'COACH.AI',
-                    style: context.runninType.labelCaps.copyWith(color: palette.secondary),
-                  ),
-                  const SizedBox(height: 8),
-                  _loadingReport
-                    ? Row(children: [
-                        SizedBox(
-                          width: 12, height: 12,
-                          child: CircularProgressIndicator(strokeWidth: 1.5, color: palette.muted),
-                        ),
-                        const SizedBox(width: 10),
-                        Text(
-                          'Analisando sua corrida... (até 60s)',
-                          style: context.runninType.bodySm,
-                        ),
-                      ])
-                    : Text(
-                        _summary ?? _reportError ?? 'Relatório não disponível.',
-                        style: context.runninType.bodyMd.copyWith(height: 1.6),
-                      ),
-                ],
-              ),
+            // Coach report — render adaptativo por status:
+            //   pending → skeleton com mensagem "Analisando..."
+            //   summary_ready/ready → card único com resumo (fase A do two-phase)
+            //   enriched → 4 ExpansionTile (Análise / Evolução / Próximas / Recomendações)
+            _CoachReportBlock(
+              status: _reportStatus,
+              summary: _summary,
+              sections: _sections,
+              error: _reportError,
+              palette: palette,
             ),
 
             const SizedBox(height: 24),
@@ -253,6 +268,159 @@ class _Divider extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     width: 1, height: 40, color: context.runninPalette.border,
   );
+}
+
+class _CoachReportBlock extends StatelessWidget {
+  final String status;
+  final String? summary;
+  final _ReportSections? sections;
+  final String? error;
+  final dynamic palette;
+
+  const _CoachReportBlock({
+    required this.status,
+    required this.summary,
+    required this.sections,
+    required this.error,
+    required this.palette,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final type = context.runninType;
+    final hasEnriched = status == 'enriched' && sections != null;
+
+    if (hasEnriched) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('COACH.AI', style: type.labelCaps.copyWith(color: palette.secondary)),
+          const SizedBox(height: 8),
+          _ReportCard(
+            title: 'ANÁLISE DA CORRIDA',
+            body: sections!.runAnalysis,
+            initiallyExpanded: true,
+            palette: palette,
+          ),
+          const SizedBox(height: 8),
+          _ReportCard(
+            title: 'EVOLUÇÃO NO PLANO',
+            body: sections!.planEvolution,
+            palette: palette,
+          ),
+          const SizedBox(height: 8),
+          _ReportCard(
+            title: 'PRÓXIMAS SESSÕES',
+            body: sections!.nextSessions,
+            palette: palette,
+          ),
+          const SizedBox(height: 8),
+          _ReportCard(
+            title: 'RECOMENDAÇÕES',
+            body: sections!.recommendations,
+            palette: palette,
+          ),
+        ],
+      );
+    }
+
+    // Fallback: pending, summary_ready ou ready (legacy) → card único.
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        border: Border(left: BorderSide(color: palette.secondary, width: 3)),
+        color: palette.secondary.withValues(alpha: 0.05),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('COACH.AI', style: type.labelCaps.copyWith(color: palette.secondary)),
+          const SizedBox(height: 8),
+          if (status == 'pending' && summary == null)
+            Row(children: [
+              SizedBox(
+                width: 12, height: 12,
+                child: CircularProgressIndicator(strokeWidth: 1.5, color: palette.muted),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                'Analisando sua corrida... (até 2 minutos)',
+                style: type.bodySm,
+              ),
+            ])
+          else if (summary != null)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(summary!, style: type.bodyMd.copyWith(height: 1.6)),
+                // Hint sutil enquanto fase B roda em background.
+                if (status == 'summary_ready') ...[
+                  const SizedBox(height: 10),
+                  Row(children: [
+                    SizedBox(
+                      width: 10, height: 10,
+                      child: CircularProgressIndicator(strokeWidth: 1.2, color: palette.muted),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Análise completa em poucos segundos...',
+                      style: type.labelCaps.copyWith(color: palette.muted),
+                    ),
+                  ]),
+                ],
+              ],
+            )
+          else
+            Text(
+              error ?? 'Relatório não disponível.',
+              style: type.bodyMd.copyWith(height: 1.6),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ReportCard extends StatelessWidget {
+  final String title;
+  final String body;
+  final bool initiallyExpanded;
+  final dynamic palette;
+
+  const _ReportCard({
+    required this.title,
+    required this.body,
+    required this.palette,
+    this.initiallyExpanded = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final type = context.runninType;
+    return Theme(
+      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+      child: Container(
+        decoration: BoxDecoration(
+          border: Border(left: BorderSide(color: palette.secondary, width: 3)),
+          color: palette.secondary.withValues(alpha: 0.05),
+        ),
+        child: ExpansionTile(
+          initiallyExpanded: initiallyExpanded,
+          tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          title: Text(title, style: type.labelCaps.copyWith(color: palette.secondary)),
+          iconColor: palette.secondary,
+          collapsedIconColor: palette.secondary,
+          children: [
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(body, style: type.bodyMd.copyWith(height: 1.6)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _XpBadge extends StatelessWidget {

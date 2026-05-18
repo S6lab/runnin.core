@@ -159,6 +159,17 @@ class RunBloc extends Bloc<RunEvent, RunState> {
   bool _coachRequestInFlight = false;
   int _lastCoachKm = 0;
 
+  /// ID da sessão planejada da run atual. Server resolve a sessão por
+  /// esse id; client mantém pra mandar em todo cue (server cacheia).
+  String? _planSessionId;
+  /// Cache dos segments da PlanSession atual, normalizados (kmStart,
+  /// kmEnd, índice estável). Vazio quando não há plano OU sessão sem
+  /// executionSegments.
+  List<PlanSegment> _segments = const [];
+  /// Índice do segment ativo (-1 = ainda não entrou em segment_0).
+  /// Atualiza em _onGpsUpdate quando distância cruza kmStart de outro.
+  int _currentSegmentIdx = -1;
+
   // Preferências de alerta do user (set em _onStart via StartRun.alertPrefs).
   // Defaults conservadores: tudo on exceto kmSplits (mais ruidoso).
   Map<String, bool> _alertPrefs = const {
@@ -223,6 +234,17 @@ class RunBloc extends Bloc<RunEvent, RunState> {
     print('coach.alert_prefs.resolved=$_alertPrefs');
     _lastCueAt.clear();
     _lastKmPace = null;
+    _planSessionId = event.planSessionId;
+    _segments = const [];
+    _currentSegmentIdx = -1;
+
+    // Resolve a sessão planejada já no start. Saudação inicial e cues
+    // segment_* leem daqui — sem isso, primeiro segment_start poderia
+    // demorar pra disparar enquanto plano carrega.
+    if (event.planSessionId != null) {
+      unawaited(_loadPlanSession(event.planSessionId!));
+    }
+
     emit(
       state.copyWith(
         status: RunStatus.starting,
@@ -537,25 +559,104 @@ class RunBloc extends Bloc<RunEvent, RunState> {
       _lastKmPace = smoothedPace;
     }
 
-    // Pace alert: dispara só se pref ligada + cooldown 60s entre cues
-    // (antes inundava em cada poll GPS quando user fora do range).
-    if (_alertPrefs['paceOutOfRange'] == true &&
-        smoothedPace != null &&
-        state.targetPace != null &&
-        state.status == RunStatus.active &&
-        _cooldownOk('pace_alert', seconds: 60)) {
-      final targetPace = _parsePaceMinKm(state.targetPace);
-      if (targetPace != null) {
-        final deviation = (smoothedPace - targetPace).abs() / targetPace;
-        if (deviation >= 0.10) {
-          _requestCoachCue(
-            event: 'pace_alert',
-            currentPaceMinKm: smoothedPace,
-            targetPaceMinKm: targetPace,
-            distanceM: newDistance,
-            elapsedS: state.elapsedS,
-          );
-          _lastCueAt['pace_alert'] = DateTime.now().millisecondsSinceEpoch;
+    // Detecção de transição de segment. Roda só quando há plano com
+    // segments — Free Run mantém o pace_alert legado abaixo. A regra:
+    // - segment_start quando _currentSegmentIdx muda (entrou em segment novo)
+    // - segment_pace_off com cooldown 60s (substitui pace_alert quando ativo)
+    // - segment_end quando ultrapassa kmEnd do último segment
+    final hasSegments = _segments.isNotEmpty;
+    PlanSegment? activeSegment;
+    int? activeSegmentIdx;
+    if (hasSegments) {
+      final kmNow = newDistance / 1000;
+      // Procura segment cujo [kmStart, kmEnd) contém o km atual.
+      for (var i = 0; i < _segments.length; i++) {
+        final s = _segments[i];
+        if (kmNow >= s.kmStart && kmNow < s.kmEnd) {
+          activeSegmentIdx = i;
+          activeSegment = s;
+          break;
+        }
+      }
+
+      // Detecta transição: novo segment_start.
+      if (activeSegmentIdx != null && activeSegmentIdx != _currentSegmentIdx) {
+        final previousIdx = _currentSegmentIdx;
+        _currentSegmentIdx = activeSegmentIdx;
+        _requestCoachCue(
+          event: 'segment_start',
+          distanceM: newDistance,
+          elapsedS: state.elapsedS,
+          currentPaceMinKm: smoothedPace,
+          targetPaceMinKm: _parsePaceMinKm(activeSegment?.targetPace),
+          currentSegmentIndex: activeSegmentIdx,
+        );
+        _lastCueAt['segment_start'] = DateTime.now().millisecondsSinceEpoch;
+        // ignore: avoid_print
+        print('coach.segment.transition prev=$previousIdx now=$activeSegmentIdx phase=${activeSegment?.phase}');
+      }
+
+      // Detecta término do último segment: passou de kmEnd final.
+      // _currentSegmentIdx fica no último; dispara só uma vez por run.
+      if (activeSegmentIdx == null && _currentSegmentIdx >= 0 &&
+          _cooldownOk('segment_end', seconds: 999999)) {
+        _requestCoachCue(
+          event: 'segment_end',
+          distanceM: newDistance,
+          elapsedS: state.elapsedS,
+          currentPaceMinKm: smoothedPace,
+          currentSegmentIndex: _currentSegmentIdx,
+        );
+        _lastCueAt['segment_end'] = DateTime.now().millisecondsSinceEpoch;
+      }
+
+      // segment_pace_off: substitui pace_alert genérico quando segment
+      // ativo tem targetPace. Cooldown 60s pra evitar flood.
+      if (_alertPrefs['paceOutOfRange'] == true &&
+          activeSegment?.targetPace != null &&
+          smoothedPace != null &&
+          state.status == RunStatus.active &&
+          _cooldownOk('segment_pace_off', seconds: 60)) {
+        final segTarget = _parsePaceMinKm(activeSegment!.targetPace);
+        if (segTarget != null) {
+          final deviation = (smoothedPace - segTarget).abs() / segTarget;
+          if (deviation >= 0.10) {
+            _requestCoachCue(
+              event: 'segment_pace_off',
+              currentPaceMinKm: smoothedPace,
+              targetPaceMinKm: segTarget,
+              distanceM: newDistance,
+              elapsedS: state.elapsedS,
+              currentSegmentIndex: activeSegmentIdx,
+            );
+            _lastCueAt['segment_pace_off'] = DateTime.now().millisecondsSinceEpoch;
+          }
+        }
+      }
+    }
+
+    // Pace alert legado: dispara só quando NÃO há segment ativo com
+    // targetPace (Free Run ou segment de warmup/cooldown sem alvo). 60s
+    // cooldown como antes.
+    if (!hasSegments || activeSegment?.targetPace == null) {
+      if (_alertPrefs['paceOutOfRange'] == true &&
+          smoothedPace != null &&
+          state.targetPace != null &&
+          state.status == RunStatus.active &&
+          _cooldownOk('pace_alert', seconds: 60)) {
+        final targetPace = _parsePaceMinKm(state.targetPace);
+        if (targetPace != null) {
+          final deviation = (smoothedPace - targetPace).abs() / targetPace;
+          if (deviation >= 0.10) {
+            _requestCoachCue(
+              event: 'pace_alert',
+              currentPaceMinKm: smoothedPace,
+              targetPaceMinKm: targetPace,
+              distanceM: newDistance,
+              elapsedS: state.elapsedS,
+            );
+            _lastCueAt['pace_alert'] = DateTime.now().millisecondsSinceEpoch;
+          }
         }
       }
     }
@@ -781,6 +882,31 @@ class RunBloc extends Bloc<RunEvent, RunState> {
     }
   }
 
+  /// Resolve a PlanSession da run atual e cacheia segments pra
+  /// detecção de transição em _onGpsUpdate. Busca o plano vigente e
+  /// procura a sessão por id em qualquer semana. Falha silenciosa
+  /// (sem plano = run roda como Free Run, sem segments).
+  Future<void> _loadPlanSession(String sessionId) async {
+    try {
+      final plan = await _planRemote.getCurrentPlan().timeout(
+            const Duration(seconds: 3),
+            onTimeout: () => null,
+          ).catchError((_) => null);
+      if (plan == null || isClosed) return;
+      PlanSession? found;
+      for (final week in plan.weeks) {
+        try {
+          found = week.sessions.firstWhere((s) => s.id == sessionId);
+          break;
+        } catch (_) {/* sessão não está nessa semana */}
+      }
+      if (found == null) return;
+      _segments = found.executionSegments;
+      // ignore: avoid_print
+      print('coach.plan_session.loaded id=$sessionId segments=${_segments.length}');
+    } catch (_) {/* sem plano, segue Free Run */}
+  }
+
   /// True se passou `seconds` desde o último cue desse tipo (ou nunca rolou).
   /// Anti-flood pra triggers que podem disparar várias vezes.
   bool _cooldownOk(String cueType, {required int seconds}) {
@@ -815,6 +941,7 @@ class RunBloc extends Bloc<RunEvent, RunState> {
     int? elapsedS,
     double? currentPaceMinKm,
     double? targetPaceMinKm,
+    int? currentSegmentIndex,
   }) {
     if (state.runId == null) {
       // ignore: avoid_print
@@ -851,6 +978,13 @@ class RunBloc extends Bloc<RunEvent, RunState> {
           distanceM: distanceM ?? state.distanceM,
           elapsedS: elapsedS ?? state.elapsedS,
           kmReached: kmReached,
+          // Sempre passa planSessionId/currentSegmentIndex quando
+          // disponíveis. Server resolve briefing completo só pra eventos
+          // estruturais (start/finish/segment_*/pace_alert); ruído
+          // (km_reached/motivation) já economiza via sessionSummary.
+          planSessionId: _planSessionId,
+          currentSegmentIndex: currentSegmentIndex ??
+              (_currentSegmentIdx >= 0 ? _currentSegmentIdx : null),
         )
         .listen(
           (cue) {

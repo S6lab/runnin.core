@@ -8,6 +8,10 @@ export interface RunContextInput {
   elapsedS?: number;
   bpm?: number;
   kmReached?: number;
+  /** Índice (0-based) do segment ativo na PlanSession do dia. Setado
+   *  pelo client quando há plano com executionSegments. Server resolve
+   *  o segment correspondente via runtime.currentSession. */
+  currentSegmentIndex?: number;
 }
 
 export function formatRunContext(ctx: RunContextInput): string {
@@ -41,6 +45,12 @@ export function buildEventPrompt(ctx: RunContextInput): string {
       return `Corrida finalizada. Dê parabéns e um insight rápido do desempenho.\n\n${base}`;
     case 'question':
       return `O corredor fez uma pergunta. Responda brevemente.\n\n${base}`;
+    case 'segment_start':
+      return `O corredor entrou no próximo segmento do plano (índice ${ctx.currentSegmentIndex ?? '?'}). Anuncie a transição em 1 frase referenciando o briefing do segmento (fase + instrução).\n\n${base}`;
+    case 'segment_pace_off':
+      return `O pace do corredor desviou do alvo DESTE segmento do plano. Corrija com firmeza e cuidado, citando o pace alvo do segmento atual (não o pace alvo geral da sessão).\n\n${base}`;
+    case 'segment_end':
+      return `O corredor terminou o segmento atual (índice ${ctx.currentSegmentIndex ?? '?'}). Em 1 frase, valide a execução do segmento e prepare a transição.\n\n${base}`;
     default:
       return base;
   }

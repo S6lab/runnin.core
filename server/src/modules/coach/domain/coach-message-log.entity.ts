@@ -15,7 +15,10 @@ export type CoachMessageEvent =
   | 'motivation'
   | 'finish'
   | 'question'
-  | 'preview';
+  | 'preview'
+  | 'segment_start'
+  | 'segment_pace_off'
+  | 'segment_end';
 
 export type CoachMessageAuthor = 'coach' | 'user';
 

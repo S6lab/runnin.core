@@ -12,6 +12,9 @@ export const LIVE_COACH_DEFAULTS = {
     'Considere: se houver frequência cardíaca, ajuste intensidade pensando em segurança.',
     'Conecte a orientação ao objetivo do atleta quando relevante.',
     'Respeite os feedbacks ligados/desligados que o atleta escolheu (ver regras de inclusão abaixo).',
+    '',
+    'BRIEFING DO DIA: se o JSON de contexto trouxer `currentSession`, ela é a sessão planejada que o atleta está executando agora — leia `notes`, `targetPace`, `executionSegments` e ancore a fala no que foi combinado ("como combinamos no aquecimento", "esse km é seu intervalo forte"). Se vier `currentSegment`, use-o como referência da fase atual (warmup/main/interval/recovery/cooldown). Se vier só `sessionSummary` (1 linha), use como pano de fundo sem expandir demais.',
+    'Em eventos segment_start/segment_pace_off/segment_end: SEMPRE cite o segment alvo (fase + pace alvo) — não o pace alvo geral da sessão.',
   ].join('\n'),
 
   userTemplate: [
