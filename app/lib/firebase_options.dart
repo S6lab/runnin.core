@@ -48,7 +48,7 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions android = FirebaseOptions(
     apiKey: 'AIzaSyDnJ9D5glmXQ29o4gwiUF5MBhelgalLw4I',
-    appId: '1:506126899076:android:dad670e264e4523b4b6fd1',
+    appId: '1:506126899076:android:9bbb474eb65e655c4b6fd1',
     messagingSenderId: '506126899076',
     projectId: 'runnin-494520',
     storageBucket: 'runnin-494520.firebasestorage.app',
@@ -56,11 +56,12 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'AIzaSyDyYL_V3a-BMckWDXDasYmhWJqqaJGogz4',
-    appId: '1:506126899076:ios:9176f04cb7a9be694b6fd1',
+    appId: '1:506126899076:ios:968144101ba52a864b6fd1',
     messagingSenderId: '506126899076',
     projectId: 'runnin-494520',
     storageBucket: 'runnin-494520.firebasestorage.app',
-    iosBundleId: 'com.reniuslab.runnin',
+    iosClientId: '506126899076-vrt53k0kh9us2rq193jvspac0hhjnl44.apps.googleusercontent.com',
+    iosBundleId: 'com.s6lab.runnin',
   );
 
   static const FirebaseOptions web = FirebaseOptions(
@@ -72,6 +73,7 @@ class DefaultFirebaseOptions {
     storageBucket: 'runnin-494520.firebasestorage.app',
     measurementId: 'G-D0CG03CYC9',
   );
+
 }
 
 /// Staging Environment [FirebaseOptions] for use with your Firebase apps.
@@ -121,7 +123,7 @@ class StagingFirebaseOptions {
     messagingSenderId: '506126899076',
     projectId: 'runnin-staging-494520',
     storageBucket: 'runnin-staging-494520.firebasestorage.app',
-    iosBundleId: 'com.reniuslab.runnin.staging',
+    iosBundleId: 'com.s6lab.runnin.staging',
   );
 
   static const FirebaseOptions web = FirebaseOptions(
@@ -130,7 +132,7 @@ class StagingFirebaseOptions {
     messagingSenderId: '506126899076',
     projectId: 'runnin-staging-494520',
     authDomain: 'runnin-staging-494520.firebaseapp.com',
-    storageBucket: 'run nin-staging-494520.firebasestorage.app',
+    storageBucket: 'runnin-staging-494520.firebasestorage.app',
     measurementId: 'G-STAGING_ID',
   );
 }

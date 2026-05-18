@@ -60,7 +60,7 @@ class StagingFirebaseOptions {
     messagingSenderId: '506126899076',
     projectId: 'runnin-staging-494520',
     storageBucket: 'runnin-staging-494520.firebasestorage.app',
-    iosBundleId: 'com.reniuslab.runnin.staging',
+    iosBundleId: 'com.s6lab.runnin.staging',
   );
 
   static const FirebaseOptions web = FirebaseOptions(

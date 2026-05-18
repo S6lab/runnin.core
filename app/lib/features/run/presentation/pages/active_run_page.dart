@@ -631,7 +631,7 @@ class _RouteMapBodyState extends State<_RouteMapBody> {
           children: [
             TileLayer(
               urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-              userAgentPackageName: 'com.reniuslab.runnin',
+              userAgentPackageName: 'com.s6lab.runnin',
           tileBuilder: (context, child, tile) => ColorFiltered(
             colorFilter: const ColorFilter.matrix([
               -0.2126,

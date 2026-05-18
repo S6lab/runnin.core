@@ -1,4 +1,4 @@
-package com.reniuslab.runnin
+package com.s6lab.runnin
 
 import io.flutter.embedding.android.FlutterActivity
 

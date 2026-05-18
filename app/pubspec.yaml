@@ -78,6 +78,12 @@ dev_dependencies:
   # upgrade do source_gen necessário pelo json_serializable atual.
   json_serializable: ^6.11.0
 
+# record 5.2.1 resolve record_linux para 0.7.2, que não implementa o
+# startStream exigido por record_platform_interface 1.5.0 — quebra o build.
+# Fix: forçar record_linux atualizado.
+dependency_overrides:
+  record_linux: ^1.3.0
+
 flutter:
   uses-material-design: true
   assets:

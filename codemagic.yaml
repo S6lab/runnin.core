@@ -32,7 +32,7 @@ definitions:
     API_BASE_URL_STAGING: "https://runnin-api-staging-rogiz7losq-rj.a.run.app"
     API_BASE_URL_PROD: "https://runnin-api-rogiz7losq-rj.a.run.app"
     FIREBASE_VAPID_KEY: "BE1oX84SuJLSCWO-JqYSyIFEtCEPj8d4ol3xWlwPHmBp_ncd372Fsau6Fr5mYxIjzpWKfg5KZcM8ueoMQu78P5Q"
-    PACKAGE_NAME: "com.reniuslab.runnin"
+    PACKAGE_NAME: "com.s6lab.runnin"
 
 workflows:
   # ───────────────────────────── Android ─────────────────────────────

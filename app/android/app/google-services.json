@@ -7,12 +7,17 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:506126899076:android:dad670e264e4523b4b6fd1",
+        "mobilesdk_app_id": "1:506126899076:android:9bbb474eb65e655c4b6fd1",
         "android_client_info": {
-          "package_name": "com.reniuslab.runnin"
+          "package_name": "com.s6lab.runnin"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "506126899076-7k8v4rdhrbkgovm28gllkjdlofii4phq.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyDnJ9D5glmXQ29o4gwiUF5MBhelgalLw4I"
@@ -20,7 +25,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "506126899076-7k8v4rdhrbkgovm28gllkjdlofii4phq.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "506126899076-httu06mvaa1uif5o1r14k1ch1tscodlp.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.reniuslab.runnin"
+              }
+            }
+          ]
         }
       }
     }
