@@ -53,6 +53,13 @@ export const CoachContextSchema = z.object({
   elapsedS: z.number().default(0),
   bpm: OptionalNumberSchema,
   kmReached: OptionalNumberSchema,
+  /** Duração (s) do km que acabou de ser cruzado — não acumulado. Enviado
+   *  pelo client em events km_reached/km_split. Coach usa pra reportar
+   *  "1 km em X minutos" em vez de tempo total da corrida. */
+  kmDurationS: OptionalNumberSchema,
+  /** FC média (bpm) durante o km que acabou de ser cruzado. Cliente
+   *  acumula amostras BPM por km e envia média no fechamento. */
+  kmAvgBpm: OptionalNumberSchema,
   question: z.string().optional(),
   /** ID da voz pra preview (event=preview). Mapeia pra Charon/Aoede/Kore
    *  no GeminiLiveTtsService. */
@@ -174,10 +181,23 @@ export class CoachMessageUseCase {
       2,
     );
 
+    // Enriquece ctx com derived fields (kmCalories MET-based + athleteName)
+    // pro prompt do coach reportar "1 km em X min, Y cal, FC Z bpm" no
+    // event km_reached. Calorias derivam de MET 9.8 (corrida moderada) ×
+    // peso × tempoDoKm — mesma constante usada em CompleteRunUseCase.
+    const ctxEnriched: typeof ctx & { kmCalories?: number; athleteName?: string } = { ...ctx };
+    if (typeof ctx.kmDurationS === 'number' && ctx.kmDurationS > 0 && typeof runtime.profile?.weight === 'number') {
+      const MET = 9.8;
+      ctxEnriched.kmCalories = Math.round((MET * runtime.profile.weight * ctx.kmDurationS) / 3600);
+    }
+    if (runtime.profile?.name) {
+      ctxEnriched.athleteName = runtime.profile.name.split(' ')[0]; // primeiro nome
+    }
+
     const built = await buildLiveCoachPrompt({
       profile: runtime.profile,
       runtimeContextJson,
-      ctx,
+      ctx: ctxEnriched,
       ragContext: knowledgeContext,
       legacyLivePrompt: config.livePrompt,
     });

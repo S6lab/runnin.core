@@ -26,6 +26,11 @@ class RunCoachRemoteDatasource {
     double? targetPaceMinKm,
     String? targetDistance,
     int? kmReached,
+    /// Duração (s) do km que acabou de cruzar (não acumulado). Server usa
+    /// pra coach reportar "1 km em X min" + estimar calorias do km.
+    int? kmDurationS,
+    /// FC média (bpm) durante o km que acabou de cruzar. Null se sem wearable.
+    int? kmAvgBpm,
     /// ID da PlanSession sendo executada. Server usa pra puxar briefing
     /// completo (notes, segments, nutrição) no contexto do LLM. Null em
     /// Free Run.
@@ -34,6 +39,10 @@ class RunCoachRemoteDatasource {
     /// pelo bloc em eventos segment_*. Server resolve o segment alvo
     /// pra ancorar a fala do coach na fase correta.
     int? currentSegmentIndex,
+    /// Histórico de splits já fechados, enviado no evento `km_analysis`
+    /// pra LLM comparar progressão km-a-km. Cada item: {km, paceMinKm,
+    /// durationS, avgBpm?}. Server passa direto pro prompt.
+    List<Map<String, dynamic>>? recentSplits,
   }) async* {
     final res = await _dio.post<Object>(
       '/coach/message',
@@ -47,8 +56,11 @@ class RunCoachRemoteDatasource {
         'targetPaceMinKm': ?targetPaceMinKm,
         'targetDistance': ?targetDistance,
         'kmReached': ?kmReached,
+        'kmDurationS': ?kmDurationS,
+        'kmAvgBpm': ?kmAvgBpm,
         'planSessionId': ?planSessionId,
         'currentSegmentIndex': ?currentSegmentIndex,
+        'recentSplits': ?recentSplits,
       },
       options: Options(
         responseType: ResponseType.stream,

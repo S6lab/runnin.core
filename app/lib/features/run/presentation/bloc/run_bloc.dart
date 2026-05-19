@@ -75,6 +75,11 @@ class RunState {
   final String? coachAudioMimeType;
   final String? error;
   final Run? completedRun;
+  /// Splits por km já fechados durante a run em andamento. Cada item é
+  /// um KmSplit completo (pace agregado, duração, velocidade média).
+  /// UI consome em vez do `state.formattedPace` global. LLM recebe
+  /// últimos N como `recentSplits` no evento `km_analysis`.
+  final List<KmSplit> splits;
 
   const RunState({
     this.status = RunStatus.idle,
@@ -91,6 +96,7 @@ class RunState {
     this.coachAudioMimeType,
     this.error,
     this.completedRun,
+    this.splits = const [],
   });
 
   RunState copyWith({
@@ -108,6 +114,7 @@ class RunState {
     String? coachAudioMimeType,
     String? error,
     Run? completedRun,
+    List<KmSplit>? splits,
   }) => RunState(
     status: status ?? this.status,
     runId: runId ?? this.runId,
@@ -123,6 +130,7 @@ class RunState {
     coachAudioMimeType: coachAudioMimeType ?? this.coachAudioMimeType,
     error: error ?? this.error,
     completedRun: completedRun ?? this.completedRun,
+    splits: splits ?? this.splits,
   );
 
   String get formattedDistance => '${(distanceM / 1000).toStringAsFixed(2)}km';
@@ -157,7 +165,15 @@ class RunBloc extends Bloc<RunEvent, RunState> {
   Timer? _flushTimer;
   int _pendingFlushCount = 0;
   bool _coachRequestInFlight = false;
+  /// Timestamp em ms quando o cue atual começou — usado pra log de diagnostic
+  /// quando outro cue tenta disparar e é skipado (mostra quanto tempo o
+  /// anterior está pendurado). Null quando nenhum cue rodando.
+  int? _coachRequestStartedAt;
   int _lastCoachKm = 0;
+  /// Timestamp (s desde start da run) em que o último km foi cruzado.
+  /// Usado pra calcular kmDurationS = elapsedS - _lastKmStartElapsedS no
+  /// evento km_reached. Coach reporta "1 km em X min" (duração do km).
+  int _lastKmStartElapsedS = 0;
 
   /// ID da sessão planejada da run atual. Server resolve a sessão por
   /// esse id; client mantém pra mandar em todo cue (server cacheia).
@@ -184,6 +200,11 @@ class RunBloc extends Bloc<RunEvent, RunState> {
   // do range — inundava o coach. 60s entre cues iguais é razoável.
   final Map<String, int> _lastCueAt = {};
   Timer? _motivationTimer;
+  /// Cue `km_analysis` agendado pra ~10s depois de cada km_reached.
+  /// Cancelado se outro km cruza antes (rare) OU se user pausa/abandona —
+  /// evita análise de km já irrelevante (ex: user pausou logo após km 3,
+  /// análise sairia 10s no pause).
+  Timer? _scheduledAnalysis;
   double? _lastKmPace; // pace médio do km anterior pra splits
 
   // Native: GPS preciso, rejeita pontos ruins.
@@ -305,6 +326,7 @@ class RunBloc extends Bloc<RunEvent, RunState> {
       );
 
       _lastCoachKm = 0;
+      _lastKmStartElapsedS = 0;
       // Saudação inicial via Gemini Live DIRETO (sem /coach/message).
       // App fala com Live → recebe áudio WAV → toca. Sem proxy, sem TTS
       // estático, sem 504 no Cloud Run. Roda em background.
@@ -519,41 +541,80 @@ class RunBloc extends Bloc<RunEvent, RunState> {
         ? null
         : recentPaces.reduce((a, b) => a + b) / recentPaces.length;
 
+    final kmReached = (newDistance / 1000).floor();
+    final crossedKmBoundary = kmReached > _lastCoachKm && kmReached > 0;
+
+    // Quando cruza fronteira de km, recomputa splits do zero (cheap pra
+    // ~10km de corrida, ~10x por run). Mantém todos os splits anteriores
+    // em ordem, agora com os campos completos (pace agregado, duração,
+    // BPM médio) que a UI dos cards precisa.
+    final updatedSplits = crossedKmBoundary
+        ? computeKmSplits(newPoints)
+        : state.splits;
+
     emit(
       state.copyWith(
         points: newPoints,
         distanceM: newDistance,
         currentPaceMinKm: smoothedPace,
+        splits: updatedSplits,
       ),
     );
 
-    final kmReached = (newDistance / 1000).floor();
-    if (kmReached > _lastCoachKm && kmReached > 0) {
+    if (crossedKmBoundary) {
       final prevKm = _lastCoachKm;
       _lastCoachKm = kmReached;
-      // km_reached: dispara só se pref `kmAlert` ligado. _lastCoachKm já
-      // dedup (1x por km), sem cooldown adicional.
+      // Tempo do km que acabou de cruzar (não acumulado). Coach reporta
+      // "1 km em X min" + server estima calorias do km (MET × peso × tempo).
+      final kmDurationS = state.elapsedS - _lastKmStartElapsedS;
+      _lastKmStartElapsedS = state.elapsedS;
+      // Cue 1: km_reached (info imediato sobre o km que acabou).
+      // _lastCoachKm já dedup (1x por km), sem cooldown adicional.
       if (_alertPrefs['kmAlert'] == true) {
-        _requestCoachCue(
+        unawaited(_requestCoachCue(
           event: 'km_reached',
           kmReached: kmReached,
           distanceM: newDistance,
           elapsedS: state.elapsedS,
           currentPaceMinKm: smoothedPace,
-        );
+          kmDurationS: kmDurationS,
+        ));
         _lastCueAt['km_reached'] = DateTime.now().millisecondsSinceEpoch;
+
+        // Cue 2: km_analysis (técnico, ~10s depois). Análise compara
+        // splits recentes com alvo do plano e sugere ação ("acelerar",
+        // "manter", "recuperar"). LLM tem recentSplits[] como insumo.
+        // Cancela cue agendado anterior se ainda pendente — só 1 análise
+        // por km.
+        _scheduledAnalysis?.cancel();
+        _scheduledAnalysis = Timer(const Duration(seconds: 10), () {
+          if (state.status != RunStatus.active || isClosed) return;
+          final recent = updatedSplits
+              .skip(updatedSplits.length > 5 ? updatedSplits.length - 5 : 0)
+              .map((s) => s.toCoachPayload())
+              .toList();
+          unawaited(_requestCoachCue(
+            event: 'km_analysis',
+            kmReached: kmReached,
+            distanceM: state.distanceM,
+            elapsedS: state.elapsedS,
+            currentPaceMinKm: state.currentPaceMinKm,
+            recentSplits: recent,
+          ));
+          _lastCueAt['km_analysis'] = DateTime.now().millisecondsSinceEpoch;
+        });
       }
       // kmSplits: ao fechar um km, manda delta de pace vs km anterior.
       // Só dispara do 2º km em diante (precisa ter referência).
       if (_alertPrefs['kmSplits'] == true && prevKm > 0 && smoothedPace != null && _lastKmPace != null) {
-        _requestCoachCue(
+        unawaited(_requestCoachCue(
           event: 'km_split',
           kmReached: kmReached,
           distanceM: newDistance,
           elapsedS: state.elapsedS,
           currentPaceMinKm: smoothedPace,
           targetPaceMinKm: _lastKmPace,
-        );
+        ));
         _lastCueAt['km_split'] = DateTime.now().millisecondsSinceEpoch;
       }
       _lastKmPace = smoothedPace;
@@ -742,10 +803,12 @@ class RunBloc extends Bloc<RunEvent, RunState> {
     _gpsPollTimer?.cancel();
     _gpsSub?.cancel();
     _motivationTimer?.cancel();
+    _scheduledAnalysis?.cancel();
     _timer = null;
     _gpsPollTimer = null;
     _gpsSub = null;
     _motivationTimer = null;
+    _scheduledAnalysis = null;
     emit(state.copyWith(status: RunStatus.paused));
   }
 
@@ -785,12 +848,15 @@ class RunBloc extends Bloc<RunEvent, RunState> {
     _timer?.cancel();
     _flushTimer?.cancel();
     _motivationTimer?.cancel();
+    _scheduledAnalysis?.cancel();
     _gpsSub = null;
     _gpsPollTimer = null;
     _timer = null;
     _flushTimer = null;
     _motivationTimer = null;
+    _scheduledAnalysis = null;
     _coachRequestInFlight = false;
+    _coachRequestStartedAt = null;
   }
 
   @override
@@ -922,19 +988,47 @@ class RunBloc extends Bloc<RunEvent, RunState> {
   void _startMotivationTimer() {
     _motivationTimer?.cancel();
     if (_alertPrefs['motivation'] != true) return;
-    _motivationTimer = Timer.periodic(const Duration(minutes: 5), (_) {
+    // Tick a cada 60s — decisão de disparar é feita em runtime baseada em
+    // "stationary" detection. Antes era Timer.periodic(5min) que perdia o
+    // primeiro ciclo se user estava na tela mas nada mais acontecia.
+    _motivationTimer = Timer.periodic(const Duration(seconds: 60), (_) {
       if (state.status != RunStatus.active || isClosed) return;
-      // Só dispara se NÃO teve outro cue nos últimos 5min — evita
-      // sobrepor motivação a alertas reais.
       final now = DateTime.now().millisecondsSinceEpoch;
       final lastAny = _lastCueAt.values.fold<int>(0, (a, b) => a > b ? a : b);
-      if (now - lastAny < 5 * 60 * 1000) return;
-      _requestCoachCue(event: 'motivation');
+      final elapsedSinceLastCue = now - lastAny;
+      final isStationary = _isStationary();
+      // Web stationary (typical em teste no desktop): 3min sem cue → motiva.
+      // Native ou web em movimento: mantém 5min legado.
+      final cooldownMs = (kIsWeb && isStationary) ? 3 * 60 * 1000 : 5 * 60 * 1000;
+      // ignore: avoid_print
+      print('coach.motivation.tick stationary=$isStationary elapsedSinceLastCue=${(elapsedSinceLastCue / 1000).round()}s cooldown=${cooldownMs ~/ 1000}s');
+      if (elapsedSinceLastCue < cooldownMs) return;
+      unawaited(_requestCoachCue(event: 'motivation'));
       _lastCueAt['motivation'] = now;
     });
   }
 
-  void _requestCoachCue({
+  /// True se os últimos pontos GPS variam menos de 20m nos últimos 60s.
+  /// Web (WiFi triangulation) tipicamente fica jitterando ±5-10m sem
+  /// movimento real — esse threshold filtra ruído mas captura caminhada.
+  /// Sem pontos suficientes: assume stationary (conservador pra liberar
+  /// motivation cedo no início).
+  bool _isStationary() {
+    if (state.points.length < 2) return true;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final cutoff = now - 60 * 1000;
+    final recent = state.points.where((p) => p.ts >= cutoff).toList();
+    if (recent.length < 2) return true;
+    final first = recent.first;
+    double maxDist = 0;
+    for (final p in recent) {
+      final d = Geolocator.distanceBetween(first.lat, first.lng, p.lat, p.lng);
+      if (d > maxDist) maxDist = d;
+    }
+    return maxDist < 20.0;
+  }
+
+  Future<void> _requestCoachCue({
     required String event,
     int? kmReached,
     double? distanceM,
@@ -942,68 +1036,84 @@ class RunBloc extends Bloc<RunEvent, RunState> {
     double? currentPaceMinKm,
     double? targetPaceMinKm,
     int? currentSegmentIndex,
-  }) {
+    List<Map<String, dynamic>>? recentSplits,
+    int? kmDurationS,
+    int? kmAvgBpm,
+  }) async {
     if (state.runId == null) {
       // ignore: avoid_print
       print('coach.cue.skip event=$event reason=no_run_id');
       return;
     }
     if (_coachRequestInFlight) {
+      final blockedAge = _coachRequestStartedAt == null
+          ? '?'
+          : '${DateTime.now().millisecondsSinceEpoch - _coachRequestStartedAt!}ms';
       // ignore: avoid_print
-      print('coach.cue.skip event=$event reason=in_flight');
+      print('coach.cue.skip event=$event reason=in_flight inFlightFor=$blockedAge');
       return;
     }
 
     // ignore: avoid_print
     print('coach.cue.fire event=$event km=$kmReached distanceM=${distanceM ?? state.distanceM}');
     _coachRequestInFlight = true;
-    // Safety net: se onError/onDone não dispararem por algum motivo (ex:
-    // request travado), libera a flag em 30s pra próximo cue não ficar
-    // bloqueado pra sempre. Cues normais respondem em <5s.
-    Timer(const Duration(seconds: 30), () {
-      if (_coachRequestInFlight) {
+    _coachRequestStartedAt = DateTime.now().millisecondsSinceEpoch;
+    // Safety net curto (15s): se await for não terminar por algum motivo
+    // bizarro, finally cobre tudo. Mas mantemos pra garantir que mesmo
+    // se Future fica pendurada o flag libera.
+    Timer(const Duration(seconds: 15), () {
+      if (_coachRequestInFlight &&
+          _coachRequestStartedAt != null &&
+          DateTime.now().millisecondsSinceEpoch - _coachRequestStartedAt! >= 15000) {
         // ignore: avoid_print
         print('coach.cue.safety_release event=$event');
         _coachRequestInFlight = false;
+        _coachRequestStartedAt = null;
       }
     });
-    _coachRemote
-        .streamCoachCue(
-          runId: state.runId!,
-          event: event,
-          runType: state.runType,
-          currentPaceMinKm: currentPaceMinKm ?? _computePaceMinKm(),
-          targetPaceMinKm: targetPaceMinKm ?? _parsePaceMinKm(state.targetPace),
-          targetDistance: state.targetDistance,
-          distanceM: distanceM ?? state.distanceM,
-          elapsedS: elapsedS ?? state.elapsedS,
-          kmReached: kmReached,
-          // Sempre passa planSessionId/currentSegmentIndex quando
-          // disponíveis. Server resolve briefing completo só pra eventos
-          // estruturais (start/finish/segment_*/pace_alert); ruído
-          // (km_reached/motivation) já economiza via sessionSummary.
-          planSessionId: _planSessionId,
-          currentSegmentIndex: currentSegmentIndex ??
-              (_currentSegmentIdx >= 0 ? _currentSegmentIdx : null),
-        )
-        .listen(
-          (cue) {
-            // ignore: avoid_print
-            print('coach.cue.chunk event=$event textLen=${cue.text.length} hasAudio=${(cue.audioBase64 ?? '').isNotEmpty}');
-            if (isClosed) return;
-            add(_CoachChunk(cue));
-          },
-          onError: (err) {
-            // ignore: avoid_print
-            print('coach.cue.error event=$event err=$err');
-            _coachRequestInFlight = false;
-          },
-          onDone: () {
-            // ignore: avoid_print
-            print('coach.cue.done event=$event');
-            _coachRequestInFlight = false;
-          },
-        );
+
+    try {
+      // await for + try/finally: substituiu .listen(onError/onDone).
+      // O bug que segurava o flag: stream Dio com response 204 podia
+      // não disparar onDone() em tempo confiável (especialmente web,
+      // SSE encerrado por server-side res.end() sem chunk). Agora o
+      // flag SEMPRE libera no finally, independente de como o stream
+      // termina (chunks, vazio, erro).
+      await for (final cue in _coachRemote.streamCoachCue(
+        runId: state.runId!,
+        event: event,
+        runType: state.runType,
+        currentPaceMinKm: currentPaceMinKm ?? _computePaceMinKm(),
+        targetPaceMinKm: targetPaceMinKm ?? _parsePaceMinKm(state.targetPace),
+        targetDistance: state.targetDistance,
+        distanceM: distanceM ?? state.distanceM,
+        elapsedS: elapsedS ?? state.elapsedS,
+        kmReached: kmReached,
+        kmDurationS: kmDurationS,
+        kmAvgBpm: kmAvgBpm,
+        // Sempre passa planSessionId/currentSegmentIndex quando
+        // disponíveis. Server resolve briefing completo só pra eventos
+        // estruturais (start/finish/segment_*/pace_alert); ruído
+        // (km_reached/motivation) já economiza via sessionSummary.
+        planSessionId: _planSessionId,
+        currentSegmentIndex: currentSegmentIndex ??
+            (_currentSegmentIdx >= 0 ? _currentSegmentIdx : null),
+        recentSplits: recentSplits,
+      )) {
+        // ignore: avoid_print
+        print('coach.cue.chunk event=$event textLen=${cue.text.length} hasAudio=${(cue.audioBase64 ?? '').isNotEmpty}');
+        if (isClosed) return;
+        add(_CoachChunk(cue));
+      }
+    } catch (err) {
+      // ignore: avoid_print
+      print('coach.cue.error event=$event err=$err');
+    } finally {
+      _coachRequestInFlight = false;
+      _coachRequestStartedAt = null;
+      // ignore: avoid_print
+      print('coach.cue.done event=$event');
+    }
   }
 
   double _computePaceMinKm() {
