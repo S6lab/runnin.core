@@ -268,6 +268,8 @@ class _RunDetailPageState extends State<RunDetailPage> {
                   time: _formatDuration(s.durationS),
                   barRatio: 0,
                   isBest: false,
+                  bpm: s.avgBpm,
+                  calories: s.calories,
                 ),
               ))
           .toList();
@@ -286,6 +288,9 @@ class _RunDetailPageState extends State<RunDetailPage> {
           time: s.avgPaceMinKm ?? _formatDuration(s.durationS),
           barRatio: ratio,
           isBest: i == bestIdx,
+          bpm: s.avgBpm,
+          calories: s.calories,
+          elevationGainM: s.elevationGain,
         ),
       );
     });

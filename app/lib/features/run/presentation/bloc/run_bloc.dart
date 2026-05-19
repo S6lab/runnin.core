@@ -205,6 +205,12 @@ class RunBloc extends Bloc<RunEvent, RunState> {
   /// evita análise de km já irrelevante (ex: user pausou logo após km 3,
   /// análise sairia 10s no pause).
   Timer? _scheduledAnalysis;
+  /// One-shot: dispara em ~30s pra checar se o user moveu o suficiente desde
+  /// o START. Se distância < 5m E houve pelo menos 1 fix GPS, manda um
+  /// `no_movement` cue ao coach (disclaimer gentil). Cancelado em
+  /// pause/abandon/complete.
+  Timer? _stallCheckTimer;
+  bool _stallCueFired = false;
   double? _lastKmPace; // pace médio do km anterior pra splits
 
   // Native: GPS preciso, rejeita pontos ruins.
@@ -341,6 +347,26 @@ class RunBloc extends Bloc<RunEvent, RunState> {
       // Motivação: dispara cue a cada 5min se não houver outro cue ativo.
       // Respeita _alertPrefs['motivation'] (no-op se false).
       _startMotivationTimer();
+
+      // Stall check: 30s após START, se distância < 5m E houve fix GPS,
+      // pede ao coach um disclaimer gentil ("tudo bem? começa quando puder").
+      // One-shot — reset por StartRun (não dispara em resume).
+      _stallCueFired = false;
+      _stallCheckTimer?.cancel();
+      _stallCheckTimer = Timer(const Duration(seconds: 30), () {
+        if (isClosed || _stallCueFired) return;
+        if (state.status != RunStatus.active) return;
+        if (state.points.isEmpty) return; // sem GPS, outro caminho avisa
+        if (state.distanceM >= 5.0) return; // moveu, OK
+        _stallCueFired = true;
+        unawaited(_requestCoachCue(
+          event: 'no_movement',
+          distanceM: state.distanceM,
+          elapsedS: state.elapsedS,
+          currentPaceMinKm: state.currentPaceMinKm,
+        ));
+        _lastCueAt['no_movement'] = DateTime.now().millisecondsSinceEpoch;
+      });
 
       // GPS: web browser não emite stream confiável (depende de
       // movimento real >5m, e WiFi-based geolocation tem accuracy 1000m+
@@ -503,11 +529,16 @@ class RunBloc extends Bloc<RunEvent, RunState> {
       return;
     }
 
+    // pos.altitude: geolocator devolve 0 quando o device não disponibiliza
+    // (web sem barômetro, fallback de IP). Filtramos 0 pra não inflar split
+    // com elevação fake — splits ficam com elevationGain null nesse caso.
+    final altitude = pos.altitude != 0 ? pos.altitude : null;
     final newPoint = GpsPoint(
       lat: pos.latitude,
       lng: pos.longitude,
       ts: pos.timestamp.millisecondsSinceEpoch,
       accuracy: pos.accuracy,
+      altitude: altitude,
       pace: pos.speed > 0 ? (1000 / pos.speed) / 60 : null, // m/s → min/km
     );
 
@@ -783,6 +814,7 @@ class RunBloc extends Bloc<RunEvent, RunState> {
         remoteRunId,
         distanceM: state.distanceM,
         durationS: state.elapsedS,
+        splits: state.splits,
       );
       await _local.clearRun(storageRunId);
       emit(state.copyWith(status: RunStatus.completed, completedRun: run));
@@ -804,11 +836,13 @@ class RunBloc extends Bloc<RunEvent, RunState> {
     _gpsSub?.cancel();
     _motivationTimer?.cancel();
     _scheduledAnalysis?.cancel();
+    _stallCheckTimer?.cancel();
     _timer = null;
     _gpsPollTimer = null;
     _gpsSub = null;
     _motivationTimer = null;
     _scheduledAnalysis = null;
+    _stallCheckTimer = null;
     emit(state.copyWith(status: RunStatus.paused));
   }
 
@@ -849,12 +883,14 @@ class RunBloc extends Bloc<RunEvent, RunState> {
     _flushTimer?.cancel();
     _motivationTimer?.cancel();
     _scheduledAnalysis?.cancel();
+    _stallCheckTimer?.cancel();
     _gpsSub = null;
     _gpsPollTimer = null;
     _timer = null;
     _flushTimer = null;
     _motivationTimer = null;
     _scheduledAnalysis = null;
+    _stallCheckTimer = null;
     _coachRequestInFlight = false;
     _coachRequestStartedAt = null;
   }

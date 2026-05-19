@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { RunRepository } from '@modules/runs/domain/run.repository';
-import { Run } from '@modules/runs/domain/run.entity';
+import { Run, KmSplit } from '@modules/runs/domain/run.entity';
 import { NotFoundError } from '@shared/errors/app-error';
 import { BenchmarkRepository } from '@modules/benchmark/domain/benchmark.repository';
 import { FirestoreUserRepository } from '@modules/users/infra/firestore-user.repository';
@@ -8,11 +8,23 @@ import { GetProfileUseCase } from '@modules/users/domain/use-cases/get-profile.u
 import { FirestorePlanRepository } from '@modules/plans/infra/firestore-plan.repository';
 import { logger } from '@shared/logger/logger';
 
+const KmSplitInputSchema = z.object({
+  kmIndex: z.number().int().nonnegative(),
+  durationS: z.number().nonnegative(),
+  avgPaceMinKm: z.string(),
+  avgBpm: z.number().optional(),
+  elevationGain: z.number().optional(),
+});
+
 export const CompleteRunSchema = z.object({
   distanceM: z.number().nonnegative(),
   durationS: z.number().nonnegative(),
   avgBpm: z.number().optional(),
   maxBpm: z.number().optional(),
+  /** Splits por km computados no app a partir dos GPS points. Server enriquece
+   *  cada split com `calories` (MET escalonado por pace × peso × tempo do km)
+   *  antes de persistir. */
+  splits: z.array(KmSplitInputSchema).optional(),
 });
 
 export type CompleteRunInput = z.infer<typeof CompleteRunSchema>;
@@ -84,6 +96,21 @@ export class CompleteRunUseCase {
       weightKg = parseWeightKg(profile?.weight);
     } catch (_) {/* mantém fallback 70kg */}
 
+    // Enriquece cada split com calorias usando o MET escalonado por pace do
+    // próprio km (não da run inteira). Persistir splits permite que a hist
+    // renderize métricas km-a-km sem precisar reabrir o GPS bruto.
+    const enrichedSplits: KmSplit[] | undefined = input.splits?.map(s => {
+      const base: KmSplit = {
+        kmIndex: s.kmIndex,
+        durationS: s.durationS,
+        avgPaceMinKm: s.avgPaceMinKm,
+        calories: calcCalories(1000, s.durationS, weightKg),
+      };
+      if (typeof s.avgBpm === 'number') base.avgBpm = s.avgBpm;
+      if (typeof s.elevationGain === 'number') base.elevationGain = s.elevationGain;
+      return base;
+    });
+
     const updates: Partial<Run> = {
       status: 'completed',
       distanceM: input.distanceM,
@@ -94,6 +121,7 @@ export class CompleteRunUseCase {
       calories: calcCalories(input.distanceM, input.durationS, weightKg),
       xpEarned: calcXp(input.distanceM, input.durationS),
       completedAt: new Date().toISOString(),
+      ...(enrichedSplits && enrichedSplits.length > 0 ? { splits: enrichedSplits } : {}),
     };
 
     await this.runRepo.update(runId, userId, updates);

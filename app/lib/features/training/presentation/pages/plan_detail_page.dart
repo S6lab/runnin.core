@@ -392,7 +392,13 @@ class _Header extends StatelessWidget {
           Text('OBJETIVO',
               style: context.runninType.labelCaps.copyWith(color: palette.muted)),
           const SizedBox(height: 6),
+          // plan.goal é texto livre do onboarding (ex: "Maratona em sub
+          // 4h mantendo trabalho e família") — pode ser longo. Wrap
+          // explícito pra crescer verticalmente sem cortar.
           Text(plan.goal,
+              softWrap: true,
+              overflow: TextOverflow.visible,
+              maxLines: null,
               style: context.runninType.displaySm.copyWith(color: palette.text, fontSize: 18)),
           const SizedBox(height: 12),
           // Mesociclo: D0 → final
@@ -524,7 +530,13 @@ class _MarkdownText extends StatelessWidget {
           ),
         ));
       } else {
+        // Parágrafos do rationale podem ser longos (1-2 parágrafos por
+        // seção). Wrap explícito + maxLines:null garante que cresçam
+        // verticalmente em vez de truncar quando o card é estreito.
         widgets.add(Text(_stripInlineMarks(line),
+            softWrap: true,
+            overflow: TextOverflow.visible,
+            maxLines: null,
             style: context.runninType.bodyMd.copyWith(color: palette.text)));
       }
     }
@@ -589,17 +601,30 @@ class _ProfileSummary extends StatelessWidget {
           Text('DADOS CONSIDERADOS',
               style: context.runninType.labelCaps.copyWith(fontSize: 11, color: palette.muted, letterSpacing: 1.2)),
           const SizedBox(height: 10),
+          // crossAxisAlignment.start: quando value (Objetivo, Condições)
+          // quebra em múltiplas linhas, label fica alinhado no topo em
+          // vez de vertical-centralizado contra texto comprido. Wrap
+          // explícito + maxLines:null garante que nenhum valor é truncado
+          // — frases longas do onboarding (objetivo livre, lista de
+          // condições médicas) precisam crescer verticalmente.
           ...items.map((e) => Padding(
                 padding: const EdgeInsets.symmetric(vertical: 3),
                 child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     SizedBox(
                       width: 110,
                       child: Text(e.$1,
+                          softWrap: true,
+                          overflow: TextOverflow.visible,
+                          maxLines: null,
                           style: context.runninType.bodySm),
                     ),
                     Expanded(
                       child: Text(e.$2,
+                          softWrap: true,
+                          overflow: TextOverflow.visible,
+                          maxLines: null,
                           style: context.runninType.bodySm.copyWith(color: palette.text)),
                     ),
                   ],

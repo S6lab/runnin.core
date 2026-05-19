@@ -1238,20 +1238,37 @@ class _ActiveStatsLayout extends StatelessWidget {
               ),
               const SizedBox(height: 10),
               SizedBox(
-                height: 76,
+                height: 92,
                 child: ListView.separated(
                   scrollDirection: Axis.horizontal,
-                  itemCount: 5,
+                  // 1 card por split fechado + 1 placeholder pro km em
+                  // andamento. Min 5 placeholders pra UI não ficar vazia
+                  // no início. Ordem: mais antigo → mais recente.
+                  itemCount: state.splits.length < 5
+                      ? 5
+                      : state.splits.length + 1,
                   separatorBuilder: (_, _) => const SizedBox(width: 8),
                   itemBuilder: (_, i) {
+                    if (i < state.splits.length) {
+                      final s = state.splits[i];
+                      return _SplitCard(
+                        kmLabel: 'KM${s.kmIndex.toString().padLeft(2, '0')}',
+                        paceLabel: s.formattedPace,
+                        timeLabel: s.formattedDuration,
+                        speedLabel: '${s.avgSpeedKmh.toStringAsFixed(1)} km/h',
+                        done: true,
+                      );
+                    }
+                    // Placeholder pro próximo KM (em andamento ou futuro)
                     final kmIdx = i + 1;
-                    final reached = (state.distanceM / 1000).floor();
-                    final done = kmIdx <= reached;
+                    final currentKm = (state.distanceM / 1000).floor() + 1;
+                    final isCurrent = kmIdx == currentKm;
                     return _SplitCard(
                       kmLabel: 'KM${kmIdx.toString().padLeft(2, '0')}',
-                      paceLabel: done ? state.formattedPace : '--:--',
-                      statusLabel: done ? 'OK' : 'PEND',
-                      done: done,
+                      paceLabel: isCurrent ? state.formattedPace : '--:--',
+                      timeLabel: isCurrent ? state.formattedElapsed : '--:--',
+                      speedLabel: isCurrent ? 'em andamento' : '--',
+                      done: false,
                     );
                   },
                 ),
@@ -1483,13 +1500,18 @@ class _StatCell extends StatelessWidget {
 
 class _SplitCard extends StatelessWidget {
   final String kmLabel;
+  /// Pace AGREGADO do split (mm:ss/km), não o smoothed instantâneo.
   final String paceLabel;
-  final String statusLabel;
+  /// Duração do split (mm:ss), ou tempo decorrido se em andamento.
+  final String timeLabel;
+  /// Velocidade média (km/h), ou "em andamento" pra split em curso.
+  final String speedLabel;
   final bool done;
   const _SplitCard({
     required this.kmLabel,
     required this.paceLabel,
-    required this.statusLabel,
+    required this.timeLabel,
+    required this.speedLabel,
     required this.done,
   });
 
@@ -1498,34 +1520,48 @@ class _SplitCard extends StatelessWidget {
     final palette = context.runninPalette;
     final type = context.runninType;
     final accent = done ? FigmaColors.brandOrange : palette.muted;
+    final mutedFg = palette.muted.withValues(alpha: 0.7);
     return Container(
-      width: 84,
+      width: 104,
       padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
       decoration: BoxDecoration(
         color: palette.surface,
-        border: Border.all(color: palette.border),
+        border: Border.all(color: done ? accent.withValues(alpha: 0.6) : palette.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             kmLabel,
-            style: type.labelCaps.copyWith(color: palette.muted, letterSpacing: 1.2),
+            style: type.labelCaps.copyWith(color: accent, letterSpacing: 1.2),
           ),
           const SizedBox(height: 4),
+          // Pace agregado — destaque principal do card
           Text(
             paceLabel,
             style: type.labelMd.copyWith(
-              color: done ? palette.text : palette.muted.withValues(alpha: 0.6),
+              color: done ? palette.text : mutedFg,
+              fontWeight: FontWeight.w600,
             ),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 2),
+          // Tempo do split
           Text(
-            statusLabel,
+            timeLabel,
             style: type.labelCaps.copyWith(
-              color: accent,
+              color: done ? palette.text.withValues(alpha: 0.85) : mutedFg,
+              fontSize: 10,
+              letterSpacing: 0.6,
+            ),
+          ),
+          const SizedBox(height: 2),
+          // Velocidade média
+          Text(
+            speedLabel,
+            style: type.labelCaps.copyWith(
+              color: mutedFg,
               fontSize: 9,
-              letterSpacing: 1.0,
+              letterSpacing: 0.5,
             ),
           ),
         ],

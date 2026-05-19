@@ -38,6 +38,7 @@ class RunRemoteDatasource {
     required int durationS,
     int? avgBpm,
     int? maxBpm,
+    List<KmSplit>? splits,
   }) async {
     final res = await _dio.patch(
       '/runs/$runId/complete',
@@ -46,6 +47,8 @@ class RunRemoteDatasource {
         'durationS': durationS,
         'avgBpm': ?avgBpm,
         'maxBpm': ?maxBpm,
+        if (splits != null && splits.isNotEmpty)
+          'splits': splits.map((s) => s.toCompletePayload()).toList(),
       },
     );
     return Run.fromJson(res.data as Map<String, dynamic>);

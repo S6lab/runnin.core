@@ -67,6 +67,8 @@ export function buildEventPrompt(ctx: RunContextInput): string {
       return `O pace do corredor desviou do alvo DESTE segmento do plano. Corrija com firmeza e cuidado, citando o pace alvo do segmento atual (não o pace alvo geral da sessão).\n\n${base}`;
     case 'segment_end':
       return `O corredor terminou o segmento atual (índice ${ctx.currentSegmentIndex ?? '?'}). Em 1 frase, valide a execução do segmento e prepare a transição.\n\n${base}`;
+    case 'no_movement':
+      return `O atleta${ctx.athleteName ? ' ' + ctx.athleteName : ''} apertou INICIAR mas em 30 segundos não se moveu (distância ~0). Pergunte gentilmente em 1 frase curta se está tudo bem — talvez esteja só esperando, talvez tenha trocado de planos. Sem tom alarmista. Sugira começar a se deslocar quando estiver pronto.\n\n${base}`;
     default:
       return base;
   }

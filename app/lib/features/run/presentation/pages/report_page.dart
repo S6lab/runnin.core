@@ -15,27 +15,13 @@ class ReportPage extends StatefulWidget {
   State<ReportPage> createState() => _ReportPageState();
 }
 
-class _ReportSections {
-  final String runAnalysis;
-  final String planEvolution;
-  final String nextSessions;
-  final String recommendations;
-  const _ReportSections({
-    required this.runAnalysis,
-    required this.planEvolution,
-    required this.nextSessions,
-    required this.recommendations,
-  });
-}
-
 class _ReportPageState extends State<ReportPage> {
   final _remote = RunRemoteDatasource();
   Run? _run;
   String? _summary;
-  _ReportSections? _sections;
-  // Status segue o backend: pending | summary_ready | enriched | ready (legacy).
-  // Render por estado: pending=skeleton, summary_ready/ready=card único,
-  // enriched=4 cards expansíveis.
+  // Status do backend: pending | summary_ready | enriched | ready (legacy).
+  // Two-phase: summary curto em ~30s → enriched (texto longo) em até ~150s.
+  // Texto enriched SOBRESCREVE o summary curto quando chega.
   String _reportStatus = 'pending';
   bool _loadingRun = true;
   String? _reportError;
@@ -60,8 +46,8 @@ class _ReportPageState extends State<ReportPage> {
   Future<void> _pollReport() async {
     int attempts = 0;
     // 50 × 3s = 150s. Two-phase: summary_ready chega em ~30s, enriched
-    // (fase B com adaptPlan + 4 seções) leva +30s a +60s. Polling para
-    // ao atingir 'enriched' ou esgotar tentativas.
+    // (fase B com adaptPlan + texto completo) leva +30s a +60s. Polling
+    // para ao atingir 'enriched' ou esgotar tentativas.
     const maxAttempts = 50;
     _pollTimer = Timer.periodic(const Duration(seconds: 3), (timer) async {
       if (attempts++ > maxAttempts) {
@@ -83,23 +69,11 @@ class _ReportPageState extends State<ReportPage> {
         final data = res.data as Map<String, dynamic>;
         final status = (data['status'] as String?) ?? 'pending';
         final summary = data['summary'] as String?;
-        final sectionsRaw = data['sections'];
-
-        _ReportSections? parsedSections;
-        if (sectionsRaw is Map<String, dynamic>) {
-          parsedSections = _ReportSections(
-            runAnalysis: (sectionsRaw['runAnalysis'] as String?)?.trim() ?? '',
-            planEvolution: (sectionsRaw['planEvolution'] as String?)?.trim() ?? '',
-            nextSessions: (sectionsRaw['nextSessions'] as String?)?.trim() ?? '',
-            recommendations: (sectionsRaw['recommendations'] as String?)?.trim() ?? '',
-          );
-        }
 
         if (mounted) {
           setState(() {
             _reportStatus = status;
             if (summary != null && summary.isNotEmpty) _summary = summary;
-            if (parsedSections != null) _sections = parsedSections;
             _reportError = null;
           });
         }
@@ -154,14 +128,13 @@ class _ReportPageState extends State<ReportPage> {
             if (_run?.xpEarned != null && _run!.xpEarned! > 0)
               const SizedBox(height: 24),
 
-            // Coach report — render adaptativo por status:
-            //   pending → skeleton com mensagem "Analisando..."
-            //   summary_ready/ready → card único com resumo (fase A do two-phase)
-            //   enriched → 4 ExpansionTile (Análise / Evolução / Próximas / Recomendações)
+            // Coach report — texto contínuo. Pending mostra skeleton.
+            // summary_ready/ready mostra summary curto + hint "análise
+            // completa em segundos". Enriched mostra summary expandido
+            // (texto markdown com `## ` headings renderizado contínuo).
             _CoachReportBlock(
               status: _reportStatus,
               summary: _summary,
-              sections: _sections,
               error: _reportError,
               palette: palette,
             ),
@@ -270,17 +243,20 @@ class _Divider extends StatelessWidget {
   );
 }
 
+/// Bloco do coach na ReportPage. Renderiza texto markdown contínuo —
+/// sem cards expansíveis, sem parsing JSON. Quando summary é o texto
+/// curto (fase A), mostra como parágrafo simples. Quando é o texto
+/// enriched (fase B, com `## ` headings), divide em parágrafos e
+/// destaca os headings.
 class _CoachReportBlock extends StatelessWidget {
   final String status;
   final String? summary;
-  final _ReportSections? sections;
   final String? error;
   final dynamic palette;
 
   const _CoachReportBlock({
     required this.status,
     required this.summary,
-    required this.sections,
     required this.error,
     required this.palette,
   });
@@ -288,44 +264,8 @@ class _CoachReportBlock extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final type = context.runninType;
-    final hasEnriched = status == 'enriched' && sections != null;
-
-    if (hasEnriched) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('COACH.AI', style: type.labelCaps.copyWith(color: palette.secondary)),
-          const SizedBox(height: 8),
-          _ReportCard(
-            title: 'ANÁLISE DA CORRIDA',
-            body: sections!.runAnalysis,
-            initiallyExpanded: true,
-            palette: palette,
-          ),
-          const SizedBox(height: 8),
-          _ReportCard(
-            title: 'EVOLUÇÃO NO PLANO',
-            body: sections!.planEvolution,
-            palette: palette,
-          ),
-          const SizedBox(height: 8),
-          _ReportCard(
-            title: 'PRÓXIMAS SESSÕES',
-            body: sections!.nextSessions,
-            palette: palette,
-          ),
-          const SizedBox(height: 8),
-          _ReportCard(
-            title: 'RECOMENDAÇÕES',
-            body: sections!.recommendations,
-            palette: palette,
-          ),
-        ],
-      );
-    }
-
-    // Fallback: pending, summary_ready ou ready (legacy) → card único.
     return Container(
+      width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         border: Border(left: BorderSide(color: palette.secondary, width: 3)),
@@ -335,8 +275,8 @@ class _CoachReportBlock extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('COACH.AI', style: type.labelCaps.copyWith(color: palette.secondary)),
-          const SizedBox(height: 8),
-          if (status == 'pending' && summary == null)
+          const SizedBox(height: 12),
+          if (status == 'pending' && (summary == null || summary!.isEmpty))
             Row(children: [
               SizedBox(
                 width: 12, height: 12,
@@ -348,28 +288,8 @@ class _CoachReportBlock extends StatelessWidget {
                 style: type.bodySm,
               ),
             ])
-          else if (summary != null)
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(summary!, style: type.bodyMd.copyWith(height: 1.6)),
-                // Hint sutil enquanto fase B roda em background.
-                if (status == 'summary_ready') ...[
-                  const SizedBox(height: 10),
-                  Row(children: [
-                    SizedBox(
-                      width: 10, height: 10,
-                      child: CircularProgressIndicator(strokeWidth: 1.2, color: palette.muted),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Análise completa em poucos segundos...',
-                      style: type.labelCaps.copyWith(color: palette.muted),
-                    ),
-                  ]),
-                ],
-              ],
-            )
+          else if (summary != null && summary!.isNotEmpty)
+            _MarkdownReport(text: summary!, palette: palette, isEnriching: status == 'summary_ready')
           else
             Text(
               error ?? 'Relatório não disponível.',
@@ -381,45 +301,92 @@ class _CoachReportBlock extends StatelessWidget {
   }
 }
 
-class _ReportCard extends StatelessWidget {
-  final String title;
-  final String body;
-  final bool initiallyExpanded;
+/// Renderiza texto markdown leve do coach: parágrafos comuns + headings
+/// `## TÍTULO`. Substitui o `_MarkdownText` de plan_detail (que tem
+/// suporte a bullets/bold) — aqui só precisamos de heading + parágrafo.
+/// Quando isEnriching=true, mostra hint sutil no fim sinalizando que
+/// a análise completa está chegando.
+class _MarkdownReport extends StatelessWidget {
+  final String text;
   final dynamic palette;
+  final bool isEnriching;
 
-  const _ReportCard({
-    required this.title,
-    required this.body,
+  const _MarkdownReport({
+    required this.text,
     required this.palette,
-    this.initiallyExpanded = false,
+    required this.isEnriching,
   });
 
   @override
   Widget build(BuildContext context) {
     final type = context.runninType;
-    return Theme(
-      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-      child: Container(
-        decoration: BoxDecoration(
-          border: Border(left: BorderSide(color: palette.secondary, width: 3)),
-          color: palette.secondary.withValues(alpha: 0.05),
-        ),
-        child: ExpansionTile(
-          initiallyExpanded: initiallyExpanded,
-          tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-          childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-          title: Text(title, style: type.labelCaps.copyWith(color: palette.secondary)),
-          iconColor: palette.secondary,
-          collapsedIconColor: palette.secondary,
-          children: [
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Text(body, style: type.bodyMd.copyWith(height: 1.6)),
+    final widgets = <Widget>[];
+    final lines = text.split('\n');
+    final paragraph = StringBuffer();
+
+    void flushParagraph() {
+      final p = paragraph.toString().trim();
+      if (p.isNotEmpty) {
+        widgets.add(Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: Text(
+            p,
+            softWrap: true,
+            overflow: TextOverflow.visible,
+            maxLines: null,
+            style: type.bodyMd.copyWith(color: palette.text, height: 1.6),
+          ),
+        ));
+      }
+      paragraph.clear();
+    }
+
+    for (final raw in lines) {
+      final line = raw.trimRight();
+      if (line.startsWith('## ')) {
+        flushParagraph();
+        widgets.add(Padding(
+          padding: const EdgeInsets.only(top: 8, bottom: 6),
+          child: Text(
+            line.substring(3).trim(),
+            softWrap: true,
+            overflow: TextOverflow.visible,
+            maxLines: null,
+            style: type.labelCaps.copyWith(
+              color: palette.secondary,
+              fontSize: 12,
+              letterSpacing: 1.2,
+              fontWeight: FontWeight.w600,
             ),
-          ],
-        ),
-      ),
-    );
+          ),
+        ));
+      } else if (line.isEmpty) {
+        flushParagraph();
+      } else {
+        if (paragraph.isNotEmpty) paragraph.write(' ');
+        paragraph.write(line);
+      }
+    }
+    flushParagraph();
+
+    if (isEnriching) {
+      widgets.add(Padding(
+        padding: const EdgeInsets.only(top: 4),
+        child: Row(children: [
+          SizedBox(
+            width: 10, height: 10,
+            child: CircularProgressIndicator(strokeWidth: 1.2, color: palette.muted),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            'Análise completa em poucos segundos...',
+            style: type.labelCaps.copyWith(color: palette.muted),
+          ),
+        ]),
+      ));
+    }
+
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: widgets);
   }
 }
 

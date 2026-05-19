@@ -5,6 +5,12 @@ export interface KmSplit {
   durationS: number;
   avgPaceMinKm: string;
   avgBpm?: number;
+  /** Calorias estimadas (kcal) do km — server preenche em CompleteRunUseCase
+   *  usando MET escalonado por pace × peso × tempo do km. */
+  calories?: number;
+  /** Ganho de elevação (m) do km — soma de deltas positivos de altitude
+   *  dos GPS points dentro do km. Null quando o device não emite altitude. */
+  elevationGain?: number;
 }
 
 export interface GpsPoint {
@@ -12,6 +18,7 @@ export interface GpsPoint {
   lng: number;
   ts: number;       // Unix ms
   accuracy: number; // metros
+  altitude?: number; // metros (acima do nível do mar; opcional, depende do device)
   pace?: number;    // min/km
   bpm?: number;
 }
