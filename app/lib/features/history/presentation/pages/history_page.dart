@@ -5,7 +5,9 @@ import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/features/history/data/benchmark_remote_datasource.dart' show BenchmarkRemoteDatasource;
 import 'package:runnin/features/history/data/period_analysis_remote_datasource.dart';
+import 'package:runnin/features/history/data/stats_remote_datasource.dart';
 import 'package:runnin/features/history/domain/entities/period_analysis.dart';
+import 'package:runnin/features/history/domain/entities/stats_aggregate.dart';
 import 'package:runnin/features/history/presentation/widgets/hist_stat_card.dart';
 import 'package:runnin/features/run/data/datasources/run_remote_datasource.dart';
 import 'package:runnin/features/run/domain/entities/run.dart';
@@ -47,6 +49,8 @@ class _HistoryPageState extends State<HistoryPage> {
   final _periodAnalysisDatasource = PeriodAnalysisRemoteDatasource();
   PeriodAnalysis? _periodAnalysis;
   bool _loadingAnalysis = false;
+  final _statsDatasource = StatsRemoteDatasource();
+  StatsAggregate? _aggregate;
 
   int get _analysisLimit => switch (_period) {
     _Period.week => 10,
@@ -54,11 +58,28 @@ class _HistoryPageState extends State<HistoryPage> {
     _Period.threeMonths => 90,
   };
 
+  String get _periodKey => switch (_period) {
+    _Period.week => 'week',
+    _Period.month => 'month',
+    _Period.threeMonths => 'threeMonths',
+  };
+
   @override
   void initState() {
     super.initState();
     _load();
     _loadPeriodAnalysis();
+    _loadAggregate();
+  }
+
+  Future<void> _loadAggregate() async {
+    if (!mounted) return;
+    try {
+      final result = await _statsDatasource.getAggregate(_periodKey);
+      if (mounted) setState(() => _aggregate = result);
+    } catch (_) {
+      // Sem aggregate, fallback nos deltas hardcoded.
+    }
   }
 
   Future<void> _loadPeriodAnalysis() async {
@@ -171,6 +192,7 @@ class _HistoryPageState extends State<HistoryPage> {
                 onChanged: (i) {
                   setState(() => _period = _Period.values[i]);
                   _loadPeriodAnalysis();
+                  _loadAggregate();
                 },
               ),
             ),
@@ -308,7 +330,7 @@ class _HistoryPageState extends State<HistoryPage> {
       backgroundColor: palette.surface,
       onRefresh: _load,
       child: _tab == _ContentTab.data
-          ? _DataView(runs: runs, plan: _plan, period: _period, periodAnalysis: _periodAnalysis, loadingAnalysis: _loadingAnalysis)
+          ? _DataView(runs: runs, plan: _plan, period: _period, periodAnalysis: _periodAnalysis, loadingAnalysis: _loadingAnalysis, aggregate: _aggregate)
           : _tab == _ContentTab.runs
               ? _RunsListView(runs: runs)
               : benchmarkWidget,
@@ -324,7 +346,8 @@ class _DataView extends StatelessWidget {
   final _Period period;
   final PeriodAnalysis? periodAnalysis;
   final bool loadingAnalysis;
-  const _DataView({required this.runs, required this.plan, required this.period, this.periodAnalysis, this.loadingAnalysis = false});
+  final StatsAggregate? aggregate;
+  const _DataView({required this.runs, required this.plan, required this.period, this.periodAnalysis, this.loadingAnalysis = false, this.aggregate});
 
   @override
   Widget build(BuildContext context) {
@@ -413,21 +436,23 @@ class _DataView extends StatelessWidget {
         ),
         const SizedBox(height: 16),
 
-        // Evolução Resumo
+        // Evolução Resumo — deltas vêm de /stats/aggregate quando disponível,
+        // fallback pra '--' enquanto carrega ou se backend não responde.
         Row(children: [
           Expanded(child: FigmaStatTileWithDelta(
             label: 'PACE',
             value: stats.avgPaceLabel,
-            delta: '+5s',
-            deltaIsPositive: false,
+            delta: _fmtDeltaPct(aggregate?.deltas.pacePctVsPrev),
+            // pace: lower = better → delta negativo é "positivo" pro usuário
+            deltaIsPositive: (aggregate?.deltas.pacePctVsPrev ?? 0) <= 0,
           )),
           const SizedBox(width: 8),
           Expanded(child: FigmaStatTileWithDelta(
             label: 'VOLUME',
             value: stats.totalKm.toStringAsFixed(1),
             unit: 'km',
-            delta: '+2.5km',
-            deltaIsPositive: true,
+            delta: _fmtDeltaPct(aggregate?.deltas.volumePctVsPrev),
+            deltaIsPositive: (aggregate?.deltas.volumePctVsPrev ?? 0) >= 0,
           )),
         ]),
         const SizedBox(height: 8),
@@ -436,15 +461,16 @@ class _DataView extends StatelessWidget {
             label: 'BPM',
             value: stats.avgBpm?.toString() ?? '--',
             unit: 'BPM',
-            delta: '-2',
-            deltaIsPositive: true,
+            delta: _fmtDeltaBpm(aggregate?.deltas.bpmDeltaBpm),
+            // bpm: lower = better → delta negativo é "positivo"
+            deltaIsPositive: (aggregate?.deltas.bpmDeltaBpm ?? 0) <= 0,
           )),
           const SizedBox(width: 8),
           Expanded(child: FigmaStatTileWithDelta(
             label: 'CORRIDAS',
             value: '${stats.count}',
-            delta: '+1',
-            deltaIsPositive: true,
+            delta: _fmtDeltaInt(aggregate?.deltas.runsCountDelta),
+            deltaIsPositive: (aggregate?.deltas.runsCountDelta ?? 0) >= 0,
           )),
         ]),
         const SizedBox(height: 16),
@@ -845,4 +871,22 @@ class _RunsListView extends StatelessWidget {
     final sec = s % 60;
     return '${m.toString().padLeft(2, '0')}:${sec.toString().padLeft(2, '0')}';
   }
+}
+
+String _fmtDeltaPct(int? pct) {
+  if (pct == null) return '--';
+  final sign = pct > 0 ? '+' : '';
+  return '$sign$pct%';
+}
+
+String _fmtDeltaBpm(int? bpm) {
+  if (bpm == null) return '--';
+  final sign = bpm > 0 ? '+' : '';
+  return '$sign$bpm';
+}
+
+String _fmtDeltaInt(int? n) {
+  if (n == null) return '--';
+  final sign = n > 0 ? '+' : '';
+  return '$sign$n';
 }

@@ -95,6 +95,51 @@ class KmSplit {
         avgPaceMinKm: j['avgPaceMinKm'] as String?,
         avgBpm: (j['avgBpm'] as num?)?.toInt(),
       );
+
+  /// Pace formatado mm:ss/km. Usa avgPaceMinKm se vier do backend, senão
+  /// deriva de durationS (1km = durationS segundos → pace = durationS/60).
+  String get formattedPace {
+    if (avgPaceMinKm != null && avgPaceMinKm!.isNotEmpty) return avgPaceMinKm!;
+    if (durationS <= 0) return '--:--';
+    final m = durationS ~/ 60;
+    final s = durationS % 60;
+    return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
+  }
+
+  /// Duração formatada mm:ss (mesma representação que pace pra splits de 1km).
+  String get formattedDuration => formattedPace;
+
+  /// Velocidade média em km/h. 1km / (durationS/3600).
+  double get avgSpeedKmh {
+    if (durationS <= 0) return 0;
+    return 3600.0 / durationS;
+  }
+
+  /// Payload compacto pro evento coach.message do tipo km_analysis. Mantém
+  /// só os campos que o LLM usa pra recomendar (kmIndex, durationS, pace).
+  Map<String, dynamic> toCoachPayload() => {
+        'kmIndex': kmIndex,
+        'durationS': durationS,
+        if (avgPaceMinKm != null) 'avgPaceMinKm': avgPaceMinKm,
+        if (avgBpm != null) 'avgBpm': avgBpm,
+      };
+}
+
+/// Constrói List<KmSplit> a partir de pontos GPS, usando os tempos em segundos
+/// de [computeKmSplitsSeconds]. avgBpm fica null (sem dado BPM nos GPS points
+/// padrão).
+List<KmSplit> computeKmSplits(List<GpsPoint> points) {
+  final seconds = computeKmSplitsSeconds(points);
+  return List.generate(seconds.length, (i) {
+    final s = seconds[i].round();
+    final m = s ~/ 60;
+    final sec = s % 60;
+    return KmSplit(
+      kmIndex: i,
+      durationS: s,
+      avgPaceMinKm: '${m.toString().padLeft(2, '0')}:${sec.toString().padLeft(2, '0')}',
+    );
+  });
 }
 
 class Run {
