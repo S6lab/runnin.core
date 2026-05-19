@@ -1,10 +1,12 @@
 import { Request, Response, NextFunction } from 'express';
 import { FirestoreRunRepository } from '@modules/runs/infra/firestore-run.repository';
 import { GetStatsAggregateUseCase } from '../domain/use-cases/get-stats-aggregate.use-case';
+import { GetUserTotalsUseCase } from '../domain/use-cases/get-user-totals.use-case';
 import { StatsPeriod } from '../domain/stats-aggregate.entity';
 
 const runRepo = new FirestoreRunRepository();
 const getStats = new GetStatsAggregateUseCase(runRepo);
+const getUserTotals = new GetUserTotalsUseCase(runRepo);
 
 const VALID_PERIODS: StatsPeriod[] = ['week', 'month', 'threeMonths'];
 
@@ -16,6 +18,15 @@ export async function getStatsAggregate(req: Request, res: Response, next: NextF
       return;
     }
     const result = await getStats.execute(req.uid, period as StatsPeriod);
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function getUserTotalsHandler(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const result = await getUserTotals.execute(req.uid);
     res.json(result);
   } catch (err) {
     next(err);
