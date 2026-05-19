@@ -16,6 +16,7 @@ import { adminRouter } from '@modules/admin/http/admin.routes';
 import { benchmarkRoutes } from '@modules/benchmark/http/benchmark.routes';
 import { subscriptionRouter } from '@modules/subscriptions/http/subscription.routes';
 import { biometricRouter } from '@modules/biometrics/http/biometric.routes';
+import { statsRouter } from '@modules/stats';
 
 export function createServer(): express.Application {
   const app = express();
@@ -72,6 +73,7 @@ export function createServer(): express.Application {
   app.use('/v1/benchmark', benchmarkRoutes);
   app.use('/v1/subscriptions', subscriptionRouter);
   app.use('/v1/biometrics', biometricRouter);
+  app.use('/v1/stats', statsRouter);
 
   app.use(errorMiddleware);
 
