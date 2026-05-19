@@ -229,7 +229,21 @@ class _HistoryPageState extends State<HistoryPage> {
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
       child: Column(
         children: [
-          if (_benchmarkLoading || _benchmarkPercentile == null)
+          if (_benchmarkEmpty)
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: palette.surface,
+                border: Border.all(color: palette.border),
+              ),
+              child: Center(
+                    child: Text(
+                      'Sem dados suficientes na sua cohort ainda',
+                      style: context.runninType.bodySm.copyWith(color: palette.muted),
+                    ),
+                  )
+            )
+          else if (_benchmarkLoading || _benchmarkPercentile == null)
             const SizedBox(
               height: 120,
               child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
@@ -785,7 +799,7 @@ class _RunsListView extends StatelessWidget {
               distanceKm: run.distanceM / 1000,
               pace: run.avgPace ?? '--:--',
               duration: _fmtDuration(run.durationS),
-              coachPreview: run.type,
+              coachPreview: run.coachQuote ?? 'Sem análise gerada ainda',
               onTap: () => context.push('/history/run/${run.id}'),
             ),
             if (run.planSessionId == null)
