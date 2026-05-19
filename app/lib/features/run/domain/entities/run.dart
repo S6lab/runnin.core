@@ -76,6 +76,27 @@ double _haversineM(double lat1, double lng1, double lat2, double lng2) {
 
 double _toRad(double deg) => deg * math.pi / 180.0;
 
+class KmSplit {
+  final int kmIndex;
+  final int durationS;
+  final String? avgPaceMinKm;
+  final int? avgBpm;
+
+  const KmSplit({
+    required this.kmIndex,
+    required this.durationS,
+    this.avgPaceMinKm,
+    this.avgBpm,
+  });
+
+  factory KmSplit.fromJson(Map<String, dynamic> j) => KmSplit(
+        kmIndex: (j['kmIndex'] as num).toInt(),
+        durationS: (j['durationS'] as num).toInt(),
+        avgPaceMinKm: j['avgPaceMinKm'] as String?,
+        avgBpm: (j['avgBpm'] as num?)?.toInt(),
+      );
+}
+
 class Run {
   final String id;
   final String status;
@@ -99,6 +120,8 @@ class Run {
   final double? elevationGain;
   final String? deviceInfo;
   final String? planSessionId;
+  final String? coachQuote;
+  final List<KmSplit> splits;
 
   const Run({
     required this.id,
@@ -120,6 +143,8 @@ class Run {
     this.elevationGain,
     this.deviceInfo,
     this.planSessionId,
+    this.coachQuote,
+    this.splits = const [],
   });
 
   factory Run.fromJson(Map<String, dynamic> j) => Run(
@@ -144,5 +169,11 @@ class Run {
     elevationGain: (j['elevationGain'] as num?)?.toDouble(),
     deviceInfo: j['deviceInfo'] as String?,
     planSessionId: j['planSessionId'] as String?,
+    coachQuote: j['coachQuote'] as String?,
+    splits: j['splits'] != null
+        ? (j['splits'] as List)
+            .map((e) => KmSplit.fromJson(e as Map<String, dynamic>))
+            .toList()
+        : const [],
   );
 }

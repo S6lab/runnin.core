@@ -6,6 +6,7 @@ import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/features/run/data/datasources/run_remote_datasource.dart';
 import 'package:runnin/features/run/domain/entities/run.dart';
+import 'package:runnin/shared/widgets/figma/figma_split_row.dart';
 
 class RunDetailPage extends StatefulWidget {
   final String runId;
@@ -186,7 +187,7 @@ class _RunDetailPageState extends State<RunDetailPage> {
                               ),
                               const SizedBox(height: 24),
 
-                              // Splits placeholder
+                              // Splits
                               Container(
                                 width: double.infinity,
                                 padding: const EdgeInsets.all(16),
@@ -198,11 +199,14 @@ class _RunDetailPageState extends State<RunDetailPage> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text('SPLITS', style: type.labelCaps.copyWith(color: palette.primary)),
-                                    const SizedBox(height: 8),
-                                    Text(
-                                      'Dados de splits por km serão exibidos aqui.',
-                                      style: type.bodySm.copyWith(color: FigmaColors.textMuted),
-                                    ),
+                                    const SizedBox(height: 12),
+                                    if (_run!.splits.isEmpty)
+                                      Text(
+                                        'Sem splits por km registrados nesta corrida.',
+                                        style: type.bodySm.copyWith(color: FigmaColors.textMuted),
+                                      )
+                                    else
+                                      ..._buildSplitRows(_run!.splits),
                                   ],
                                 ),
                               ),
@@ -245,6 +249,63 @@ class _RunDetailPageState extends State<RunDetailPage> {
         ),
       ),
     );
+  }
+
+  /// Monta uma lista de FigmaSplitRow. Best split (menor pace numérico) fica
+  /// destacado em cyan via isBest; demais em dim. barRatio = pace/maxPace
+  /// (split mais lento ocupa toda a largura, mais rápido proporcionalmente
+  /// menos — leitura visual de "mais curto = mais rápido").
+  List<Widget> _buildSplitRows(List<KmSplit> splits) {
+    final sorted = [...splits]..sort((a, b) => a.kmIndex.compareTo(b.kmIndex));
+    final paceMins = sorted.map(_paceToMin).toList();
+    final validPaces = paceMins.where((p) => p != null).cast<double>().toList();
+    if (validPaces.isEmpty) {
+      return sorted
+          .map((s) => Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: FigmaSplitRow(
+                  kmLabel: 'KM${s.kmIndex + 1}',
+                  time: _formatDuration(s.durationS),
+                  barRatio: 0,
+                  isBest: false,
+                ),
+              ))
+          .toList();
+    }
+    final maxPace = validPaces.reduce((a, b) => a > b ? a : b);
+    final bestIdx = paceMins.indexWhere((p) => p != null && p == validPaces.reduce((a, b) => a < b ? a : b));
+
+    return List.generate(sorted.length, (i) {
+      final s = sorted[i];
+      final p = paceMins[i];
+      final ratio = (p != null && maxPace > 0) ? p / maxPace : 0.0;
+      return Padding(
+        padding: EdgeInsets.only(bottom: i == sorted.length - 1 ? 0 : 6),
+        child: FigmaSplitRow(
+          kmLabel: 'KM${s.kmIndex + 1}',
+          time: s.avgPaceMinKm ?? _formatDuration(s.durationS),
+          barRatio: ratio,
+          isBest: i == bestIdx,
+        ),
+      );
+    });
+  }
+
+  double? _paceToMin(KmSplit s) {
+    final p = s.avgPaceMinKm;
+    if (p == null) return null;
+    final parts = p.split(':');
+    if (parts.length != 2) return null;
+    final min = int.tryParse(parts[0]);
+    final sec = int.tryParse(parts[1]);
+    if (min == null || sec == null) return null;
+    return min + sec / 60.0;
+  }
+
+  String _formatDuration(int s) {
+    final m = (s ~/ 60).toString();
+    final r = (s % 60).toString().padLeft(2, '0');
+    return '$m:$r';
   }
 }
 
