@@ -48,7 +48,7 @@ export async function getRun(req: Request, res: Response, next: NextFunction): P
   try {
     const run = await repo.findById(req.params['id'] as string, req.uid);
     if (!run) throw new NotFoundError('Run');
-    res.json(run);
+    res.json({ ...run, splits: run.splits ?? [] });
   } catch (err) { next(err); }
 }
 

@@ -1,5 +1,12 @@
 export type RunStatus = 'active' | 'completed' | 'abandoned';
 
+export interface KmSplit {
+  kmIndex: number;
+  durationS: number;
+  avgPaceMinKm: string;
+  avgBpm?: number;
+}
+
 export interface GpsPoint {
   lat: number;
   lng: number;
@@ -30,6 +37,7 @@ export interface Run {
   calories?: number;
   xpEarned?: number;
   coachReportId?: string;
+  splits?: KmSplit[];
   createdAt: string;
   completedAt?: string;
 }
