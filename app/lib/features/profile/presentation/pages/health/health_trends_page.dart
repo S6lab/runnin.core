@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
+import 'package:runnin/features/biometrics/data/biometric_remote_datasource.dart';
 import 'package:runnin/features/run/data/datasources/run_remote_datasource.dart';
 import 'package:runnin/features/run/domain/entities/run.dart';
 import 'package:runnin/shared/widgets/figma/figma_hist_stat_card.dart';
@@ -17,8 +18,10 @@ class HealthTrendsPage extends StatefulWidget {
 class _HealthTrendsPageState extends State<HealthTrendsPage> {
   final _remoteRuns = RunRemoteDatasource();
   final _remoteUser = UserRemoteDatasource();
+  final _remoteBiometrics = BiometricRemoteDatasource();
   List<Run>? _runs;
   UserProfile? _userProfile;
+  BiometricSummary? _biometricSummary;
   bool _loading = true;
 
   @override
@@ -29,13 +32,16 @@ class _HealthTrendsPageState extends State<HealthTrendsPage> {
 
   Future<void> _load() async {
     try {
-      final runs = await _remoteRuns.listRuns(limit: 90);
-      final userProfile = await _remoteUser.getMe();
-      
+      final results = await Future.wait([
+        _remoteRuns.listRuns(limit: 90),
+        _remoteUser.getMe(),
+        _remoteBiometrics.getSummary(windowDays: 7),
+      ]);
       if (mounted) {
         setState(() {
-          _runs = runs.where((r) => r.status == 'completed').toList();
-          _userProfile = userProfile;
+          _runs = (results[0] as List<Run>).where((r) => r.status == 'completed').toList();
+          _userProfile = results[1] as UserProfile;
+          _biometricSummary = results[2] as BiometricSummary;
           _loading = false;
         });
       }
@@ -66,6 +72,7 @@ class _HealthTrendsPageState extends State<HealthTrendsPage> {
                   : _Body(
                       runs: _runs ?? [],
                       userProfile: _userProfile,
+                      biometricSummary: _biometricSummary,
                     ),
             ),
           ],
@@ -227,21 +234,22 @@ _Stats _buildStats(List<Run> runs) {
     );
 }
 
-int _recoveryScore(_Stats stats, UserProfile? profile) {
-  if (!stats.hasRunData || profile?.hasWearable != true) return 0;
-  final freq = stats.runCount >= 3 ? 10 : (stats.runCount * 3);
-  final cons = stats.weeklyDistKm >= 10 ? 10 : (stats.weeklyDistKm ~/ 2);
-  return freq + cons;
+int _recoveryScore(num? avgHrv) {
+  if (avgHrv == null) return 0;
+  return (avgHrv / 10).round().clamp(0, 10);
 }
 
 class _Body extends StatelessWidget {
-  const _Body({required this.runs, required this.userProfile});
+  const _Body({required this.runs, required this.userProfile, required this.biometricSummary});
   final List<Run> runs;
   final UserProfile? userProfile;
+  final BiometricSummary? biometricSummary;
 
   @override
   Widget build(BuildContext context) {
     final stats = _buildStats(runs);
+    final sleepHours = biometricSummary?.avgSleepHours;
+    final recoveryScore = _recoveryScore(biometricSummary?.avgHrv);
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(23.99),
@@ -273,20 +281,18 @@ class _Body extends StatelessWidget {
               ),
               _HealthCard(
                 label: 'Sono médio',
-                value: '—',
+                value: sleepHours != null
+                    ? '${sleepHours.toStringAsFixed(1)}h'
+                    : '—',
                 unit: '',
-                secondaryLabel: userProfile?.hasWearable == true
-                    ? null
-                    : 'Sem dados — conecte wearable',
+                secondaryLabel: sleepHours != null ? null : 'Sem dados',
                 valueColor: FigmaColors.brandGreen,
               ),
               _HealthCard(
                 label: 'Recovery score',
-                value: _recoveryScore(stats, userProfile).toString(),
+                value: recoveryScore > 0 ? recoveryScore.toString() : '—',
                 unit: '',
-                secondaryLabel: _recoveryScore(stats, userProfile) > 0
-                    ? null
-                    : 'Sem dados — frequência+consistência',
+                secondaryLabel: recoveryScore > 0 ? null : 'Sem dados de HRV',
                 valueColor: FigmaColors.brandOrange,
               ),
             ],
