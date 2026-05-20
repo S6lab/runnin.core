@@ -47,8 +47,6 @@ class _TrainingPageState extends State<TrainingPage> {
   final _userDs = UserRemoteDatasource();
   final _weeklyReportDs = WeeklyReportRemoteDatasource();
   List<WeeklyReport> _weeklyReports = const [];
-  final bool _loadingWeeklyReports = false;
-  String? _selectedWeekStart;
   UserProfile? _profile;
   Plan? _plan;
   List<_RunFeedback> _reports = const [];
@@ -1426,7 +1424,6 @@ class _SectionTitle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final palette = context.runninPalette;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

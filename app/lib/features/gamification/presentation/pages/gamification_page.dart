@@ -40,7 +40,6 @@ class _GamificationPageState extends State<GamificationPage> {
   @override
   Widget build(BuildContext context) {
     final palette = context.runninPalette;
-    final type = context.runninType;
 
     return Scaffold(
       backgroundColor: palette.background,

@@ -2432,12 +2432,7 @@ class _HeroSection extends StatelessWidget {
         : (fallbackName ?? 'ATLETA');
     final dateLabel = _formatDate(now);
     
-    // Today's session information
     final session = data.todaySession;
-    final sessionInfo = session == null
-        ? 'Nenhuma sessao planejada para hoje'
-        : '${session.type.toUpperCase()} • ${session.targetPace ?? 'livre'}';
-
     final dayOfYear = now.difference(DateTime(now.year, 1, 1)).inDays;
     final heroAsset = dayOfYear.isEven
         ? 'assets/img/hero/runner_1.png'

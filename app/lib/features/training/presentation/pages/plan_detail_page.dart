@@ -584,8 +584,8 @@ class _ProfileSummary extends StatelessWidget {
       if (p.height != null && p.height!.isNotEmpty) ('Altura', p.height!),
       if (p.restingBpm != null) ('FC repouso', '${p.restingBpm} bpm'),
       if (p.maxBpm != null) ('FC máx', '${p.maxBpm} bpm'),
-      if ((p.medicalConditions ?? []).isNotEmpty)
-        ('Condições', (p.medicalConditions ?? []).join(', '))
+      if (p.medicalConditions.isNotEmpty)
+        ('Condições', p.medicalConditions.join(', '))
       else
         ('Condições', 'nenhuma informada'),
       ('Wearable', p.hasWearable ? 'conectado' : 'sem'),

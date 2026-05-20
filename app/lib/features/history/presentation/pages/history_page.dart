@@ -40,7 +40,6 @@ class _HistoryPageState extends State<HistoryPage> {
   final bool _benchmarkLoading = false;
   double? _benchmarkPercentile;
   List<BenchmarkRow> _benchmarkTableData = [];
-  int _benchmarkCohortSize = 0;
   bool _benchmarkEmpty = false;
   final _benchmarkDatasource = BenchmarkRemoteDatasource();
   final _periodAnalysisDatasource = PeriodAnalysisRemoteDatasource();
@@ -129,7 +128,6 @@ class _HistoryPageState extends State<HistoryPage> {
         setState(() { 
           _benchmarkTableData = result.items;
           _benchmarkPercentile = result.percentileTop.toDouble();
-          _benchmarkCohortSize = result.cohortSize;
           _benchmarkEmpty = result.cohortSize == 0;
         });
       }
