@@ -230,8 +230,14 @@ sem painéis legados duplicados. Voz única e prompt da voz têm fonte única (c
   voz/invariantes §R compartilhadas (`defaults/_coach-voice.ts`) + override via Firestore + **decision
   layer** (silencia cue por frequência/DND → server responde 204).
 - **RAG**: base = Doc 1 (Coach.AI v3) chunkada por subseção em `running-knowledge-corpus.json`, embeddada
-  por vetor em Firestore (`rag_chunks`). Recuperação garante chunk **vinculante** (seção R — limites
+  por vetor em Firestore (`rag_chunks`) com `gemini-embedding-001`. Inclui **casos-modelo por perfil**
+  (categoria `caso-modelo`, Dossiê 2): arquétipos atleta×objetivo que o `gemini-3.1-pro` puxa na geração de
+  plano pra escolher estrutura/carga/tom. Recuperação garante chunk **vinculante** (seção R — limites
   clínicos/legais) em query de tema sensível. Uploads do admin (`rag/uploads/`) complementam a base.
+- **Motor de plano**: variação real de sessões (easy/tempo/intervalado/longão/recovery/fartlek) é dirigida
+  pelo prompt `plan-init` (v2, obriga variedade + periodização 3:1) + RAG, NÃO hardcoded. Roteiro de fases
+  por tipo é determinístico (`build-execution-segments.ts`). Two-tier: semanas 1-2 detalhadas, 3+ skeleton
+  liberadas no checkpoint.
 
 ---
 
