@@ -70,7 +70,9 @@ class GetHomeDataUseCase {
   Future<HomeData> execute() async {
     final results = await Future.wait([
       _userDs.getMe(),
-      _planDs.getCurrentPlan(),
+      // Cache-first: o plano foi recuperado/cacheado no login; invalida só ao
+      // gerar novo, aplicar checkpoint/revisão, ou cruzar domingo.
+      _planDs.getCurrentPlan(cacheFirst: true),
       _runDs.listRuns(limit: 21),
     ]);
 

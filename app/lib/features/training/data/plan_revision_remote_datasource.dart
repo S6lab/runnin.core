@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:runnin/core/network/api_client.dart';
+import 'package:runnin/features/training/data/datasources/plan_remote_datasource.dart';
 import 'package:runnin/features/training/domain/entities/plan.dart';
 import 'package:runnin/features/training/domain/entities/plan_revision.dart';
 
@@ -50,6 +51,8 @@ class PlanRevisionRemoteDatasource {
         'freeText': ?freeText,
       },
     );
+    // Revisão mudou o plano — invalida o cache.
+    PlanRemoteDatasource.clearPlanCache();
     return PlanRevisionResponse.fromJson(res.data as Map<String, dynamic>);
   }
 

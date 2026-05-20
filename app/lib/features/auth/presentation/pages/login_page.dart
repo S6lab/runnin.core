@@ -10,6 +10,7 @@ import 'package:runnin/core/router/app_router.dart';
 import 'package:runnin/shared/widgets/runnin_app_bar.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
+import 'package:runnin/features/training/data/datasources/plan_remote_datasource.dart';
 import 'package:runnin/features/onboarding/presentation/steps/onboarding_shared.dart';
 import 'package:runnin/shared/widgets/figma/export.dart';
 
@@ -106,6 +107,17 @@ class _LoginPageState extends State<LoginPage> {
         onboarded = profile?.onboarded ?? false;
       } catch (_) {
         onboarded = false;
+      }
+      if (!mounted) return;
+
+      // Recupera o plano de treino no login e cacheia. Se já existe um plano,
+      // o usuário é tratado como onboarded mesmo se a flag vier inconsistente
+      // — evita reenviar pro onboarding (que gera um plano NOVO no servidor).
+      try {
+        final plan = await PlanRemoteDatasource().getCurrentPlan();
+        if (plan != null) onboarded = true;
+      } catch (_) {
+        // Falha ao buscar plano não bloqueia o login.
       }
       if (!mounted) return;
 

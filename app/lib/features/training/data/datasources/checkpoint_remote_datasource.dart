@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:runnin/core/network/api_client.dart';
+import 'package:runnin/features/training/data/datasources/plan_remote_datasource.dart';
 import 'package:runnin/features/training/domain/entities/plan_checkpoint.dart';
 
 /// Datasource desacoplado: troca via construtor pra testes / mocks.
@@ -62,6 +63,8 @@ class CheckpointRemoteDatasource {
       '/plans/$planId/checkpoints/$weekNumber/apply',
       data: {'inputs': extraInputs.map((e) => e.toJson()).toList()},
     );
+    // O apply ajusta as semanas seguintes — invalida o cache do plano.
+    PlanRemoteDatasource.clearPlanCache();
     final body = res.data as Map<String, dynamic>;
     return CheckpointApplyResult(
       checkpoint: PlanCheckpoint.fromJson(body['checkpoint'] as Map<String, dynamic>),
