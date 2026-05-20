@@ -59,9 +59,18 @@ export class LlmCheckpointAnalysisStrategy
         (w) =>
           `Semana ${w.weekNumber}: ${w.sessions.length} sessões / ${w.sessions
             .reduce((s, x) => s + x.distanceKm, 0)
-            .toFixed(1)}km`,
+            .toFixed(1)}km (${w.detailLevel ?? 'full'})`,
       )
       .join('\n');
+
+    // As 2 PRÓXIMAS semanas são DETALHADAS neste checkpoint (esqueleto→full).
+    // As demais seguem esqueleto, com volume/pace ajustados.
+    const detailWeeks = followingWeeks.slice(0, 2);
+    const detailWeekNums = detailWeeks.map((w) => w.weekNumber).join(' e ');
+    const skeletonWeekNums = followingWeeks
+      .slice(2)
+      .map((w) => w.weekNumber)
+      .join(', ');
 
     const prompt = `Você é o Coach AI do runnin executando um CHECKPOINT semanal.
 
@@ -81,6 +90,10 @@ SEMANAS RESTANTES NO PLANO (você vai ajustar essas):
 ${followingDigest}
 
 Sua tarefa: avaliar a semana, considerar inputs do usuário e ajustar as semanas SEGUINTES (NÃO mexa em semanas anteriores nem na semana ${weekNumber}). Mantenha estrutura/ID das sessions onde possível; ajuste distanceKm, targetPace, durationMin, type, notes conforme necessário.
+
+GERAÇÃO EM DOIS NÍVEIS (CRÍTICO):
+- As 2 PRÓXIMAS semanas (${detailWeekNums || 'as imediatamente seguintes'}) devem vir com DETALHE COMPLETO: cada sessão com targetPace, durationMin, hydrationLiters, nutritionPre, nutritionPost e notes ricas (2-4 frases com fase + foco + cuidado). É AGORA que essas semanas ganham detalhe — antes estavam em esqueleto.${skeletonWeekNums ? `\n- As demais semanas (${skeletonWeekNums}) seguem em ESQUELETO: só type, distanceKm, targetPace e notes curta (1 frase). NÃO preencha hydration/nutrition nessas — serão detalhadas no próximo checkpoint.` : ''}
+- Seja CRIATIVO e técnico nos tipos de sessão das 2 semanas detalhadas (Fartlek, Progressivo, Tiros, Tempo em blocos) — evite repetir "Easy Run" demais. Toda variação tecnicamente verdadeira.
 
 Princípios:
 - "load_up" + boa aderência → suba volume 5-10% nas próximas 2 semanas

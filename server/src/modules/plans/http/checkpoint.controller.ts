@@ -150,6 +150,34 @@ export async function applyCheckpointHandler(
   }
 }
 
+/**
+ * "Depois": o usuário adia o checkpoint sem aplicar ajuste. Marca como
+ * `skipped` (sem revisão). As semanas que seriam detalhadas seguem em
+ * esqueleto e são enriquecidas no próximo checkpoint. Não consome cota.
+ */
+export async function skipCheckpointHandler(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const planId = req.params['id'] as string;
+    const weekNumber = parseWeekNumber(req, res);
+    if (weekNumber == null) return;
+    const cp = await checkpointRepo.findByWeek(planId, weekNumber, req.uid);
+    if (!cp) throw new NotFoundError('Checkpoint');
+    if (cp.status === 'completed') {
+      throw new CheckpointAlreadyAppliedError(weekNumber, cp.completedAt);
+    }
+    await checkpointRepo.update(planId, weekNumber, req.uid, {
+      status: 'skipped',
+    });
+    res.json({ ...cp, status: 'skipped' });
+  } catch (err) {
+    next(err);
+  }
+}
+
 function mergeInputs(
   existing: CheckpointInput[],
   extra: CheckpointInput[],

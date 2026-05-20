@@ -13,6 +13,7 @@ import {
   getCheckpoint,
   submitCheckpointInputs,
   applyCheckpointHandler,
+  skipCheckpointHandler,
 } from './checkpoint.controller';
 
 export const planRouter = Router();
@@ -35,3 +36,5 @@ planRouter.post('/:id/weekly-reports/:weekNumber/generate', requireFeature('week
 // mas só premium roda apply (gera revision via LLM).
 planRouter.post('/:id/checkpoints/:weekNumber/inputs', submitCheckpointInputs);
 planRouter.post('/:id/checkpoints/:weekNumber/apply', requireFeature('planRevisions'), applyCheckpointHandler);
+// "Depois": adia o checkpoint (marca skipped, sem ajuste). Freemium OK.
+planRouter.post('/:id/checkpoints/:weekNumber/skip', skipCheckpointHandler);

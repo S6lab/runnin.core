@@ -1,5 +1,6 @@
 import { v4 as uuid } from 'uuid';
-import { Plan, PlanRevision as PlanRevisionLog, PlanWeek } from '../domain/plan.entity';
+import { Plan, PlanRevision as PlanRevisionLog, PlanSession, PlanWeek } from '../domain/plan.entity';
+import { buildExecutionSegments } from './build-execution-segments';
 import { PlanRepository } from '../domain/plan.repository';
 import { PlanRevision } from '../domain/plan-revision.entity';
 import { PlanRevisionRepository } from '../domain/plan-revision.repository';
@@ -102,6 +103,16 @@ export class ApplyCheckpointUseCase {
 
     // Snapshot anterior (só semanas que vão mudar) pro PlanRevision.
     const oldFollowingWeeks = plan.weeks.filter((w) => w.weekNumber > weekNumber);
+
+    // Two-tier: detalha (full) as 2 próximas semanas e mantém o resto
+    // esqueleto, preservando metadados de bloco e gerando o roteiro km-a-km.
+    if (analysisOut.newWeeks.length > 0) {
+      analysisOut.newWeeks = this._enrichTwoTier(
+        analysisOut.newWeeks,
+        oldFollowingWeeks,
+        weekNumber,
+      );
+    }
 
     let newPlanWeeks = plan.weeks;
     if (analysisOut.newWeeks.length > 0) {
@@ -247,6 +258,77 @@ export class ApplyCheckpointUseCase {
         avgPaceMinPerKm,
       },
     };
+  }
+
+  /**
+   * Aplica a regra two-tier nas semanas devolvidas pelo checkpoint: as 2
+   * próximas (menores weekNumber > semana atual) viram 'full' (roteiro
+   * km-a-km + nutrição/hidratação); as demais seguem 'skeleton'. Preserva
+   * metadados de bloco/narrativa da geração original e garante IDs estáveis.
+   */
+  private _enrichTwoTier(
+    newWeeks: PlanWeek[],
+    oldFollowingWeeks: PlanWeek[],
+    weekNumber: number,
+  ): PlanWeek[] {
+    const detailNums = oldFollowingWeeks
+      .map((w) => w.weekNumber)
+      .filter((n) => n > weekNumber)
+      .sort((a, b) => a - b)
+      .slice(0, 2);
+
+    return newWeeks.map((w) => {
+      const old = oldFollowingWeeks.find((o) => o.weekNumber === w.weekNumber);
+      const isFull = detailNums.includes(w.weekNumber);
+      const sessions: PlanSession[] = (w.sessions ?? []).map((s) => {
+        const id = s.id && s.id.length > 0 ? s.id : uuid();
+        const distanceKm = Number(Number(s.distanceKm).toFixed(1));
+        if (isFull) {
+          const base = {
+            id,
+            dayOfWeek: s.dayOfWeek,
+            type: s.type,
+            distanceKm,
+            targetPace: s.targetPace,
+            durationMin: s.durationMin,
+            hydrationLiters: s.hydrationLiters,
+            nutritionPre: s.nutritionPre,
+            nutritionPost: s.nutritionPost,
+            notes: s.notes ?? '',
+          } satisfies Omit<PlanSession, 'executionSegments'>;
+          const segs =
+            (s.executionSegments?.length ?? 0) > 0
+              ? s.executionSegments
+              : buildExecutionSegments(base);
+          return { ...base, executionSegments: segs } satisfies PlanSession;
+        }
+        // Skeleton: só tipo/distância/pace + notes curta.
+        return {
+          id,
+          dayOfWeek: s.dayOfWeek,
+          type: s.type,
+          distanceKm,
+          targetPace: s.targetPace,
+          notes: s.notes ?? '',
+        } satisfies PlanSession;
+      });
+
+      return {
+        weekNumber: w.weekNumber,
+        sessions,
+        detailLevel: isFull ? ('full' as const) : ('skeleton' as const),
+        projectedLoadKm: Number(
+          sessions.reduce((a, s) => a + s.distanceKm, 0).toFixed(1),
+        ),
+        // Preserva metadados de bloco e narrativa da geração original.
+        blockName: w.blockName ?? old?.blockName,
+        objective: w.objective ?? old?.objective,
+        targets: w.targets ?? old?.targets,
+        narrative: w.narrative ?? old?.narrative,
+        focus: w.focus ?? old?.focus,
+        restDayTips: isFull ? (w.restDayTips ?? old?.restDayTips) : undefined,
+      } satisfies PlanWeek;
+    });
   }
 }
 
