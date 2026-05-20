@@ -4,6 +4,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:runnin/core/network/api_client.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
+import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 import 'package:runnin/shared/widgets/figma/figma_selection_button.dart';
 import 'package:runnin/shared/widgets/figma/figma_top_nav.dart';
 import 'package:runnin/shared/widgets/section_heading.dart';
@@ -42,10 +43,13 @@ class _CoachSettingsPageState extends State<CoachSettingsPage> {
   bool _saving = false;
   bool _previewLoading = false;
 
+  final _remote = UserRemoteDatasource();
+
   @override
   void initState() {
     super.initState();
     _loadFromHive();
+    _loadFromRemote();
   }
 
   void _loadFromHive() {
@@ -63,6 +67,38 @@ class _CoachSettingsPageState extends State<CoachSettingsPage> {
         ));
       }
     });
+  }
+
+  Future<void> _loadFromRemote() async {
+    try {
+      final profile = await _remote.getMe();
+      if (profile == null || !mounted) return;
+      setState(() {
+        if (profile.coachPersonality != null) _personality = profile.coachPersonality!;
+        // coachVoiceId from server has "coach-" prefix; strip it for local state
+        if (profile.coachVoiceId.isNotEmpty) {
+          _voiceId = profile.coachVoiceId.replaceFirst('coach-', '');
+        }
+        if (profile.coachMessageFrequency != null) _frequency = profile.coachMessageFrequency!;
+        if (profile.allowCriticalAlertsInSilent != null) {
+          _allowCriticalInSilent = profile.allowCriticalAlertsInSilent!;
+        }
+        if (profile.coachFeedbackEnabled != null) {
+          _feedback = Map<String, bool>.from(profile.coachFeedbackEnabled!);
+        }
+      });
+      // Update Hive cache with remote values
+      if (Hive.isBoxOpen(_hiveBox)) {
+        final box = Hive.box<dynamic>(_hiveBox);
+        await box.put(_hiveKeyPersonality, _personality);
+        await box.put(_hiveKeyVoice, _voiceId);
+        await box.put(_hiveKeyFrequency, _frequency);
+        await box.put(_hiveKeyAllowCriticalInSilent, _allowCriticalInSilent);
+        await box.put(_hiveKeyFeedback, _feedback);
+      }
+    } catch (_) {
+      // Remote load is best-effort; Hive values remain
+    }
   }
 
   Future<void> _saveToHive() async {

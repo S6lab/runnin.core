@@ -27,6 +27,10 @@ class UserProfile {
   final int? restingBpm;
   final int? maxBpm;
   final Map<String, bool>? preRunAlerts;
+  final String? coachPersonality;
+  final String? coachMessageFrequency;
+  final Map<String, bool>? coachFeedbackEnabled;
+  final bool? allowCriticalAlertsInSilent;
 
   const UserProfile({
     required this.id,
@@ -52,6 +56,10 @@ class UserProfile {
     this.restingBpm,
     this.maxBpm,
     this.preRunAlerts,
+    this.coachPersonality,
+    this.coachMessageFrequency,
+    this.coachFeedbackEnabled,
+    this.allowCriticalAlertsInSilent,
   });
 
   bool get isPro {
@@ -92,6 +100,11 @@ class UserProfile {
     maxBpm: j['maxBpm'] as int?,
     preRunAlerts: (j['preRunAlerts'] as Map<String, dynamic>?)
         ?.map((k, v) => MapEntry(k, v as bool)),
+    coachPersonality: j['coachPersonality'] as String?,
+    coachMessageFrequency: j['coachMessageFrequency'] as String?,
+    coachFeedbackEnabled: (j['coachFeedbackEnabled'] as Map<String, dynamic>?)
+        ?.map((k, v) => MapEntry(k, v as bool)),
+    allowCriticalAlertsInSilent: j['allowCriticalAlertsInSilent'] as bool?,
   );
 }
 
