@@ -360,13 +360,6 @@ class _CyberStatusBar extends StatelessWidget {
                 active: data.profile?.hasWearable == true,
                 palette: palette,
               ),
-              const SizedBox(width: 8),
-              _DeviceChip(
-                label: 'AUDIO',
-                icon: Icons.headphones_outlined,
-                active: false,
-                palette: palette,
-              ),
             ],
           ),
         ],
