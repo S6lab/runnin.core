@@ -28,15 +28,19 @@ class _HealthZonesPageState extends State<HealthZonesPage> {
   Future<void> _loadProfileAndZones() async {
     try {
       final profile = await _userDatasource.getMe();
-      
+
       if (!mounted) return;
+
+      final hasBpm = profile?.restingBpm != null && profile?.maxBpm != null;
 
       setState(() {
         _profile = profile;
-        _zones = computeHealthZones(
-          restingBpm: profile?.restingBpm ?? 60,
-          maxBpm: profile?.maxBpm ?? 180,
-        );
+        _zones = hasBpm
+            ? computeHealthZones(
+                restingBpm: profile!.restingBpm!,
+                maxBpm: profile.maxBpm!,
+              )
+            : [];
         _loading = false;
       });
     } catch (_) {
@@ -63,7 +67,11 @@ class _HealthZonesPageState extends State<HealthZonesPage> {
                         strokeWidth: 1.5,
                       ),
                     )
-                  : _Body(profile: _profile!, zones: _zones),
+                  : _profile == null ||
+                          _profile!.restingBpm == null ||
+                          _profile!.maxBpm == null
+                      ? const _MissingBpmBanner()
+                      : _Body(profile: _profile!, zones: _zones),
             ),
           ],
         ),
@@ -100,7 +108,7 @@ class _Body extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 24),
-          _MaxBpmHeader(maxBpm: profile.maxBpm ?? 180),
+          _MaxBpmHeader(maxBpm: profile.maxBpm!),
           const SizedBox(height: 24),
           _SectionHeader(label: 'ZONAS', index: '02'),
           const SizedBox(height: 16),
@@ -120,6 +128,52 @@ class _Body extends StatelessWidget {
             if (zone != zones.last) const SizedBox(height: 16),
           ],
           const SizedBox(height: 24),
+        ],
+      ),
+    );
+  }
+}
+
+class _MissingBpmBanner extends StatelessWidget {
+  const _MissingBpmBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            'DADOS INCOMPLETOS',
+            style: context.runninType.dataXs.copyWith(
+              color: FigmaColors.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Preencha sua frequência cardíaca em repouso e máxima no perfil para visualizar suas zonas.',
+            textAlign: TextAlign.center,
+            style: context.runninType.bodySm.copyWith(
+              color: FigmaColors.textSecondary,
+            ),
+          ),
+          const SizedBox(height: 24),
+          GestureDetector(
+            onTap: () => Navigator.of(context).pop(),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              decoration: BoxDecoration(
+                border: Border.all(color: FigmaColors.brandCyan, width: 1),
+              ),
+              child: Text(
+                'PREENCHER PERFIL',
+                style: context.runninType.labelCaps.copyWith(
+                  color: FigmaColors.brandCyan,
+                ),
+              ),
+            ),
+          ),
         ],
       ),
     );
