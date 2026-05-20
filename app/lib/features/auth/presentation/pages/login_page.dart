@@ -191,7 +191,16 @@ class _LoginPageState extends State<LoginPage> {
     try {
       final auth = FirebaseAuth.instance;
       if (kIsWeb) {
-        await auth.signInWithPhoneNumber(phoneNumber);
+        // Guarda o ConfirmationResult (usado em _confirmPhoneCode) E muda pro
+        // modo OTP — sem isso a tela ficava travada em loading no web.
+        final confirmation = await auth.signInWithPhoneNumber(phoneNumber);
+        if (!mounted) return;
+        setState(() {
+          _phoneConfirmationResult = confirmation;
+          _phoneMode = true;
+          _loading = false;
+          _error = null;
+        });
       } else {
         await auth.verifyPhoneNumber(
           phoneNumber: phoneNumber,
@@ -368,7 +377,7 @@ class _LoginPageState extends State<LoginPage> {
                     height: 52,
                     child: ElevatedButton(
                       onPressed: _loading ? null : _beginPhoneAuth,
-                      child: const Text('ENVIA CÓDIGO POR SMS'),
+                      child: const Text('ENVIAR CÓDIGO POR SMS'),
                     ),
                   ),
                 ] else ...[
