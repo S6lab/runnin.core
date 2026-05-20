@@ -2,6 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl_phone_field/intl_phone_field.dart';
 import 'package:runnin/core/network/api_client.dart';
 import 'package:runnin/core/router/app_router.dart';
 import 'package:runnin/core/theme/app_palette.dart';
@@ -25,6 +26,8 @@ class AccountAccessPage extends StatefulWidget {
 class _AccountAccessPageState extends State<AccountAccessPage> {
   final _phoneCtrl = TextEditingController();
   final _smsCtrl = TextEditingController();
+  /// Número completo em E.164 montado pelo IntlPhoneField (Brasil default).
+  String _completePhone = '';
   bool _phoneEditing = false;
   bool _codeRequested = false;
   bool _busy = false;
@@ -40,18 +43,11 @@ class _AccountAccessPageState extends State<AccountAccessPage> {
     super.dispose();
   }
 
-  String? _normalizePhone(String input) {
-    final digits = input.replaceAll(RegExp(r'[^0-9+]'), '');
-    if (digits.isEmpty) return null;
-    if (digits.startsWith('+') && digits.length >= 12) return digits;
-    if (digits.startsWith('55') && digits.length >= 12) return '+$digits';
-    if (digits.length >= 10 && digits.length <= 11) return '+55$digits';
-    return null;
-  }
-
   Future<void> _sendPhoneCode() async {
-    final phone = _normalizePhone(_phoneCtrl.text.trim());
-    if (phone == null) {
+    // O IntlPhoneField já entrega o número em E.164 com o código do país.
+    final phone = _completePhone.trim();
+    final digits = phone.replaceAll(RegExp(r'[^0-9]'), '');
+    if (phone.isEmpty || digits.length < 10) {
       setState(() {
         _error = 'Informe um telefone válido com DDD.';
         _message = null;
@@ -221,6 +217,10 @@ class _AccountAccessPageState extends State<AccountAccessPage> {
     final user = FirebaseAuth.instance.currentUser;
     final email = user?.email;
     final phone = user?.phoneNumber;
+    // Se o login foi por telefone, o número é a credencial de acesso e não
+    // pode ser trocado aqui (evita perda de acesso à conta).
+    final loggedInWithPhone =
+        user?.providerData.any((p) => p.providerId == 'phone') ?? false;
 
     return Scaffold(
       backgroundColor: palette.background,
@@ -284,38 +284,65 @@ class _AccountAccessPageState extends State<AccountAccessPage> {
                                     context.runninType.bodyMd.copyWith(color: palette.text, fontSize: 13),
                               ),
                             ),
-                            TextButton(
-                              onPressed: _busy
-                                  ? null
-                                  : () => setState(() {
-                                        _phoneEditing = !_phoneEditing;
-                                        _codeRequested = false;
-                                        _phoneCtrl.clear();
-                                        _smsCtrl.clear();
-                                        _error = null;
-                                        _message = null;
-                                      }),
-                              child: Text(
-                                _phoneEditing ? 'CANCELAR' : 'TROCAR',
-                                style: context.runninType.labelCaps.copyWith(
-                                  fontSize: 11,
-                                  color: palette.primary,
-                                  letterSpacing: 0.5,
+                            if (loggedInWithPhone)
+                              Icon(Icons.lock_outline,
+                                  size: 14, color: palette.muted)
+                            else
+                              TextButton(
+                                onPressed: _busy
+                                    ? null
+                                    : () => setState(() {
+                                          _phoneEditing = !_phoneEditing;
+                                          _codeRequested = false;
+                                          _phoneCtrl.clear();
+                                          _smsCtrl.clear();
+                                          _completePhone = '';
+                                          _error = null;
+                                          _message = null;
+                                        }),
+                                child: Text(
+                                  _phoneEditing ? 'CANCELAR' : 'TROCAR',
+                                  style: context.runninType.labelCaps.copyWith(
+                                    fontSize: 11,
+                                    color: palette.primary,
+                                    letterSpacing: 0.5,
+                                  ),
                                 ),
                               ),
-                            ),
                           ],
                         ),
-                        if (_phoneEditing) ...[
+                        if (loggedInWithPhone) ...[
+                          const SizedBox(height: 6),
+                          Text(
+                            'Você entrou com este telefone — ele é sua credencial de acesso e não pode ser alterado aqui.',
+                            style: context.runninType.bodyXs.copyWith(color: palette.muted),
+                          ),
+                        ],
+                        if (_phoneEditing && !loggedInWithPhone) ...[
                           const SizedBox(height: 14),
-                          TextField(
+                          IntlPhoneField(
                             controller: _phoneCtrl,
-                            keyboardType: TextInputType.phone,
                             enabled: !_codeRequested,
-                            decoration: const InputDecoration(
-                              labelText: 'Novo telefone',
-                              hintText: '11999999999',
+                            initialCountryCode: 'BR',
+                            languageCode: 'pt',
+                            style: TextStyle(color: palette.text),
+                            dropdownTextStyle: TextStyle(color: palette.text),
+                            dropdownIcon: Icon(Icons.arrow_drop_down, color: palette.muted),
+                            invalidNumberMessage: 'Número inválido',
+                            decoration: InputDecoration(
+                              hintText: '11 99999-9999',
+                              hintStyle: TextStyle(color: palette.muted),
+                              counterText: '',
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.zero,
+                                borderSide: BorderSide(color: palette.border),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.zero,
+                                borderSide: BorderSide(color: palette.primary),
+                              ),
                             ),
+                            onChanged: (p) => _completePhone = p.completeNumber,
                           ),
                           if (!_codeRequested) ...[
                             const SizedBox(height: 10),
