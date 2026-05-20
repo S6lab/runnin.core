@@ -8,12 +8,14 @@ import 'package:runnin/features/history/data/period_analysis_remote_datasource.d
 import 'package:runnin/features/history/data/stats_remote_datasource.dart';
 import 'package:runnin/features/history/domain/entities/period_analysis.dart';
 import 'package:runnin/features/history/domain/entities/stats_aggregate.dart';
+import 'package:runnin/features/history/domain/entities/stats_breakdown.dart';
 import 'package:runnin/features/run/data/datasources/run_remote_datasource.dart';
 import 'package:runnin/features/run/domain/entities/run.dart';
 import 'package:runnin/features/training/data/datasources/plan_remote_datasource.dart';
 import 'package:runnin/features/training/domain/entities/plan.dart';
 import 'package:runnin/shared/widgets/chart_panel.dart';
 import 'package:runnin/shared/widgets/two_tone_bar_chart.dart';
+import 'package:runnin/shared/widgets/two_line_chart.dart';
 import 'package:runnin/shared/widgets/figma/export.dart';
 import 'package:runnin/shared/widgets/segmented_tab_bar.dart';
 
@@ -47,6 +49,7 @@ class _HistoryPageState extends State<HistoryPage> {
   bool _loadingAnalysis = false;
   final _statsDatasource = StatsRemoteDatasource();
   StatsAggregate? _aggregate;
+  StatsBreakdown? _breakdown;
 
   int get _analysisLimit => switch (_period) {
     _Period.week => 10,
@@ -66,6 +69,7 @@ class _HistoryPageState extends State<HistoryPage> {
     _load();
     _loadPeriodAnalysis();
     _loadAggregate();
+    _loadBreakdown();
   }
 
   Future<void> _loadAggregate() async {
@@ -75,6 +79,16 @@ class _HistoryPageState extends State<HistoryPage> {
       if (mounted) setState(() => _aggregate = result);
     } catch (_) {
       // Sem aggregate, fallback nos deltas hardcoded.
+    }
+  }
+
+  Future<void> _loadBreakdown() async {
+    if (!mounted) return;
+    try {
+      final result = await _statsDatasource.getBreakdown(_periodKey);
+      if (mounted) setState(() => _breakdown = result);
+    } catch (_) {
+      // Sem breakdown, _DataView faz fallback no cálculo client-side.
     }
   }
 
@@ -165,19 +179,7 @@ class _HistoryPageState extends State<HistoryPage> {
           children: [
             const FigmaTopNav(breadcrumb: 'HISTÓRICO'),
             const SizedBox(height: 16),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxl),
-              child: SegmentedTabBar(
-                tabs: const ['SEMANA', 'MÊS', '3 MESES'],
-                selectedIndex: _Period.values.indexOf(_period),
-                onChanged: (i) {
-                  setState(() => _period = _Period.values[i]);
-                  _loadPeriodAnalysis();
-                  _loadAggregate();
-                },
-              ),
-            ),
-            const SizedBox(height: 12),
+            // Submenu de CONTEÚDO em cima (DADOS/CORRIDAS/BENCH)...
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxl),
               child: SegmentedTabBar(
@@ -193,6 +195,21 @@ class _HistoryPageState extends State<HistoryPage> {
                       _loadBenchmarkTable(lastRunId);
                     }
                   }
+                },
+              ),
+            ),
+            const SizedBox(height: 12),
+            // ...e filtro de PERÍODO embaixo (SEMANA/MÊS/3 MESES).
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxl),
+              child: SegmentedTabBar(
+                tabs: const ['SEMANA', 'MÊS', '3 MESES'],
+                selectedIndex: _Period.values.indexOf(_period),
+                onChanged: (i) {
+                  setState(() => _period = _Period.values[i]);
+                  _loadPeriodAnalysis();
+                  _loadAggregate();
+                  _loadBreakdown();
                 },
               ),
             ),
@@ -311,7 +328,7 @@ class _HistoryPageState extends State<HistoryPage> {
       backgroundColor: palette.surface,
       onRefresh: _load,
       child: _tab == _ContentTab.data
-          ? _DataView(runs: runs, plan: _plan, period: _period, periodAnalysis: _periodAnalysis, loadingAnalysis: _loadingAnalysis, aggregate: _aggregate)
+          ? _DataView(runs: runs, plan: _plan, period: _period, periodAnalysis: _periodAnalysis, loadingAnalysis: _loadingAnalysis, aggregate: _aggregate, breakdown: _breakdown)
           : _tab == _ContentTab.runs
               ? _RunsListView(runs: runs)
               : benchmarkWidget,
@@ -328,67 +345,65 @@ class _DataView extends StatelessWidget {
   final PeriodAnalysis? periodAnalysis;
   final bool loadingAnalysis;
   final StatsAggregate? aggregate;
-  const _DataView({required this.runs, required this.plan, required this.period, this.periodAnalysis, this.loadingAnalysis = false, this.aggregate});
+  final StatsBreakdown? breakdown;
+  const _DataView({required this.runs, required this.plan, required this.period, this.periodAnalysis, this.loadingAnalysis = false, this.aggregate, this.breakdown});
 
   @override
   Widget build(BuildContext context) {
-    final stats = _computeStats(runs);
+    final stats = _computeStats(runs); // fallback + zonas + deltas
+    final p = context.runninPalette;
+    final bd = breakdown?.stats;
+
+    // Valores: prioriza breakdown (BE); fallback no cálculo client-side.
+    final corridas = '${bd?.runs ?? stats.count}';
+    final volumeKm = (bd?.totalDistanceKm ?? stats.totalKm).toStringAsFixed(1);
+    final distMedia = (bd?.avgDistanceKm ??
+            (stats.count > 0 ? stats.totalKm / stats.count : 0))
+        .toStringAsFixed(1);
+    final tempo = bd?.totalTimeLabel ?? stats.totalTimeLabel;
+    final pace = bd?.avgPace ?? stats.avgPaceLabel;
+    final calorias = bd != null ? '${bd.calories}' : '--';
+    final nivel = bd != null ? '${bd.level}' : '--';
+    final nivelNome = bd?.levelName ?? '';
+    final bpmMed = (bd?.avgBpm ?? stats.avgBpm)?.toString() ?? '--';
+    final bpmMax = bd?.maxBpm?.toString() ?? '--';
+    final streak = '${bd?.streak ?? stats.streakDays}';
+    final xp = '${bd?.totalXp ?? stats.totalXp}';
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
       children: [
-        // Ciclo de cores [primary, secondary, white] alternados nos cards
-        // pra criar ritmo visual sem ter que escolher caso a caso.
+        // 11 stats consolidados (respeitam o período; nível/streak lifetime).
         Row(children: [
-          Expanded(child: FigmaHistStatCard(
-            label: 'CORRIDAS',
-            value: '${stats.count}',
-            valueColor: context.runninPalette.primary,
-          )),
+          Expanded(child: FigmaHistStatCard(label: 'CORRIDAS', value: corridas, valueColor: p.primary)),
           const SizedBox(width: 8),
-          Expanded(child: FigmaHistStatCard(
-            label: 'VOLUME',
-            value: stats.totalKm.toStringAsFixed(1),
-            unit: 'km',
-            valueColor: context.runninPalette.secondary,
-          )),
+          Expanded(child: FigmaHistStatCard(label: 'VOLUME', value: volumeKm, unit: 'km', valueColor: p.secondary)),
           const SizedBox(width: 8),
-          Expanded(child: FigmaHistStatCard(
-            label: 'TEMPO',
-            value: stats.totalTimeLabel,
-            valueColor: FigmaColors.textPrimary,
-          )),
+          Expanded(child: FigmaHistStatCard(label: 'DIST. MÉDIA', value: distMedia, unit: 'km', valueColor: FigmaColors.textPrimary)),
         ]),
         const SizedBox(height: 8),
         Row(children: [
-          Expanded(child: FigmaHistStatCard(
-            label: 'PACE',
-            value: stats.avgPaceLabel,
-            unit: '/km',
-            valueColor: context.runninPalette.primary,
-          )),
+          Expanded(child: FigmaHistStatCard(label: 'TEMPO', value: tempo, valueColor: p.primary)),
           const SizedBox(width: 8),
-          Expanded(child: FigmaHistStatCard(
-            label: 'STREAK',
-            value: '${stats.streakDays}',
-            unit: 'd',
-            valueColor: context.runninPalette.secondary,
-          )),
+          Expanded(child: FigmaHistStatCard(label: 'PACE', value: pace, unit: '/km', valueColor: p.secondary)),
           const SizedBox(width: 8),
-          Expanded(child: FigmaHistStatCard(
-            label: 'XP',
-            value: '${stats.totalXp}',
-            valueColor: FigmaColors.textPrimary,
-          )),
+          Expanded(child: FigmaHistStatCard(label: 'CALORIAS', value: calorias, unit: 'kcal', valueColor: FigmaColors.textPrimary)),
         ]),
         const SizedBox(height: 8),
         Row(children: [
-          Expanded(child: FigmaHistStatCard(
-            label: 'BPM MÉD.',
-            value: stats.avgBpm?.toString() ?? '--',
-            unit: 'BPM',
-            valueColor: context.runninPalette.primary,
-          )),
+          Expanded(child: FigmaHistStatCard(label: 'NÍVEL', value: nivel, unit: nivelNome, valueColor: p.primary)),
+          const SizedBox(width: 8),
+          Expanded(child: FigmaHistStatCard(label: 'BPM MÉD.', value: bpmMed, unit: 'BPM', valueColor: p.secondary)),
+          const SizedBox(width: 8),
+          Expanded(child: FigmaHistStatCard(label: 'BPM MÁX.', value: bpmMax, unit: 'BPM', valueColor: FigmaColors.textPrimary)),
+        ]),
+        const SizedBox(height: 8),
+        Row(children: [
+          Expanded(child: FigmaHistStatCard(label: 'STREAK', value: streak, unit: 'd', valueColor: p.primary)),
+          const SizedBox(width: 8),
+          Expanded(child: FigmaHistStatCard(label: 'XP', value: xp, valueColor: p.secondary)),
+          const SizedBox(width: 8),
+          const Expanded(child: SizedBox()),
         ]),
         const SizedBox(height: 16),
 
@@ -403,16 +418,40 @@ class _DataView extends StatelessWidget {
           ),
         const SizedBox(height: 16),
 
-        // Volume dinâmico: agrupa por dia/semana/mês baseado no period
-        // selecionado. Two-tone planned (palette.primary) vs executed
-        // (palette.secondary). Quando user não tem plano, mostra só
-        // executed (planned=0 em todos buckets).
+        // Volume acumulado no período: barras paralelas planejado vs
+        // realizado por dia/semana/mês (do breakdown do BE; fallback no
+        // cálculo client-side enquanto carrega).
         ChartPanel(
-          title: _volumeTitle(period),
+          title: 'VOLUME ACUMULADO NO PERÍODO',
           subtitle: _volumeSubtitle(period),
           height: 200,
           child: TwoToneBarChart(
-            data: _buildVolumeBuckets(period, plan, runs),
+            data: breakdown != null
+                ? breakdown!.volume
+                    .map((b) => TwoToneBarData(
+                          planned: b.plannedKm,
+                          executed: b.realizedKm,
+                          label: b.label,
+                        ))
+                    .toList()
+                : _buildVolumeBuckets(period, plan, runs),
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // Pace do período: 2 linhas (projetado vs médio) por bucket.
+        ChartPanel(
+          title: 'PACE DO PERÍODO',
+          subtitle: _paceSubtitle(period),
+          height: 200,
+          child: TwoLineChart(
+            data: (breakdown?.pace ?? [])
+                .map((b) => TwoLineData(
+                      label: b.label,
+                      lineA: b.projectedPaceSec?.toDouble(),
+                      lineB: b.avgPaceSec?.toDouble(),
+                    ))
+                .toList(),
           ),
         ),
         const SizedBox(height: 16),
@@ -629,14 +668,6 @@ class _WeeklyEntry {
 
 // ── Volume two-tone helpers ──────────────────────────────────────────────────
 
-String _volumeTitle(_Period p) {
-  switch (p) {
-    case _Period.week: return 'VOLUME DIÁRIO';
-    case _Period.month: return 'VOLUME SEMANAL';
-    case _Period.threeMonths: return 'VOLUME MENSAL';
-  }
-}
-
 String _volumeSubtitle(_Period p) {
   switch (p) {
     case _Period.week:
@@ -645,6 +676,17 @@ String _volumeSubtitle(_Period p) {
       return 'Km por semana do mês — planejado vs feito';
     case _Period.threeMonths:
       return 'Km por mês — planejado vs feito';
+  }
+}
+
+String _paceSubtitle(_Period p) {
+  switch (p) {
+    case _Period.week:
+      return 'Pace por dia — projetado vs médio';
+    case _Period.month:
+      return 'Pace por semana do mês — projetado vs médio';
+    case _Period.threeMonths:
+      return 'Pace por mês — projetado vs médio';
   }
 }
 
