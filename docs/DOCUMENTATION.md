@@ -112,6 +112,8 @@ quando indicado `[público]` ou `[cron]`. `[premium]` = exige feature do plano (
 `GET /me` · `PATCH /me` · `DELETE /me` · `POST /provision` · `POST /onboarding` · `POST /me/trial` ·
 `POST /internal/reset-plan-revision-quota` [cron]
 
+`PATCH /me` aceita campos opcionais `uiSkin` (string) e `textScale` (string) para persistir tema/skin/escala de texto no perfil do usuário.
+
 ### runs — `/v1/runs`
 `POST /` (cria/inicia) · `GET /` (lista, com coachQuote) · `GET /:id` · `GET /:id/gps` ·
 `PATCH /:id/gps` (batch) · `PATCH /:id/complete` (calcula splits/calorias, dispara report, marca sessão executada)

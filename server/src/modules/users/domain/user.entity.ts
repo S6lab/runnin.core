@@ -57,6 +57,10 @@ export interface UserProfile {
   paceFormat?: 'min_per_km' | 'min_per_mi';
   timeFormat?: '24h' | '12h';
 
+  // UI preferences
+  uiSkin?: string;
+  textScale?: string;
+
   // Plan revisions quota
   planRevisions?: { usedThisWeek: number; max: number; resetAt: string };
 

@@ -48,6 +48,10 @@ export const UpsertProfileSchema = z.object({
   paceFormat: z.enum(['min_per_km', 'min_per_mi']).optional(),
   timeFormat: z.enum(['24h', '12h']).optional(),
 
+  // UI preferences
+  uiSkin: z.string().optional(),
+  textScale: z.string().optional(),
+
   // Subscription (paywall manda subscriptionPlanId='pro' ao assinar; operadoras
   // mandam ids como 'claro_basic'). Catálogo aberto — validação contra
   // Firestore acontece no resolver de features.
@@ -123,6 +127,10 @@ export class UpsertProfileUseCase {
       unitsSystem: input.unitsSystem ?? existing?.unitsSystem,
       paceFormat: input.paceFormat ?? existing?.paceFormat,
       timeFormat: input.timeFormat ?? existing?.timeFormat,
+
+      // UI preferences
+      uiSkin: input.uiSkin ?? existing?.uiSkin,
+      textScale: input.textScale ?? existing?.textScale,
       
       // Subscription handling — espelha legacy `premium` no plan novo
       subscriptionPlanId: (() => {
