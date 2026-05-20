@@ -14,8 +14,11 @@ const GEMINI_LIVE_URL = 'wss://generativelanguage.googleapis.com/ws/google.ai.ge
 // API version v1beta, or is not supported for bidiGenerateContent".
 // 'gemini-live-2.5-flash-preview' está ativo em v1alpha (auth_tokens)
 // E em v1beta (bidi WebSocket). Override via GEMINI_LIVE_MODEL env.
+// Deve bater com o modelo que o app usa pra conectar na Live API
+// (live_coach_voice_service.dart `_model`) — o token efêmero é vinculado ao
+// modelo; descasar gera áudio sobreposto/estranho no início da corrida.
 const DEFAULT_MODEL = process.env['GEMINI_LIVE_MODEL']?.trim()
-  || 'models/gemini-2.5-flash-native-audio-latest';
+  || 'models/gemini-2.5-flash-native-audio-preview-12-2025';
 
 export interface GeminiLiveConfig {
   model?: string;

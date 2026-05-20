@@ -6,9 +6,11 @@ const AUTH_TOKENS_URL =
 // é rejeitado pra AUDIO. O modelo native-audio é o suportado pra AUDIO
 // modality em BidiGenerateContentConstrained (vide README do pacote
 // gemini_live e docs Google Live API).
+// DEVE bater com live_coach_voice_service.dart `_model` no app (token efêmero
+// é vinculado ao modelo). Descasar gera voz sobreposta no início da corrida.
 const DEFAULT_MODEL =
   process.env['GEMINI_LIVE_MODEL']?.trim() ||
-  'models/gemini-2.5-flash-native-audio-latest';
+  'models/gemini-2.5-flash-native-audio-preview-12-2025';
 
 /**
  * Cria token efêmero pra app Flutter conectar direto no Gemini Live
