@@ -64,11 +64,13 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
     try {
       final run = await _remote.getRun(widget.runId);
       final points = await _remote.getGpsPoints(widget.runId).catchError((_) => <GpsPoint>[]);
-      if (mounted) setState(() {
+      if (mounted) {
+        setState(() {
         _run = run;
         _gpsPoints = points;
         _loading = false;
       });
+      }
     } catch (_) {
       if (mounted) setState(() => _loading = false);
     }

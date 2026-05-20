@@ -189,10 +189,10 @@ class UserRemoteDatasource {
         'targetPace': targetPace,
         'hasWearable': hasWearable,
         'medicalConditions': medicalConditions,
-        if (gender != null) 'gender': gender,
-        if (runPeriod != null) 'runPeriod': runPeriod,
-        if (wakeTime != null) 'wakeTime': wakeTime,
-        if (sleepTime != null) 'sleepTime': sleepTime,
+        'gender': ?gender,
+        'runPeriod': ?runPeriod,
+        'wakeTime': ?wakeTime,
+        'sleepTime': ?sleepTime,
       },
     );
     final data = res.data as Map<String, dynamic>;

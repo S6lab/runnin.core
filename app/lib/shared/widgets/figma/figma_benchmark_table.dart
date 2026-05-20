@@ -42,7 +42,7 @@ class BenchmarkRow {
 class RowItem extends StatelessWidget {
   final BenchmarkRow row;
 
-  const RowItem({required this.row});
+  const RowItem({super.key, required this.row});
 
   @override
   Widget build(BuildContext context) {

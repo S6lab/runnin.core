@@ -16,7 +16,7 @@ class AdminPromptsDatasource {
       data: {
         'builder': builder,
         'runLlm': runLlm,
-        if (fixture != null) 'fixture': fixture,
+        'fixture': ?fixture,
       },
     );
     return res.data ?? {};

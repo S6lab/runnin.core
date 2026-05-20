@@ -301,7 +301,7 @@ class _BadgesTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final type = context.runninType;
 
-    int _countStreak(List<Run> runs) {
+    int countStreak(List<Run> runs) {
       final runDays = runs.map((r) {
         final d = DateTime.tryParse(r.createdAt)?.toLocal();
         if (d == null) return null;
@@ -317,7 +317,7 @@ class _BadgesTab extends StatelessWidget {
       return streak;
     }
 
-    bool _hasPaceBelow(double targetMinPerKm) {
+    bool hasPaceBelow(double targetMinPerKm) {
       for (final r in runs) {
         if (r.distanceM > 0 && r.elapsedSeconds != null) {
           final pace = (r.elapsedSeconds! / 60) / (r.distanceM / 1000);
@@ -327,7 +327,7 @@ class _BadgesTab extends StatelessWidget {
       return false;
     }
 
-    bool _isTop20Percent() {
+    bool isTop20Percent() {
       if (runs.length < 5) return false;
       final sorted = List.of(runs)..sort((a, b) {
         final distA = a.distanceM;
@@ -338,31 +338,31 @@ class _BadgesTab extends StatelessWidget {
       return runs.contains(sorted[index20Percent]);
     }
 
-    bool _isZona(Run r) {
+    bool isZona(Run r) {
       final d = DateTime.tryParse(r.createdAt)?.toLocal();
       return d != null && (d.hour >= 17 && d.hour < 21);
     }
 
-    bool _isNoturno(Run r) {
+    bool isNoturno(Run r) {
       final d = DateTime.tryParse(r.createdAt)?.toLocal();
       return d != null && (d.hour >= 21 || d.hour < 6);
     }
 
-    bool _isIntervalado(Run r) {
+    bool isIntervalado(Run r) {
       return (r.distanceM >= 5000 && r.elapsedSeconds != null && r.elapsedSeconds! > 1800) ||
              (r.distanceM >= 10000 && r.elapsedSeconds != null && r.elapsedSeconds! > 3600);
     }
 
-    bool _hasLongRun(double minKm) {
+    bool hasLongRun(double minKm) {
       return runs.any((r) => r.distanceM >= minKm * 1000);
     }
 
-    bool _isSocialRun(Run r) {
+    bool isSocialRun(Run r) {
       return (r.distanceM >= 5000 && r.elapsedSeconds == null) ||
              (r.distanceM < 5000 && r.distanceM > 0);
     }
 
-    bool _hasFastRecovery() {
+    bool hasFastRecovery() {
       for (final r in runs) {
         if (r.distanceM >= 10000 && r.elapsedSeconds != null) {
           final pace = (r.elapsedSeconds! / 60) / (r.distanceM / 1000);
@@ -372,7 +372,7 @@ class _BadgesTab extends StatelessWidget {
       return false;
     }
 
-    bool _isPerfectMonth() {
+    bool isPerfectMonth() {
       final now = DateTime.now();
       final monthRuns = runs.where((r) {
         final d = DateTime.tryParse(r.createdAt)?.toLocal();
@@ -381,7 +381,7 @@ class _BadgesTab extends StatelessWidget {
       return monthRuns.length >= 10;
     }
 
-    bool _isLabRat() {
+    bool isLabRat() {
       return runs.any((r) => r.deviceInfo?.contains('prototype') == true ||
                           r.distanceM >= 42195);
     }
@@ -405,64 +405,64 @@ class _BadgesTab extends StatelessWidget {
         title: 'Streak 7',
         description: 'Mantenha streak de 7 dias',
         icon: Icons.hot_tub_outlined,
-        isUnlocked: _countStreak(runs) >= 7,
-        progress: _countStreak(runs) >= 7 ? 1.0 : null,
+        isUnlocked: countStreak(runs) >= 7,
+        progress: countStreak(runs) >= 7 ? 1.0 : null,
       ),
       _BadgeDef(
         title: 'Streak 14',
         description: 'Mantenha streak de 14 dias',
         icon: Icons.calendar_today_outlined,
-        isUnlocked: _countStreak(runs) >= 14,
-        progress: _countStreak(runs) >= 14 ? 1.0 : null,
+        isUnlocked: countStreak(runs) >= 14,
+        progress: countStreak(runs) >= 14 ? 1.0 : null,
       ),
       _BadgeDef(
         title: 'Pace Sub-6',
         description: 'Corra com pace abaixo de 6min/km',
         icon: Icons.speed_outlined,
-        isUnlocked: _hasPaceBelow(6.0),
-        progress: _hasPaceBelow(6.0) ? 1.0 : null,
+        isUnlocked: hasPaceBelow(6.0),
+        progress: hasPaceBelow(6.0) ? 1.0 : null,
       ),
       _BadgeDef(
         title: 'Pace Sub-5:30',
         description: 'Corra com pace abaixo de 5:30min/km',
         icon: Icons.timer_outlined,
-        isUnlocked: _hasPaceBelow(5.5),
-        progress: _hasPaceBelow(5.5) ? 1.0 : null,
+        isUnlocked: hasPaceBelow(5.5),
+        progress: hasPaceBelow(5.5) ? 1.0 : null,
       ),
       _BadgeDef(
         title: 'Top 20%',
         description: 'Entre nos 20% mais rápidos',
         icon: Icons.emoji_events_outlined,
-        isUnlocked: _isTop20Percent(),
-        progress: _isTop20Percent() ? 1.0 : null,
+        isUnlocked: isTop20Percent(),
+        progress: isTop20Percent() ? 1.0 : null,
       ),
       _BadgeDef(
         title: 'Zona Master',
         description: 'Corra entre 17h e 21h',
         icon: Icons.location_city_outlined,
-        isUnlocked: runs.any(_isZona),
-        progress: runs.any(_isZona) ? 1.0 : null,
+        isUnlocked: runs.any(isZona),
+        progress: runs.any(isZona) ? 1.0 : null,
       ),
       _BadgeDef(
         title: 'Noturno',
         description: 'Corra após as 21h ou antes das 6h',
         icon: Icons.nightlight_rounded,
-        isUnlocked: runs.any(_isNoturno),
-        progress: runs.any(_isNoturno) ? 1.0 : null,
+        isUnlocked: runs.any(isNoturno),
+        progress: runs.any(isNoturno) ? 1.0 : null,
       ),
       _BadgeDef(
         title: 'Intervalado',
         description: 'Corra 5km+ ou 10km+ com bom tempo',
         icon: Icons.bolt_outlined,
-        isUnlocked: runs.any(_isIntervalado),
-        progress: runs.any(_isIntervalado) ? 1.0 : null,
+        isUnlocked: runs.any(isIntervalado),
+        progress: runs.any(isIntervalado) ? 1.0 : null,
       ),
       _BadgeDef(
         title: 'Longão',
         description: 'Corra 21km ou mais',
         icon: Icons.map_outlined,
-        isUnlocked: _hasLongRun(21),
-        progress: _hasLongRun(21) ? 1.0 : null,
+        isUnlocked: hasLongRun(21),
+        progress: hasLongRun(21) ? 1.0 : null,
       ),
       _BadgeDef(
         title: 'Consistente',
@@ -475,15 +475,15 @@ class _BadgesTab extends StatelessWidget {
         title: 'Corredor Social',
         description: 'Corra 5km ou mais sem registro de ritmo',
         icon: Icons.groups_outlined,
-        isUnlocked: runs.any(_isSocialRun),
-        progress: runs.any(_isSocialRun) ? 1.0 : null,
+        isUnlocked: runs.any(isSocialRun),
+        progress: runs.any(isSocialRun) ? 1.0 : null,
       ),
       _BadgeDef(
         title: 'Mestre da Recuperação',
         description: 'Corra 10km com pace abaixo de 5min/km',
         icon: Icons.health_and_safety_outlined,
-        isUnlocked: _hasFastRecovery(),
-        progress: _hasFastRecovery() ? 1.0 : null,
+        isUnlocked: hasFastRecovery(),
+        progress: hasFastRecovery() ? 1.0 : null,
       ),
        _BadgeDef(
          title: 'Escalador',
@@ -496,8 +496,8 @@ class _BadgesTab extends StatelessWidget {
         title: 'Mês Perfeito',
         description: 'Corra 10 vezes este mês',
         icon: Icons.star_rounded,
-        isUnlocked: _isPerfectMonth(),
-        progress: _isPerfectMonth() ? 1.0 : null,
+        isUnlocked: isPerfectMonth(),
+        progress: isPerfectMonth() ? 1.0 : null,
       ),
       _BadgeDef(
         title: 'Veterano',
@@ -510,8 +510,8 @@ class _BadgesTab extends StatelessWidget {
          title: 'Lab Rat',
           description: 'Corra maratona ou use dispositivo prototype',
           icon: Icons.science_outlined,
-          isUnlocked: _isLabRat(),
-           progress: _isLabRat() ? 1.0 : null,
+          isUnlocked: isLabRat(),
+           progress: isLabRat() ? 1.0 : null,
        ),
        _BadgeDef(
          title: 'Trail Master',
@@ -531,8 +531,8 @@ class _BadgesTab extends StatelessWidget {
          title: 'Maratonista',
          description: 'Corra 42km ou mais',
          icon: Icons.flag_outlined,
-         isUnlocked: _hasLongRun(42),
-          progress: _hasLongRun(42) ? 1.0 : null,
+         isUnlocked: hasLongRun(42),
+          progress: hasLongRun(42) ? 1.0 : null,
        ),
        _BadgeDef(
          title: 'Ultra Runner',

@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter/material.dart';
-import 'dart:convert';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:runnin/features/coach/data/datasources/coach_report_remote_datasource.dart';
@@ -48,7 +47,7 @@ class _TrainingPageState extends State<TrainingPage> {
   final _userDs = UserRemoteDatasource();
   final _weeklyReportDs = WeeklyReportRemoteDatasource();
   List<WeeklyReport> _weeklyReports = const [];
-  bool _loadingWeeklyReports = false;
+  final bool _loadingWeeklyReports = false;
   String? _selectedWeekStart;
   UserProfile? _profile;
   Plan? _plan;

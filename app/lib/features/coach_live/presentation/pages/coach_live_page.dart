@@ -78,23 +78,29 @@ class _CoachLivePageState extends State<CoachLivePage> {
       _sub = channel.stream.listen(
         _handleServerMessage,
         onError: (err) {
-          if (mounted) setState(() {
+          if (mounted) {
+            setState(() {
             _error = 'Erro: $err';
             _connecting = false;
             _connected = false;
           });
+          }
         },
         onDone: () {
-          if (mounted) setState(() {
+          if (mounted) {
+            setState(() {
             _connected = false;
           });
+          }
         },
       );
     } catch (e) {
-      if (mounted) setState(() {
+      if (mounted) {
+        setState(() {
         _error = '$e';
         _connecting = false;
       });
+      }
     }
   }
 

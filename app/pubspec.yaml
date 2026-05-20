@@ -66,6 +66,8 @@ dependencies:
   # Gemini Live multimodal (text/audio bidi). Substitui TTS legado (ElevenLabs)
   # nos cues automáticos da run — app fala direto com Gemini, sem proxy.
   gemini_live: ^2026.4.19
+  # usado em produção (blocs/states) — por isso em dependencies, não dev.
+  equatable: ^2.0.5
 
 dev_dependencies:
   flutter_test:
@@ -73,9 +75,6 @@ dev_dependencies:
   flutter_lints: ^6.0.0
   build_runner: ^2.4.14
   freezed: ^3.0.0
-  equatable: ^2.0.5
-  # riverpod_generator removido junto com riverpod_annotation — bloqueava
-  # upgrade do source_gen necessário pelo json_serializable atual.
   json_serializable: ^6.11.0
 
 # record 5.2.1 resolve record_linux para 0.7.2, que não implementa o

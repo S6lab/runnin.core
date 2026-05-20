@@ -12,8 +12,6 @@ import 'package:runnin/features/run/data/datasources/run_remote_datasource.dart'
 import 'package:runnin/features/run/domain/entities/run.dart';
 import 'package:runnin/features/training/data/datasources/plan_remote_datasource.dart';
 import 'package:runnin/features/training/domain/entities/plan.dart';
-import 'package:runnin/shared/widgets/figma/figma_coach_ai_block.dart';
-import 'package:runnin/shared/widgets/figma/figma_top_nav.dart';
 import 'package:runnin/shared/widgets/chart_panel.dart';
 import 'package:runnin/shared/widgets/two_tone_bar_chart.dart';
 import 'package:runnin/shared/widgets/figma/export.dart';
@@ -39,7 +37,7 @@ class _HistoryPageState extends State<HistoryPage> {
   String? _error;
   _Period _period = _Period.month;
   _ContentTab _tab = _ContentTab.data;
-  bool _benchmarkLoading = false;
+  final bool _benchmarkLoading = false;
   double? _benchmarkPercentile;
   List<BenchmarkRow> _benchmarkTableData = [];
   int _benchmarkCohortSize = 0;

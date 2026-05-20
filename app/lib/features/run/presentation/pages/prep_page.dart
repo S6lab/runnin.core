@@ -16,7 +16,6 @@ import 'package:runnin/features/training/domain/entities/plan.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/features/run/presentation/widgets/gps_permission_modal.dart';
 import 'package:runnin/shared/widgets/runnin_app_bar.dart';
-import 'package:runnin/shared/widgets/section_heading.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class PrepPage extends StatelessWidget {
@@ -48,7 +47,7 @@ class _PrepViewState extends State<_PrepView> {
   Timer? _coachDebounce;
   String? _coachCue;
   bool _coachLoading = false;
-  bool _coachMuted = false;
+  final bool _coachMuted = false;
   bool? _isPro;
 
   List<WarmupExercise> _exercises = const [];

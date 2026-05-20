@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:runnin/core/network/api_client.dart';
 import 'package:runnin/core/theme/app_palette.dart';
-import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/features/subscriptions/data/subscription_remote_datasource.dart';
 import 'package:runnin/shared/widgets/runnin_app_bar.dart';
 
@@ -63,10 +62,12 @@ class _PaywallPageState extends State<PaywallPage> {
       if (!mounted) return;
       context.go(widget.nextRoute);
     } catch (e) {
-      if (mounted) setState(() {
+      if (mounted) {
+        setState(() {
         _error = 'Não foi possível assinar agora: $e';
         _saving = false;
       });
+      }
     }
   }
 

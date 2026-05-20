@@ -1244,7 +1244,7 @@ class _UsersPanelState extends State<_UsersPanel> {
                 : ListView.separated(
                     shrinkWrap: true,
                     itemCount: _users.length,
-                    separatorBuilder: (_, __) =>
+                    separatorBuilder: (_, _) =>
                         Divider(color: palette.border, height: 1),
                     itemBuilder: (_, i) {
                       final u = _users[i];
@@ -1436,7 +1436,7 @@ class _RagStatusPanelState extends State<_RagStatusPanel> {
               child: ListView.separated(
                 shrinkWrap: true,
                 itemCount: _docs.length,
-                separatorBuilder: (_, __) => Divider(color: palette.border, height: 1),
+                separatorBuilder: (_, _) => Divider(color: palette.border, height: 1),
                 itemBuilder: (_, i) {
                   final d = _docs[i];
                   final isIndexed = d.ragStatus == 'indexed';

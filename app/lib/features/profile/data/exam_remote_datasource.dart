@@ -72,7 +72,7 @@ class ExamRemoteDatasource {
 
   Future<Exam> finalize(String examId, {String? coachAnalysis}) async {
     final res = await _dio.post('/exams/$examId/finalize', data: {
-      if (coachAnalysis != null) 'coachAnalysis': coachAnalysis,
+      'coachAnalysis': ?coachAnalysis,
     });
     return Exam.fromJson(res.data as Map<String, dynamic>);
   }

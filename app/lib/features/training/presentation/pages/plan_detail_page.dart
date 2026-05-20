@@ -66,11 +66,13 @@ class _PlanDetailPageState extends State<PlanDetailPage> {
         _planDs.getCurrentPlan(),
         _userDs.getMe(),
       ]);
-      if (mounted) setState(() {
+      if (mounted) {
+        setState(() {
         _plan = results[0] as Plan?;
         _profile = results[1] as UserProfile?;
         _loading = false;
       });
+      }
       // Se navegou com ?focusWeek=N, scroll após primeiro paint.
       final fw = widget.focusWeek;
       if (fw != null && _plan != null) {
@@ -191,13 +193,12 @@ class _CollapsibleSection extends StatelessWidget {
   final String title;
   final Widget child;
   final bool initiallyExpanded;
-  final bool accent;
+  final bool accent = false;
   const _CollapsibleSection({
     required this.icon,
     required this.title,
     required this.child,
     this.initiallyExpanded = false,
-    this.accent = false,
   });
 
   @override

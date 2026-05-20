@@ -696,7 +696,7 @@ class _AccessibilitySection extends StatelessWidget {
         const SizedBox(height: AppSpacing.md),
         AnimatedBuilder(
           animation: themeController,
-          builder: (_, __) => Row(
+          builder: (_, _) => Row(
             children: AppTextScale.values.map((scale) {
               final isActive = themeController.textScale == scale;
               final isLast = scale == AppTextScale.values.last;

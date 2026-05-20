@@ -886,13 +886,12 @@ class _NotifGroup {
   final IconData icon;
   final Color accent;
   final List<AppNotification> items;
-  final _NotifSpecial special;
+  final _NotifSpecial special = _NotifSpecial.none;
   const _NotifGroup({
     required this.label,
     required this.icon,
     required this.accent,
     required this.items,
-    this.special = _NotifSpecial.none,
   });
 }
 
