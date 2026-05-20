@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 
 import 'app_palette.dart';
 
@@ -49,17 +50,23 @@ class ThemeController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> setSkin(RunninSkin skin) async {
+  Future<void> setSkin(RunninSkin skin, {bool sync = true}) async {
     if (_skin == skin) return;
     _skin = skin;
     await _box?.put(_skinPreferenceKey, skin.palette.id);
     notifyListeners();
+    if (sync) {
+      UserRemoteDatasource().patchMe(uiSkin: skin.palette.id).ignore();
+    }
   }
 
-  Future<void> setTextScale(AppTextScale scale) async {
+  Future<void> setTextScale(AppTextScale scale, {bool sync = true}) async {
     if (_textScale == scale) return;
     _textScale = scale;
     await _box?.put(_textScalePreferenceKey, scale.name);
     notifyListeners();
+    if (sync) {
+      UserRemoteDatasource().patchMe(textScale: scale.name).ignore();
+    }
   }
 }

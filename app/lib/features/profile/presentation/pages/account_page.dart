@@ -88,6 +88,20 @@ class _AccountPageState extends State<AccountPage> {
       final runs = allRuns.where((r) => r.status == 'completed').toList();
       final totalXp = runs.fold<int>(0, (s, r) => s + (r.xpEarned ?? 0));
       final totalKm = runs.fold<double>(0, (s, r) => s + r.distanceM) / 1000;
+      if (profile?.uiSkin != null) {
+        final skin = RunninSkin.values.firstWhere(
+          (s) => s.palette.id == profile!.uiSkin,
+          orElse: () => RunninSkin.artico,
+        );
+        await themeController.setSkin(skin, sync: false);
+      }
+      if (profile?.textScale != null) {
+        final scale = AppTextScale.values.firstWhere(
+          (s) => s.name == profile!.textScale,
+          orElse: () => AppTextScale.normal,
+        );
+        await themeController.setTextScale(scale, sync: false);
+      }
       if (!mounted) return;
       setState(() {
         _data = _AccountData(

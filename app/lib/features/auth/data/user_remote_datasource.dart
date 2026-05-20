@@ -31,6 +31,10 @@ class UserProfile {
   final String? coachMessageFrequency;
   final Map<String, bool>? coachFeedbackEnabled;
   final bool? allowCriticalAlertsInSilent;
+  final Map<String, bool>? notificationsEnabled;
+  final Map<String, String>? dndWindow;
+  final String? uiSkin;
+  final String? textScale;
 
   const UserProfile({
     required this.id,
@@ -60,6 +64,10 @@ class UserProfile {
     this.coachMessageFrequency,
     this.coachFeedbackEnabled,
     this.allowCriticalAlertsInSilent,
+    this.notificationsEnabled,
+    this.dndWindow,
+    this.uiSkin,
+    this.textScale,
   });
 
   bool get isPro {
@@ -105,6 +113,12 @@ class UserProfile {
     coachFeedbackEnabled: (j['coachFeedbackEnabled'] as Map<String, dynamic>?)
         ?.map((k, v) => MapEntry(k, v as bool)),
     allowCriticalAlertsInSilent: j['allowCriticalAlertsInSilent'] as bool?,
+    notificationsEnabled: (j['notificationsEnabled'] as Map<String, dynamic>?)
+        ?.map((k, v) => MapEntry(k, v as bool)),
+    dndWindow: (j['dndWindow'] as Map<String, dynamic>?)
+        ?.map((k, v) => MapEntry(k, v as String)),
+    uiSkin: j['uiSkin'] as String?,
+    textScale: j['textScale'] as String?,
   );
 }
 
@@ -196,6 +210,8 @@ class UserRemoteDatasource {
     int? restingBpm,
     int? maxBpm,
     Map<String, bool>? preRunAlerts,
+    String? uiSkin,
+    String? textScale,
   }) async {
     final data = <String, dynamic>{
       'name': name,
@@ -217,6 +233,8 @@ class UserRemoteDatasource {
       'restingBpm': restingBpm,
       'maxBpm': maxBpm,
       'preRunAlerts': preRunAlerts,
+      'uiSkin': uiSkin,
+      'textScale': textScale,
     }..removeWhere((_, value) => value == null);
 
     final res = await _dio.patch('/users/me', data: data);
