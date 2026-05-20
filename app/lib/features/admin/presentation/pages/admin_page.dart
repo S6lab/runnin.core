@@ -1036,6 +1036,8 @@ class _DrivePanel extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 24),
       child: Column(
         children: [
+          _CoachAiConsoleEntry(canRead: session.canRead),
+          const SizedBox(height: 8),
           _PromptsConsoleEntry(canRead: session.canRead),
           const SizedBox(height: 8),
           _CoachPromptPanel(
@@ -1501,6 +1503,26 @@ class _RagStat extends StatelessWidget {
   }
 }
 
+class _CoachAiConsoleEntry extends StatelessWidget {
+  final bool canRead;
+  const _CoachAiConsoleEntry({required this.canRead});
+
+  @override
+  Widget build(BuildContext context) {
+    if (!canRead) return const SizedBox.shrink();
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 0, vertical: 0),
+      child: ListTile(
+        leading: const Icon(Icons.hub_outlined),
+        title: const Text('Console Coach.AI'),
+        subtitle: const Text('5 momentos · 4 modelos · base de conhecimento (RAG) com purga'),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => GoRouter.of(context).push('/admin/coach-ai'),
+      ),
+    );
+  }
+}
+
 class _PromptsConsoleEntry extends StatelessWidget {
   final bool canRead;
   const _PromptsConsoleEntry({required this.canRead});
@@ -1513,7 +1535,7 @@ class _PromptsConsoleEntry extends StatelessWidget {
       child: ListTile(
         leading: const Icon(Icons.tune),
         title: const Text('Prompts & Personas'),
-        subtitle: const Text('Editar prompts dos 7 momentos LLM, personas do coach, knobs do decision layer'),
+        subtitle: const Text('Editar prompts dos momentos LLM, personas do coach, knobs do decision layer'),
         trailing: const Icon(Icons.chevron_right),
         onTap: () => GoRouter.of(context).push('/admin/prompts'),
       ),
