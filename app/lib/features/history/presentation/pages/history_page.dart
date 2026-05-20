@@ -8,7 +8,6 @@ import 'package:runnin/features/history/data/period_analysis_remote_datasource.d
 import 'package:runnin/features/history/data/stats_remote_datasource.dart';
 import 'package:runnin/features/history/domain/entities/period_analysis.dart';
 import 'package:runnin/features/history/domain/entities/stats_aggregate.dart';
-import 'package:runnin/features/history/presentation/widgets/hist_stat_card.dart';
 import 'package:runnin/features/run/data/datasources/run_remote_datasource.dart';
 import 'package:runnin/features/run/domain/entities/run.dart';
 import 'package:runnin/features/training/data/datasources/plan_remote_datasource.dart';
