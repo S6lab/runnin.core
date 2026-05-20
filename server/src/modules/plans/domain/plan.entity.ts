@@ -67,6 +67,24 @@ export interface PlanWeek {
   sessions: PlanSession[];
   focus?: string;       // "Base" | "Intervalado" | "Tempo" | "Recuperação"
   narrative?: string;   // texto LLM da semana (1-2 frases)
+  /**
+   * Nível de detalhe da semana (geração two-tier):
+   *  - 'full': sessões completas (pace, tempo, hidratação, nutrição, notes
+   *    ricas, executionSegments). Sempre as 2 primeiras semanas + as 2
+   *    enriquecidas a cada checkpoint.
+   *  - 'skeleton': só tipo + distância + pace alvo + metadados do bloco.
+   *    Demais campos liberados no checkpoint da semana anterior.
+   * Default (ausente) = 'full' para retrocompatibilidade com planos antigos.
+   */
+  detailLevel?: 'full' | 'skeleton';
+  /** Nome didático do bloco/fase da semana (ex: "BASE · Adaptação"). */
+  blockName?: string;
+  /** Objetivo da semana em 1 frase (ex: "Construir base aeróbica"). */
+  objective?: string;
+  /** Carga projetada da semana em km (soma planejada do volume). */
+  projectedLoadKm?: number;
+  /** Objetivos a atingir na semana, em bullets curtos. */
+  targets?: string[];
   /** Orientação para os dias SEM treino dessa semana (descanso, recuperação,
    *  alongamento). Wired nas notificações diárias quando não há sessão. */
   restDayTips?: PlanRestDayTip[];
@@ -110,6 +128,14 @@ export interface Plan {
   startDate?: string;
   weeks: PlanWeek[];
   mesocycleNarrative?: string; // texto LLM do mesociclo (3-4 frases)
+  /**
+   * Avaliação honesta do objetivo declarado pelo atleta: o coach analisa o
+   * gap entre o estado atual (nível/idade/peso/condições) e a meta, e diz se
+   * é alcançável neste mesociclo ou se este plano é só a fundação. Campo
+   * dedicado (distinto de coachRationale e mesocycleNarrative), renderizado
+   * em destaque na /training/plan-detail. Gerado junto do plano.
+   */
+  goalAssessment?: string;
   /**
    * Texto markdown longo escrito pelo coach AI explicando o plano: dados
    * considerados, racional de carga, periodização, contraindicações,

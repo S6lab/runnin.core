@@ -140,6 +140,18 @@ class PlanWeek {
   /// semana específica do user. Null se ainda não gerado.
   final String? narrative;
   final String? focus;
+  /// Nível de detalhe (geração two-tier): 'full' = sessões completas com
+  /// roteiro/nutrição; 'skeleton' = só tipo/distância/pace, detalhe liberado
+  /// no checkpoint. Ausente = 'full' (planos legados).
+  final String? detailLevel;
+  /// Nome didático do bloco/fase (ex: "BASE · Adaptação").
+  final String? blockName;
+  /// Objetivo da semana em 1 frase.
+  final String? objective;
+  /// Carga projetada da semana (km).
+  final double? projectedLoadKm;
+  /// Objetivos a atingir na semana (bullets).
+  final List<String> targets;
   final List<PlanRestDayTip> restDayTips;
 
   const PlanWeek({
@@ -147,8 +159,17 @@ class PlanWeek {
     required this.sessions,
     this.narrative,
     this.focus,
+    this.detailLevel,
+    this.blockName,
+    this.objective,
+    this.projectedLoadKm,
+    this.targets = const [],
     this.restDayTips = const [],
   });
+
+  /// Semana esqueleto: só volume/pace, sem detalhe rico (liberado no
+  /// checkpoint da semana anterior). Default false p/ planos legados.
+  bool get isSkeleton => detailLevel == 'skeleton';
 
   factory PlanWeek.fromJson(Map<String, dynamic> j) => PlanWeek(
         weekNumber: j['weekNumber'] as int,
@@ -157,6 +178,13 @@ class PlanWeek {
             .toList(),
         narrative: j['narrative'] as String?,
         focus: j['focus'] as String?,
+        detailLevel: j['detailLevel'] as String?,
+        blockName: j['blockName'] as String?,
+        objective: j['objective'] as String?,
+        projectedLoadKm: (j['projectedLoadKm'] as num?)?.toDouble(),
+        targets: ((j['targets'] as List?) ?? [])
+            .map((t) => t as String)
+            .toList(),
         restDayTips: ((j['restDayTips'] as List?) ?? [])
             .map((t) => PlanRestDayTip.fromJson(t as Map<String, dynamic>))
             .toList(),
@@ -179,6 +207,9 @@ class Plan {
   final String? coachRationale;
   /// Texto curto (3-4 frases) sobre estratégia do mesociclo todo.
   final String? mesocycleNarrative;
+  /// Avaliação honesta do objetivo: o coach diz se a meta é alcançável neste
+  /// mesociclo ou se o plano é só a fundação. Renderizado em destaque.
+  final String? goalAssessment;
   final List<PlanRevisionLog> revisions;
 
   const Plan({
@@ -192,6 +223,7 @@ class Plan {
     this.startDate,
     this.coachRationale,
     this.mesocycleNarrative,
+    this.goalAssessment,
     this.revisions = const [],
   });
 
@@ -208,6 +240,7 @@ class Plan {
         startDate: j['startDate'] as String?,
         coachRationale: j['coachRationale'] as String?,
         mesocycleNarrative: j['mesocycleNarrative'] as String?,
+        goalAssessment: j['goalAssessment'] as String?,
         revisions: ((j['revisions'] as List?) ?? [])
             .map((r) => PlanRevisionLog.fromJson(r as Map<String, dynamic>))
             .toList(),

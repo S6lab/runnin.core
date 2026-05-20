@@ -402,11 +402,15 @@ REGRAS GERAIS:
 Responda APENAS JSON estritamente neste schema:
 
 {
-  "mesocycle": "string (3-5 frases). Explique: (1) avaliação realista do gap nível-vs-objetivo (se objetivo é ambicioso pro nível, diga que essas ${plan.weeksCount} semanas são fundação, NÃO o objetivo final); (2) estratégia de periodização (padrão 3:1, deload, blocos); (3) o que ele DEVE esperar ao final dessas semanas (resultado realista).",
+  "mesocycle": "string (3-5 frases). Explique: (1) estratégia de periodização (padrão 3:1, deload, blocos); (2) o que ele DEVE esperar ao final dessas semanas (resultado realista).",
+  "goalAssessment": "string (2-4 frases). Avaliação HONESTA do objetivo declarado: o gap entre o estado atual (nível/idade/condições) e a meta. Se o objetivo é ambicioso pro nível, diga claramente que essas ${plan.weeksCount} semanas são a FUNDAÇÃO, não o objetivo final, e o que viria depois. Se é realista, confirme e diga o que vai destravar.",
   "weeks": [
     {
       "weekNumber": 1,
-      "narrative": "string (2-3 frases). DEVE COMEÇAR com a FASE em colchetes (ex: '[BASE]', '[BUILD]', '[DELOAD]', '[SPECIFIC]', '[PEAK]', '[TAPER]'). Em seguida: foco da semana + sessão-chave + conexão com a próxima ou anterior ('preparamos pra...' / 'consolida o que fez na semana X')."
+      "narrative": "string (2-3 frases). DEVE COMEÇAR com a FASE em colchetes (ex: '[BASE]', '[BUILD]', '[DELOAD]', '[SPECIFIC]', '[PEAK]', '[TAPER]'). Em seguida: foco da semana + sessão-chave + conexão com a próxima ou anterior ('preparamos pra...' / 'consolida o que fez na semana X').",
+      "blockName": "string curta (2-4 palavras) — nome didático do bloco/fase (ex: 'BASE · Adaptação', 'BUILD · Limiar', 'DELOAD · Recuperação').",
+      "objective": "string (1 frase) — o objetivo central da semana.",
+      "targets": ["bullet curto 1", "bullet curto 2"]
     },
     ...
   ]
@@ -414,8 +418,9 @@ Responda APENAS JSON estritamente neste schema:
 
 REGRAS CRÍTICAS:
 - weeks tem EXATAMENTE ${weeks.length} elementos (1 por semana).
-- A FASE de cada semana SAI do volume relativo: se volume cai 30%+ da semana anterior = DELOAD/TAPER; se mantém com qualidade nova = BUILD; se sobe sem qualidade = BASE+; semana de início (S1) = BASE; última = TAPER ou PEAK conforme objetivo.
-- Mesociclo precisa fazer leitura HONESTA do gap nível→objetivo (não infle expectativa).
+- A FASE de cada semana SAI do volume relativo: se volume cai 30%+ da semana anterior = DELOAD/TAPER; se mantém com qualidade nova = BUILD; se sobe sem qualidade = BASE+; semana de início (S1) = BASE; última = TAPER ou PEAK conforme objetivo. O blockName DEVE refletir essa fase.
+- targets: 2-3 bullets curtos e mensuráveis do que atingir na semana (ex: "Completar o longão de 8km", "Manter pace easy abaixo de 6:30").
+- goalAssessment precisa fazer leitura HONESTA do gap nível→objetivo (não infle expectativa).
 - Cada narrative deve EXPLICITAMENTE conectar com a sequência (não pode ser independente).
 - Sem emojis, sem markdown, "você", PT-BR.
 
@@ -447,12 +452,20 @@ ${weeksDigest}`;
 
       const enriched: PlanWeek[] = weeks.map((w) => {
         const match = uniqueNarratives.find((x) => x.weekNumber === w.weekNumber);
-        return match ? { ...w, narrative: match.narrative } : w;
+        if (!match) return w;
+        return {
+          ...w,
+          narrative: match.narrative,
+          blockName: match.blockName ?? w.blockName,
+          objective: match.objective ?? w.objective,
+          targets: match.targets ?? w.targets,
+        };
       });
 
       await this.repo.update(plan.id, plan.userId, {
         weeks: enriched,
         mesocycleNarrative: parsed.mesocycle,
+        goalAssessment: parsed.goalAssessment,
         updatedAt: new Date().toISOString(),
       });
       logger.info('plan.narratives.generated', {
@@ -467,7 +480,17 @@ ${weeksDigest}`;
     }
   }
 
-  private _parseNarrativesJson(raw: string): { mesocycle: string; weeks: { weekNumber: number; narrative: string }[] } | null {
+  private _parseNarrativesJson(raw: string): {
+    mesocycle: string;
+    goalAssessment?: string;
+    weeks: {
+      weekNumber: number;
+      narrative: string;
+      blockName?: string;
+      objective?: string;
+      targets?: string[];
+    }[];
+  } | null {
     try {
       // Strip fenced code blocks se vierem
       const cleaned = raw.replace(/^```(?:json)?\s*|\s*```\s*$/g, '').trim();
@@ -475,14 +498,35 @@ ${weeksDigest}`;
       const end = cleaned.lastIndexOf('}');
       if (start < 0 || end <= start) return null;
       const json = cleaned.slice(start, end + 1);
-      const obj = JSON.parse(json) as { mesocycle?: unknown; weeks?: unknown };
+      const obj = JSON.parse(json) as {
+        mesocycle?: unknown;
+        goalAssessment?: unknown;
+        weeks?: unknown;
+      };
       if (typeof obj.mesocycle !== 'string') return null;
       if (!Array.isArray(obj.weeks)) return null;
-      const weeks = obj.weeks.filter((x): x is { weekNumber: number; narrative: string } => {
-        return !!x && typeof (x as { weekNumber?: unknown }).weekNumber === 'number'
-          && typeof (x as { narrative?: unknown }).narrative === 'string';
-      });
-      return { mesocycle: obj.mesocycle, weeks };
+      const weeks = obj.weeks
+        .filter(
+          (x): x is { weekNumber: number; narrative: string; blockName?: unknown; objective?: unknown; targets?: unknown } =>
+            !!x &&
+            typeof (x as { weekNumber?: unknown }).weekNumber === 'number' &&
+            typeof (x as { narrative?: unknown }).narrative === 'string',
+        )
+        .map((x) => ({
+          weekNumber: x.weekNumber,
+          narrative: x.narrative,
+          blockName: typeof x.blockName === 'string' ? x.blockName : undefined,
+          objective: typeof x.objective === 'string' ? x.objective : undefined,
+          targets: Array.isArray(x.targets)
+            ? x.targets.filter((t): t is string => typeof t === 'string')
+            : undefined,
+        }));
+      return {
+        mesocycle: obj.mesocycle,
+        goalAssessment:
+          typeof obj.goalAssessment === 'string' ? obj.goalAssessment : undefined,
+        weeks,
+      };
     } catch {
       return null;
     }
@@ -606,6 +650,7 @@ ${repaired}`,
       const padDistanceKm = Number(Math.max(3, Math.min(8, avgDistance)).toFixed(1));
 
       const needed = maxAllowed - w.sessions.length;
+      const isSkeleton = w.detailLevel === 'skeleton';
       const newSessions: PlanSession[] = [];
       for (let i = 0; i < needed && i < freeDays.length; i++) {
         const dow = freeDays[i]!;
@@ -613,6 +658,20 @@ ${repaired}`,
         // é sempre conversável (zona 1-2), pace 6:00-7:30/km serve bem
         // pra qualquer nível como base. Fallback usa 6:30.
         const targetPace = '6:30';
+        if (isSkeleton) {
+          // Semana esqueleto: padding também é esqueleto (só tipo/dist/pace).
+          // Detalhe (nutrição/roteiro) é liberado no checkpoint.
+          newSessions.push({
+            id: uuid(),
+            dayOfWeek: dow,
+            type: 'Easy Run',
+            distanceKm: padDistanceKm,
+            targetPace,
+            notes: `Easy Run complementar pra fechar a frequência de ${targetFreq}x/semana.`,
+          } satisfies PlanSession);
+          totalPadded++;
+          continue;
+        }
         const durationMin = Math.round(padDistanceKm * 6.5);
         const base = {
           id: uuid(),
@@ -637,7 +696,13 @@ ${repaired}`,
         if (a.dayOfWeek !== b.dayOfWeek) return a.dayOfWeek - b.dayOfWeek;
         return a.id.localeCompare(b.id);
       });
-      return { ...w, sessions: combined };
+      return {
+        ...w,
+        sessions: combined,
+        projectedLoadKm: Number(
+          combined.reduce((a, s) => a + s.distanceKm, 0).toFixed(1),
+        ),
+      };
     });
 
     if (totalPadded > 0) {
@@ -668,27 +733,43 @@ ${repaired}`,
     const startDow = (start.getDay() || 7);
 
     const normalized = parsed.map((week, weekIndex) => {
+      // Geração two-tier: as 2 PRIMEIRAS semanas são 'full' (sessões
+      // completas + roteiro km-a-km). As demais são 'skeleton' (só
+      // tipo/distância/pace), enriquecidas depois no checkpoint.
+      const isFull = weekIndex < 2;
       const allSessions = week.sessions.map(session => {
-        const base = {
+        if (isFull) {
+          const base = {
+            id: uuid(),
+            dayOfWeek: session.dayOfWeek,
+            type: session.type,
+            distanceKm: Number(session.distanceKm.toFixed(1)),
+            targetPace: session.targetPace,
+            durationMin: session.durationMin,
+            hydrationLiters: session.hydrationLiters,
+            nutritionPre: session.nutritionPre,
+            nutritionPost: session.nutritionPost,
+            notes: session.notes,
+          } satisfies Omit<PlanSession, 'executionSegments'>;
+          // Segments: prioriza o que LLM mandou (caso futuro o prompt
+          // volte a pedir), senão gera deterministicamente a partir de
+          // distância + tipo + pace. Sem LLM, instantâneo.
+          const segments: PlanSegment[] | undefined =
+            (session.executionSegments?.length ?? 0) > 0
+              ? (session.executionSegments as PlanSegment[])
+              : buildExecutionSegments(base);
+          return { ...base, executionSegments: segments } satisfies PlanSession;
+        }
+        // Skeleton: só tipo/distância/pace + notes curta. Sem hidratação/
+        // nutrição/roteiro — esse detalhe é liberado no checkpoint.
+        return {
           id: uuid(),
           dayOfWeek: session.dayOfWeek,
           type: session.type,
           distanceKm: Number(session.distanceKm.toFixed(1)),
           targetPace: session.targetPace,
-          durationMin: session.durationMin,
-          hydrationLiters: session.hydrationLiters,
-          nutritionPre: session.nutritionPre,
-          nutritionPost: session.nutritionPost,
-          notes: session.notes,
-        } satisfies Omit<PlanSession, 'executionSegments'>;
-        // Segments: prioriza o que LLM mandou (caso futuro o prompt
-        // volte a pedir), senão gera deterministicamente a partir de
-        // distância + tipo + pace. Sem LLM, instantâneo.
-        const segments: PlanSegment[] | undefined =
-          (session.executionSegments?.length ?? 0) > 0
-            ? (session.executionSegments as PlanSegment[])
-            : buildExecutionSegments(base);
-        return { ...base, executionSegments: segments } satisfies PlanSession;
+          notes: session.notes ?? '',
+        } satisfies PlanSession;
       });
 
       // Week 1: descarta SEMPRE sessões com dayOfWeek < hoje (LLM não deveria
@@ -700,13 +781,20 @@ ${repaired}`,
         ? allSessions.filter(s => s.dayOfWeek >= startDow)
         : allSessions;
 
+      const sorted = filtered.sort((a, b) => {
+        if (a.dayOfWeek !== b.dayOfWeek) return a.dayOfWeek - b.dayOfWeek;
+        return a.id.localeCompare(b.id);
+      });
+
       return {
         weekNumber: week.weekNumber || weekIndex + 1,
-        sessions: filtered.sort((a, b) => {
-          if (a.dayOfWeek !== b.dayOfWeek) return a.dayOfWeek - b.dayOfWeek;
-          return a.id.localeCompare(b.id);
-        }),
-        restDayTips: week.restDayTips,
+        sessions: sorted,
+        detailLevel: isFull ? 'full' as const : 'skeleton' as const,
+        projectedLoadKm: Number(
+          sorted.reduce((a, s) => a + s.distanceKm, 0).toFixed(1),
+        ),
+        // Esqueleto não tem restDayTips (liberado no checkpoint).
+        restDayTips: isFull ? week.restDayTips : undefined,
       };
     });
 
