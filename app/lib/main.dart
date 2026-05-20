@@ -12,6 +12,8 @@ import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 import 'package:runnin/features/biometrics/data/health_sync_service.dart';
 import 'package:runnin/features/notifications/data/push_notifications_service.dart';
 import 'package:runnin/features/subscriptions/presentation/subscription_controller.dart';
+import 'package:runnin/core/remote_config/force_update_controller.dart';
+import 'package:runnin/features/force_update/presentation/pages/force_update_page.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/theme_controller.dart';
@@ -37,6 +39,13 @@ Future<void> _runApp() async {
 
   final isAdminEntry =
       Uri.base.path == '/admin' || Uri.base.path.startsWith('/admin/');
+
+  // Gate de manutenção / atualização obrigatória (Remote Config). Roda em
+  // background — não bloqueia o boot; quando resolve, o builder do app exibe
+  // a tela de bloqueio se necessário. Fail-open em caso de erro.
+  if (!isAdminEntry) {
+    forceUpdateController.check();
+  }
 
   // Limpa qualquer sessão anônima leftover (do tempo em que a app fazia
   // signInAnonymously no boot). Sem isso, o user reabre o app já "logado"
@@ -113,7 +122,14 @@ class RunrunApp extends StatelessWidget {
             data: mq.copyWith(
               textScaler: TextScaler.linear(themeController.textScaleFactor),
             ),
-            child: child ?? const SizedBox.shrink(),
+            // Overlay de bloqueio (manutenção / update obrigatório) sobre
+            // qualquer rota quando o Remote Config indicar.
+            child: AnimatedBuilder(
+              animation: forceUpdateController,
+              builder: (context, _) => forceUpdateController.blocked
+                  ? const ForceUpdatePage()
+                  : (child ?? const SizedBox.shrink()),
+            ),
           );
         },
       ),
