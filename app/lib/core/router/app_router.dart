@@ -7,6 +7,8 @@ import 'package:runnin/features/admin/presentation/pages/admin_page.dart';
 import 'package:runnin/features/admin/presentation/pages/prompts_admin_page.dart';
 import 'package:runnin/features/intro/presentation/pages/intro_page.dart';
 import 'package:runnin/features/paywall/presentation/pages/paywall_page.dart';
+import 'package:runnin/features/subscriptions/presentation/pages/benefit_activation_page.dart';
+import 'package:runnin/features/subscriptions/presentation/pages/benefits_page.dart';
 import 'package:runnin/features/coach_live/presentation/pages/coach_live_page.dart';
 import 'package:runnin/features/auth/presentation/pages/login_page.dart';
 import 'package:runnin/features/coach_intro/presentation/pages/coach_intro_page.dart';
@@ -163,6 +165,16 @@ final appRouter = GoRouter(
       builder: (_, state) => PlanLoadingPage(
         startDate: state.uri.queryParameters['startDate'],
       ),
+    ),
+    GoRoute(
+      path: '/benefit-activation',
+      builder: (_, state) => BenefitActivationPage(
+        startDate: state.uri.queryParameters['startDate'],
+      ),
+    ),
+    GoRoute(
+      path: '/profile/benefits',
+      builder: (_, _) => const BenefitsPage(),
     ),
     GoRoute(path: '/coach-intro', builder: (_, _) => const CoachIntroPage()),
     GoRoute(

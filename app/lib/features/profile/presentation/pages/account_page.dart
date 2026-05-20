@@ -797,6 +797,13 @@ class _MenuSection extends StatelessWidget {
         ),
         const SizedBox(height: AppSpacing.sm),
         _MenuItem(
+          icon: Icons.card_giftcard_outlined,
+          title: 'VERIFICAR BENEFÍCIO',
+          subtitle: 'Assinaturas de parceiro (Claro, etc.)',
+          onTap: () => context.push('/profile/benefits'),
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        _MenuItem(
           icon: Icons.favorite_outline,
           title: 'SAÚDE',
           subtitle: 'BPM, Zonas, Wearable',

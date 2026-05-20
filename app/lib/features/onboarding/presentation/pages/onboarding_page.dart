@@ -5,6 +5,7 @@ import 'package:runnin/core/router/app_router.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 import 'package:runnin/features/subscriptions/presentation/subscription_controller.dart';
+import 'package:runnin/features/subscriptions/presentation/benefit_controller.dart';
 import 'package:runnin/features/onboarding/presentation/steps/onboarding_step_body.dart';
 import 'package:runnin/features/onboarding/presentation/steps/onboarding_step_frequency.dart';
 import 'package:runnin/features/onboarding/presentation/steps/onboarding_step_gender.dart';
@@ -114,6 +115,11 @@ class _OnboardingPageState extends State<OnboardingPage> {
     final startIso = _startDateIso();
     if (subscriptionController.has('generatePlan')) {
       context.push('/plan-loading?startDate=$startIso');
+    } else if (benefitController.hasPending) {
+      // Benefício de parceiro encontrado (lookup silencioso no login) → ativa
+      // o benefício em vez de oferecer o Pro pago.
+      // PENDÊNCIA: caso o user já seja Pro (tratado acima por generatePlan).
+      context.go('/benefit-activation?startDate=$startIso');
     } else {
       // Freemium: mantém startDate como query pra paywall gerar se ele assinar.
       context.go('/paywall?next=/home&startDate=$startIso');

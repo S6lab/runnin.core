@@ -11,6 +11,7 @@ import 'package:runnin/shared/widgets/runnin_app_bar.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 import 'package:runnin/features/subscriptions/presentation/subscription_controller.dart';
+import 'package:runnin/features/subscriptions/presentation/benefit_controller.dart';
 import 'package:runnin/features/training/data/datasources/plan_remote_datasource.dart';
 import 'package:runnin/features/onboarding/presentation/steps/onboarding_shared.dart';
 import 'package:runnin/shared/widgets/figma/export.dart';
@@ -114,6 +115,12 @@ class _LoginPageState extends State<LoginPage> {
       // Carrega o billing plan central (features/permissões) já no login.
       try {
         await subscriptionController.refresh();
+      } catch (_) {}
+
+      // Busca SILENCIOSA de benefícios de parceiro (pelo telefone). Se houver,
+      // a jornada de fim de onboarding troca o paywall do Pro pela ativação.
+      try {
+        await benefitController.lookup();
       } catch (_) {}
 
       // Recupera o plano de treino no login e cacheia. Se já existe um plano,
