@@ -159,6 +159,35 @@ class _CheckpointPageState extends State<CheckpointPage> {
     }
   }
 
+  Future<void> _skip() async {
+    setState(() {
+      _applying = true;
+      _applyError = null;
+    });
+    try {
+      await _ds.skip(widget.planId, widget.weekNumber);
+      if (!mounted) return;
+      context.pop();
+    } on DioException catch (e) {
+      if (!mounted) return;
+      final code = e.response?.statusCode;
+      final raw = e.response?.data is Map ? e.response!.data as Map : null;
+      final err = raw?['error'] is Map ? raw!['error'] as Map : null;
+      setState(() {
+        _applyError = code == 409
+            ? 'Esse checkpoint já foi aplicado.'
+            : (err?['message'] as String? ?? 'Erro ao adiar checkpoint.');
+        _applying = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _applyError = 'Erro inesperado.';
+        _applying = false;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final palette = context.runninPalette;
@@ -302,6 +331,29 @@ class _CheckpointPageState extends State<CheckpointPage> {
               style: context.runninType.bodyXs.copyWith(
                 color: palette.muted,
                 height: 1.45,
+              ),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: TextButton(
+                onPressed: _applying ? null : _skip,
+                child: Text(
+                  'DEPOIS',
+                  style: context.runninType.labelCaps.copyWith(
+                    color: palette.muted,
+                    letterSpacing: 1.2,
+                  ),
+                ),
+              ),
+            ),
+            Text(
+              'Pode adiar até a data do checkpoint. Sem ajuste agora, o detalhe das '
+              'próximas semanas é liberado no próximo checkpoint.',
+              textAlign: TextAlign.center,
+              style: context.runninType.bodyXs.copyWith(
+                color: palette.muted.withValues(alpha: 0.7),
+                height: 1.4,
               ),
             ),
           ],

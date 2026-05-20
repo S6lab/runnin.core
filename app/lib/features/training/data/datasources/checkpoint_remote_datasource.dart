@@ -43,6 +43,13 @@ class CheckpointRemoteDatasource {
     return PlanCheckpoint.fromJson(res.data as Map<String, dynamic>);
   }
 
+  /// "Depois": adia o checkpoint sem aplicar ajuste (marca skipped). Não
+  /// consome cota; as semanas pendentes são detalhadas no próximo checkpoint.
+  Future<PlanCheckpoint> skip(String planId, int weekNumber) async {
+    final res = await _dio.post('/plans/$planId/checkpoints/$weekNumber/skip');
+    return PlanCheckpoint.fromJson(res.data as Map<String, dynamic>);
+  }
+
   /// Aplica o ajuste: roda LLM, gera PlanRevision, ajusta semanas seguintes
   /// do plano. Cobrado pelo gate premium no server (403 PREMIUM_REQUIRED se
   /// freemium tentar).

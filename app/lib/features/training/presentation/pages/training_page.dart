@@ -399,11 +399,12 @@ class _TrainingPageState extends State<TrainingPage> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: palette.surface,
-        title: const Text('Limite semanal atingido'),
+        title: const Text('Limite de geração atingido'),
         content: Text(
-          'No plano Pro você pode gerar um novo plano completo 1× por semana. '
-          'Pra ajustes pontuais (mais carga, troca de dias, etc.), use a '
-          '"Revisão semanal" do plano atual.\n\n$availableLine',
+          'Na primeira semana você pode gerar 2 planos (caso queira refazer). '
+          'Depois, é 1 novo plano por semana. Pra ajustes pontuais (mais carga, '
+          'troca de dias, etc.), use a "Revisão semanal" ou o checkpoint do plano '
+          'atual.\n\n$availableLine',
         ),
         actions: [
           TextButton(
@@ -1200,6 +1201,10 @@ class _WeeklyPlanView extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 12),
+        if (week?.isSkeleton ?? false) ...[
+          _SkeletonWeekNotice(),
+          const SizedBox(height: 12),
+        ],
         ...() {
           // Datas reais por sessão: cada semana começa na segunda anterior
           // (ou em plan.createdAt se foi gerado numa segunda). Week 1 alinha
@@ -1340,29 +1345,31 @@ class _MonthlyPlanView extends StatelessWidget {
         ...plan.weeks.asMap().entries.map((entry) {
           final weekIndex = entry.key;
           final week = entry.value;
-          final weekDistance = week.sessions.fold<double>(
-            0,
-            (sum, session) => sum + session.distanceKm,
-          );
           final currentWeekIndex = _currentPlanWeekIndex(plan);
-          final isCompleted = weekIndex < currentWeekIndex;
+          // "COMPLETA" vem da execução real (executedRunId), não da data.
+          final executed = week.sessions.where((s) => s.isExecuted).length;
+          final allDone =
+              week.sessions.isNotEmpty && executed == week.sessions.length;
           final isCurrent = weekIndex == currentWeekIndex;
-          final status = isCompleted
+          final isPast = weekIndex < currentWeekIndex;
+          final status = allDone
               ? 'COMPLETA'
               : isCurrent
               ? 'ATUAL'
+              : isPast
+              ? 'PARCIAL'
               : 'PRÓXIMA';
+          final statusColor = allDone
+              ? context.runninPalette.primary
+              : isCurrent
+              ? context.runninPalette.secondary
+              : isPast
+              ? context.runninPalette.warning
+              : context.runninPalette.muted;
           return _MonthlyWeekCard(
-            weekNumber: week.weekNumber,
-            focus: _deriveWeekFocus(week),
-            summary: _buildMonthSummary(week),
-            totalDistance: weekDistance,
+            week: week,
             status: status,
-            statusColor: isCompleted
-                ? context.runninPalette.primary
-                : isCurrent
-                ? context.runninPalette.secondary
-                : context.runninPalette.muted,
+            statusColor: statusColor,
             onTap: () => onWeekTap(week.weekNumber),
           );
         }),
@@ -1467,7 +1474,9 @@ class _WeeklySessionRow extends StatelessWidget {
     final palette = context.runninPalette;
     final isRest = session == null;
     final hasPlanned = !isRest;
-    final hadPastSession = isPast && hasPlanned;
+    // "Concluído" vem da corrida real vinculada (executedRunId), não da data.
+    final isExecuted = hasPlanned && (session?.isExecuted ?? false);
+    final missedPast = hasPlanned && isPast && !isExecuted;
     final dd = dayDate.day.toString().padLeft(2, '0');
     final mm = dayDate.month.toString().padLeft(2, '0');
     final dayShort = _dayNames[dayOfWeek].substring(0, 3).toUpperCase();
@@ -1493,7 +1502,8 @@ class _WeeklySessionRow extends StatelessWidget {
       rowBorder = palette.primary;
       rowBorderWidth = 1.5;
       statusIcon = hasPlanned ? Icons.gps_fixed : Icons.bedtime_outlined;
-    } else if (hadPastSession) {
+    } else if (isExecuted) {
+      // sessão concluída (corrida real vinculada)
       cellBg = palette.primary.withValues(alpha: 0.85);
       cellFg = palette.background;
       cellLabel = 'OK';
@@ -1501,6 +1511,15 @@ class _WeeklySessionRow extends StatelessWidget {
       rowBorder = palette.primary.withValues(alpha: 0.30);
       rowBorderWidth = 1.0;
       statusIcon = Icons.check_circle_outline;
+    } else if (missedPast) {
+      // sessão planejada que passou sem ser feita
+      cellBg = palette.surfaceAlt;
+      cellFg = palette.muted.withValues(alpha: 0.7);
+      cellLabel = dayShort;
+      rowBg = palette.surface.withValues(alpha: 0.7);
+      rowBorder = palette.warning.withValues(alpha: 0.3);
+      rowBorderWidth = 1.0;
+      statusIcon = Icons.remove_circle_outline;
     } else if (isPast) {
       // descanso passado
       cellBg = palette.surfaceAlt;
@@ -1553,7 +1572,7 @@ class _WeeklySessionRow extends StatelessWidget {
                   cellLabel,
                   style: context.runninType.labelCaps.copyWith(
                     fontSize: 11,
-                    fontWeight: isToday || hadPastSession
+                    fontWeight: isToday || isExecuted
                         ? FontWeight.w700
                         : FontWeight.w500,
                     color: cellFg,
@@ -1592,10 +1611,12 @@ class _WeeklySessionRow extends StatelessWidget {
                         color: isPast && !isToday ? palette.muted : palette.text,
                       ),
                     ),
-                    if (isPast && !isToday) ...[
+                    if (isExecuted || (isPast && !isToday)) ...[
                       const SizedBox(width: 8),
                       Text(
-                        hadPastSession ? '· feito' : '· passado',
+                        isExecuted
+                            ? '· concluído'
+                            : (missedPast ? '· perdido' : '· passado'),
                         style: context.runninType.bodyXs.copyWith(
                           fontSize: 10,
                           color: palette.muted.withValues(alpha: 0.7),
@@ -1694,19 +1715,13 @@ class _WeeklySessionRow extends StatelessWidget {
 }
 
 class _MonthlyWeekCard extends StatelessWidget {
-  final int weekNumber;
-  final String focus;
-  final String summary;
-  final double totalDistance;
-  final String status;
+  final PlanWeek week;
+  final String status; // COMPLETA | PARCIAL | ATUAL | PRÓXIMA
   final Color statusColor;
   final VoidCallback onTap;
 
   const _MonthlyWeekCard({
-    required this.weekNumber,
-    required this.focus,
-    required this.summary,
-    required this.totalDistance,
+    required this.week,
     required this.status,
     required this.statusColor,
     required this.onTap,
@@ -1716,27 +1731,41 @@ class _MonthlyWeekCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final palette = context.runninPalette;
 
-    // Nome da FASE em destaque (BUILD/PEAK/DELOAD/BASE/RECUPERAÇÃO).
-    // Inferido do focus que vem de _deriveWeekFocus(week).
-    final phaseLabel = _phaseFromFocus(focus);
+    // Conteúdo didático vem do BE (blockName/objective/projectedLoadKm/targets).
+    // Fallback pros planos legados que não têm os campos novos.
+    final blockName = (week.blockName?.trim().isNotEmpty ?? false)
+        ? week.blockName!.trim().toUpperCase()
+        : _phaseFromFocus(week.focus ?? _deriveWeekFocus(week));
+    final objective = (week.objective?.trim().isNotEmpty ?? false)
+        ? week.objective!.trim()
+        : null;
+    final loadKm = week.projectedLoadKm ??
+        week.sessions.fold<double>(0, (s, x) => s + x.distanceKm);
+    final ordered = [...week.sessions]
+      ..sort((a, b) => a.dayOfWeek.compareTo(b.dayOfWeek));
+    final sessionsLine = ordered
+        .map((s) => '${_shortDayName(s.dayOfWeek)} ${s.type}')
+        .join(' · ');
+    final isCompleted = status == 'COMPLETA';
 
     return InkWell(
-      // Clique troca pra visão SEMANAL com essa semana selecionada
-      // (handler em _PlanTab faz onWeekChanged + onPlanModeChanged).
       onTap: onTap,
       child: AppPanel(
         margin: const EdgeInsets.only(bottom: 8),
         borderColor: status == 'ATUAL'
             ? palette.primary.withValues(alpha: 0.45)
             : palette.border,
-        child: Row(
+        child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Wrap(
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 8,
+                    runSpacing: 4,
                     children: [
                       Container(
                         padding: const EdgeInsets.symmetric(
@@ -1745,63 +1774,73 @@ class _MonthlyWeekCard extends StatelessWidget {
                         ),
                         color: palette.primary.withValues(alpha: 0.15),
                         child: Text(
-                          'SEM $weekNumber',
+                          'SEM ${week.weekNumber}',
                           style: context.runninType.labelCaps.copyWith(
                             color: palette.primary,
                             letterSpacing: 1.0,
                           ),
                         ),
                       ),
-                      const SizedBox(width: 8),
                       Text(
-                        phaseLabel,
+                        blockName,
                         style: context.runninType.bodyMd.copyWith(
                           fontWeight: FontWeight.w500,
                           color: palette.text,
                           letterSpacing: 0.5,
                         ),
                       ),
+                      if (week.isSkeleton)
+                        _SkeletonBadge(),
+                      if (isCompleted)
+                        Icon(Icons.check_circle,
+                            size: 15, color: palette.primary),
                     ],
                   ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Foco: $focus',
-                    style: context.runninType.bodySm.copyWith(
-                      color: palette.text.withValues(alpha: 0.82),
-                      fontSize: 12.5,
+                ),
+                const SizedBox(width: 12),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      '${loadKm.toStringAsFixed(0)}K',
+                      style: context.runninType.dataMd.copyWith(
+                        fontWeight: FontWeight.w500,
+                        color: palette.secondary,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    summary,
-                    style: context.runninType.bodyMd.copyWith(color: palette.muted),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 16),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  '${totalDistance.toStringAsFixed(0)}K',
-                  style: context.runninType.dataMd.copyWith(
-                    fontWeight: FontWeight.w500,
-                    color: palette.secondary,
-                  ),
+                    Text(
+                      status,
+                      style: context.runninType.bodyMd.copyWith(
+                        color: statusColor,
+                        fontWeight: FontWeight.w500,
+                        letterSpacing: 0.08,
+                      ),
+                    ),
+                  ],
                 ),
-                Text(
-                  status,
-                  style: context.runninType.bodyMd.copyWith(
-                    color: statusColor,
-                    fontWeight: FontWeight.w500,
-                    letterSpacing: 0.08,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Icon(Icons.chevron_right, size: 16, color: palette.muted),
               ],
             ),
+            if (objective != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                objective,
+                style: context.runninType.bodySm.copyWith(
+                  color: palette.text.withValues(alpha: 0.85),
+                  fontSize: 12.5,
+                ),
+              ),
+            ],
+            if (week.targets.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              ...week.targets.map((t) => _BulletLine(text: t)),
+            ],
+            if (sessionsLine.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(
+                sessionsLine,
+                style: context.runninType.bodyXs.copyWith(color: palette.muted),
+              ),
+            ],
           ],
         ),
       ),
@@ -1819,6 +1858,94 @@ class _MonthlyWeekCard extends StatelessWidget {
     }
     if (low.contains('long')) return 'SPECIFIC';
     return 'BASE';
+  }
+}
+
+/// Bullet "▸ texto" pros objetivos da semana na periodização.
+class _BulletLine extends StatelessWidget {
+  final String text;
+  const _BulletLine({required this.text});
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 3),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('▸ ',
+              style: context.runninType.bodySm
+                  .copyWith(color: palette.primary, fontSize: 12.5)),
+          Expanded(
+            child: Text(
+              text,
+              style: context.runninType.bodySm.copyWith(
+                color: palette.text.withValues(alpha: 0.82),
+                fontSize: 12.5,
+                height: 1.4,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Badge "ESQUELETO" pras semanas ainda não detalhadas (liberadas no
+/// checkpoint da semana anterior).
+class _SkeletonBadge extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        border: Border.all(color: palette.muted.withValues(alpha: 0.5)),
+      ),
+      child: Text(
+        'DETALHE NO CHECKPOINT',
+        style: context.runninType.labelCaps.copyWith(
+          fontSize: 8.5,
+          color: palette.muted,
+          letterSpacing: 0.5,
+        ),
+      ),
+    );
+  }
+}
+
+/// Aviso na visão semanal quando a semana ainda é esqueleto: volume e pace
+/// já estão definidos; nutrição, hidratação e roteiro km-a-km são liberados
+/// no checkpoint da semana anterior.
+class _SkeletonWeekNotice extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      decoration: BoxDecoration(
+        color: palette.surface,
+        border: Border.all(color: palette.border, width: 1.0),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.lock_clock_outlined, size: 16, color: palette.muted),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Volume e pace já definidos. O detalhe completo (roteiro, nutrição, '
+              'hidratação) é liberado no checkpoint da semana anterior — assim o '
+              'coach ajusta pela sua evolução real.',
+              style: context.runninType.bodyXs.copyWith(
+                color: palette.muted,
+                height: 1.4,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 class _MonthlyStats {
@@ -1959,20 +2086,6 @@ String _deriveWeekFocus(PlanWeek week) {
     return 'Resistencia';
   }
   return 'Base';
-}
-
-String _buildMonthSummary(PlanWeek week) {
-  final ordered = [...week.sessions]
-    ..sort((a, b) => a.dayOfWeek.compareTo(b.dayOfWeek));
-  final summaryParts = ordered
-      .map((session) => '${_shortDayName(session.dayOfWeek)} ${session.type}')
-      .join(' · ');
-  final note = ordered
-      .map((session) => session.notes.trim())
-      .firstWhere((item) => item.isNotEmpty, orElse: () => '');
-
-  if (note.isEmpty) return summaryParts;
-  return '$summaryParts. $note';
 }
 
 String _shortDayName(int dayOfWeek) {

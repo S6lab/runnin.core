@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
-import 'package:runnin/features/run/data/datasources/run_remote_datasource.dart';
-import 'package:runnin/features/run/domain/entities/run.dart';
 import 'package:runnin/features/training/data/datasources/plan_remote_datasource.dart';
 import 'package:runnin/features/training/domain/entities/plan.dart';
 import 'package:runnin/shared/widgets/runnin_app_bar.dart';
@@ -32,9 +30,7 @@ class DayDetailPage extends StatefulWidget {
 
 class _DayDetailPageState extends State<DayDetailPage> {
   final _planDs = PlanRemoteDatasource();
-  final _runDs = RunRemoteDatasource();
   Plan? _plan;
-  Run? _runOfThisDay;
   bool _loading = true;
   String? _error;
 
@@ -55,18 +51,6 @@ class _DayDetailPageState extends State<DayDetailPage> {
       final plan = await _planDs.getCurrentPlan();
       if (!mounted) return;
       _plan = plan;
-      // Tenta achar a corrida concluída neste dia (busca últimos 90 dias).
-      if (plan != null) {
-        final dayDate = _dateOf(plan);
-        final runs = await _runDs.listRuns(limit: 200);
-        _runOfThisDay = runs.cast<Run?>().firstWhere(
-              (r) =>
-                  r != null &&
-                  r.status == 'completed' &&
-                  _sameDay(DateTime.tryParse(r.createdAt), dayDate),
-              orElse: () => null,
-            );
-      }
       if (mounted) setState(() => _loading = false);
     } catch (e) {
       if (mounted) {
@@ -76,11 +60,6 @@ class _DayDetailPageState extends State<DayDetailPage> {
         });
       }
     }
-  }
-
-  bool _sameDay(DateTime? a, DateTime b) {
-    if (a == null) return false;
-    return a.year == b.year && a.month == b.month && a.day == b.day;
   }
 
   /// Calcula a data real desse (week, day) baseado em plan.effectiveStartDate.
@@ -151,7 +130,6 @@ class _DayDetailPageState extends State<DayDetailPage> {
     final dateLabel =
         '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
     final isPast = date.isBefore(DateTime.now().subtract(const Duration(hours: 4)));
-    final run = _runOfThisDay;
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
@@ -160,11 +138,12 @@ class _DayDetailPageState extends State<DayDetailPage> {
         const SizedBox(height: 16),
         if (session != null) ...[
           _PlannedSessionCard(session: session),
-          if (isPast && run != null) ...[
+          // "Concluído" vem da corrida real vinculada (executedRunId),
+          // não de comparação data×plano.
+          if (session.isExecuted) ...[
             const SizedBox(height: 14),
-            _PlanVsRealCard(session: session, run: run),
-          ],
-          if (isPast && run == null) ...[
+            _CompletedSessionCard(),
+          ] else if (isPast) ...[
             const SizedBox(height: 14),
             _MissedSessionCard(),
           ],
@@ -308,150 +287,6 @@ class _PlannedSessionCard extends StatelessWidget {
             const SizedBox(height: 20),
             _ExecutionTimeline(segments: session.executionSegments),
           ],
-          const SizedBox(height: 20),
-          _PrepChecklist(session: session),
-        ],
-      ),
-    );
-  }
-}
-
-/// Checklist visual de preparo pra sessão. Items variam por tipo
-/// (Long Run pede mais hidratação prévia, Intervalado pede aquecimento
-/// reforçado, etc). Estado é local (não persiste) — propósito é
-/// memória de curto prazo pré-corrida.
-class _PrepChecklist extends StatefulWidget {
-  final PlanSession session;
-  const _PrepChecklist({required this.session});
-
-  @override
-  State<_PrepChecklist> createState() => _PrepChecklistState();
-}
-
-class _PrepChecklistState extends State<_PrepChecklist> {
-  final Set<int> _checked = {};
-
-  List<String> _items() {
-    final s = widget.session;
-    final type = s.type.toLowerCase();
-    final isLong = type.contains('long');
-    final isInterval = type.contains('interval') || type.contains('tiro');
-    final isTempo = type.contains('tempo');
-    final hydration = s.hydrationLiters;
-    final pre = s.nutritionPre?.trim();
-
-    final items = <String>[];
-
-    items.add(
-      hydration != null
-          ? 'Hidratei ao longo do dia (meta: ${hydration.toStringAsFixed(1)}L)'
-          : 'Hidratei bem ao longo do dia',
-    );
-
-    if (pre != null && pre.isNotEmpty) {
-      items.add('Comi 60-90min antes: $pre');
-    } else {
-      items.add('Refeição leve 60-90min antes (carbo + pouca gordura)');
-    }
-
-    if (isLong) {
-      items.add('Levei gel/banana se passar de 60min');
-      items.add('Garrafa de água ou eletrólito comigo');
-    }
-    if (isInterval) {
-      items.add('Aquecimento robusto (10-12min) + educativos');
-    }
-    if (isTempo) {
-      items.add('Aquecimento progressivo (8-10min) antes do tempo');
-    }
-
-    items.add('Tênis confortável + cadarço firme');
-    items.add('GPS / wearable conectado e carregado');
-    items.add('Fone com Coach AI pronto');
-
-    return items;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.runninPalette;
-    final items = _items();
-    final done = _checked.length;
-    final total = items.length;
-
-    return Container(
-      padding: const EdgeInsets.all(AppSpacing.xl),
-      decoration: BoxDecoration(
-        color: palette.background,
-        border: Border.all(color: palette.border, width: 1.0),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.checklist, size: 16, color: palette.primary),
-              const SizedBox(width: 8),
-              Text(
-                'CHECKLIST DE PREPARO · $done/$total',
-                style: context.runninType.labelCaps.copyWith(
-                  fontSize: 11,
-                  color: palette.primary,
-                  letterSpacing: 1.0,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'Toque pra marcar conforme se preparar. Lista some quando você sair desta tela.',
-            style: context.runninType.bodyXs,
-          ),
-          const SizedBox(height: 10),
-          for (var i = 0; i < items.length; i++)
-            InkWell(
-              onTap: () => setState(() {
-                if (_checked.contains(i)) {
-                  _checked.remove(i);
-                } else {
-                  _checked.add(i);
-                }
-              }),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 6),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(
-                      _checked.contains(i)
-                          ? Icons.check_box_outlined
-                          : Icons.check_box_outline_blank,
-                      size: 18,
-                      color: _checked.contains(i)
-                          ? palette.primary
-                          : palette.muted,
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        items[i],
-                        style: context.runninType.bodyMd.copyWith(
-                          color: _checked.contains(i)
-                              ? palette.muted
-                              : palette.text,
-                          fontSize: 13,
-                          height: 1.45,
-                          decoration: _checked.contains(i)
-                              ? TextDecoration.lineThrough
-                              : null,
-                          decorationColor: palette.muted,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
         ],
       ),
     );
@@ -779,92 +614,6 @@ class _GenericRestCard extends StatelessWidget {
   }
 }
 
-class _PlanVsRealCard extends StatelessWidget {
-  final PlanSession session;
-  final Run run;
-  const _PlanVsRealCard({required this.session, required this.run});
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.runninPalette;
-    final realKm = run.distanceM / 1000.0;
-    final realDurationMin = run.durationS / 60.0;
-    final plannedKm = session.distanceKm;
-    final plannedMin = session.durationMin;
-    final kmRatio = plannedKm > 0 ? realKm / plannedKm : 0;
-    final hitDistance = kmRatio >= 0.9 && kmRatio <= 1.15;
-    final hitTime = plannedMin != null
-        ? (realDurationMin / plannedMin) >= 0.85 &&
-            (realDurationMin / plannedMin) <= 1.2
-        : null;
-    final hitAll = hitDistance && (hitTime ?? true);
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: (hitAll ? palette.primary : palette.warning)
-            .withValues(alpha: 0.06),
-        border: Border.all(
-          color: (hitAll ? palette.primary : palette.warning)
-              .withValues(alpha: 0.4),
-          width: 1.0,
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(
-                hitAll ? Icons.check_circle : Icons.info_outline,
-                size: 18,
-                color: hitAll ? palette.primary : palette.muted,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                hitAll ? 'METAS ATINGIDAS' : 'PLANEJADO vs REALIZADO',
-                style: context.runninType.labelCaps.copyWith(
-                  fontSize: 11,
-                  color: hitAll ? palette.primary : palette.text,
-                  letterSpacing: 1.2,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          _ComparisonRow(
-            label: 'DISTÂNCIA',
-            planned: '${plannedKm.toStringAsFixed(1)} km',
-            real: '${realKm.toStringAsFixed(2)} km',
-            hit: hitDistance,
-          ),
-          if (plannedMin != null)
-            _ComparisonRow(
-              label: 'TEMPO',
-              planned: '~${plannedMin.round()} min',
-              real: '${realDurationMin.toStringAsFixed(0)} min',
-              hit: hitTime ?? false,
-            ),
-          if (run.avgPace != null && session.targetPace != null)
-            _ComparisonRow(
-              label: 'PACE',
-              planned: '${session.targetPace}/km',
-              real: '${run.avgPace}',
-              hit: true, // sem regra rigorosa de pace ainda — só compara
-            ),
-          if (run.avgBpm != null)
-            _ComparisonRow(
-              label: 'BPM MÉDIO',
-              planned: '—',
-              real: '${run.avgBpm} bpm',
-              hit: true,
-            ),
-        ],
-      ),
-    );
-  }
-}
-
 class _MissedSessionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
@@ -895,53 +644,31 @@ class _MissedSessionCard extends StatelessWidget {
   }
 }
 
-class _ComparisonRow extends StatelessWidget {
-  final String label;
-  final String planned;
-  final String real;
-  final bool hit;
-  const _ComparisonRow({
-    required this.label,
-    required this.planned,
-    required this.real,
-    required this.hit,
-  });
+/// Confirmação de sessão concluída — mostrada quando a sessão tem
+/// `executedRunId` (corrida real vinculada). Substitui o antigo
+/// "PLANEJADO vs REALIZADO".
+class _CompletedSessionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final palette = context.runninPalette;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.xl),
+      decoration: BoxDecoration(
+        color: palette.primary.withValues(alpha: 0.06),
+        border: Border.all(color: palette.primary.withValues(alpha: 0.4)),
+      ),
       child: Row(
         children: [
-          SizedBox(
-            width: 90,
-            child: Text(
-              label,
-              style: context.runninType.labelCaps.copyWith(
-                color: palette.muted,
-                letterSpacing: 0.8,
-              ),
-            ),
-          ),
+          Icon(Icons.check_circle, size: 18, color: palette.primary),
+          const SizedBox(width: 10),
           Expanded(
             child: Text(
-              planned,
-              style: context.runninType.bodySm,
-            ),
-          ),
-          Expanded(
-            child: Text(
-              real,
+              'Sessão concluída. Bom trabalho — essa sessão entra no fechamento da semana.',
               style: context.runninType.bodySm.copyWith(
                 color: palette.text,
-                fontWeight: FontWeight.w500,
+                height: 1.45,
               ),
             ),
-          ),
-          Icon(
-            hit ? Icons.check : Icons.remove,
-            size: 14,
-            color: hit ? palette.primary : palette.muted,
           ),
         ],
       ),

@@ -112,6 +112,12 @@ class _PlanDetailPageState extends State<PlanDetailPage> {
                           // 1. Header com objetivo + stats principais
                           _Header(plan: _plan!, profile: _profile),
                           const SizedBox(height: 14),
+                          // 1b. Avaliação honesta do objetivo (gap nível→meta).
+                          if (_plan!.goalAssessment != null &&
+                              _plan!.goalAssessment!.trim().isNotEmpty) ...[
+                            _GoalAssessmentCard(text: _plan!.goalAssessment!),
+                            const SizedBox(height: 14),
+                          ],
                           // Disclaimer: regra "1 ajuste por semana" via checkpoint.
                           // Aparece logo no topo pra criar expectativa correta
                           // antes do user ler o plano detalhado.
@@ -471,6 +477,42 @@ class _MesocycleCard extends StatelessWidget {
               const SizedBox(width: 8),
               Text('ESTRATÉGIA DO MESOCICLO',
                   style: context.runninType.labelCaps.copyWith(fontSize: 11, color: palette.primary, letterSpacing: 1.2)),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(text,
+              style: context.runninType.bodyMd.copyWith(color: palette.text)),
+        ],
+      ),
+    );
+  }
+}
+
+/// Avaliação honesta do objetivo: o coach diz se a meta é alcançável neste
+/// mesociclo ou se o plano é a fundação. Em destaque (cor secundária) logo
+/// abaixo do header.
+class _GoalAssessmentCard extends StatelessWidget {
+  final String text;
+  const _GoalAssessmentCard({required this.text});
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: palette.secondary.withValues(alpha: 0.05),
+        border: Border.all(color: palette.secondary.withValues(alpha: 0.4), width: 1.0),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.flag_outlined, size: 18, color: palette.secondary),
+              const SizedBox(width: 8),
+              Text('AVALIAÇÃO DO OBJETIVO',
+                  style: context.runninType.labelCaps.copyWith(
+                      fontSize: 11, color: palette.secondary, letterSpacing: 1.2)),
             ],
           ),
           const SizedBox(height: 10),
