@@ -473,6 +473,18 @@ class _CoachNotifications extends StatelessWidget {
 /// - Sono+performance→ types 'sono_performance' + 'bpm_real'
 /// - Coach (alertas) → types 'melhor_horario' + 'checklist_pre_easy_run'
 /// - Outras          → demais types ('fechamento_mensal' etc)
+/// Tipos de notificação reconhecidos — fonte única (evita magic strings
+/// espalhadas). O que não casar com `claimed` cai no grupo "OUTRAS".
+class _NotifTypes {
+  static const hidratacao = 'hidratacao';
+  static const nutricional = 'preparo_nutricional';
+  static const sono = 'sono_performance';
+  static const bpm = 'bpm_real';
+  static const melhorHorario = 'melhor_horario';
+  static const checklist = 'checklist_pre_easy_run';
+  static const claimed = {hidratacao, nutricional, sono, bpm, melhorHorario, checklist};
+}
+
 class _NotificationsHub extends StatefulWidget {
   final List<AppNotification> items;
   const _NotificationsHub({required this.items});
@@ -488,14 +500,11 @@ class _NotificationsHubState extends State<_NotificationsHub> {
   @override
   Widget build(BuildContext context) {
     final palette = context.runninPalette;
-    final hidratacao = widget.items.where((n) => n.type == 'hidratacao').toList();
-    final nutricional = widget.items.where((n) => n.type == 'preparo_nutricional').toList();
-    final sonoPerf = widget.items.where((n) => n.type == 'sono_performance' || n.type == 'bpm_real').toList();
-    final coachMsgs = widget.items.where((n) => n.type == 'melhor_horario' || n.type == 'checklist_pre_easy_run').toList();
-    final outras = widget.items.where((n) {
-      const claimed = {'hidratacao', 'preparo_nutricional', 'sono_performance', 'bpm_real', 'melhor_horario', 'checklist_pre_easy_run'};
-      return !claimed.contains(n.type);
-    }).toList();
+    final hidratacao = widget.items.where((n) => n.type == _NotifTypes.hidratacao).toList();
+    final nutricional = widget.items.where((n) => n.type == _NotifTypes.nutricional).toList();
+    final sonoPerf = widget.items.where((n) => n.type == _NotifTypes.sono || n.type == _NotifTypes.bpm).toList();
+    final coachMsgs = widget.items.where((n) => n.type == _NotifTypes.melhorHorario || n.type == _NotifTypes.checklist).toList();
+    final outras = widget.items.where((n) => !_NotifTypes.claimed.contains(n.type)).toList();
 
     final groups = <_NotifGroup>[
       _NotifGroup(

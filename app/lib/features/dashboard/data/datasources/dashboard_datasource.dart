@@ -1,3 +1,4 @@
+import 'package:runnin/core/gamification/levels.dart';
 import 'package:runnin/features/dashboard/domain/dashboard_stats.dart';
 import 'package:runnin/features/run/data/datasources/run_remote_datasource.dart';
 import 'package:runnin/features/run/domain/entities/run.dart';
@@ -28,7 +29,9 @@ class DashboardDatasource {
     final totalDistanceKm = completed.fold(0.0, (s, r) => s + r.distanceM) / 1000;
     final totalDurationS = completed.fold(0, (s, r) => s + r.durationS);
     final totalXp = completed.fold(0, (s, r) => s + (r.xpEarned ?? 0));
-    final level = (totalXp / 500).floor() + 1;
+    // Fonte única de nível: computeLevel (thresholds em core/gamification/levels.dart),
+    // em vez de fórmula /500 hardcoded e divergente.
+    final level = computeLevel(totalXp).currentLevel;
 
     // Pace médio geral
     String? avgPace;
