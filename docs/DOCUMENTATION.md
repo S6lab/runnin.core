@@ -139,6 +139,8 @@ quando indicado `[público]` ou `[cron]`. `[premium]` = exige feature do plano (
 ### health — `/v1/health`
 `GET /zones` [premium] (zonas de FC Karvonen)
 
+**HealthZonesPage (app):** Exibe zonas somente quando `restingBpm` e `maxBpm` estão preenchidos no perfil. Se faltar qualquer um, exibe aviso `_MissingBpmBanner` com CTA para o usuário preencher o perfil — zonas não são calculadas com valores padrão.
+
 ### exams — `/v1/exams`
 `GET /` · `POST /upload-url` [premium] · `POST /:examId/finalize` [premium] · `DELETE /:examId`
 (OCR multimodal Gemini. Persiste via Firestore + quota mensal `examsPerMonth` validada no server.)
