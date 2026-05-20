@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 
 /// Card-per-week in TREINO §Plano Mensal per `docs/figma/screens/TREINO.md`
@@ -13,7 +14,7 @@ class FigmaMonthWeekCard extends StatelessWidget {
     required this.volumeKm,
     required this.targetKm,
     required this.statusLabel,
-    this.statusColor = FigmaColors.brandCyan,
+    this.statusColor,
   });
 
   final String weekLabel; // e.g. "SEM 1"
@@ -21,10 +22,11 @@ class FigmaMonthWeekCard extends StatelessWidget {
   final double volumeKm;
   final double targetKm;
   final String statusLabel; // e.g. "EM DIA"
-  final Color statusColor;
+  final Color? statusColor;
 
   @override
   Widget build(BuildContext context) {
+    final statusColor = this.statusColor ?? context.runninPalette.primary;
     final progress = targetKm <= 0 ? 0.0 : (volumeKm / targetKm).clamp(0.0, 1.0);
     return Container(
       padding: const EdgeInsets.all(13.718),
@@ -47,7 +49,7 @@ class FigmaMonthWeekCard extends StatelessWidget {
                       fontSize: 11,
                       letterSpacing: 1.65,
                       fontWeight: FontWeight.w500,
-                      color: FigmaColors.brandCyan,
+                      color: context.runninPalette.primary,
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -93,7 +95,7 @@ class FigmaMonthWeekCard extends StatelessWidget {
             child: LinearProgressIndicator(
               value: progress,
               backgroundColor: FigmaColors.progressTrack,
-              valueColor: const AlwaysStoppedAnimation(FigmaColors.brandCyan),
+              valueColor: AlwaysStoppedAnimation(context.runninPalette.primary),
             ),
           ),
         ],

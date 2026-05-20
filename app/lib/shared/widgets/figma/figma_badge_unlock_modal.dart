@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 
 /// Modal overlay shown when a badge is unlocked post-run per
@@ -34,7 +35,7 @@ class FigmaBadgeUnlockModal extends StatelessWidget {
         padding: const EdgeInsets.all(28),
         decoration: BoxDecoration(
           color: FigmaColors.bgBase,
-          border: Border.all(color: FigmaColors.brandCyan, width: 1.041),
+          border: Border.all(color: context.runninPalette.primary, width: 1.041),
           borderRadius: FigmaBorderRadius.zero,
         ),
         child: Column(
@@ -47,7 +48,7 @@ class FigmaBadgeUnlockModal extends StatelessWidget {
                 height: 15 / 10,
                 letterSpacing: 1.5,
                 fontWeight: FontWeight.w500,
-                color: FigmaColors.brandCyan,
+                color: context.runninPalette.primary,
               ),
             ),
             const SizedBox(height: 20),
@@ -84,7 +85,7 @@ class FigmaBadgeUnlockModal extends StatelessWidget {
                 fontSize: 28,
                 height: 28 / 28,
                 fontWeight: FontWeight.w500,
-                color: FigmaColors.brandOrange,
+                color: context.runninPalette.secondary,
               ),
             ),
             const SizedBox(height: 24),
@@ -95,8 +96,8 @@ class FigmaBadgeUnlockModal extends StatelessWidget {
                 width: double.infinity,
                 height: 49.982,
                 alignment: Alignment.center,
-                decoration: const BoxDecoration(
-                  color: FigmaColors.brandCyan,
+                decoration: BoxDecoration(
+                  color: context.runninPalette.primary,
                   borderRadius: FigmaBorderRadius.zero,
                 ),
                 child: Text(
@@ -137,12 +138,12 @@ class _RingedIcon extends StatelessWidget {
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 border: Border.all(
-                  color: FigmaColors.brandCyan.withValues(alpha: size / 150),
+                  color: context.runninPalette.primary.withValues(alpha: size / 150),
                   width: 1.5,
                 ),
               ),
             ),
-          Icon(icon, size: 40, color: FigmaColors.brandCyan),
+          Icon(icon, size: 40, color: context.runninPalette.primary),
         ],
       ),
     );

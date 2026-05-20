@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:runnin/core/theme/app_palette.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 
@@ -19,7 +20,7 @@ class FigmaHighlightBullet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isAlert = type == HighlightType.alert;
-    final color = isAlert ? FigmaColors.brandOrange : FigmaColors.brandCyan;
+    final color = isAlert ? context.runninPalette.secondary : context.runninPalette.primary;
     final prefix = isAlert ? '!' : '+';
     final bgAlpha = isAlert ? 0.08 : 0.04;
     final borderAlpha = isAlert ? 0.35 : 0.20;

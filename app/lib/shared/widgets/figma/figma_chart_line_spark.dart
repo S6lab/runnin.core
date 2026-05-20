@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:runnin/core/theme/design_system_tokens.dart';
+import 'package:runnin/core/theme/app_palette.dart';
 
 /// Minimal sparkline-style line chart for HIST trend cards per
 /// `docs/figma/screens/HIST.md` §Volume/Pace/BPM charts. Custom-painted —
@@ -11,13 +11,13 @@ class FigmaChartLineSpark extends StatelessWidget {
     super.key,
     required this.values,
     this.height = 80,
-    this.lineColor = FigmaColors.brandCyan,
+    this.lineColor,
     this.fillGradient = true,
   });
 
   final List<double> values;
   final double height;
-  final Color lineColor;
+  final Color? lineColor;
   final bool fillGradient;
 
   @override
@@ -31,7 +31,7 @@ class FigmaChartLineSpark extends StatelessWidget {
         size: Size.infinite,
         painter: _SparkPainter(
           values: values,
-          lineColor: lineColor,
+          lineColor: lineColor ?? context.runninPalette.primary,
           fillGradient: fillGradient,
         ),
       ),

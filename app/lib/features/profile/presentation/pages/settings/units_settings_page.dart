@@ -97,7 +97,7 @@ class _UnitsSettingsPageState extends State<UnitsSettingsPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: const Text('Erro ao salvar. Tente novamente.'),
-            backgroundColor: FigmaColors.brandOrange,
+            backgroundColor: context.runninPalette.secondary,
             duration: const Duration(seconds: 3),
             behavior: SnackBarBehavior.floating,
           ),
@@ -220,7 +220,7 @@ class _UnitsSettingsPageState extends State<UnitsSettingsPage> {
                           'PRÉVIA',
                           style: context.runninType.bodyMd.copyWith(
                             fontWeight: FontWeight.w500,
-                            color: FigmaColors.brandCyan,
+                            color: context.runninPalette.primary,
                             letterSpacing: 1.0,
                           ),
                         ),
@@ -276,8 +276,8 @@ class _UnitsSettingsPageState extends State<UnitsSettingsPage> {
               child: Container(
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: FigmaColors.brandCyan,
-                  border: Border.all(color: FigmaColors.brandCyan, width: 1.041),
+                  color: context.runninPalette.primary,
+                  border: Border.all(color: context.runninPalette.primary, width: 1.041),
                 ),
                 child: _saving
                     ? const SizedBox(

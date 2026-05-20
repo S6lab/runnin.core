@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:runnin/core/theme/app_palette.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 
@@ -17,7 +18,7 @@ class SectionHeading extends StatelessWidget {
   const SectionHeading({
     super.key,
     required this.label,
-    this.dotColor = FigmaColors.brandCyan,
+    this.dotColor,
     this.badge,
     this.action,
     this.onAction,
@@ -27,9 +28,9 @@ class SectionHeading extends StatelessWidget {
   /// uppercased (the widget does not transform).
   final String label;
 
-  /// Color of the leading dot AND the label text. Defaults to brand cyan.
-  /// Pass `FigmaColors.brandOrange` for Coach.AI sections.
-  final Color dotColor;
+  /// Color of the leading dot AND the label text. Default: `palette.primary`
+  /// (resolvido no build). Pass `context.runninPalette.secondary` para Coach.AI.
+  final Color? dotColor;
 
   /// Optional numeric badge to render right after the label
   /// (e.g. "5" notifications). Bold 9 px on `dotColor` background.
@@ -43,6 +44,7 @@ class SectionHeading extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final dot = dotColor ?? context.runninPalette.primary;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
@@ -51,7 +53,7 @@ class SectionHeading extends StatelessWidget {
           height: 5.986,
           child: Opacity(
             opacity: 0.98,
-            child: ColoredBox(color: dotColor),
+            child: ColoredBox(color: dot),
           ),
         ),
         const SizedBox(width: 8),
@@ -65,13 +67,13 @@ class SectionHeading extends StatelessWidget {
               height: 16.5 / 11,
               letterSpacing: 1.65,
               fontWeight: FontWeight.w400,
-              color: dotColor,
+              color: dot,
             ),
           ),
         ),
         if (badge != null) ...[
           const SizedBox(width: 8),
-          _BadgeCounter(text: badge!, color: dotColor),
+          _BadgeCounter(text: badge!, color: dot),
         ],
         const Spacer(),
         if (action != null)

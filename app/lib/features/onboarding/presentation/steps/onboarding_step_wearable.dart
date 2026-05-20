@@ -49,14 +49,14 @@ class OnboardingStepWearable extends StatelessWidget {
                     Container(
                       width: 8,
                       height: 8,
-                      color: FigmaColors.brandOrange.withValues(alpha: 0.50),
+                      color: context.runninPalette.secondary.withValues(alpha: 0.50),
                     ),
                     const SizedBox(width: 8),
                     Text(
                       '> COACH.AI',
                       style: context.runninType.bodyXs.copyWith(
                         letterSpacing: 1.65,
-                        color: FigmaColors.brandOrange,
+                        color: context.runninPalette.secondary,
                       ),
                     ),
                   ],
@@ -92,7 +92,7 @@ class OnboardingStepWearable extends StatelessWidget {
                     style: context.runninType.labelMd.copyWith(
                       fontWeight: FontWeight.w500,
                       height: 19.2 / 12,
-                      color: FigmaColors.brandCyan,
+                      color: context.runninPalette.primary,
                     ),
                   ),
                   const TextSpan(

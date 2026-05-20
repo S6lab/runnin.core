@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 
 /// Run list card in HIST §Corridas per `docs/figma/screens/HIST.md` tela 2.
@@ -14,7 +15,7 @@ class FigmaRunCard extends StatelessWidget {
     required this.pace,
     required this.duration,
     required this.coachPreview,
-    this.typeAccent = FigmaColors.brandCyan,
+    this.typeAccent,
     this.onTap,
   });
 
@@ -24,11 +25,12 @@ class FigmaRunCard extends StatelessWidget {
   final String pace;
   final String duration;
   final String coachPreview;
-  final Color typeAccent;
+  final Color? typeAccent;
   final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
+    final typeAccent = this.typeAccent ?? context.runninPalette.primary;
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
@@ -92,9 +94,9 @@ class FigmaRunCard extends StatelessWidget {
             const SizedBox(height: 12),
             Row(
               children: [
-                _stat('${distanceKm.toStringAsFixed(1)}K', 'DIST'),
-                _stat(pace, 'PACE'),
-                _stat(duration, 'TEMPO'),
+                _stat(context, '${distanceKm.toStringAsFixed(1)}K', 'DIST'),
+                _stat(context, pace, 'PACE'),
+                _stat(context, duration, 'TEMPO'),
               ],
             ),
             const SizedBox(height: 12),
@@ -115,7 +117,7 @@ class FigmaRunCard extends StatelessWidget {
     );
   }
 
-  Widget _stat(String value, String label) {
+  Widget _stat(BuildContext context, String value, String label) {
     return Expanded(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -126,7 +128,7 @@ class FigmaRunCard extends StatelessWidget {
               fontSize: 16,
               height: 1,
               fontWeight: FontWeight.w500,
-              color: FigmaColors.brandCyan,
+              color: context.runninPalette.primary,
             ),
           ),
           const SizedBox(height: 4),

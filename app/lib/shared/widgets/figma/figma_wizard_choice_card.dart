@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:runnin/core/theme/app_palette.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 
@@ -113,10 +114,10 @@ class FigmaQuickReplyButton extends StatelessWidget {
         margin: const EdgeInsets.only(bottom: 6),
         decoration: BoxDecoration(
           color: selected
-              ? FigmaColors.brandOrange.withValues(alpha: 0.10)
+              ? context.runninPalette.secondary.withValues(alpha: 0.10)
               : Colors.transparent,
           border: Border.all(
-            color: FigmaColors.brandOrange.withValues(alpha: selected ? 0.7 : 0.35),
+            color: context.runninPalette.secondary.withValues(alpha: selected ? 0.7 : 0.35),
             width: 1.041,
           ),
         ),

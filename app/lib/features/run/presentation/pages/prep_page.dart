@@ -13,7 +13,6 @@ import 'package:runnin/features/run/data/datasources/run_coach_remote_datasource
 import 'package:runnin/features/run/presentation/bloc/run_bloc.dart';
 import 'package:runnin/features/training/data/datasources/plan_remote_datasource.dart';
 import 'package:runnin/features/training/domain/entities/plan.dart';
-import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/features/run/presentation/widgets/gps_permission_modal.dart';
 import 'package:runnin/shared/widgets/runnin_app_bar.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -470,7 +469,7 @@ class _PrepViewState extends State<_PrepView> {
         Text(
           '// INICIAR CORRIDA',
           style: type.bodyMd.copyWith(
-            color: FigmaColors.brandCyan,
+            color: context.runninPalette.primary,
             fontWeight: FontWeight.w500,
             letterSpacing: 1.5,
           ),
@@ -533,7 +532,7 @@ class _PrepViewState extends State<_PrepView> {
               ? '${session!.type} · ${session.distanceKm.toStringAsFixed(session.distanceKm % 1 == 0 ? 0 : 1)}km. '
                   'Revise os itens abaixo antes de sair — economia de fôlego no quilômetro 1.'
               : 'Corrida livre. Faça uma revisão rápida — hidratação, calçado e telefone carregado evitam dor de cabeça no meio do trajeto.',
-          accent: FigmaColors.brandCyan,
+          accent: context.runninPalette.primary,
         ),
         const SizedBox(height: 14),
         // Tiles checkáveis. Gate do CONTINUAR depende de todos marcados.
@@ -651,7 +650,7 @@ class _PrepViewState extends State<_PrepView> {
         _CoachAccentCard(
           topic: 'BRIEFING',
           body: briefingText,
-          accent: FigmaColors.brandOrange,
+          accent: context.runninPalette.secondary,
         ),
         const SizedBox(height: 32),
         Text(
@@ -663,7 +662,7 @@ class _PrepViewState extends State<_PrepView> {
           topic: 'MOBILIDADE PRÉ-CORRIDA',
           body:
               'Prepare articulações e ative cadeias musculares antes de correr. 5-8 minutos reduzem risco de lesão e melhoram economia de corrida.',
-          accent: FigmaColors.brandCyan,
+          accent: context.runninPalette.primary,
         ),
         const SizedBox(height: 14),
         if (_exercises.isEmpty)
@@ -680,7 +679,7 @@ class _PrepViewState extends State<_PrepView> {
         _CoachAccentCard(
           topic: 'DICA',
           body: tipText,
-          accent: FigmaColors.brandOrange,
+          accent: context.runninPalette.secondary,
         ),
       ],
     );
@@ -792,8 +791,8 @@ class _GpsStatusChip extends StatelessWidget {
     final (label, color) = switch (status) {
       _GpsStatus.unknown => ('CONECTANDO', palette.muted),
       _GpsStatus.ok => ('OK', palette.primary),
-      _GpsStatus.denied => ('PERMISSÃO NEGADA', FigmaColors.brandOrange),
-      _GpsStatus.off => ('SERVIÇO DESLIGADO', FigmaColors.brandOrange),
+      _GpsStatus.denied => ('PERMISSÃO NEGADA', context.runninPalette.secondary),
+      _GpsStatus.off => ('SERVIÇO DESLIGADO', context.runninPalette.secondary),
     };
     return InkWell(
       onTap: status == _GpsStatus.ok ? null : onRetry,
@@ -1144,8 +1143,8 @@ class _PlanSessionHeroCard extends StatelessWidget {
             : 'Versão grátis. Plano AI personalizado é premium ↗')
         : 'Coach IA irá te guiar durante toda a sessão ↗';
     final borderColor = selected
-        ? FigmaColors.brandCyan
-        : FigmaColors.brandCyan.withValues(alpha: 0.4);
+        ? context.runninPalette.primary
+        : context.runninPalette.primary.withValues(alpha: 0.4);
 
     return GestureDetector(
       onTap: onTap,
@@ -1154,7 +1153,7 @@ class _PlanSessionHeroCard extends StatelessWidget {
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
           color: selected
-              ? FigmaColors.brandCyan.withValues(alpha: 0.06)
+              ? context.runninPalette.primary.withValues(alpha: 0.06)
               : palette.surface,
           border: Border.all(color: borderColor, width: selected ? 2 : 1.5),
         ),
@@ -1168,7 +1167,7 @@ class _PlanSessionHeroCard extends StatelessWidget {
                   child: Text(
                     label,
                     style: type.labelMd.copyWith(
-                      color: FigmaColors.brandCyan,
+                      color: context.runninPalette.primary,
                       fontWeight: FontWeight.w500,
                       letterSpacing: 1.5,
                     ),
@@ -1180,7 +1179,7 @@ class _PlanSessionHeroCard extends StatelessWidget {
                       horizontal: 10,
                       vertical: 6,
                     ),
-                    color: FigmaColors.brandCyan,
+                    color: context.runninPalette.primary,
                     child: Text(
                       'RECOMENDADO',
                       style: type.labelCaps.copyWith(
@@ -1264,7 +1263,7 @@ class _HeroStatCell extends StatelessWidget {
         Text(
           value,
           style: type.dataXs.copyWith(
-            color: FigmaColors.brandOrange,
+            color: context.runninPalette.secondary,
             fontSize: 24,
             letterSpacing: -0.5,
           ),
@@ -1357,14 +1356,14 @@ class _SecondaryModeCard extends StatelessWidget {
                   Container(
                     width: 8,
                     height: 8,
-                    color: FigmaColors.brandOrange,
+                    color: context.runninPalette.secondary,
                   ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       footerLabel!,
                       style: type.labelCaps.copyWith(
-                        color: FigmaColors.brandOrange,
+                        color: context.runninPalette.secondary,
                         fontSize: 11,
                         fontWeight: FontWeight.w500,
                         letterSpacing: 0.4,

@@ -2,7 +2,6 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:runnin/core/theme/app_palette.dart';
-import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/features/training/data/datasources/checkpoint_remote_datasource.dart';
 import 'package:runnin/features/training/domain/entities/plan_checkpoint.dart';
 import 'package:runnin/shared/widgets/app_panel.dart';
@@ -604,7 +603,7 @@ class _ErrorState extends StatelessWidget {
             OutlinedButton(
               onPressed: onRetry,
               style: OutlinedButton.styleFrom(
-                side: BorderSide(color: FigmaColors.brandCyan),
+                side: BorderSide(color: context.runninPalette.primary),
                 shape: const RoundedRectangleBorder(
                   borderRadius: BorderRadius.zero,
                 ),
@@ -612,7 +611,7 @@ class _ErrorState extends StatelessWidget {
               child: Text(
                 'TENTAR DE NOVO',
                 style: context.runninType.labelCaps.copyWith(
-                  color: FigmaColors.brandCyan,
+                  color: context.runninPalette.primary,
                   fontSize: 11,
                   letterSpacing: 0.8,
                 ),

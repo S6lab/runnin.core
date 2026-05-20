@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:runnin/core/theme/app_palette.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
@@ -23,7 +24,7 @@ class FigmaConversaCoachBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isCoach = author == ConversaAuthor.coach;
-    final color = isCoach ? FigmaColors.brandOrange : FigmaColors.brandCyan;
+    final color = isCoach ? context.runninPalette.secondary : context.runninPalette.primary;
     final label = isCoach ? 'COACH.AI' : 'VOCÊ';
     final timeLabel = DateFormat.Hm().format(timestamp.toLocal());
 

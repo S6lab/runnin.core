@@ -96,7 +96,7 @@ class _IntroPageState extends State<IntroPage> {
                       const SizedBox(width: 4),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-                        color: FigmaColors.brandCyan,
+                        color: context.runninPalette.primary,
                         child: Text('.AI', style: context.runninType.labelCaps.copyWith(
                           color: FigmaColors.bgBase, fontWeight: FontWeight.w500,
                         )),
@@ -137,7 +137,7 @@ class _IntroPageState extends State<IntroPage> {
                     margin: const EdgeInsets.symmetric(horizontal: 4),
                     width: active ? 24 : 8,
                     height: 4,
-                    color: active ? FigmaColors.brandCyan : Colors.white.withValues(alpha: 0.18),
+                    color: active ? context.runninPalette.primary : Colors.white.withValues(alpha: 0.18),
                   );
                 }),
               ),
@@ -151,7 +151,7 @@ class _IntroPageState extends State<IntroPage> {
                   onTap: _advance,
                   child: Container(
                     padding: const EdgeInsets.symmetric(vertical: 16),
-                    color: FigmaColors.brandCyan,
+                    color: context.runninPalette.primary,
                     alignment: Alignment.center,
                     child: Text(
                       _index == _slides.length - 1 ? 'COMEÇAR ↗' : 'PRÓXIMO ↗',
@@ -197,10 +197,10 @@ class _IntroSlideView extends StatelessWidget {
             width: 64,
             height: 64,
             decoration: BoxDecoration(
-              color: FigmaColors.brandCyan.withValues(alpha: 0.1),
-              border: Border.all(color: FigmaColors.brandCyan, width: 1.041),
+              color: context.runninPalette.primary.withValues(alpha: 0.1),
+              border: Border.all(color: context.runninPalette.primary, width: 1.041),
             ),
-            child: Icon(slide.icon, color: FigmaColors.brandCyan, size: 32),
+            child: Icon(slide.icon, color: context.runninPalette.primary, size: 32),
           ),
           const SizedBox(height: 32),
           Text(
@@ -208,7 +208,7 @@ class _IntroSlideView extends StatelessWidget {
             style: context.runninType.labelCaps.copyWith(
               fontSize: 11,
               fontWeight: FontWeight.w500,
-              color: FigmaColors.brandCyan,
+              color: context.runninPalette.primary,
               letterSpacing: 1.1,
             ),
           ),

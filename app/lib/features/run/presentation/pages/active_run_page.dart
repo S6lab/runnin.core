@@ -9,7 +9,6 @@ import 'package:go_router/go_router.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:runnin/core/audio/coach_audio_player.dart';
 import 'package:runnin/core/theme/app_palette.dart';
-import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/features/run/domain/entities/run.dart' show GpsPoint;
 import 'package:runnin/features/run/presentation/bloc/run_bloc.dart';
 import 'package:runnin/features/run/presentation/widgets/gps_permission_modal.dart';
@@ -305,7 +304,7 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
                                   ? palette.primary
                                   : gpsChipStatus == _GpsStatus.unknown
                                       ? palette.muted
-                                      : FigmaColors.brandOrange,
+                                      : palette.secondary,
                               onTap: gpsChipStatus == _GpsStatus.ok
                                   ? null
                                   : _refreshGpsStatus,
@@ -821,11 +820,11 @@ class _StatsOverlay extends StatelessWidget {
                 height: 44,
                 child: OutlinedButton.icon(
                   onPressed: onRetryGps,
-                  icon: Icon(Icons.gps_fixed, size: 16, color: FigmaColors.brandOrange),
+                  icon: Icon(Icons.gps_fixed, size: 16, color: context.runninPalette.secondary),
                   label: Text(
                     'TENTAR LOCALIZAÇÃO',
                     style: context.runninType.labelCaps.copyWith(
-                      color: FigmaColors.brandOrange,
+                      color: context.runninPalette.secondary,
                       fontSize: 11,
                       letterSpacing: 1.2,
                       fontWeight: FontWeight.w500,
@@ -833,7 +832,7 @@ class _StatsOverlay extends StatelessWidget {
                   ),
                   style: OutlinedButton.styleFrom(
                     side: BorderSide(
-                      color: FigmaColors.brandOrange.withValues(alpha: 0.55),
+                      color: context.runninPalette.secondary.withValues(alpha: 0.55),
                     ),
                     shape: const RoundedRectangleBorder(
                       borderRadius: BorderRadius.zero,
@@ -1068,12 +1067,12 @@ class _ActiveStatsLayout extends StatelessWidget {
             // Header: brand chip + run type como .exe
             Row(
               children: [
-                Container(width: 10, height: 10, color: FigmaColors.brandCyan),
+                Container(width: 10, height: 10, color: palette.primary),
                 const SizedBox(width: 8),
                 Text(
                   'RUN.ACTIVE',
                   style: type.labelMd.copyWith(
-                    color: FigmaColors.brandCyan,
+                    color: palette.primary,
                     letterSpacing: 1.4,
                   ),
                 ),
@@ -1248,9 +1247,9 @@ class _ButtonsRow extends StatelessWidget {
             child: ElevatedButton(
               onPressed: isStarting ? null : onStart,
               style: ElevatedButton.styleFrom(
-                backgroundColor: FigmaColors.brandCyan,
+                backgroundColor: palette.primary,
                 foregroundColor: palette.background,
-                disabledBackgroundColor: FigmaColors.brandCyan.withValues(alpha: 0.4),
+                disabledBackgroundColor: palette.primary.withValues(alpha: 0.4),
                 shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
               ),
               child: isStarting
@@ -1271,16 +1270,16 @@ class _ButtonsRow extends StatelessWidget {
               height: 44,
               child: OutlinedButton.icon(
                 onPressed: onRetryGps,
-                icon: const Icon(Icons.gps_fixed, size: 16, color: FigmaColors.brandOrange),
+                icon: Icon(Icons.gps_fixed, size: 16, color: palette.secondary),
                 label: Text(
                   'TENTAR LOCALIZAÇÃO',
                   style: type.labelMd.copyWith(
-                    color: FigmaColors.brandOrange,
+                    color: palette.secondary,
                     letterSpacing: 1.2,
                   ),
                 ),
                 style: OutlinedButton.styleFrom(
-                  side: BorderSide(color: FigmaColors.brandOrange.withValues(alpha: 0.55)),
+                  side: BorderSide(color: palette.secondary.withValues(alpha: 0.55)),
                   shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
                 ),
               ),
@@ -1299,14 +1298,14 @@ class _ButtonsRow extends StatelessWidget {
               onPressed: onPauseResume,
               style: OutlinedButton.styleFrom(
                 side: BorderSide(
-                  color: isPaused ? FigmaColors.brandCyan : palette.border,
+                  color: isPaused ? palette.primary : palette.border,
                 ),
                 shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
               ),
               child: Text(
                 isPaused ? 'RETOMAR' : 'PAUSAR',
                 style: type.labelMd.copyWith(
-                  color: isPaused ? FigmaColors.brandCyan : palette.muted,
+                  color: isPaused ? palette.primary : palette.muted,
                   letterSpacing: 1.2,
                 ),
               ),
@@ -1321,9 +1320,9 @@ class _ButtonsRow extends StatelessWidget {
             child: ElevatedButton(
               onPressed: isCompleting ? null : onFinish,
               style: ElevatedButton.styleFrom(
-                backgroundColor: FigmaColors.brandCyan,
+                backgroundColor: palette.primary,
                 foregroundColor: palette.background,
-                disabledBackgroundColor: FigmaColors.brandCyan.withValues(alpha: 0.4),
+                disabledBackgroundColor: palette.primary.withValues(alpha: 0.4),
                 shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
               ),
               child: isCompleting
@@ -1435,7 +1434,7 @@ class _SplitCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final palette = context.runninPalette;
     final type = context.runninType;
-    final accent = done ? FigmaColors.brandOrange : palette.muted;
+    final accent = done ? palette.secondary : palette.muted;
     final mutedFg = palette.muted.withValues(alpha: 0.7);
     return Container(
       width: 104,

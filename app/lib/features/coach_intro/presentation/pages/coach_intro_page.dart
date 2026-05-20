@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:runnin/core/constants/marketing_copy.dart';
+import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 
@@ -158,7 +159,7 @@ class _ProgressBar extends StatelessWidget {
           alignment: Alignment.centerLeft,
           child: FractionallySizedBox(
             widthFactor: progress.clamp(0.0, 1.0),
-            child: const ColoredBox(color: FigmaColors.brandCyan),
+            child: ColoredBox(color: context.runninPalette.primary),
           ),
         ),
       ),
@@ -190,10 +191,10 @@ class _TopNav extends StatelessWidget {
           children: [
             Opacity(
               opacity: dotOpacity,
-              child: const SizedBox(
+              child: SizedBox(
                 width: 9.986,
                 height: 9.986,
-                child: ColoredBox(color: FigmaColors.brandOrange),
+                child: ColoredBox(color: context.runninPalette.secondary),
               ),
             ),
             const SizedBox(width: 8),
@@ -204,7 +205,7 @@ class _TopNav extends StatelessWidget {
                 height: 18 / 12,
                 letterSpacing: 1.8,
                 fontWeight: FontWeight.w400,
-                color: FigmaColors.brandOrange,
+                color: context.runninPalette.secondary,
               ),
             ),
             const Spacer(),
@@ -252,14 +253,14 @@ class _Slide extends StatelessWidget {
               height: 18 / 12,
               letterSpacing: 2.4,
               fontWeight: FontWeight.w400,
-              color: FigmaColors.brandCyan,
+              color: context.runninPalette.primary,
             ),
           ),
           const SizedBox(height: 22),
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Icon(data.icon, size: 36, color: FigmaColors.brandCyan),
+              Icon(data.icon, size: 36, color: context.runninPalette.primary),
               const SizedBox(width: 14),
               Expanded(
                 child: Text(
@@ -326,7 +327,7 @@ class _BulletCard extends StatelessWidget {
               fontSize: 12,
               height: 18 / 12,
               fontWeight: FontWeight.w400,
-              color: FigmaColors.brandCyan,
+              color: context.runninPalette.primary,
             ),
           ),
           const SizedBox(width: 12),
@@ -382,8 +383,8 @@ class _BottomActions extends StatelessWidget {
                 behavior: HitTestBehavior.opaque,
                 child: Container(
                   alignment: Alignment.center,
-                  decoration: const BoxDecoration(
-                    color: FigmaColors.brandCyan,
+                  decoration: BoxDecoration(
+                    color: context.runninPalette.primary,
                     borderRadius: FigmaBorderRadius.zero,
                   ),
                   child: Text(
@@ -448,7 +449,7 @@ class _Dot extends StatelessWidget {
       height: 4,
       child: ColoredBox(
         color: switch (state) {
-          _DotState.active => FigmaColors.brandCyan,
+          _DotState.active => context.runninPalette.primary,
           _DotState.visited => const Color(0x33FFFFFF), // rgba white 0.20
           _DotState.inactive => const Color(0x0FFFFFFF), // rgba white 0.06
         },

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:runnin/core/theme/design_system_tokens.dart';
+import 'package:runnin/core/theme/app_palette.dart';
 
 class FigmaOnboardingPageIndicator extends StatelessWidget {
   final int total;
@@ -39,7 +39,7 @@ class _ActiveDot extends StatelessWidget {
     return Container(
       width: 20,
       height: 4,
-      color: FigmaColors.brandCyan,
+      color: context.runninPalette.primary,
     );
   }
 }

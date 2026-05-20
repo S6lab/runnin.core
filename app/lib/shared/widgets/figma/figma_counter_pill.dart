@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:runnin/core/theme/app_palette.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 
@@ -7,22 +8,23 @@ class FigmaCounterPill extends StatelessWidget {
     super.key,
     required this.value,
     required this.label,
-    this.accent = FigmaColors.brandCyan,
+    this.accent,
     this.width = 80,
   });
 
   final Object value; // int or String
   final String label;
-  final Color accent;
+  final Color? accent;
   final double width;
 
   @override
   Widget build(BuildContext context) {
+    final _ac = accent ?? context.runninPalette.primary;
     return Container(
       width: width,
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
-        border: Border.all(color: accent, width: 1),
+        border: Border.all(color: _ac, width: 1),
         borderRadius: FigmaBorderRadius.zero,
       ),
       child: Column(
@@ -33,7 +35,7 @@ class FigmaCounterPill extends StatelessWidget {
             style: GoogleFonts.jetBrainsMono(
               fontSize: 20,
               fontWeight: FontWeight.w600,
-              color: accent,
+              color: _ac,
             ),
           ),
           const SizedBox(height: 2),

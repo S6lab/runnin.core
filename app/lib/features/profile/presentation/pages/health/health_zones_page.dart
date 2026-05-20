@@ -61,9 +61,9 @@ class _HealthZonesPageState extends State<HealthZonesPage> {
             ),
             Expanded(
               child: _loading
-                  ? const Center(
+                  ? Center(
                       child: CircularProgressIndicator(
-                        color: FigmaColors.brandCyan,
+                        color: context.runninPalette.primary,
                         strokeWidth: 1.5,
                       ),
                     )
@@ -164,12 +164,12 @@ class _MissingBpmBanner extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
               decoration: BoxDecoration(
-                border: Border.all(color: FigmaColors.brandCyan, width: 1),
+                border: Border.all(color: context.runninPalette.primary, width: 1),
               ),
               child: Text(
                 'PREENCHER PERFIL',
                 style: context.runninType.labelCaps.copyWith(
-                  color: FigmaColors.brandCyan,
+                  color: context.runninPalette.primary,
                 ),
               ),
             ),
@@ -296,7 +296,7 @@ class _SectionHeader extends StatelessWidget {
               style: context.runninType.labelCaps.copyWith(
                 fontSize: 6.6,
                 fontWeight: FontWeight.w400,
-                color: FigmaColors.brandCyan,
+                color: context.runninPalette.primary,
               ),
             ),
           ),

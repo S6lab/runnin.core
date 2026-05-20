@@ -34,9 +34,9 @@ class RunninCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final palette = context.runninPalette;
     final accentColor = accent == 'cyan'
-        ? FigmaColors.brandCyan
+        ? context.runninPalette.primary
         : accent == 'orange'
-            ? FigmaColors.brandOrange
+            ? context.runninPalette.secondary
             : null;
 
     final effectivePadding = padding ??

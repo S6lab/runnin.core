@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 
 /// XP/Level card per `docs/figma/screens/PERFIL.md` §GAMIFICAÇÃO > XP.
@@ -40,7 +41,7 @@ class FigmaXpLevelCard extends StatelessWidget {
                   fontSize: 56,
                   height: 50.4 / 56,
                   fontWeight: FontWeight.w500,
-                  color: FigmaColors.brandCyan,
+                  color: context.runninPalette.primary,
                 ),
               ),
               const SizedBox(width: 12),
@@ -75,7 +76,7 @@ class FigmaXpLevelCard extends StatelessWidget {
             child: LinearProgressIndicator(
               value: progress,
               backgroundColor: FigmaColors.progressTrack,
-              valueColor: const AlwaysStoppedAnimation(FigmaColors.brandCyan),
+              valueColor: AlwaysStoppedAnimation(context.runninPalette.primary),
             ),
           ),
         ],

@@ -93,7 +93,7 @@ class _HealthExamsPageState extends State<HealthExamsPage> {
           ),
           Expanded(
             child: RefreshIndicator(
-              color: FigmaColors.brandCyan,
+              color: context.runninPalette.primary,
               onRefresh: _loadExams,
               child: SingleChildScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
@@ -118,11 +118,11 @@ class _HealthExamsPageState extends State<HealthExamsPage> {
                     _FieldLabel(label: 'EXAMES'),
                     const SizedBox(height: AppSpacing.md),
                     if (_loading)
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 48),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 48),
                         child: Center(
                           child: CircularProgressIndicator(
-                            color: FigmaColors.brandCyan,
+                            color: context.runninPalette.primary,
                             strokeWidth: 1.5,
                           ),
                         ),
@@ -259,16 +259,16 @@ class _ErrorBanner extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(AppSpacing.lg),
       decoration: BoxDecoration(
-        color: FigmaColors.brandOrange.withValues(alpha: 0.08),
+        color: context.runninPalette.secondary.withValues(alpha: 0.08),
         border: Border.all(
-          color: FigmaColors.brandOrange.withValues(alpha: 0.4),
+          color: context.runninPalette.secondary.withValues(alpha: 0.4),
           width: 1.0,
         ),
       ),
       child: Text(
         message,
         style: context.runninType.bodyXs.copyWith(
-          color: FigmaColors.brandOrange,
+          color: context.runninPalette.secondary,
         ),
       ),
     );
@@ -290,14 +290,14 @@ class _UploadCounter extends StatelessWidget {
           '$used/$max uploads este mês',
           style: context.runninType.bodyXs.copyWith(
             fontWeight: FontWeight.w500,
-            color: reached ? FigmaColors.brandOrange : FigmaColors.textMuted,
+            color: reached ? context.runninPalette.secondary : FigmaColors.textMuted,
           ),
         ),
         if (reached)
           Text(
             'Premium = ilimitado',
             style: context.runninType.labelCaps.copyWith(
-              color: FigmaColors.brandCyan,
+              color: context.runninPalette.primary,
             ),
           ),
       ],
@@ -326,7 +326,7 @@ class _RecommendedExamCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final priorityColor =
-        spec.priority == 'ALTO' ? FigmaColors.brandOrange : FigmaColors.textMuted;
+        spec.priority == 'ALTO' ? context.runninPalette.secondary : FigmaColors.textMuted;
     return Container(
       padding: const EdgeInsets.symmetric(
         horizontal: AppSpacing.lg,

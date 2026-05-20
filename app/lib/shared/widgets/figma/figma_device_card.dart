@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 
 /// Wearable device card for PERFIL > SAÚDE > DISPOSITIVOS per
@@ -26,7 +27,7 @@ class FigmaDeviceConnectedCard extends StatelessWidget {
       padding: const EdgeInsets.all(13.718),
       decoration: BoxDecoration(
         color: FigmaColors.surfaceCardCyan,
-        border: Border.all(color: FigmaColors.brandCyan, width: 1.041),
+        border: Border.all(color: context.runninPalette.primary, width: 1.041),
         borderRadius: FigmaBorderRadius.zero,
       ),
       child: Column(
@@ -37,8 +38,8 @@ class FigmaDeviceConnectedCard extends StatelessWidget {
               Container(
                 width: 8,
                 height: 8,
-                decoration: const BoxDecoration(
-                  color: FigmaColors.brandCyan,
+                decoration: BoxDecoration(
+                  color: context.runninPalette.primary,
                   shape: BoxShape.circle,
                 ),
               ),
@@ -49,7 +50,7 @@ class FigmaDeviceConnectedCard extends StatelessWidget {
                   fontSize: 10,
                   letterSpacing: 1.0,
                   fontWeight: FontWeight.w500,
-                  color: FigmaColors.brandCyan,
+                  color: context.runninPalette.primary,
                 ),
               ),
             ],
@@ -81,14 +82,14 @@ class FigmaDeviceConnectedCard extends StatelessWidget {
                 .map(
                   (c) => Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    color: FigmaColors.brandCyan.withValues(alpha: 0.14),
+                    color: context.runninPalette.primary.withValues(alpha: 0.14),
                     child: Text(
                       c,
                       style: GoogleFonts.jetBrainsMono(
                         fontSize: 10,
                         letterSpacing: 0.5,
                         fontWeight: FontWeight.w500,
-                        color: FigmaColors.brandCyan,
+                        color: context.runninPalette.primary,
                       ),
                     ),
                   ),
@@ -106,7 +107,7 @@ class FigmaDeviceConnectedCard extends StatelessWidget {
                   fontSize: 11,
                   letterSpacing: 1.1,
                   fontWeight: FontWeight.w500,
-                  color: FigmaColors.brandCyan,
+                  color: context.runninPalette.primary,
                 ),
               ),
             ),
@@ -178,7 +179,7 @@ class FigmaCompatibleDeviceCard extends StatelessWidget {
                 fontSize: 11,
                 letterSpacing: 0.55,
                 fontWeight: FontWeight.w500,
-                color: FigmaColors.brandCyan,
+                color: context.runninPalette.primary,
               ),
             ),
           ],

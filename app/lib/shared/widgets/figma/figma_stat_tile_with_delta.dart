@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:runnin/core/theme/app_palette.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 
@@ -34,7 +35,7 @@ class FigmaStatTileWithDelta extends StatelessWidget {
   Widget build(BuildContext context) {
     final deltaColor = deltaIsPositive
         ? const Color(0xFF22C55E) // verde
-        : FigmaColors.brandOrange; // laranja/vermelho para piora
+        : context.runninPalette.secondary; // laranja/vermelho para piora
 
     return Container(
       padding: const EdgeInsets.all(13.718),

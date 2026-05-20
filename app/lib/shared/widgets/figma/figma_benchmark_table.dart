@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:runnin/core/theme/app_palette.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 
@@ -51,7 +52,7 @@ class RowItem extends StatelessWidget {
         : compareValues(row.userValue, row.cohortValue) > 0;
     final color = isBetter
         ? FigmaColors.textPrimary
-        : FigmaColors.brandCyan;
+        : context.runninPalette.primary;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
@@ -75,7 +76,7 @@ class RowItem extends StatelessWidget {
               style: GoogleFonts.jetBrainsMono(
                 fontSize: 14,
                 fontWeight: FontWeight.w500,
-                color: FigmaColors.brandCyan,
+                color: context.runninPalette.primary,
               ),
             ),
           ),

@@ -196,7 +196,7 @@ class _PlanLoadingPageState extends State<PlanLoadingPage>
                   },
                   style: OutlinedButton.styleFrom(
                     side: BorderSide(
-                      color: FigmaColors.brandCyan.withValues(alpha: 0.6),
+                      color: context.runninPalette.primary.withValues(alpha: 0.6),
                       width: 1.0,
                     ),
                     shape: const RoundedRectangleBorder(
@@ -206,7 +206,7 @@ class _PlanLoadingPageState extends State<PlanLoadingPage>
                   child: Text(
                     'IR PRA HOME AGORA',
                     style: context.runninType.labelCaps.copyWith(
-                      color: FigmaColors.brandCyan,
+                      color: context.runninPalette.primary,
                       fontSize: 11,
                       letterSpacing: 0.8,
                       fontWeight: FontWeight.w500,
@@ -270,9 +270,9 @@ class _StepRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = done
-        ? FigmaColors.brandCyan
+        ? context.runninPalette.primary
         : active
-            ? FigmaColors.brandCyan.withValues(alpha: 0.85)
+            ? context.runninPalette.primary.withValues(alpha: 0.85)
             : Colors.white.withValues(alpha: 0.35);
     return Row(
       children: [
@@ -329,7 +329,10 @@ class _ClockCountdown extends StatelessWidget {
         animation: animation,
         builder: (context, _) {
           return CustomPaint(
-            painter: _ClockPainter(progress: animation.value),
+            painter: _ClockPainter(
+              progress: animation.value,
+              accent: context.runninPalette.primary,
+            ),
             child: Center(
               child: Text(
                 '$remaining',
@@ -350,7 +353,8 @@ class _ClockCountdown extends StatelessWidget {
 
 class _ClockPainter extends CustomPainter {
   final double progress; // 0 → 1
-  _ClockPainter({required this.progress});
+  final Color accent;
+  _ClockPainter({required this.progress, required this.accent});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -364,7 +368,7 @@ class _ClockPainter extends CustomPainter {
     canvas.drawCircle(center, radius, track);
 
     final arc = Paint()
-      ..color = FigmaColors.brandCyan
+      ..color = accent
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2.5
       ..strokeCap = StrokeCap.round;
@@ -384,12 +388,12 @@ class _ClockPainter extends CustomPainter {
       center.dy + radius * 0.78 * math.sin(angle),
     );
     final handPaint = Paint()
-      ..color = FigmaColors.brandCyan.withValues(alpha: 0.9)
+      ..color = accent.withValues(alpha: 0.9)
       ..strokeWidth = 2.0
       ..strokeCap = StrokeCap.round;
     canvas.drawLine(center, tip, handPaint);
 
-    final hub = Paint()..color = FigmaColors.brandCyan;
+    final hub = Paint()..color = accent;
     canvas.drawCircle(center, 3.5, hub);
   }
 

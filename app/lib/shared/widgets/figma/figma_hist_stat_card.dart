@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:runnin/core/theme/app_palette.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 
@@ -92,7 +93,7 @@ class FigmaHistStatCard extends StatelessWidget {
                 Icon(
                   deltaIsPositive ? Icons.arrow_upward : Icons.arrow_downward,
                   size: 11,
-                  color: deltaIsPositive ? FigmaColors.brandCyan : FigmaColors.zone5,
+                  color: deltaIsPositive ? context.runninPalette.primary : FigmaColors.zone5,
                 ),
                 const SizedBox(width: 4),
                 Text(
@@ -100,7 +101,7 @@ class FigmaHistStatCard extends StatelessWidget {
                   style: GoogleFonts.jetBrainsMono(
                     fontSize: 11,
                     fontWeight: FontWeight.w400,
-                    color: deltaIsPositive ? FigmaColors.brandCyan : FigmaColors.zone5,
+                    color: deltaIsPositive ? context.runninPalette.primary : FigmaColors.zone5,
                   ),
                 ),
               ],

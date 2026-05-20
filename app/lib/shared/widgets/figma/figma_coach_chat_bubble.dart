@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:runnin/core/theme/app_palette.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 
@@ -64,7 +65,7 @@ class FigmaCoachChatBubble extends StatelessWidget {
                       height: 15 / 10,
                       letterSpacing: 1.0,
                       fontWeight: FontWeight.w400,
-                      color: FigmaColors.brandOrange,
+                      color: context.runninPalette.secondary,
                     ),
                   ),
                   const SizedBox(height: 8),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:runnin/core/theme/app_palette.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 
@@ -65,7 +66,7 @@ class FigmaCoachAIBreadcrumb extends StatelessWidget {
         Container(
           width: 10,
           height: 10,
-          color: FigmaColors.brandOrange,
+          color: context.runninPalette.secondary,
         ),
         const SizedBox(width: 4),
         Text(
@@ -74,7 +75,7 @@ class FigmaCoachAIBreadcrumb extends StatelessWidget {
             fontSize: 12,
             fontWeight: FontWeight.w400,
             letterSpacing: 1.8,
-            color: FigmaColors.brandOrange,
+            color: context.runninPalette.secondary,
           ),
         ),
         const SizedBox(width: 4),

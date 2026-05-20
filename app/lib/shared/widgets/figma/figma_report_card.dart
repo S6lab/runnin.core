@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 
 /// Report list card in TREINO §Relatórios per `docs/figma/screens/TREINO.md`
@@ -50,7 +51,7 @@ class FigmaReportCard extends StatelessWidget {
                     fontSize: 11,
                     letterSpacing: 1.1,
                     fontWeight: FontWeight.w500,
-                    color: FigmaColors.brandCyan,
+                    color: context.runninPalette.primary,
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -68,19 +69,19 @@ class FigmaReportCard extends StatelessWidget {
             const SizedBox(height: 12),
             Row(
               children: [
-                _stat('ADERÊNCIA', '$adherencePct%', FigmaColors.brandCyan),
+                _stat('ADERÊNCIA', '$adherencePct%', context.runninPalette.primary),
                 _stat('KM', km.toStringAsFixed(1), FigmaColors.textPrimary),
                 _stat('SESSÕES', '$sessions', FigmaColors.textPrimary),
-                _stat('FREE', '$freeRuns', FigmaColors.brandOrange),
+                _stat('FREE', '$freeRuns', context.runninPalette.secondary),
               ],
             ),
             const SizedBox(height: 12),
             Container(
               padding: const EdgeInsets.all(10),
-              decoration: const BoxDecoration(
-                color: Color(0x08FF6B35),
+              decoration: BoxDecoration(
+                color: const Color(0x08FF6B35),
                 border: Border(
-                  left: BorderSide(color: FigmaColors.brandOrange, width: 1.041),
+                  left: BorderSide(color: context.runninPalette.secondary, width: 1.041),
                 ),
               ),
               child: Text(

@@ -10,13 +10,13 @@ class FigmaPostRunStatCard extends StatelessWidget {
     required this.label,
     required this.value,
     this.unit,
-    this.valueColor = FigmaColors.brandCyan,
+    this.valueColor,
   });
 
   final String label;
   final String value;
   final String? unit;
-  final Color valueColor;
+  final Color? valueColor;
 
   @override
   Widget build(BuildContext context) {

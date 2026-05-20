@@ -112,13 +112,13 @@ class _SplashLockup extends StatelessWidget {
           ),
         ),
         // Decorative cyan line
-        const Positioned(
+        Positioned(
           left: 36.78,
           top: 107.96,
           child: SizedBox(
             width: 121.93,
             height: 2,
-            child: ColoredBox(color: FigmaColors.brandCyan),
+            child: ColoredBox(color: context.runninPalette.primary),
           ),
         ),
       ],
@@ -150,7 +150,7 @@ class _SplashWordmark extends StatelessWidget {
           const SizedBox(width: 5.99),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            color: FigmaColors.brandCyan,
+            color: context.runninPalette.primary,
             child: Text(
               '.AI',
               style: context.runninType.labelMd.copyWith(

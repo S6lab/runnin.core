@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 
 /// Single weekly-plan row in TREINO §Plano Semanal per
@@ -30,14 +31,14 @@ class FigmaWeekPlanRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final accent = switch (state) {
-      WeekPlanRowState.ok => FigmaColors.brandCyan,
-      WeekPlanRowState.today => FigmaColors.brandOrange,
+      WeekPlanRowState.ok => context.runninPalette.primary,
+      WeekPlanRowState.today => context.runninPalette.secondary,
       WeekPlanRowState.future => FigmaColors.textSecondary,
       WeekPlanRowState.rest => FigmaColors.textMuted,
     };
     final iconWidget = switch (state) {
-      WeekPlanRowState.ok => const Icon(Icons.check, size: 14, color: FigmaColors.brandCyan),
-      WeekPlanRowState.today => const Icon(Icons.fiber_manual_record, size: 10, color: FigmaColors.brandOrange),
+      WeekPlanRowState.ok => Icon(Icons.check, size: 14, color: context.runninPalette.primary),
+      WeekPlanRowState.today => Icon(Icons.fiber_manual_record, size: 10, color: context.runninPalette.secondary),
       WeekPlanRowState.future => const Icon(Icons.fiber_manual_record_outlined, size: 12, color: FigmaColors.textDim),
       WeekPlanRowState.rest => Text(
           'DESC',

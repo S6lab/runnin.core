@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:runnin/core/theme/app_palette.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 
@@ -48,7 +49,7 @@ class FigmaRunMetricCell extends StatelessWidget {
                   fontSize: 9,
                   height: 13.5 / 9,
                   fontWeight: FontWeight.w400,
-                  color: FigmaColors.brandCyan,
+                  color: context.runninPalette.primary,
                 ),
               ),
             ],

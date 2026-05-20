@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:runnin/core/theme/app_palette.dart';
-import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/shared/widgets/section_heading.dart';
 
 /// Modal educacional pra solicitação de GPS no web. Dois modos:
@@ -112,8 +111,8 @@ class _GpsPermissionModalState extends State<GpsPermissionModal> {
           color: palette.surface,
           border: Border.all(
             color: _isBlocked
-                ? FigmaColors.brandOrange.withValues(alpha: 0.6)
-                : FigmaColors.brandCyan.withValues(alpha: 0.6),
+                ? palette.secondary.withValues(alpha: 0.6)
+                : palette.primary.withValues(alpha: 0.6),
             width: 1,
           ),
         ),
@@ -179,7 +178,7 @@ class _GpsPermissionModalState extends State<GpsPermissionModal> {
                 child: ElevatedButton(
                   onPressed: _requesting ? null : _requestPermission,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: FigmaColors.brandCyan,
+                    backgroundColor: palette.primary,
                     foregroundColor: palette.background,
                     shape: const RoundedRectangleBorder(
                       borderRadius: BorderRadius.zero,
@@ -215,9 +214,9 @@ class _GpsPermissionModalState extends State<GpsPermissionModal> {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SectionHeading(
+        SectionHeading(
           label: '> PERMISSÃO BLOQUEADA',
-          dotColor: FigmaColors.brandOrange,
+          dotColor: palette.secondary,
         ),
         const SizedBox(height: 14),
         Text(
@@ -263,7 +262,7 @@ class _GpsPermissionModalState extends State<GpsPermissionModal> {
                 child: ElevatedButton(
                   onPressed: _recheckAfterUnblock,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: FigmaColors.brandCyan,
+                    backgroundColor: palette.primary,
                     foregroundColor: palette.background,
                     shape: const RoundedRectangleBorder(
                       borderRadius: BorderRadius.zero,
@@ -302,15 +301,15 @@ class _Step extends StatelessWidget {
           height: 22,
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: FigmaColors.brandOrange.withValues(alpha: 0.18),
+            color: palette.secondary.withValues(alpha: 0.18),
             border: Border.all(
-              color: FigmaColors.brandOrange.withValues(alpha: 0.55),
+              color: palette.secondary.withValues(alpha: 0.55),
             ),
           ),
           child: Text(
             num,
             style: context.runninType.labelCaps.copyWith(
-              color: FigmaColors.brandOrange,
+              color: palette.secondary,
               fontSize: 11,
               fontWeight: FontWeight.w500,
             ),

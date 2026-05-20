@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 
 class FigmaOnboardingTopProgressBar extends StatelessWidget {
@@ -24,7 +25,7 @@ class FigmaOnboardingTopProgressBar extends StatelessWidget {
           FractionallySizedBox(
             alignment: Alignment.centerLeft,
             widthFactor: progress,
-            child: Container(color: FigmaColors.brandCyan),
+            child: Container(color: context.runninPalette.primary),
           ),
         ],
       ),

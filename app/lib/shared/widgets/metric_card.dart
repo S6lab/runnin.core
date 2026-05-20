@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:runnin/core/theme/app_palette.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 
@@ -128,7 +129,7 @@ class MetricCard extends StatelessWidget {
                 fontSize: 11,
                 height: 16.5 / 11,
                 fontWeight: FontWeight.w400,
-                color: deltaColor ?? FigmaColors.brandCyan,
+                color: deltaColor ?? context.runninPalette.primary,
               ),
             ),
           ],
@@ -152,7 +153,7 @@ class MetricCard extends StatelessWidget {
                 fontSize: 13,
                 height: 19.5 / 13,
                 fontWeight: FontWeight.w500,
-                color: cardioLabelColor ?? FigmaColors.brandOrange,
+                color: cardioLabelColor ?? context.runninPalette.secondary,
               ),
             ),
           ],

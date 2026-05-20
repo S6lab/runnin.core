@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:runnin/core/theme/app_palette.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 
@@ -106,14 +107,14 @@ class _HeaderCell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bg = switch (data.status) {
-      WeekDayCellStatus.done => FigmaColors.brandCyan,
+      WeekDayCellStatus.done => context.runninPalette.primary,
       WeekDayCellStatus.today =>
         const Color(0x1700D4FF), // rgba(0,212,255,0.09) per HOME.md
       _ => Colors.transparent,
     };
     final fg = switch (data.status) {
       WeekDayCellStatus.done => FigmaColors.bgBase,
-      WeekDayCellStatus.today => FigmaColors.brandCyan,
+      WeekDayCellStatus.today => context.runninPalette.primary,
       _ => FigmaColors.textSecondary,
     };
 
@@ -156,25 +157,25 @@ class _BodyCell extends StatelessWidget {
     final isTodayAccent = data.isToday;
 
     final iconColor = isTodayAccent
-        ? FigmaColors.brandCyan
+        ? context.runninPalette.primary
         : data.isDone
-            ? FigmaColors.brandCyan
+            ? context.runninPalette.primary
             : FigmaColors.textDim;
 
     final typeColor = isTodayAccent
-        ? FigmaColors.brandCyan
+        ? context.runninPalette.primary
         : accentDim
             ? FigmaColors.textDim
-            : FigmaColors.brandCyan;
+            : context.runninPalette.primary;
 
     final distanceColor = isTodayAccent
-        ? FigmaColors.brandOrange
+        ? context.runninPalette.secondary
         : data.isDone
-            ? FigmaColors.brandCyan
+            ? context.runninPalette.primary
             : FigmaColors.textDim;
 
     final paceColor = isTodayAccent
-        ? FigmaColors.brandOrange
+        ? context.runninPalette.secondary
         : FigmaColors.textDim;
 
     final icon = data.isDone ? Icons.check : Icons.fiber_manual_record;
@@ -241,7 +242,7 @@ class _BodyCell extends StatelessWidget {
                 height: 12 / 8,
                 letterSpacing: 0.8,
                 fontWeight: FontWeight.w500,
-                color: FigmaColors.brandCyan,
+                color: context.runninPalette.primary,
               ),
             ),
         ],

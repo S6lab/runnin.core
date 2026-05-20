@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:runnin/core/theme/app_palette.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 
@@ -33,7 +34,7 @@ class FigmaSplitRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final barColor = isBest ? FigmaColors.brandCyan : FigmaColors.textDim;
+    final barColor = isBest ? context.runninPalette.primary : FigmaColors.textDim;
     final hasMeta = bpm != null || calories != null || elevationGainM != null;
     final mainRow = Row(
       crossAxisAlignment: CrossAxisAlignment.center,
@@ -76,7 +77,7 @@ class FigmaSplitRow extends StatelessWidget {
               fontSize: 13,
               height: 19.5 / 13,
               fontWeight: FontWeight.w500,
-              color: isBest ? FigmaColors.brandCyan : FigmaColors.textPrimary,
+              color: isBest ? context.runninPalette.primary : FigmaColors.textPrimary,
             ),
           ),
         ),

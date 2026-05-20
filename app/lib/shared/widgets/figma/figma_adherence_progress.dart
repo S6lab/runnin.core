@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:runnin/core/theme/app_palette.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 
@@ -21,7 +22,7 @@ class FigmaAdherenceProgress extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final low = percent < 70;
-    final color = low ? FigmaColors.brandOrange : FigmaColors.brandCyan;
+    final color = low ? context.runninPalette.secondary : context.runninPalette.primary;
 
     return Container(
       padding: const EdgeInsets.all(13.718),
@@ -49,7 +50,7 @@ class FigmaAdherenceProgress extends StatelessWidget {
               if (low)
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  color: FigmaColors.brandOrange,
+                  color: context.runninPalette.secondary,
                   child: Text(
                     'ATENÇÃO',
                     style: GoogleFonts.jetBrainsMono(

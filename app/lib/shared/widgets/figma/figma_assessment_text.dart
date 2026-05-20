@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:runnin/core/theme/app_palette.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 
@@ -16,7 +17,7 @@ class FigmaAssessmentLabel extends StatelessWidget {
         fontWeight: FontWeight.w400,
         height: 19.5 / 13,
         letterSpacing: 1.95,
-        color: FigmaColors.brandCyan,
+        color: context.runninPalette.primary,
       ),
     );
   }

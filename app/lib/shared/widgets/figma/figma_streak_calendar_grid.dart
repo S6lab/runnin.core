@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:runnin/core/theme/app_palette.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 
@@ -85,7 +86,7 @@ class _Cell extends StatelessWidget {
       height: size,
       child: ColoredBox(
         color: active
-            ? FigmaColors.brandCyan.withValues(alpha: opacity.clamp(0.30, 0.94))
+            ? context.runninPalette.primary.withValues(alpha: opacity.clamp(0.30, 0.94))
             : FigmaColors.surfaceCard,
       ),
     );

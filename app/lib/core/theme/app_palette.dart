@@ -213,8 +213,10 @@ enum RunninSkin {
           border: Color(0xFF1A1D28),
           text: Color(0xFFF5F7FB),
           muted: Color(0xFF8C97AD),
-          primary: Color(0xFF2ECDF3),
-          secondary: Color(0xFFFF6E40),
+          // Alinhado aos hex de FigmaColors.brandCyan/brandOrange (dominantes no
+          // app) pra o skin artico ficar idêntico após a migração brand->palette.
+          primary: Color(0xFF00D4FF),
+          secondary: Color(0xFFFF6B35),
           tertiary: Color(0xFF4D7DFF),
           success: Color(0xFF25C56B),
           warning: Color(0xFFF3BF31),

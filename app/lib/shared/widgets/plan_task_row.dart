@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/_theme.dart';
 
 enum PlanTaskStatus { done, active, pending }

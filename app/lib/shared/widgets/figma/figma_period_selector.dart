@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:runnin/core/theme/app_palette.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 
@@ -57,7 +58,7 @@ class _Tab extends StatelessWidget {
       child: Container(
         height: 44,
         alignment: Alignment.center,
-        color: active ? FigmaColors.brandCyan : Colors.transparent,
+        color: active ? context.runninPalette.primary : Colors.transparent,
         child: Text(
           label,
           style: GoogleFonts.jetBrainsMono(

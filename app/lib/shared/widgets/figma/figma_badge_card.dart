@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:runnin/core/theme/app_palette.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 
@@ -13,7 +14,7 @@ class FigmaBadgeCard extends StatelessWidget {
     required this.description,
     this.unlocked = false,
     this.progress = 0.0, // 0.0–1.0, ignored when unlocked
-    this.accent = FigmaColors.brandCyan,
+    this.accent,
   });
 
   final IconData icon;
@@ -21,12 +22,13 @@ class FigmaBadgeCard extends StatelessWidget {
   final String description;
   final bool unlocked;
   final double progress;
-  final Color accent;
+  final Color? accent;
 
   @override
   Widget build(BuildContext context) {
-    final bg = unlocked ? const Color(0x0800D4FF) : FigmaColors.surfaceCard;
-    final border = unlocked ? const Color(0x3000D4FF) : FigmaColors.borderDefault;
+    final c = accent ?? context.runninPalette.primary;
+    final bg = unlocked ? c.withValues(alpha: 0.03) : FigmaColors.surfaceCard;
+    final border = unlocked ? c.withValues(alpha: 0.19) : FigmaColors.borderDefault;
     return Opacity(
       opacity: unlocked ? 1.0 : 0.5,
       child: Container(
@@ -43,7 +45,7 @@ class FigmaBadgeCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                Icon(icon, size: 18, color: accent),
+                Icon(icon, size: 18, color: c),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
@@ -59,7 +61,7 @@ class FigmaBadgeCard extends StatelessWidget {
                   ),
                 ),
                 if (unlocked)
-                  const Icon(Icons.check, size: 16, color: FigmaColors.brandCyan),
+                  Icon(Icons.check, size: 16, color: c),
               ],
             ),
             Text(
@@ -81,7 +83,7 @@ class FigmaBadgeCard extends StatelessWidget {
                   child: LinearProgressIndicator(
                     value: progress.clamp(0.0, 1.0),
                     backgroundColor: FigmaColors.progressTrack,
-                    valueColor: const AlwaysStoppedAnimation(FigmaColors.brandCyan),
+                    valueColor: AlwaysStoppedAnimation(c),
                   ),
                 ),
               ),

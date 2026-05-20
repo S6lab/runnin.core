@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:runnin/core/theme/app_palette.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 
@@ -34,8 +35,8 @@ class FigmaCoachOptionButton extends StatelessWidget {
         ),
       CoachOptionAccent.cyan => (
           bg: const Color(0x1400D4FF), // rgba(0,212,255,0.08)
-          border: FigmaColors.brandCyan,
-          text: FigmaColors.brandCyan,
+          border: context.runninPalette.primary,
+          text: context.runninPalette.primary,
         ),
       CoachOptionAccent.neutral => (
           bg: Colors.transparent,

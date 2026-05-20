@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 
 /// Normal-distribution bell curve with user position marker per
@@ -22,15 +23,25 @@ class FigmaBenchmarkBellCurve extends StatelessWidget {
       height: height,
       child: CustomPaint(
         size: Size.infinite,
-        painter: _BellCurvePainter(userPercentile: userPercentile),
+        painter: _BellCurvePainter(
+          userPercentile: userPercentile,
+          curveColor: context.runninPalette.primary,
+          markerColor: context.runninPalette.secondary,
+        ),
       ),
     );
   }
 }
 
 class _BellCurvePainter extends CustomPainter {
-  _BellCurvePainter({required this.userPercentile});
+  _BellCurvePainter({
+    required this.userPercentile,
+    required this.curveColor,
+    required this.markerColor,
+  });
   final double userPercentile;
+  final Color curveColor;
+  final Color markerColor;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -43,13 +54,13 @@ class _BellCurvePainter extends CustomPainter {
         begin: Alignment.topCenter,
         end: Alignment.bottomCenter,
         colors: [
-          FigmaColors.brandCyan.withValues(alpha: 0.35),
-          FigmaColors.brandCyan.withValues(alpha: 0.0),
+          curveColor.withValues(alpha: 0.35),
+          curveColor.withValues(alpha: 0.0),
         ],
       ).createShader(Rect.fromLTWH(0, 0, w, h));
     final stroke = Paint()
       ..style = PaintingStyle.stroke
-      ..color = FigmaColors.brandCyan
+      ..color = curveColor
       ..strokeWidth = 1.735;
 
     final path = Path();
@@ -68,13 +79,13 @@ class _BellCurvePainter extends CustomPainter {
     final ux = (userPercentile.clamp(0, 100) / 100) * w;
     final norm = (ux / w - 0.5) * 6;
     final uy = h - math.exp(-norm * norm / 2) * (h - 8);
-    final markerPaint = Paint()..color = FigmaColors.brandOrange;
+    final markerPaint = Paint()..color = markerColor;
     canvas.drawCircle(Offset(ux, uy), 5, markerPaint);
     canvas.drawLine(
       Offset(ux, uy),
       Offset(ux, h),
       Paint()
-        ..color = FigmaColors.brandOrange
+        ..color = markerColor
         ..strokeWidth = 1.0,
     );
 

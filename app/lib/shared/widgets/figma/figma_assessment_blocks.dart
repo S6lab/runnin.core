@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:runnin/core/theme/app_palette.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 
@@ -33,7 +34,7 @@ class FigmaCyanInfoBlock extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (icon != null) ...[
-            Icon(icon, size: 24, color: FigmaColors.brandCyan),
+            Icon(icon, size: 24, color: context.runninPalette.primary),
             const SizedBox(width: 12),
           ],
           Expanded(
@@ -244,7 +245,7 @@ class FigmaTimePeriodCard extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 22, color: FigmaColors.brandCyan),
+            Icon(icon, size: 22, color: context.runninPalette.primary),
             const SizedBox(height: 8),
             Text(
               label,

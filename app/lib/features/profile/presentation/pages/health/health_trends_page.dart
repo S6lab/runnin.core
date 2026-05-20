@@ -63,9 +63,9 @@ class _HealthTrendsPageState extends State<HealthTrendsPage> {
             ),
             Expanded(
               child: _loading
-                  ? const Center(
+                  ? Center(
                       child: CircularProgressIndicator(
-                        color: FigmaColors.brandCyan,
+                        color: context.runninPalette.primary,
                         strokeWidth: 1.5,
                       ),
                     )
@@ -271,13 +271,13 @@ class _Body extends StatelessWidget {
                 label: 'BPM repouso',
                 value: userProfile?.restingBpm?.toString() ?? '—',
                 unit: 'bpm',
-                valueColor: FigmaColors.brandCyan,
+                valueColor: context.runninPalette.primary,
               ),
               _HealthCard(
                 label: 'BPM corrida',
                 value: stats.avgBpm > 0 ? stats.avgBpm.toString() : '—',
                 unit: 'bpm',
-                valueColor: FigmaColors.brandCyan,
+                valueColor: context.runninPalette.primary,
               ),
               _HealthCard(
                 label: 'Sono médio',
@@ -293,7 +293,7 @@ class _Body extends StatelessWidget {
                 value: recoveryScore > 0 ? recoveryScore.toString() : '—',
                 unit: '',
                 secondaryLabel: recoveryScore > 0 ? null : 'Sem dados de HRV',
-                valueColor: FigmaColors.brandOrange,
+                valueColor: context.runninPalette.secondary,
               ),
             ],
           ),
@@ -310,14 +310,14 @@ class _HealthCard extends StatelessWidget {
     required this.value,
     required this.unit,
     this.secondaryLabel,
-    this.valueColor = FigmaColors.brandCyan,
+    this.valueColor,
   });
 
   final String label;
   final String value;
   final String unit;
   final String? secondaryLabel;
-  final Color valueColor;
+  final Color? valueColor;
 
   @override
   Widget build(BuildContext context) {
@@ -327,7 +327,7 @@ class _HealthCard extends StatelessWidget {
       unit: unit,
       delta: null,
       deltaIsPositive: true,
-      valueColor: valueColor,
+      valueColor: valueColor ?? context.runninPalette.primary,
     );
   }
 }
@@ -399,7 +399,7 @@ class _SectionHeader extends StatelessWidget {
                 fontSize: 6.6,
                 fontWeight: FontWeight.w400,
                 letterSpacing: 0,
-                color: FigmaColors.brandCyan,
+                color: context.runninPalette.primary,
               ),
             ),
           ),

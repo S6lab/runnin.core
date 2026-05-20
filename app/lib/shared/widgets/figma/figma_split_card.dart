@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:runnin/core/theme/app_palette.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 
@@ -24,7 +25,7 @@ class FigmaSplitCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final timeColor = status == SplitCardStatus.done
-        ? FigmaColors.brandOrange
+        ? context.runninPalette.secondary
         : FigmaColors.textDim;
     return Container(
       width: 72,

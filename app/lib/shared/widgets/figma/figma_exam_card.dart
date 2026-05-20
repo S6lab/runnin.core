@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 
 /// Exam upload CTA (dashed border — only dashed element in the app) per
@@ -30,7 +31,7 @@ class FigmaExamUploadCTA extends StatelessWidget {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.add, size: 18, color: FigmaColors.brandCyan),
+              Icon(Icons.add, size: 18, color: context.runninPalette.primary),
               const SizedBox(width: 8),
               Text(
                 label,
@@ -122,7 +123,7 @@ class FigmaExamCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                const Icon(Icons.description_outlined, size: 22, color: FigmaColors.brandCyan),
+                Icon(Icons.description_outlined, size: 22, color: context.runninPalette.primary),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Column(
@@ -155,10 +156,10 @@ class FigmaExamCard extends StatelessWidget {
               const SizedBox(height: 12),
               Container(
                 padding: const EdgeInsets.all(10),
-                decoration: const BoxDecoration(
-                  color: Color(0x05FF6B35),
+                decoration: BoxDecoration(
+                  color: const Color(0x05FF6B35),
                   border: Border(
-                    left: BorderSide(color: FigmaColors.brandOrange, width: 1.041),
+                    left: BorderSide(color: context.runninPalette.secondary, width: 1.041),
                   ),
                 ),
                 child: Text(

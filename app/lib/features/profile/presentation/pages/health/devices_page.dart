@@ -142,7 +142,7 @@ class _HealthDevicesPageState extends State<HealthDevicesPage> {
             child: Text(
               'OK',
               style: context.runninType.labelMd.copyWith(
-                color: FigmaColors.brandCyan,
+                color: context.runninPalette.primary,
               ),
             ),
           ),
