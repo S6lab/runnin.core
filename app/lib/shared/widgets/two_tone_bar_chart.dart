@@ -47,54 +47,48 @@ class TwoToneBarChart extends StatelessWidget {
     return Column(
       children: [
         Expanded(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: List.generate(data.length, (i) {
-              final d = data[i];
-              final pFrac = maxVal > 0 ? d.planned / maxVal : 0.0;
-              final eFrac = maxVal > 0 ? d.executed / maxVal : 0.0;
-              return Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 3),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      // Planejado
-                      Expanded(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          children: [
-                            if (d.planned > 0)
-                              FractionallySizedBox(
-                                heightFactor: pFrac.clamp(0.02, 1.0),
-                                child: Container(color: pColor.withValues(alpha: 0.85)),
-                              )
-                            else
-                              Container(height: 2, color: palette.border),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 2),
-                      // Executado
-                      Expanded(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          children: [
-                            if (d.executed > 0)
-                              FractionallySizedBox(
-                                heightFactor: eFrac.clamp(0.02, 1.0),
-                                child: Container(color: eColor.withValues(alpha: 0.85)),
-                              )
-                            else
-                              Container(height: 2, color: palette.border),
-                          ],
-                        ),
-                      ),
-                    ],
+          // LayoutBuilder dá uma altura FINITA pra calcular o pixel de cada
+          // barra. Antes usávamos FractionallySizedBox dentro de Column, que
+          // recebe altura infinita e estoura o layout quando há dado > 0.
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final h = constraints.maxHeight;
+              Widget bar(double value, Color color) {
+                final frac = maxVal > 0 ? (value / maxVal).clamp(0.0, 1.0) : 0.0;
+                final px = value > 0 ? (frac * h).clamp(2.0, h) : 2.0;
+                return Expanded(
+                  child: Align(
+                    alignment: Alignment.bottomCenter,
+                    child: Container(
+                      height: px,
+                      color: value > 0
+                          ? color.withValues(alpha: 0.85)
+                          : palette.border,
+                    ),
                   ),
-                ),
+                );
+              }
+
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: List.generate(data.length, (i) {
+                  final d = data[i];
+                  return Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 3),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          bar(d.planned, pColor),
+                          const SizedBox(width: 2),
+                          bar(d.executed, eColor),
+                        ],
+                      ),
+                    ),
+                  );
+                }),
               );
-            }),
+            },
           ),
         ),
         const SizedBox(height: 6),
