@@ -1,0 +1,323 @@
+# runnin.core — Documentação da Estrutura Atual (snapshot 2026-05-19)
+
+> Documentação **fiel ao código implementado** (snapshot 2026-05-19), gerada por auditoria direta
+> (`server.ts`, rotas, datasources, wiring). Serve de **base para desenhar melhorias**.
+> Substitui o template genérico anterior, que não refletia a stack real.
+
+---
+
+## Sumário
+
+1. [Visão Geral](#1-visão-geral)
+2. [Stack Tecnológica (real)](#2-stack-tecnológica-real)
+3. [Arquitetura & Estrutura de Pastas](#3-arquitetura--estrutura-de-pastas)
+4. [Backend — Módulos & Endpoints](#4-backend--módulos--endpoints)
+5. [Modelo de Dados (Firestore)](#5-modelo-de-dados-firestore)
+6. [Frontend — Features Flutter](#6-frontend--features-flutter)
+7. [Integrações](#7-integrações)
+8. [Jornadas do Usuário (reais)](#8-jornadas-do-usuário-reais)
+9. [Configuração, Deploy & CI](#9-configuração-deploy--ci)
+10. [Testes](#10-testes)
+11. [Itens implementados-mas-frágeis](#11-itens-implementados-mas-frágeis)
+12. [Oportunidades de melhoria](#12-oportunidades-de-melhoria)
+
+---
+
+## 1. Visão Geral
+
+**Runnin** é um app de corrida com **coach de IA**. Não é uma rede social de corredores — é um
+**coach pessoal**: gera planos de treino personalizados, acompanha a corrida em tempo real com voz,
+analisa o desempenho e adapta o plano semana a semana. Foco no mercado brasileiro (pt-BR).
+
+Pilares implementados:
+- **Planejamento inteligente** — plano mesocíclico gerado por LLM, com sessões dia-a-dia (pace, duração,
+  hidratação, nutrição) e segmentos de execução km-a-km; revisões automáticas + manuais; checkpoints semanais.
+- **Coach em tempo real** — cues por evento (km, pace, segmento) via SSE e voz via Gemini Live; relatório
+  pós-corrida em duas fases (resumo rápido → análise enriquecida).
+- **Histórico & métricas** — runs com splits km-a-km (pace, FC, calorias, elevação), stats agregadas,
+  benchmark percentil vs coorte, replay da conversa do coach.
+- **Saúde & biometria** — sincronização com HealthKit/Health Connect, zonas de FC, OCR de exames.
+- **Gamificação** — badges, XP, streak.
+- **Monetização** — modelo freemium/pro com gating real de features (pagamento ainda não integrado).
+
+---
+
+## 2. Stack Tecnológica (real)
+
+| Camada | Tecnologia |
+|---|---|
+| App | **Flutter** (Dart), Web + Android (iOS preparado, deploy desativado) |
+| State (app) | flutter_bloc + Cubit + ChangeNotifier (Riverpod presente, pouco usado) |
+| Navegação | go_router |
+| HTTP (app) | Dio + interceptor de Firebase ID token |
+| Mapa / GPS | flutter_map + latlong2 + geolocator |
+| Local (app) | Hive |
+| Backend | **Node.js + Express 5 + TypeScript** |
+| Banco | **Firestore** (Firebase Admin SDK) — NoSQL |
+| Auth | **Firebase Auth** (Google + Phone SMS). Sem JWT/registro próprios |
+| LLM | **Gemini** (async) + **Gemini Live** (áudio); adapters Groq/Together via factory |
+| Validação | Zod |
+| WebSocket | `ws` (proxy Gemini Live) |
+| Push | Firebase Cloud Messaging |
+| Storage | Firebase Storage / GCS (exames, RAG) |
+| Hosting web | Firebase Hosting |
+| Backend host | Google Cloud Run (`runnin-494520`, southamerica-east1) |
+| CI/CD | Codemagic |
+
+> ❌ **NÃO há** PostgreSQL, Prisma, Redis, BullMQ, NestJS — apesar do `DOCUMENTATION.md` antigo afirmar.
+
+---
+
+## 3. Arquitetura & Estrutura de Pastas
+
+Monorepo. Branch de trabalho `development`; deploy a partir de `main`.
+
+```
+runnin.core/
+├── app/                     # Flutter (frontend)
+│   ├── lib/
+│   │   ├── core/            # router, network (apiClient), theme/tokens, audio, units, gamification
+│   │   ├── features/        # 22 features (ver §6) — data/domain/presentation
+│   │   └── shared/widgets/  # widgets reutilizáveis + figma/ (~48 componentes do design system)
+│   └── test/                # ~8 widget/bloc tests
+├── server/                  # Node + Express + TS (backend)
+│   └── src/
+│       ├── modules/<m>/     # domain (entities) / use-cases / infra (firestore repos) / http (routes+controller)
+│       ├── shared/
+│       │   ├── infra/llm/   # factory + adapters + prompts (builders, contexts, personas, defaults)
+│       │   ├── infra/firebase/  # client admin
+│       │   ├── infra/http/middlewares/  # auth, error, requireFeature, requireAdmin, cron-token, request-id
+│       │   ├── container.ts # DI manual (singletons)
+│       │   ├── logger/ errors/ feature-flags/ knowledge/
+│       ├── server.ts        # monta routers /v1 + health checks
+│       └── main.ts          # bootstrap + attach WebSocket coach-live
+├── docs/                    # documentação + specs figma
+├── codemagic.yaml           # CI/CD
+└── deploy-*.sh              # scripts Cloud Run + Firebase Hosting
+```
+
+Backend segue **arquitetura modular por domínio**: cada módulo tem `domain` (entidades/interfaces),
+`use-cases`, `infra` (repositórios Firestore) e `http` (rotas + controller). DI via container manual.
+
+---
+
+## 4. Backend — Módulos & Endpoints
+
+Todas as rotas sob prefixo **`/v1`**. Auth = Firebase ID token (`Authorization: Bearer <token>`) salvo
+quando indicado `[público]` ou `[cron]`. `[premium]` = exige feature do plano (middleware `requireFeature`).
+
+**Health (sem auth):** `GET /health`, `GET /healthz` (liveness), `GET /readyz` (checa Firestore).
+
+### users — `/v1/users`
+`GET /me` · `PATCH /me` · `DELETE /me` · `POST /provision` · `POST /onboarding` · `POST /me/trial` ·
+`POST /internal/reset-plan-revision-quota` [cron]
+
+### runs — `/v1/runs`
+`POST /` (cria/inicia) · `GET /` (lista, com coachQuote) · `GET /:id` · `GET /:id/gps` ·
+`PATCH /:id/gps` (batch) · `PATCH /:id/complete` (calcula splits/calorias, dispara report, marca sessão executada)
+
+### plans — `/v1/plans`
+`GET /knowledge/corpus` · `GET /current` · `GET /:id` · `GET /:id/revisions` · `GET /:id/weekly-reports` ·
+`GET /:id/weekly-reports/:weekNumber` · `GET /:id/checkpoints` · `GET /:id/checkpoints/:weekNumber` ·
+`POST /generate` [premium] · `POST /:id/request-revision` [premium] ·
+`POST /:id/weekly-reports/:weekNumber/generate` [premium] · `POST /:id/checkpoints/:weekNumber/inputs` ·
+`POST /:id/checkpoints/:weekNumber/apply` [premium]
+
+### weekly-reports — `/v1/weekly-reports`
+`GET /` · `GET /:weekStart`
+
+### coach — `/v1/coach`
+`POST /live-token` [premium] · `POST /message` (SSE) [premium] · `POST /chat` [premium] ·
+`GET /report/:runId` [premium] · `POST /report/:runId/generate` [premium] · `GET /messages/:runId` [premium] ·
+`GET /period-analysis` [premium] · **WebSocket `/v1/coach/live` (+ `/coach-live` legado)** — token Firebase via query, proxy pro Gemini Live
+
+### notifications — `/v1/notifications`
+`GET /` · `POST /clear` · `POST /:id/dismiss` · `POST /:id/read` · `POST /devices` (FCM) · `POST /ensure-daily` [cron]
+
+### health — `/v1/health`
+`GET /zones` [premium] (zonas de FC Karvonen)
+
+### exams — `/v1/exams`
+`GET /` · `POST /upload-url` [premium] · `POST /:examId/finalize` [premium] · `DELETE /:examId`
+(OCR multimodal Gemini — ⚠️ persistência via in-memory, ver §11)
+
+### biometrics — `/v1/biometrics`
+`POST /samples` (ingest batch) · `GET /latest/:type` · `GET /summary` · `POST /seed-test-user`
+
+### stats — `/v1/stats`
+`GET /aggregate?period=week|month|threeMonths` · `GET /totals`
+
+### subscriptions — `/v1/subscriptions`
+`GET /plans` [público] · `GET /me` · `POST /seed` [público]
+
+### benchmark — `/v1/benchmark`
+`GET /?level=&runType=&distance=` · `GET /:runId`
+
+### admin — `/v1/admin`
+`POST /tester/seed` [cron] · `GET /diagnose/user` [cron] · `POST /diagnose/regenerate-plan` [cron] ·
+`POST /diagnose/reset-journey` [cron] · `POST /diagnose/weekly-revise` [cron] · `POST /prompts/preview` ·
+`GET /prompts/defaults` · `POST /prompts/invalidate-cache` · `GET /users` · `PATCH /users/:userId/plan` ·
+`POST /users/:userId/reset?mode=plan|full` · `GET /rag/status` · `POST /rag/reindex`
+
+### Infra LLM (`shared/infra/llm`)
+- **Factory** realtime + async (env `LLM_REALTIME_PROVIDER` / `LLM_ASYNC_PROVIDER`, default gemini).
+- **Adapters**: Gemini (primário), Groq, Together. Embeddings `text-embedding-004`.
+- **Gemini Live**: áudio nativo, vozes (Charon default), token efêmero criado server-side.
+- **Prompts** (`prompts/`): 8 builders — `plan-init`, `plan-revision`, `live-coach`, `post-run-report`,
+  `post-run-report-enriched`, `period-analysis`, `coach-chat`, `exam-analysis`. + contexts (perfil, run, RAG)
+  + personas (motivador/técnico/sereno) + defaults com override via Firestore + **decision layer**
+  (silencia cue por frequência/DND → server responde 204).
+- **RAG**: corpus de conhecimento de corrida embeddado em Firestore.
+
+---
+
+## 5. Modelo de Dados (Firestore)
+
+```
+users/{uid}                              # perfil (level, goal, frequency, gênero, biometria,
+  │                                      #   medicalConditions, coachPersonality/messageFrequency,
+  │                                      #   units, subscriptionPlanId, planRevisions{usedThisWeek,max,resetAt})
+  ├─ onboarding_history/{ts}
+  ├─ plans/{planId}                      # goal, level, weeksCount, status, startDate, weeks[], rationale
+  │   ├─ revisions/{revisionId}          # auto/manual/checkpoint/weekly_cron
+  │   ├─ checkpoints/{weekNumber}        # questionário subjetivo semanal
+  │   └─ weekly_reports/{weekNumber}     # métricas + análise LLM
+  ├─ runs/{runId}                        # distanceM, durationS, avgPace, avg/maxBpm, elevationGain,
+  │   │                                  #   calories(MET), xpEarned, splits[], coachReportId
+  │   ├─ gps_points/{id}                 # lat/lng/ts/accuracy/altitude?/pace?/bpm?
+  │   ├─ coach_messages/{id}             # log de cues/voz (replay)
+  │   └─ reports/{id}                    # report pós-corrida (two-phase)
+  ├─ biometric_samples/{id}              # bpm/hrv/sleep/steps/spo2/weight/... (source: apple_health/health_connect/...)
+  ├─ devices/{id}                        # wearables pareados
+  ├─ exams/{id}                          # ⚠️ HTTP atual usa in-memory (não persiste de fato)
+  ├─ period-analysis/{id}                # análise multi-semana cacheada
+  └─ notifications/{id}
+
+app_config/{feature_flags|subscription_plans|notification_devices|prompts|coach}
+running_knowledge_chunks/{id}            # base RAG embeddada
+```
+
+**Estruturas-chave:**
+- **PlanSession**: dayOfWeek, type, distanceKm, targetPace, durationMin, hidratação, nutrição,
+  `executionSegments[]` (kmStart/kmEnd, phase warmup|main|interval|recovery|cooldown, targetPace, instrução),
+  executedRunId.
+- **KmSplit** (em Run): kmIndex, durationS, avgPaceMinKm, avgBpm, calories, elevationGain.
+
+Índices compostos (`firestore.indexes.json`): `exams(deletedAt,uploadedAt)`,
+`planRevisions(planId,createdAt)`, `biometric_samples(type,recordedAt)`.
+
+---
+
+## 6. Frontend — Features Flutter
+
+22 features em `app/lib/features/`. Router go_router (~26 rotas) com guards de auth/onboarding/paywall.
+
+| Feature | O que faz |
+|---|---|
+| **splash / intro / coach_intro** | Slides pré-login + briefing do Coach.AI (4 slides) |
+| **auth** | Login Google OAuth + Phone SMS; provision/onboarding/patch de perfil |
+| **onboarding** | ~15 passos (identidade, nível, objetivo, frequência, pace, gênero, wearable, condições médicas, rotina, data início). Freemium→paywall, premium→plan-loading |
+| **run** | `RunBloc` compartilhado prep→run→report→share; GPS (web=polling), splits km-a-km, cues SSE + Gemini Live (voz), stall detection 30s, mapa, pause/resume |
+| **training** | Plano mensal/semanal, geração + polling, PlanDetail, DayDetail (segments km-a-km), RevisionFlow, Checkpoint, WeeklyReport. Tabs PLAN \| ADJUSTMENTS |
+| **coach / coach_live** | `CoachPeriodBloc` (análise de período); CoachLivePage via WebSocket (texto MVP + chunks de áudio) |
+| **home** | `HomeCubit`: hero com stats, sessão do dia, week grid, última corrida, notificações, upsell premium |
+| **history** | Tabs DADOS \| CORRIDAS \| BENCH; RunDetail (splits, mapa, zonas FC, coach quote); replay da conversa do coach |
+| **profile** | Conta, edição, settings (coach/notifications/units), saúde (index/devices/trends/zones), exames (upload+OCR) |
+| **dashboard** | Analytics agregado (PRs, tendências) |
+| **gamification** | Tabs BADGES \| XP \| STREAK (18+ badges, unlock a partir das runs) |
+| **notifications** | `NotificationsCubit` + FCM (render embutido na Home) |
+| **biometrics** | `HealthSyncService` (HealthKit/Health Connect), ingest batch |
+| **subscriptions / paywall** | `SubscriptionController` (gating de features); PaywallPage (premium fake — PATCH premium:true) |
+| **steps / assessment** | Componentes reutilizáveis de fluxo multi-step |
+| **admin** | Config de coach/prompts, upload RAG |
+| **shared/widgets/figma** | ~48 widgets do design system (JetBrains Mono, FigmaColors, tokens) |
+
+`main.dart`: Firebase init, Hive, themeController, FCM register, health sync em background, limpeza de
+sessão anônima. `apiClient`: base `API_BASE_URL` (dart-define) + token Firebase + refresh em 401.
+
+---
+
+## 7. Integrações
+
+- **Firebase Auth** — Google + Phone SMS. Anônimo descontinuado (limpo no boot). Server verifica ID token.
+- **Gemini** — async (planos, reports, análise, OCR de exames) + **Gemini Live** (voz em tempo real).
+  App conecta **direto** no Gemini Live usando token efêmero emitido pelo server (API key fica no server).
+- **HealthKit (iOS) / Health Connect (Android)** via pacote `health`: FC, FC repouso, HRV, sono, passos,
+  SpO2, peso, energia, respiração. Sincroniza em batch (≤500) pro `/biometrics/samples`.
+  ⚠️ Garmin/Polar/Strava só entram **se o dado passar por HealthKit/Health Connect** — sem API direta.
+- **FCM** — push notifications (registro de device token).
+- **Firebase Storage / GCS** — upload de exames e arquivos de RAG.
+
+---
+
+## 8. Jornadas do Usuário (reais)
+
+**J1 — Onboarding:** Splash → Intro (slides) → Login (Google/Phone) → provision → Onboarding (~15 passos) →
+freemium cai em Paywall / premium vai pra Plan Loading (gera plano via LLM, polling) → Coach Intro → Home.
+
+**J2 — Registrar corrida:** Home/Training → Prep (tipo, alvo, alertas) → Active Run (GPS, métricas, splits
+km-a-km, coach por voz a cada km/evento, stall detection 30s) → Finalizar → Report (splits, mapa, stats,
+narrativa do coach) → Share (card + mapa) → corrida some no histórico.
+
+**J3 — Acompanhar progresso:** History → DADOS (stats agregadas por período + análise) / CORRIDAS (lista →
+RunDetail com splits, mapa, zonas FC, coach quote, replay) / BENCH (percentil vs coorte). Dashboard (PRs/tendências).
+
+**J4 — Plano de treino:** Training → ver plano mensal/semanal → DayDetail (segmentos km-a-km, hidratação,
+nutrição) → executar como corrida (vincula sessão) → Checkpoint semanal (questionário) → revisão automática
+ou manual → WeeklyReport (análise LLM).
+
+**J5 — Saúde:** Profile → Health → conectar wearable (HealthKit/Health Connect) → sincroniza biometria →
+Trends (FC repouso, HRV, sono, passos) / Zones (zonas FC) / Exams (upload + OCR + análise do coach).
+
+**J6 — Gamificação:** Gamification → BADGES / XP / STREAK, derivados das corridas.
+
+> ❌ Jornadas do `DOCUMENTATION.md` antigo que **não existem**: feed social, seguir corredores, grupos,
+> desafios coletivos/leaderboards, integração direta com Strava/Garmin/Polar.
+
+---
+
+## 9. Configuração, Deploy & CI
+
+- **App build**: dart-defines `API_BASE_URL`, `FIREBASE_VAPID_KEY`. Staging aponta pro Cloud Run staging.
+- **Server env** (`.env.staging`/`.env.production`): `FIREBASE_PROJECT_ID`, `GEMINI_API_KEY`,
+  `LLM_*_PROVIDER`, `TTS_*`, `X_CRON_TOKEN`, etc.
+- **Cloud Run**: projeto `runnin-494520`, região `southamerica-east1`, scale-to-zero, via `deploy-server*.sh`.
+- **Firebase Hosting**: build web → `firebase deploy` via `deploy-web*.sh` (no-cache nos entrypoints).
+- **Codemagic** (`codemagic.yaml`): `android-debug` (push main), `android-release` (tag v*, Play interno),
+  `web-staging` (push main), `web-production` (tag v*), `ios-release` (desativado). Instâncias mac: `mac_mini_m1`.
+- **Credencial GCP do server**: `server/runnin-google-service-account.json` (gitignored).
+
+---
+
+## 10. Testes
+
+- **App**: ~8 widget/bloc tests (`app/test/`) — steps, home, gamification, body metrics. Sem integração/E2E.
+- **Server**: **0 testes**. Sem runner configurado.
+
+---
+
+## 11. Itens implementados-mas-frágeis
+
+1. ⚠️ **Exames não persistem** — `exam.controller.ts` usa `InMemoryExamRepository` (some em restart),
+   apesar de existir `FirestoreExamRepository` + índice. `analyze-exam.use-case` usa Firestore por default
+   → wiring inconsistente.
+2. ⚠️ **Pagamento é fake** — Paywall só faz `PATCH /users/me {premium:true}`; sem Stripe/StoreKit/cobrança.
+3. ⚠️ **Coach Live no app é MVP** — texto + chunks de áudio; voz bidirecional parcial.
+4. ⚠️ **Cobertura de testes mínima** — server sem testes; app só widget tests.
+5. ⚠️ **Riverpod** está como dependência mas é pouco usado (state real é bloc/cubit/ChangeNotifier).
+
+---
+
+## 12. Oportunidades de melhoria (base para roadmap)
+
+- **Persistência de exames** — apontar o controller pro `FirestoreExamRepository` (corrige perda de dados).
+- **Pagamento real** — integrar StoreKit/Play Billing (mobile) e/ou Stripe (web); substituir o premium fake.
+- **Coach Live completo** — fechar voz bidirecional no app (mic → Gemini Live → áudio) com UX estável.
+- **Testes** — cobrir use-cases do server (Zod + lógica de plano/splits/calorias) e fluxos críticos do app.
+- **Observabilidade** — métricas/erros estruturados além do Winston (ex: Sentry/Crashlytics no app já existe).
+- **Hardening de auth/admin** — revisar custom claims e rotas cron-token.
+
+---
+
+*Snapshot gerado por auditoria de código em 2026-05-19 — fonte fiel da estrutura atual,
+substituindo o template genérico anterior.*
