@@ -490,20 +490,23 @@ export async function postRagPurge(_req: Request, res: Response, next: NextFunct
   }
 }
 
-/** Apaga todos os documentos de uma collection em lotes de 400. */
+/**
+ * Apaga todos os documentos de uma collection. Deleta POR DOCUMENTO (em
+ * ondas de 25) em vez de batch — chunks de RAG carregam embeddings de 3072
+ * floats e um batch de centenas estoura "Transaction too big" no Firestore.
+ */
 async function deleteAllDocs(
   col: FirebaseFirestore.CollectionReference,
 ): Promise<number> {
-  const db = getFirestore();
   let total = 0;
   for (;;) {
-    const snap = await col.limit(400).get();
+    const snap = await col.limit(300).get();
     if (snap.empty) break;
-    const batch = db.batch();
-    snap.docs.forEach(doc => batch.delete(doc.ref));
-    await batch.commit();
+    for (let i = 0; i < snap.docs.length; i += 25) {
+      await Promise.all(snap.docs.slice(i, i + 25).map(doc => doc.ref.delete()));
+    }
     total += snap.size;
-    if (snap.size < 400) break;
+    if (snap.size < 300) break;
   }
   return total;
 }

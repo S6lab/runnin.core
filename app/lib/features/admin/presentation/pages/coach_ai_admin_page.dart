@@ -278,7 +278,7 @@ class _RagPanelState extends State<_RagPanel> {
   }
 
   Future<void> _reindex() async {
-    setState(() => _busy = true);
+    setState(() { _busy = true; _msg = null; });
     try {
       final r = await widget.rag.reindex();
       if (mounted) setState(() => _msg = 'Reindex: ${r.totalChunks} chunks, ${r.withEmbedding} com embedding.');
@@ -298,7 +298,7 @@ class _RagPanelState extends State<_RagPanel> {
       if (mounted) setState(() => _msg = 'Formato não suportado.');
       return;
     }
-    setState(() => _busy = true);
+    setState(() { _busy = true; _msg = null; });
     try {
       final safe = file.name.trim().replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '-');
       final ts = DateTime.now().toUtc().toIso8601String().replaceAll(':', '-');
@@ -333,7 +333,7 @@ class _RagPanelState extends State<_RagPanel> {
       ),
     );
     if (ok != true) return;
-    setState(() => _busy = true);
+    setState(() { _busy = true; _msg = null; });
     try {
       final r = await widget.rag.purge();
       if (mounted) {
