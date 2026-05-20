@@ -52,4 +52,16 @@ export class FirestoreExamRepository implements ExamRepository {
       extractedData,
     });
   }
+
+  async countByMonth(userId: string, year: number, month: number): Promise<number> {
+    const start = new Date(year, month - 1, 1).toISOString();
+    const end = new Date(year, month, 1).toISOString();
+    const snap = await this.col(userId)
+      .where('deletedAt', '==', null)
+      .where('uploadedAt', '>=', start)
+      .where('uploadedAt', '<', end)
+      .count()
+      .get();
+    return snap.data().count;
+  }
 }

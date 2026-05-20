@@ -139,7 +139,7 @@ quando indicado `[público]` ou `[cron]`. `[premium]` = exige feature do plano (
 
 ### exams — `/v1/exams`
 `GET /` · `POST /upload-url` [premium] · `POST /:examId/finalize` [premium] · `DELETE /:examId`
-(OCR multimodal Gemini — ⚠️ persistência via in-memory, ver §11)
+(OCR multimodal Gemini. Persiste via Firestore + quota mensal `examsPerMonth` validada no server.)
 
 ### biometrics — `/v1/biometrics`
 `POST /samples` (ingest batch) · `GET /latest/:type` · `GET /summary` · `POST /seed-test-user`
@@ -189,7 +189,7 @@ users/{uid}                              # perfil (level, goal, frequency, gêne
   │   └─ reports/{id}                    # report pós-corrida (two-phase)
   ├─ biometric_samples/{id}              # bpm/hrv/sleep/steps/spo2/weight/... (source: apple_health/health_connect/...)
   ├─ devices/{id}                        # wearables pareados
-  ├─ exams/{id}                          # ⚠️ HTTP atual usa in-memory (não persiste de fato)
+  ├─ exams/{id}                          # OCR Gemini; persiste via FirestoreExamRepository + quota/mês
   ├─ period-analysis/{id}                # análise multi-semana cacheada
   └─ notifications/{id}
 
@@ -298,9 +298,8 @@ Trends (FC repouso, HRV, sono, passos) / Zones (zonas FC) / Exams (upload + OCR 
 
 ## 11. Itens implementados-mas-frágeis
 
-1. ⚠️ **Exames não persistem** — `exam.controller.ts` usa `InMemoryExamRepository` (some em restart),
-   apesar de existir `FirestoreExamRepository` + índice. `analyze-exam.use-case` usa Firestore por default
-   → wiring inconsistente.
+1. ✅ **Exames persistem (resolvido 2026-05-19)** — `exam.controller.ts` usa `FirestoreExamRepository` e a
+   geração de upload-url valida a quota mensal (`examsPerMonth`) via `GetUserFeaturesUseCase`.
 2. ⚠️ **Pagamento é fake** — Paywall só faz `PATCH /users/me {premium:true}`; sem Stripe/StoreKit/cobrança.
 3. ⚠️ **Coach Live no app é MVP** — texto + chunks de áudio; voz bidirecional parcial.
 4. ⚠️ **Cobertura de testes mínima** — server sem testes; app só widget tests.

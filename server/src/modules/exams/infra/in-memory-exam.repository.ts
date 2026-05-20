@@ -45,4 +45,14 @@ export class InMemoryExamRepository implements ExamRepository {
     if (!exam) throw new NotFoundError('Exam');
     await this.update(examId, userId, { extractedData });
   }
+
+  async countByMonth(userId: string, year: number, month: number): Promise<number> {
+    const start = new Date(year, month - 1, 1).getTime();
+    const end = new Date(year, month, 1).getTime();
+    return Array.from(this.exams.values()).filter(e => {
+      if (e.userId !== userId || e.deletedAt) return false;
+      const t = new Date(e.uploadedAt).getTime();
+      return t >= start && t < end;
+    }).length;
+  }
 }

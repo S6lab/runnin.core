@@ -1,10 +1,11 @@
 import { Request, Response, NextFunction } from 'express';
 import { GenerateUploadUrlUseCase, GenerateUploadUrlInput } from '../use-cases/generate-exam-upload-url.use-case';
-import { InMemoryExamRepository } from '../infra/in-memory-exam.repository';
+import { FirestoreExamRepository } from '../infra/firestore-exam.repository';
 import { NotFoundError } from '@shared/errors/app-error';
+import { container } from '@shared/container';
 
-const repo = new InMemoryExamRepository();
-const generateUploadUrlUseCase = new GenerateUploadUrlUseCase(repo);
+const repo = new FirestoreExamRepository();
+const generateUploadUrlUseCase = new GenerateUploadUrlUseCase(repo, container.useCases.getUserFeatures);
 
 export async function postGenerateUploadUrl(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
