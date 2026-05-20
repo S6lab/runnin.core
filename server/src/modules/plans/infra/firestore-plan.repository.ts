@@ -23,6 +23,14 @@ export class FirestorePlanRepository implements PlanRepository {
     return { id: d.id, userId, ...d.data() } as Plan;
   }
 
+  async listByUser(userId: string): Promise<Plan[]> {
+    const snap = await this.col(userId).get();
+    if (snap.empty) return [];
+    return snap.docs
+      .map((d) => ({ id: d.id, userId, ...d.data() }) as Plan)
+      .sort((a, b) => (a.createdAt ?? '').localeCompare(b.createdAt ?? ''));
+  }
+
   async findById(planId: string, userId: string): Promise<Plan | null> {
     const d = await this.col(userId).doc(planId).get();
     if (!d.exists) return null;
