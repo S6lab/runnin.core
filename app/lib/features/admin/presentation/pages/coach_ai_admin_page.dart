@@ -1,7 +1,9 @@
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:runnin/core/theme/app_palette.dart';
+import 'package:runnin/features/admin/data/admin_file_picker.dart';
 import 'package:runnin/features/admin/data/admin_rag_datasource.dart';
 
 /// Console do Coach.AI organizado pelos 5 MOMENTOS da jornada (arquitetura v3:
@@ -288,6 +290,34 @@ class _RagPanelState extends State<_RagPanel> {
     }
   }
 
+  Future<void> _upload() async {
+    const allowed = ['pdf', 'txt', 'md', 'csv', 'json', 'doc', 'docx'];
+    final file = await pickAdminFile(allowed);
+    if (file == null) return;
+    if (!allowed.contains(file.extension)) {
+      if (mounted) setState(() => _msg = 'Formato não suportado.');
+      return;
+    }
+    setState(() => _busy = true);
+    try {
+      final safe = file.name.trim().replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '-');
+      final ts = DateTime.now().toUtc().toIso8601String().replaceAll(':', '-');
+      final ref = FirebaseStorage.instance.ref('rag/uploads/${ts}_$safe');
+      await ref.putData(
+        file.bytes,
+        SettableMetadata(customMetadata: {'originalName': file.name, 'ragStatus': 'pending'}),
+      );
+      // Reindexa pra embedar o novo arquivo na base.
+      final r = await widget.rag.reindex();
+      if (mounted) setState(() => _msg = 'Arquivo enviado e reindexado: ${r.totalChunks} chunks.');
+      await _load();
+    } catch (e) {
+      if (mounted) setState(() => _msg = 'Erro no upload: $e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   Future<void> _purge() async {
     final ok = await showDialog<bool>(
       context: context,
@@ -344,6 +374,7 @@ class _RagPanelState extends State<_RagPanel> {
           runSpacing: 8,
           children: [
             OutlinedButton(onPressed: _busy ? null : _load, child: const Text('ATUALIZAR')),
+            OutlinedButton(onPressed: _busy ? null : _upload, child: const Text('ENVIAR ARQUIVO')),
             OutlinedButton(onPressed: _busy ? null : _reindex, child: const Text('REINDEXAR')),
             ElevatedButton(
               style: ElevatedButton.styleFrom(backgroundColor: palette.error),

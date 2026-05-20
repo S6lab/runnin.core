@@ -24,8 +24,6 @@ export interface LiveCoachBuildInput {
   runtimeContextJson: string;
   ctx: RunContextInput & { question?: string };
   ragContext: string;
-  /** legacy fallback: CoachConfigService.livePrompt — overrides systemPrompt when set */
-  legacyLivePrompt?: string;
 }
 
 export async function buildLiveCoachPrompt(args: LiveCoachBuildInput): Promise<BuiltPrompt> {
@@ -49,15 +47,10 @@ export async function buildLiveCoachPrompt(args: LiveCoachBuildInput): Promise<B
     rag: args.ragContext,
   };
 
-  // Prioridade: novo store (firestore prompts) > default em código > legacy livePrompt (fallback final)
+  // Fonte única: config-store (firestore prompts > default em código). Sem
+  // override legado — o prompt da voz é editado em /admin/prompts (live-coach).
   let systemPrompt = renderTemplate(config.systemPrompt, values);
-  let resolvedSource = source;
-
-  if (source === 'default' && args.legacyLivePrompt && args.legacyLivePrompt.trim().length > 0) {
-    // Só usa legacy quando admin ainda não setou nada no novo store
-    systemPrompt = `${args.legacyLivePrompt}\n\nTOM (persona):\n${tone}`;
-    resolvedSource = 'firestore';
-  }
+  const resolvedSource = source;
 
   if (!isRunTime) {
     systemPrompt += '\n\nFora da corrida: até 4 frases curtas, cabendo em até 30 segundos de áudio.';
