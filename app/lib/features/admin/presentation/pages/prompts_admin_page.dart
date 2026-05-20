@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:dio/dio.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import 'package:runnin/features/admin/data/admin_prompts_datasource.dart';
 
@@ -9,8 +10,11 @@ const _promptIds = <String>[
   'plan-init',
   'plan-revision',
   'live-coach',
+  'live-voice',
   'post-run-report',
+  'post-run-report-enriched',
   'period-analysis',
+  'weekly-report',
   'coach-chat',
   'exam-analysis',
 ];
@@ -109,6 +113,11 @@ class _PromptsAdminPageState extends State<PromptsAdminPage> with SingleTickerPr
       appBar: AppBar(
         title: const Text('Prompts & Personas'),
         actions: [
+          IconButton(
+            tooltip: 'Console Coach.AI (por momento)',
+            onPressed: () => context.push('/admin/coach-ai'),
+            icon: const Icon(Icons.hub_outlined),
+          ),
           IconButton(
             tooltip: 'Recarregar',
             onPressed: _loading ? null : _load,

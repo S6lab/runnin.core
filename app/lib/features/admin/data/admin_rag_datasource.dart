@@ -42,6 +42,7 @@ class RagStatusSummary {
   final int pending;
   final int totalChunksInUse;
   final int chunksWithEmbedding;
+  final int vinculanteChunks;
   final int builtinCorpusChunks;
 
   RagStatusSummary({
@@ -50,6 +51,7 @@ class RagStatusSummary {
     required this.pending,
     required this.totalChunksInUse,
     required this.chunksWithEmbedding,
+    required this.vinculanteChunks,
     required this.builtinCorpusChunks,
   });
 
@@ -59,8 +61,65 @@ class RagStatusSummary {
         pending: (j['pending'] as num).toInt(),
         totalChunksInUse: (j['totalChunksInUse'] as num).toInt(),
         chunksWithEmbedding: (j['chunksWithEmbedding'] as num).toInt(),
+        vinculanteChunks: (j['vinculanteChunks'] as num?)?.toInt() ?? 0,
         builtinCorpusChunks: (j['builtinCorpusChunks'] as num).toInt(),
       );
+}
+
+/// Chunk da base RAG com os metadados v3 (Doc 1) pra inspeção no admin.
+class RagChunkInfo {
+  final String id;
+  final String? secao;
+  final String title;
+  final List<String> categoria;
+  final bool vinculante;
+  final List<String> encaminhamento;
+  final bool hasEmbedding;
+
+  RagChunkInfo({
+    required this.id,
+    required this.secao,
+    required this.title,
+    required this.categoria,
+    required this.vinculante,
+    required this.encaminhamento,
+    required this.hasEmbedding,
+  });
+
+  factory RagChunkInfo.fromJson(Map<String, dynamic> j) => RagChunkInfo(
+        id: j['id'] as String,
+        secao: j['secao'] as String?,
+        title: (j['title'] as String?) ?? '',
+        categoria: ((j['categoria'] as List?) ?? []).map((e) => e.toString()).toList(),
+        vinculante: j['vinculante'] == true,
+        encaminhamento: ((j['encaminhamento'] as List?) ?? []).map((e) => e.toString()).toList(),
+        hasEmbedding: j['hasEmbedding'] == true,
+      );
+}
+
+class RagPurgeResult {
+  final int ragChunks;
+  final int ragDocuments;
+  final int storageFiles;
+  final int reindexedChunks;
+
+  RagPurgeResult({
+    required this.ragChunks,
+    required this.ragDocuments,
+    required this.storageFiles,
+    required this.reindexedChunks,
+  });
+
+  factory RagPurgeResult.fromJson(Map<String, dynamic> j) {
+    final purged = (j['purged'] as Map<String, dynamic>?) ?? {};
+    final reindexed = (j['reindexed'] as Map<String, dynamic>?) ?? {};
+    return RagPurgeResult(
+      ragChunks: (purged['ragChunks'] as num?)?.toInt() ?? 0,
+      ragDocuments: (purged['ragDocuments'] as num?)?.toInt() ?? 0,
+      storageFiles: (purged['storageFiles'] as num?)?.toInt() ?? 0,
+      reindexedChunks: (reindexed['totalChunks'] as num?)?.toInt() ?? 0,
+    );
+  }
 }
 
 class RagReindexResult {
@@ -85,19 +144,29 @@ class RagReindexResult {
 }
 
 class AdminRagDatasource {
-  Future<({List<RagDocStatus> docs, RagStatusSummary summary})> status() async {
+  Future<({List<RagDocStatus> docs, List<RagChunkInfo> chunks, RagStatusSummary summary})>
+      status() async {
     final res = await apiClient.get<Map<String, dynamic>>('/admin/rag/status');
     final data = res.data ?? {};
     final docs = ((data['documents'] as List?) ?? [])
         .map((e) => RagDocStatus.fromJson(e as Map<String, dynamic>))
         .toList();
+    final chunks = ((data['chunks'] as List?) ?? [])
+        .map((e) => RagChunkInfo.fromJson(e as Map<String, dynamic>))
+        .toList();
     final summary = RagStatusSummary.fromJson(
         data['summary'] as Map<String, dynamic>);
-    return (docs: docs, summary: summary);
+    return (docs: docs, chunks: chunks, summary: summary);
   }
 
   Future<RagReindexResult> reindex() async {
     final res = await apiClient.post<Map<String, dynamic>>('/admin/rag/reindex');
     return RagReindexResult.fromJson(res.data ?? {});
+  }
+
+  /// Apaga toda a base RAG (chunks/documents/uploads) e reindexa o corpus.
+  Future<RagPurgeResult> purge() async {
+    final res = await apiClient.post<Map<String, dynamic>>('/admin/rag/purge');
+    return RagPurgeResult.fromJson(res.data ?? {});
   }
 }
