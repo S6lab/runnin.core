@@ -1,9 +1,9 @@
-import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:runnin/core/network/api_client.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
+import 'package:runnin/features/subscriptions/data/subscription_remote_datasource.dart';
 import 'package:runnin/shared/widgets/runnin_app_bar.dart';
 
 /// Paywall pós-assessment ou ao tentar acessar feature premium.
@@ -23,6 +23,7 @@ class PaywallPage extends StatefulWidget {
 }
 
 class _PaywallPageState extends State<PaywallPage> {
+  final _datasource = SubscriptionRemoteDatasource();
   final _dio = apiClient;
   String _priceLabel = 'R\$ 19,90';
   String _periodLabel = '/mês';
@@ -38,17 +39,16 @@ class _PaywallPageState extends State<PaywallPage> {
 
   Future<void> _loadPricing() async {
     try {
-      final res = await _dio.get<Map<String, dynamic>>('/admin/pricing');
-      final d = res.data ?? {};
+      final plans = await _datasource.listPlans();
+      final pro = plans.firstWhere((p) => p.id == 'pro', orElse: () => plans.first);
       if (mounted) {
         setState(() {
-          _priceLabel = (d['priceLabel'] as String?) ?? _priceLabel;
-          _periodLabel = (d['periodLabel'] as String?) ?? _periodLabel;
+          _priceLabel = pro.priceLabel.isNotEmpty ? pro.priceLabel : _priceLabel;
+          _periodLabel = pro.periodLabel.isNotEmpty ? pro.periodLabel : _periodLabel;
           _loading = false;
         });
       }
     } catch (_) {
-      // Endpoint público de pricing pode não existir; usa defaults
       if (mounted) setState(() => _loading = false);
     }
   }
