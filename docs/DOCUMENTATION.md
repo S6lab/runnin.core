@@ -178,7 +178,11 @@ personalizada ainda; é um guia genérico, não dado por usuário.)
 `avgSleepHours` e `avgHrv` são `null` quando não há amostras do tipo na janela.
 
 ### stats — `/v1/stats`
-`GET /aggregate?period=week|month|threeMonths` · `GET /totals`
+`GET /aggregate?period=week|month|threeMonths` · `GET /totals` ·
+`GET /breakdown?period=week|month|threeMonths` (aba DADOS do Histórico: 11 stats consolidados do período —
+corridas, dist. total/média, tempo, pace, calorias, nível, BPM méd/máx, streak, XP — + buckets de volume
+planejado-vs-realizado e pace projetado-vs-médio por dia/semana/mês; cobre histórico de planos. nível/streak
+são lifetime)
 
 ### subscriptions — `/v1/subscriptions`
 `GET /plans` [público] · `GET /me` · `POST /seed` [público]
@@ -256,7 +260,7 @@ running_knowledge_chunks/{id}            # base RAG embeddada
 | **training** | Plano mensal/semanal, geração + polling, PlanDetail, DayDetail (segments km-a-km), RevisionFlow, Checkpoint, WeeklyReport. Tabs PLAN \| ADJUSTMENTS |
 | **coach / coach_live** | `CoachPeriodBloc` (análise de período); CoachLivePage via WebSocket (texto MVP + chunks de áudio) |
 | **home** | `HomeCubit`: hero com stats, sessão do dia, week grid, última corrida, notificações, upsell premium |
-| **history** | Tabs DADOS \| CORRIDAS \| BENCH; RunDetail (splits, mapa, zonas FC, coach quote); replay da conversa do coach |
+| **history** | Submenus: conteúdo (DADOS \| CORRIDAS \| BENCH) em cima, período (SEMANA \| MÊS \| 3 MESES) embaixo. DADOS = 11 stats + "VOLUME ACUMULADO NO PERÍODO" (planejado vs realizado) + "PACE DO PERÍODO" (projetado vs médio), via `/stats/breakdown`. Analytics consolidado aqui (sem mais atalho na Home/Perfil). RunDetail (splits, mapa, zonas FC, coach quote) |
 | **profile** | Conta, edição, settings (coach/notifications/units), saúde (index/devices/trends/zones), exames (upload+OCR). `UnitsSettingsPage` carrega preferências do backend via `getMe()` no `initState` (fallback Hive para resposta rápida, backend sobrescreve como source of truth) |
 | **dashboard** | Analytics agregado (PRs, tendências) |
 | **gamification** | Tabs BADGES \| XP \| STREAK (18+ badges, unlock a partir das runs) |
@@ -299,8 +303,10 @@ freemium cai em Paywall / premium vai pra Plan Loading (gera plano via LLM, poll
 km-a-km, coach por voz a cada km/evento, stall detection 30s) → Finalizar → Report (splits, mapa, stats,
 narrativa do coach) → Share (card + mapa) → corrida some no histórico.
 
-**J3 — Acompanhar progresso:** History → DADOS (stats agregadas por período + análise) / CORRIDAS (lista →
-RunDetail com splits, mapa, zonas FC, coach quote, replay) / BENCH (percentil vs coorte). Dashboard (PRs/tendências).
+**J3 — Acompanhar progresso:** History → escolhe conteúdo (DADOS/CORRIDAS/BENCH) e período
+(SEMANA/MÊS/3 MESES). DADOS = 11 stats consolidados + volume planejado-vs-realizado + pace projetado-vs-médio
+(via `/stats/breakdown`) + análise do coach / CORRIDAS (lista → RunDetail com splits, mapa, zonas FC, coach
+quote, replay) / BENCH (percentil vs coorte). Analytics consolidado no Histórico (sem atalho na Home/Perfil).
 
 **J4 — Plano de treino:** Training → periodização mensal (cards em bullets: bloco/objetivo/carga/targets;
 semanas 3+ marcadas "esqueleto") → semana (sessões com marcador "concluído" por corrida real) → DayDetail
