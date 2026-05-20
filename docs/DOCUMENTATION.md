@@ -241,7 +241,7 @@ running_knowledge_chunks/{id}            # base RAG embeddada
 | **coach / coach_live** | `CoachPeriodBloc` (análise de período); CoachLivePage via WebSocket (texto MVP + chunks de áudio) |
 | **home** | `HomeCubit`: hero com stats, sessão do dia, week grid, última corrida, notificações, upsell premium |
 | **history** | Tabs DADOS \| CORRIDAS \| BENCH; RunDetail (splits, mapa, zonas FC, coach quote); replay da conversa do coach |
-| **profile** | Conta, edição, settings (coach/notifications/units), saúde (index/devices/trends/zones), exames (upload+OCR) |
+| **profile** | Conta, edição, settings (coach/notifications/units), saúde (index/devices/trends/zones), exames (upload+OCR). `UnitsSettingsPage` carrega preferências do backend via `getMe()` no `initState` (fallback Hive para resposta rápida, backend sobrescreve como source of truth) |
 | **dashboard** | Analytics agregado (PRs, tendências) |
 | **gamification** | Tabs BADGES \| XP \| STREAK (18+ badges, unlock a partir das runs) |
 | **notifications** | `NotificationsCubit` + FCM (render embutido na Home) |

@@ -35,6 +35,9 @@ class UserProfile {
   final Map<String, String>? dndWindow;
   final String? uiSkin;
   final String? textScale;
+  final String? unitsSystem;
+  final String? paceFormat;
+  final String? timeFormat;
 
   const UserProfile({
     required this.id,
@@ -68,6 +71,9 @@ class UserProfile {
     this.dndWindow,
     this.uiSkin,
     this.textScale,
+    this.unitsSystem,
+    this.paceFormat,
+    this.timeFormat,
   });
 
   bool get isPro {
@@ -119,6 +125,9 @@ class UserProfile {
         ?.map((k, v) => MapEntry(k, v as String)),
     uiSkin: j['uiSkin'] as String?,
     textScale: j['textScale'] as String?,
+    unitsSystem: j['unitsSystem'] as String?,
+    paceFormat: j['paceFormat'] as String?,
+    timeFormat: j['timeFormat'] as String?,
   );
 }
 

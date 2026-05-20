@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:runnin/core/network/api_client.dart';
 import 'package:runnin/core/theme/app_palette.dart';
@@ -31,17 +32,37 @@ class _UnitsSettingsPageState extends State<UnitsSettingsPage> {
   @override
   void initState() {
     super.initState();
-    _loadFromHive();
+    _loadSettings();
   }
 
-  void _loadFromHive() {
-    if (!Hive.isBoxOpen(_hiveBox)) return;
-    final box = Hive.box<dynamic>(_hiveBox);
-    setState(() {
-      _unitsSystem = box.get(_hiveKeyUnitsSystem, defaultValue: UnitsSystem.metric) as UnitsSystem? ?? UnitsSystem.metric;
-      _paceFormat = box.get(_hiveKeyPaceFormat, defaultValue: PaceFormat.minPerKm) as PaceFormat? ?? PaceFormat.minPerKm;
-      _timeFormat = box.get(_hiveKeyTimeFormat, defaultValue: '24h') as String? ?? '24h';
-    });
+  Future<void> _loadSettings() async {
+    if (Hive.isBoxOpen(_hiveBox)) {
+      final box = Hive.box<dynamic>(_hiveBox);
+      setState(() {
+        _unitsSystem = box.get(_hiveKeyUnitsSystem, defaultValue: UnitsSystem.metric) as UnitsSystem? ?? UnitsSystem.metric;
+        _paceFormat = box.get(_hiveKeyPaceFormat, defaultValue: PaceFormat.minPerKm) as PaceFormat? ?? PaceFormat.minPerKm;
+        _timeFormat = box.get(_hiveKeyTimeFormat, defaultValue: '24h') as String? ?? '24h';
+      });
+    }
+    try {
+      final ds = UserRemoteDatasource();
+      final profile = await ds.getMe();
+      if (profile == null || !mounted) return;
+      final us = profile.unitsSystem == 'imperial' ? UnitsSystem.imperial : UnitsSystem.metric;
+      final pf = profile.paceFormat == 'min_per_mi' ? PaceFormat.minPerMi : PaceFormat.minPerKm;
+      final tf = profile.timeFormat ?? '24h';
+      setState(() {
+        _unitsSystem = us;
+        _paceFormat = pf;
+        _timeFormat = tf;
+      });
+      if (Hive.isBoxOpen(_hiveBox)) {
+        final box = Hive.box<dynamic>(_hiveBox);
+        await box.put(_hiveKeyUnitsSystem, us.index);
+        await box.put(_hiveKeyPaceFormat, pf.index);
+        await box.put(_hiveKeyTimeFormat, tf);
+      }
+    } catch (_) {}
   }
 
   Future<void> _saveToHive() async {
