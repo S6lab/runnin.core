@@ -724,6 +724,11 @@ class _PrepViewState extends State<_PrepView> {
           }
         : _selectedType as Object;
     if (!context.mounted) return;
+    // push() mantém a PrepPage viva sob a /run (dispose não roda), então o
+    // stream do cue pre_run continua emitindo chunks e tocando por cima da
+    // saudação da corrida = "dois coaches". Corta o stream antes de navegar.
+    _coachSub?.cancel();
+    _coachSub = null;
     context.push('/run', extra: extra);
   }
 
