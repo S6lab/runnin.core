@@ -64,12 +64,16 @@ export class FirestoreRunRepository implements RunRepository {
   }
 
   async findByDateRange(userId: string, from: Date, to: Date): Promise<Run[]> {
+    // Só range em createdAt + orderBy (single-field, auto-indexado). Filtrar
+    // status='completed' em MEMÓRIA — combinar where(status==) com range exige
+    // índice composto que não existe em staging (gerava 500 em /stats/*).
     const snap = await this.col(userId)
-      .where('status', '==', 'completed')
       .where('createdAt', '>=', from.toISOString())
       .where('createdAt', '<=', to.toISOString())
       .orderBy('createdAt', 'asc')
       .get();
-    return snap.docs.map(d => ({ id: d.id, userId, ...d.data() }) as Run);
+    return snap.docs
+      .map(d => ({ id: d.id, userId, ...d.data() }) as Run)
+      .filter(r => r.status === 'completed');
   }
 }
