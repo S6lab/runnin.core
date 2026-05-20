@@ -34,19 +34,37 @@ class _HealthDevicesPageState extends State<HealthDevicesPage> {
                   const SizedBox(height: AppSpacing.md),
                   const _EmptyConnectedState(),
                   const SizedBox(height: AppSpacing.xxl),
-                  _FieldLabel(label: 'COMPATÍVEIS'),
+                  _FieldLabel(label: 'COMPATÍVEIS AGORA'),
                   const SizedBox(height: AppSpacing.md),
-                  ..._kCompatibleProviders.map(
-                    (p) => Padding(
-                      padding: const EdgeInsets.only(bottom: AppSpacing.md),
-                      child: FigmaCompatibleDeviceCard(
-                        icon: p.icon,
-                        deviceName: p.name,
-                        dataLabel: p.metrics,
-                        onConnect: () => _onConnectProvider(context, p),
+                  ..._kCompatibleProviders
+                      .where((p) => _isAvailableNow(p))
+                      .map(
+                        (p) => Padding(
+                          padding: const EdgeInsets.only(bottom: AppSpacing.md),
+                          child: FigmaCompatibleDeviceCard(
+                            icon: p.icon,
+                            deviceName: p.name,
+                            dataLabel: p.metrics,
+                            onConnect: () => _onConnectProvider(context, p),
+                          ),
+                        ),
                       ),
-                    ),
-                  ),
+                  const SizedBox(height: AppSpacing.xxl),
+                  _FieldLabel(label: 'EM BREVE'),
+                  const SizedBox(height: AppSpacing.md),
+                  ..._kCompatibleProviders
+                      .where((p) => !_isAvailableNow(p))
+                      .map(
+                        (p) => Padding(
+                          padding: const EdgeInsets.only(bottom: AppSpacing.md),
+                          child: FigmaCompatibleDeviceCard(
+                            icon: p.icon,
+                            deviceName: p.name,
+                            dataLabel: p.metrics,
+                            onConnect: () => _onConnectProvider(context, p),
+                          ),
+                        ),
+                      ),
                 ],
               ),
             ),
@@ -59,10 +77,13 @@ class _HealthDevicesPageState extends State<HealthDevicesPage> {
   /// Apple Watch + Samsung Galaxy Watch usam HealthKit / Health Connect direto
   /// via plugin `health`. Outros providers (Garmin, Polar, etc.) ainda exigem
   /// OAuth próprio — mostram dialog "em breve".
+  /// Apple Watch + Samsung sincronizam via HealthKit/Health Connect hoje.
+  /// Os demais providers ainda exigem OAuth próprio (em breve).
+  bool _isAvailableNow(_ProviderSpec p) =>
+      p.name == 'Apple Watch' || p.name == 'Samsung Galaxy Watch';
+
   void _onConnectProvider(BuildContext context, _ProviderSpec p) {
-    final isAppleWatch = p.name == 'Apple Watch';
-    final isSamsung = p.name == 'Samsung Galaxy Watch';
-    if ((isAppleWatch || isSamsung) && healthSyncService.isSupported) {
+    if (_isAvailableNow(p) && healthSyncService.isSupported) {
       _connectViaHealthBridge(context, p);
       return;
     }

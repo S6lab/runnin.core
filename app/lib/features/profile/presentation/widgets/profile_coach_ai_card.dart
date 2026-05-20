@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 
 class ProfileCoachAICard extends StatefulWidget {
@@ -109,9 +110,7 @@ class _ProfileCoachAICardState extends State<ProfileCoachAICard> {
                     children: [
                       Expanded(
                         child: ElevatedButton(
-                          onPressed: () {
-                            // TODO: Navigate to CoachAI close screen
-                          },
+                          onPressed: () => context.push('/history'),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.white,
                             foregroundColor: const Color(0xFFFF6B35),

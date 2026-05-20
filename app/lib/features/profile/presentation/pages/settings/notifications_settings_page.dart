@@ -75,7 +75,6 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
   final List<Map<String, String>> _channels = [
     {'type': 'push', 'label': 'Push'},
     {'type': 'in_app', 'label': 'In-App Banner'},
-    {'type': 'email', 'label': 'E-mail'},
   ];
 
   final List<Map<String, String>> _notificationTypes = [

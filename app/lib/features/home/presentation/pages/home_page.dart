@@ -351,7 +351,7 @@ class _IniciarSessaoButton extends StatelessWidget {
     // Coach AI message block from Figma
     final coachMessage = session == null
         ? 'Nenhuma sessao planejada para hoje. Use uma corrida livre ou revise a distribuicao da semana no modulo de treino.'
-        : 'Easy Run hoje — pace controlado entre ${session.targetPace ?? "livre"} e foco em cadencia e respiracao. Nao acelere nos ultimos 2km.';
+        : '${session.type} hoje — pace alvo ${session.targetPace ?? "livre"}. Foco em cadencia e respiracao.';
 
     // _CyberTodayCard movido pra dentro do _HeroSection (evita duplicação).
     // Aqui fica só Coach AI + CTA INICIAR.
