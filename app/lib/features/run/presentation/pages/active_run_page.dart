@@ -494,27 +494,6 @@ class _CoachMuteButton extends StatelessWidget {
     );
   }
 }
-
-class _CoachTalkButton extends StatelessWidget {
-  final String runId;
-  const _CoachTalkButton({required this.runId});
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.runninPalette;
-    return IconButton(
-      tooltip: 'Falar com o coach',
-      onPressed: () => context.push('/coach-live?runId=$runId'),
-      style: IconButton.styleFrom(
-        backgroundColor: palette.background.withValues(alpha: 0.82),
-        foregroundColor: palette.primary,
-        side: BorderSide(color: palette.border),
-      ),
-      icon: const Icon(Icons.chat_bubble_outline),
-    );
-  }
-}
-
 class _RouteMap extends StatelessWidget {
   final List<GpsPoint> points;
   const _RouteMap({required this.points});
@@ -691,69 +670,6 @@ class _RouteMapBodyState extends State<_RouteMapBody> {
     );
   }
 }
-
-class _WaitingForGpsMap extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.runninPalette;
-    final type = context.runninType;
-
-    return Container(
-      width: double.infinity,
-      height: double.infinity,
-      color: palette.background,
-      child: Stack(
-        children: [
-          Positioned.fill(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [palette.surface, palette.background],
-                ),
-              ),
-            ),
-          ),
-          Center(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(28, 28, 28, 180),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  SizedBox(
-                    width: 34,
-                    height: 34,
-                    child: CircularProgressIndicator(
-                      color: palette.primary,
-                      strokeWidth: 2,
-                    ),
-                  ),
-                  const SizedBox(height: 18),
-                  Text(
-                    'Aguardando GPS',
-                    style: type.displaySm,
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Libere a localização no navegador e aguarde o primeiro ponto real para abrir o mapa.',
-                    style: type.bodySm.copyWith(
-                      color: palette.muted,
-                      height: 1.45,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _StatsOverlay extends StatelessWidget {
   final RunState state;
   final String initialType;
