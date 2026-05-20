@@ -61,8 +61,19 @@ export interface UserProfile {
   uiSkin?: string;
   textScale?: string;
 
-  // Plan revisions quota
+  // Plan revisions quota (revisão manual do plano atual — /request-revision)
   planRevisions?: { usedThisWeek: number; max: number; resetAt: string };
+
+  // Plan generation/regeneration quota (gerar/descartar+gerar plano novo).
+  // Distinta de planRevisions e do checkpoint (que não consomem cota aqui).
+  // Novo usuário: até 2 gerações nos primeiros 7 dias (cobre erro na 1ª).
+  // Depois: 1 regeneração por janela semanal.
+  planGenerations?: {
+    total: number;          // total de planos gerados (lifetime)
+    firstPlanAt?: string;   // ISO da 1ª geração (define a janela de boas-vindas)
+    usedThisWeek: number;   // consumo na janela semanal (pós-boas-vindas)
+    resetAt: string;        // fim da janela semanal corrente
+  };
 
   // Exams monthly counter
   examsCount?: number;

@@ -120,35 +120,55 @@ export class GeneratePlanUseCase {
       throw err;
     }
 
-    // Overwrite quota: pro user pode substituir plano 1x/semana.
-    // Primeiro plano (sem existing ativo) não consome quota.
-    if (existing && existing.status !== 'failed' && opts.confirmOverwrite) {
-      const profile = await container.repos.users.findById(userId);
-      const quota = profile?.planRevisions ?? { usedThisWeek: 0, max: 1, resetAt: new Date().toISOString() };
-      const resetAt = new Date(quota.resetAt);
-      const now = new Date();
-      // Se janela semanal expirou, reseta
-      if (resetAt < now) {
-        quota.usedThisWeek = 0;
-        // próxima janela: 7 dias a partir de agora
-        quota.resetAt = new Date(now.getTime() + 7 * 24 * 3600 * 1000).toISOString();
-      }
-      if (quota.usedThisWeek >= quota.max) {
-        throw new CooldownError(
-          quota.resetAt,
-          `Limite semanal de novo plano atingido (${quota.max}/semana). Disponível em ${quota.resetAt}.`,
-        );
-      }
-      // Consome 1 unidade da quota
-      quota.usedThisWeek += 1;
-      if (profile) {
-        await container.repos.users.upsert({
-          ...profile,
-          planRevisions: quota,
-          updatedAt: now.toISOString(),
-        });
+    // Cota de geração/regeneração (separada de planRevisions e do checkpoint).
+    // - 1º plano (sem existing ativo): livre, só registra firstPlanAt.
+    // - Novo usuário (primeiros 7 dias após firstPlanAt): até 2 gerações totais
+    //   (cobre erro na 1ª) — não consome a cota semanal.
+    // - Depois: 1 regeneração por janela semanal.
+    const nowD = new Date();
+    const nowDIso = nowD.toISOString();
+    const WEEK_MS = 7 * 24 * 3600 * 1000;
+    const pg = profile.planGenerations ?? { total: 0, usedThisWeek: 0, resetAt: nowDIso };
+    const isOverwrite = !!(existing && existing.status !== 'failed' && opts.confirmOverwrite);
+
+    if (isOverwrite) {
+      const firstPlanAt = pg.firstPlanAt ? new Date(pg.firstPlanAt) : null;
+      const inWelcomeWindow = firstPlanAt
+        ? nowD.getTime() < firstPlanAt.getTime() + WEEK_MS
+        : false;
+      if (inWelcomeWindow) {
+        // Bônus de boas-vindas: até 2 gerações nos primeiros 7 dias.
+        if (pg.total >= 2) {
+          const availableAt = new Date(firstPlanAt!.getTime() + WEEK_MS).toISOString();
+          throw new CooldownError(
+            availableAt,
+            `Você já usou suas 2 gerações iniciais. Próxima geração disponível em ${availableAt}.`,
+          );
+        }
+      } else {
+        // Janela normal: 1 regeneração por semana.
+        if (new Date(pg.resetAt) < nowD) {
+          pg.usedThisWeek = 0;
+          pg.resetAt = new Date(nowD.getTime() + WEEK_MS).toISOString();
+        }
+        if (pg.usedThisWeek >= 1) {
+          throw new CooldownError(
+            pg.resetAt,
+            `Limite semanal de novo plano atingido (1/semana). Disponível em ${pg.resetAt}.`,
+          );
+        }
+        pg.usedThisWeek += 1;
       }
     }
+
+    // Registra a geração (inclusive a 1ª, livre) e ancora a janela de boas-vindas.
+    pg.total += 1;
+    if (!pg.firstPlanAt) pg.firstPlanAt = nowDIso;
+    await container.repos.users.upsert({
+      ...profile,
+      planGenerations: pg,
+      updatedAt: nowDIso,
+    });
 
     const planId = uuid();
     const now = new Date().toISOString();
