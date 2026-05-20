@@ -691,5 +691,215 @@
     "sourceType": "curado",
     "sourceTitle": "Base Coach.AI v3 · Doc 1 §R.5",
     "sourceUrl": ""
+  },
+  {
+    "id": "caso-iniciante-5k",
+    "secao": "V.1",
+    "tema": "caso_sedentario_5k",
+    "title": "Caso-modelo: sedentário/iniciante → 5K",
+    "summary": "Iniciante absoluto com meta 5K. Estrutura: base de hábito com walk-run; 3x/semana; sem sessões de qualidade nas 3 primeiras semanas. Foco em consistência, não em pace.",
+    "guidance": [
+      "Semana 1-3: walk-run (ex: 1min trote / 2min caminhada), 2-3km por sessão, sem pace alvo.",
+      "Volume semanal inicial ≤12km; progressão conservadora (5-8%/sem).",
+      "Sinais de alerta: dor articular, abandono na semana 2-3 — reforçar constância e tom encorajador."
+    ],
+    "content": "Arquétipo: sedentário/iniciante absoluto, meta 5K. Estrutura recomendada: fase de base de hábito; 3x/semana; sessões de 20-30min em walk-run; sem intervalado nem tempo nas 3 primeiras semanas. Progressão: walk-run → corrida contínua leve ao longo de 8-12 semanas. Tipos típicos: easy/walk-run, recovery. Tom: muito encorajador, celebra constância acima de performance. Pace: sem alvo no início (sensação manda). Alerta: dor articular, entusiasmo excessivo, evasão precoce.",
+    "tags": ["caso-modelo", "iniciante", "5k", "walk-run", "base"],
+    "categoria": ["caso-modelo"],
+    "nivel": "iniciante",
+    "encaminhamento": [],
+    "vinculante": false,
+    "sourceType": "curado",
+    "sourceTitle": "Base Coach.AI v3 · Casos-modelo (Dossiê 2)",
+    "sourceUrl": ""
+  },
+  {
+    "id": "caso-iniciante-meia",
+    "secao": "V.2",
+    "tema": "caso_iniciante_meia",
+    "title": "Caso-modelo: iniciante → primeira meia maratona",
+    "summary": "Iniciante com meta meia. Ciclo longo (12-16 sem) com base aeróbia ampla antes de qualidade. Long run é a sessão-chave, cresce gradual respeitando 10%.",
+    "guidance": [
+      "Base longa (4-6 sem) de easy + long run antes de introduzir tempo.",
+      "Long run cresce gradual (teto 10% sobre o maior das últimas semanas) até ~16-18km.",
+      "1 sessão de qualidade leve por semana só após a base; Easy domina o volume."
+    ],
+    "content": "Arquétipo: iniciante, meta primeira meia. Estrutura: 12-16 semanas, base/build/peak/taper; pico de volume moderado; long run sobe gradual. Tipos: easy (maioria), long run (chave), 1 tempo leve na fase build, recovery. Progressão: foco em completar, não em tempo. Tom: encorajador com método. Pace: range só após baseline; long run em ritmo confortável. Alerta: spike de volume, easy rápido demais, fueling pobre no long run.",
+    "tags": ["caso-modelo", "iniciante", "meia", "long-run", "base"],
+    "categoria": ["caso-modelo"],
+    "nivel": "iniciante",
+    "encaminhamento": [],
+    "vinculante": false,
+    "sourceType": "curado",
+    "sourceTitle": "Base Coach.AI v3 · Casos-modelo (Dossiê 2)",
+    "sourceUrl": ""
+  },
+  {
+    "id": "caso-intermediario-meia",
+    "secao": "V.3",
+    "tema": "caso_intermediario_meia",
+    "title": "Caso-modelo: intermediário → meia maratona",
+    "summary": "Intermediário com volume base real (ex: 25km/sem). 12-16 sem, 4 fases, pico 40-50km, 1 sessão de qualidade/semana (tempo/intervalado alternando), long run até 18-20km.",
+    "guidance": [
+      "1 qualidade/semana alternando tempo e intervalado (nunca dois intervalados seguidos).",
+      "Long run progressivo até 18-20km; volume de pico ~40-50km/sem.",
+      "Deload a cada ~4 semanas (3:1)."
+    ],
+    "content": "Arquétipo: recreativo intermediário, meta meia, baseline real. Estrutura: base/build/peak/taper em 12-16 sem; pico 40-50km; 1 qualidade/sem (tempo OU intervalado, alternando). Tipos: easy, long run, tempo, intervalado, recovery. Tom: técnico-motivador, cita dados. Pace: range por zona. Alerta: subir volume rápido, easy rápido demais, fadiga acumulada.",
+    "tags": ["caso-modelo", "intermediario", "meia", "tempo", "intervalado"],
+    "categoria": ["caso-modelo"],
+    "nivel": "intermediario",
+    "encaminhamento": [],
+    "vinculante": false,
+    "sourceType": "curado",
+    "sourceTitle": "Base Coach.AI v3 · Casos-modelo (Dossiê 2)",
+    "sourceUrl": ""
+  },
+  {
+    "id": "caso-intermediario-maratona",
+    "secao": "V.4",
+    "tema": "caso_intermediario_maratona",
+    "title": "Caso-modelo: intermediário → primeira maratona",
+    "summary": "Volume base 35-50km. 16-20 sem, pico 60-80km, long run até 30-32km. Fueling é determinante (gut training). Long run progressivo com finish em ritmo de prova nas fases finais.",
+    "guidance": [
+      "Long run até 30-32km, progressão controlada; treinar fueling (nunca estrear na prova).",
+      "Pico 60-80km/sem; médio-longos na semana além do long run.",
+      "Alerta principal: lesão por volume, bonking por fueling pobre."
+    ],
+    "content": "Arquétipo: intermediário, primeira maratona. Estrutura: 16-20 sem; pico 60-80km; long run até 30-32km; médio-longos. Tipos: easy, long run (+médio-longo), tempo, intervalado pontual, recovery. Fueling determinante (treino intestinal). Tom: técnico com cuidado. Pace: range; long run com trechos em pace de maratona no peak. Alerta: spike de volume, bonking, recuperação insuficiente.",
+    "tags": ["caso-modelo", "intermediario", "maratona", "long-run", "fueling"],
+    "categoria": ["caso-modelo"],
+    "nivel": "intermediario",
+    "encaminhamento": [],
+    "vinculante": false,
+    "sourceType": "curado",
+    "sourceTitle": "Base Coach.AI v3 · Casos-modelo (Dossiê 2)",
+    "sourceUrl": ""
+  },
+  {
+    "id": "caso-avancado-pr",
+    "secao": "V.5",
+    "tema": "caso_avancado_performance",
+    "title": "Caso-modelo: avançado → PR / performance",
+    "summary": "Avançado buscando recorde pessoal. Volume 70-100km, 5-7x/semana, periodização rigorosa com bloco específico no pico. 2 qualidades/semana. Deload por sinais, não só calendário.",
+    "guidance": [
+      "2 sessões de qualidade/semana específicas do objetivo; bloco específico (Canova) no peak.",
+      "Volume 70-100km com 5-7 sessões; deload disparado por sinais convergentes de fadiga.",
+      "Alerta principal: overtraining, subreporte de fadiga."
+    ],
+    "content": "Arquétipo: avançado, meta PR. Estrutura: periodização rigorosa, pico 70-100km, specific block no peak. Tipos: easy (volume base 80/20), 2 qualidades (tempo/intervalado/pace de prova), long run com qualidade, recovery. Tom: técnico, dado cru. Pace: ranges precisos por zona/VDOT. Alerta: overtraining, fadiga subreportada, monotonia de carga.",
+    "tags": ["caso-modelo", "avancado", "pr", "specific-block", "performance"],
+    "categoria": ["caso-modelo"],
+    "nivel": "avancado",
+    "encaminhamento": [],
+    "vinculante": false,
+    "sourceType": "curado",
+    "sourceTitle": "Base Coach.AI v3 · Casos-modelo (Dossiê 2)",
+    "sourceUrl": ""
+  },
+  {
+    "id": "caso-retorno-lesao",
+    "secao": "V.6",
+    "tema": "caso_retorno_lesao",
+    "title": "Caso-modelo: retorno após lesão",
+    "summary": "Atleta voltando de lesão. Requer liberação do profissional que tratou. Volume 50-60% do antigo; sem pace alvo nas 3-4 primeiras semanas; progressão muito conservadora.",
+    "guidance": [
+      "Pré-requisito: liberação do profissional que tratou a lesão.",
+      "Volume 50-60% do anterior; sem pace alvo nas 3-4 primeiras semanas (sensação manda).",
+      "Reintroduzir qualidade só quando a base e a ausência de dor permitirem."
+    ],
+    "content": "Arquétipo: retorno de lesão. Estrutura: modificador sobre o caso-base do nível; volume 50-60% do antigo, progressão conservadora (5-8%), cross-training de baixo impacto. Tipos: easy curto, recovery, cross; qualidade só depois. Tom: cuidadoso, sem pressa, valida cada passo. Pace: sem alvo 3-4 sem. Alerta: tentar pace antigo, dor recorrente — reduzir e encaminhar fisioterapeuta se persistir.",
+    "tags": ["caso-modelo", "retorno-lesao", "conservador", "cross-training"],
+    "categoria": ["caso-modelo", "prevencao"],
+    "nivel": "qualquer",
+    "encaminhamento": ["fisioterapeuta_esportivo"],
+    "vinculante": false,
+    "sourceType": "curado",
+    "sourceTitle": "Base Coach.AI v3 · Casos-modelo (Dossiê 2)",
+    "sourceUrl": ""
+  },
+  {
+    "id": "caso-master",
+    "secao": "V.7",
+    "tema": "caso_master_50",
+    "title": "Caso-modelo: master 50+",
+    "summary": "Atleta 50+. Recuperação 24-48h mais longa entre sessões duras; força é P0 (2x/semana); 3-4 corridas + 2 força. Liberação cardiológica se houver sinais.",
+    "guidance": [
+      "3-4 sessões de corrida + 2 de força/semana; recuperação mais longa entre sessões intensas.",
+      "Força é prioridade (reduz lesão); progressão de volume mais conservadora.",
+      "Liberação cardiológica se sinais; betabloqueador → usar esforço percebido (frequência mascarada)."
+    ],
+    "content": "Arquétipo: master 50+. Estrutura: modificador sobre o caso-base; menos densidade de qualidade, mais recuperação, força 2x/semana (P0). Tipos: easy, long run, 1 qualidade leve, recovery, força. Tom: técnico-motivador, valoriza consistência e longevidade. Pace: ranges conservadores. Alerta: recuperação insuficiente, sinais cardíacos (encaminhar cardiologista).",
+    "tags": ["caso-modelo", "master", "forca", "recuperacao"],
+    "categoria": ["caso-modelo"],
+    "nivel": "qualquer",
+    "encaminhamento": ["cardiologista"],
+    "vinculante": false,
+    "sourceType": "curado",
+    "sourceTitle": "Base Coach.AI v3 · Casos-modelo (Dossiê 2)",
+    "sourceUrl": ""
+  },
+  {
+    "id": "caso-sobrepeso-saude",
+    "secao": "V.8",
+    "tema": "caso_sobrepeso_saude",
+    "title": "Caso-modelo: sobrepeso → saúde",
+    "summary": "Iniciante com sobrepeso, meta saúde. Caminhada 2-4 semanas antes de correr; 4-5x/semana com cross-training de baixo impacto. Nunca focar peso. Duração aberta.",
+    "guidance": [
+      "Caminhada 2-4 semanas antes de introduzir corrida; cross-training de baixo impacto.",
+      "Nunca focar em peso/calorias — foco em hábito, energia e saúde.",
+      "Alerta: articular, cardiovascular, relação com comida — encaminhar se necessário."
+    ],
+    "content": "Arquétipo: sobrepeso, meta saúde. Estrutura: base muito gradual, caminhada → walk-run, cross-training (bike/elíptico/natação) pra volume de baixo impacto. Tipos: caminhada, walk-run, easy curto, cross, recovery. Tom: acolhedor, sem julgamento, nunca discute peso/calorias. Pace: sem alvo. Alerta: impacto articular, sinais cardiovasculares, relação com comida.",
+    "tags": ["caso-modelo", "sobrepeso", "saude", "cross-training", "baixo-impacto"],
+    "categoria": ["caso-modelo"],
+    "nivel": "iniciante",
+    "encaminhamento": ["medico"],
+    "vinculante": false,
+    "sourceType": "curado",
+    "sourceTitle": "Base Coach.AI v3 · Casos-modelo (Dossiê 2)",
+    "sourceUrl": ""
+  },
+  {
+    "id": "caso-manutencao",
+    "secao": "V.9",
+    "tema": "caso_manutencao_forma",
+    "title": "Caso-modelo: manutenção / forma física",
+    "summary": "Atleta que quer manter forma sem prova-alvo. Easy + 1 long + cross-training é suficiente. Sem necessidade de periodização agressiva; consistência sustentável.",
+    "guidance": [
+      "Estrutura simples: easy na maioria, 1 long run, cross-training opcional.",
+      "Sem pico agressivo; foco em manter o hábito e a base aeróbia.",
+      "Pode incluir variação leve (fartlek, strides) pra prazer e estímulo."
+    ],
+    "content": "Arquétipo: manutenção/saúde sem prova. Estrutura: sem periodização agressiva; volume estável, 1 long run, easy predominante, cross opcional, strides/fartlek pra variar. Tipos: easy, long run, fartlek leve, recovery. Tom: leve, sustentável, prazer no processo. Pace: confortável. Alerta: monotonia/abandono — variar pra manter engajamento.",
+    "tags": ["caso-modelo", "manutencao", "saude", "easy", "long-run"],
+    "categoria": ["caso-modelo"],
+    "nivel": "qualquer",
+    "encaminhamento": [],
+    "vinculante": false,
+    "sourceType": "curado",
+    "sourceTitle": "Base Coach.AI v3 · Casos-modelo (Dossiê 2)",
+    "sourceUrl": ""
+  },
+  {
+    "id": "caso-objetivo-desproporcional",
+    "secao": "V.10",
+    "tema": "caso_objetivo_desproporcional",
+    "title": "Caso-modelo: objetivo desproporcional ao nível (ex: iniciante → ultra)",
+    "summary": "Quando o objetivo declarado é muito além do estado atual (ex: sedentário quer ultra), o plano do ciclo é a FASE DE FUNDAÇÃO, não a entrega do objetivo. Mensagem honesta no racional.",
+    "guidance": [
+      "Não tentar entregar o objetivo no ciclo: o plano constrói a fundação aeróbica.",
+      "Explicar honestamente no racional o gap e o horizonte real (meses).",
+      "Calibrar a semana 1 pelo NÍVEL atual, nunca pelo objetivo."
+    ],
+    "content": "Arquétipo: objetivo desproporcional ao nível atual. Regra: o plano de N semanas é o PRIMEIRO BLOCO da jornada — começa onde o atleta está. Ex: iniciante que quer ultra recebe base de iniciante (walk-run/easy), com racional honesto explicando que ultra exige 6-12 meses de base. Tipos: conforme o caso-base do nível real. Tom: honesto e encorajador, sem prometer o impossível. Alerta: frustração por expectativa — alinhar expectativa no racional.",
+    "tags": ["caso-modelo", "fundacao", "expectativa", "iniciante"],
+    "categoria": ["caso-modelo"],
+    "nivel": "qualquer",
+    "encaminhamento": [],
+    "vinculante": false,
+    "sourceType": "curado",
+    "sourceTitle": "Base Coach.AI v3 · Casos-modelo (Dossiê 2)",
+    "sourceUrl": ""
   }
 ]
