@@ -147,7 +147,14 @@ class _TwoLinePainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final w = size.width;
     final h = size.height;
-    final range = (maxV - minV).abs() < 1e-6 ? 1.0 : (maxV - minV);
+    // Domínio com padding de 15% pra a linha não colar nas bordas. Quando a
+    // série é PLANA (todos os valores iguais — ex: só o pace projetado), o
+    // range vira 1 e o padding centraliza a linha no meio do gráfico.
+    final raw = maxV - minV;
+    final isFlat = raw.abs() < 1e-6;
+    final pad = (isFlat ? 1.0 : raw) * 0.15;
+    final lo = minV - pad;
+    final span = (isFlat ? 1.0 : raw) + pad * 2;
 
     // Linhas de grade horizontais (topo/meio/base).
     final grid = Paint()
@@ -160,8 +167,12 @@ class _TwoLinePainter extends CustomPainter {
 
     double xFor(int i) =>
         data.length <= 1 ? w / 2 : w * i / (data.length - 1);
-    // Eixo invertido: pace menor (melhor) fica mais no TOPO.
-    double yFor(double v) => h - ((maxV - v) / range) * (h - 8) - 4;
+    // Eixo invertido: pace menor (melhor) fica mais no TOPO. Série plana
+    // (todos iguais) é centralizada no meio.
+    double yFor(double v) {
+      final frac = isFlat ? 0.5 : ((v - lo) / span);
+      return 4 + frac * (h - 8);
+    }
 
     void drawSeries(double? Function(TwoLineData) sel, Color color) {
       final stroke = Paint()
