@@ -212,16 +212,21 @@ Organização por **momento da jornada** (não por modelo). Princípios: "pro de
 | 4 | Multimodal / exame | `gemini-3.5-flash` | `exam-analysis` | lê/escreve |
 | 5 | Voz ao vivo | `gemini-2.5-flash-native-audio` | `live-voice` | **não** |
 
-Console de admin por momento em `/admin/coach-ai` (badge do modelo + prompts + painel RAG com purga).
+Console de admin por momento em `/admin/coach-ai` (badge do modelo + prompts + painel RAG com upload/
+reindex/purga). A landing `/admin` é só navegação (Console Coach.AI · Prompts & Personas · Usuários) —
+sem painéis legados duplicados. Voz única e prompt da voz têm fonte única (config-store, sem override legado).
 
 ### Infra LLM (`shared/infra/llm`)
 - **Factory** realtime + async + plano (env `LLM_REALTIME_PROVIDER` / `LLM_ASYNC_PROVIDER` / `GEMINI_PLAN_MODEL`, default gemini).
 - **Adapters**: Gemini (primário), Groq, Together. Embeddings `text-embedding-004`.
-- **Gemini Live**: áudio nativo, vozes (Charon default), token efêmero criado server-side. System prompt
-  da voz vem do config-store (`live-voice`, Doc 5) — editável no admin, sem RAG em runtime.
+- **Gemini Live**: áudio nativo, **voz ÚNICA masculina (Charon)** fim-a-fim — saudação, cues e voz ao vivo
+  usam só Gemini Live (sem fallback ElevenLabs/Google na corrida, que gerava vozes diferentes). Token
+  efêmero criado server-side. System prompt da voz vem do config-store (`live-voice`, Doc 5), sem RAG.
+- **Personas**: **2** — Motivador e Técnico (calibram só o vocabulário). Editáveis no admin. O atleta
+  escolhe só a persona, não a voz.
 - **Prompts** (`prompts/`): 10 ids no config-store — `plan-init`, `plan-revision`, `live-coach`,
   `live-voice`, `post-run-report`, `post-run-report-enriched`, `period-analysis`, `weekly-report`,
-  `coach-chat`, `exam-analysis`. + contexts (perfil, run, RAG) + personas (motivador/técnico/sereno) +
+  `coach-chat`, `exam-analysis`. + contexts (perfil, run, RAG) + personas (motivador/técnico) +
   voz/invariantes §R compartilhadas (`defaults/_coach-voice.ts`) + override via Firestore + **decision
   layer** (silencia cue por frequência/DND → server responde 204).
 - **RAG**: base = Doc 1 (Coach.AI v3) chunkada por subseção em `running-knowledge-corpus.json`, embeddada
