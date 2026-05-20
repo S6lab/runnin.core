@@ -144,6 +144,23 @@ quando indicado `[público]` ou `[cron]`. `[premium]` = exige feature do plano (
 ### biometrics — `/v1/biometrics`
 `POST /samples` (ingest batch) · `GET /latest/:type` · `GET /summary` · `POST /seed-test-user`
 
+**GET /summary?windowDays=7** — retorna rollup dos últimos N dias:
+```json
+{
+  "windowDays": 7,
+  "from": "<ISO>",
+  "to": "<ISO>",
+  "avgRestingBpm": 58.4,
+  "maxBpm": 182,
+  "avgSleepHours": 7.2,
+  "avgHrv": 52.1,
+  "totalSteps": 49200,
+  "latestWeight": 72.5,
+  "sampleCount": 134
+}
+```
+`avgSleepHours` e `avgHrv` são `null` quando não há amostras do tipo na janela.
+
 ### stats — `/v1/stats`
 `GET /aggregate?period=week|month|threeMonths` · `GET /totals`
 
