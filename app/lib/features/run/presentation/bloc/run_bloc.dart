@@ -520,14 +520,7 @@ class RunBloc extends Bloc<RunEvent, RunState> {
   /// novo `_CoachChunk` carregando o áudio. UI player escuta.
   Future<void> _synthesizeAndDispatch(String text) async {
     try {
-      final profile = await _userRemote.getMe().timeout(
-            const Duration(seconds: 2),
-            onTimeout: () => null,
-          );
-      final audio = await _liveVoice.synthesize(
-        text,
-        voiceId: profile?.coachVoiceId,
-      );
+      final audio = await _liveVoice.synthesize(text);
       if (audio == null || isClosed) return;
       add(_CoachChunk(CoachCue(
         text: text,
@@ -1017,10 +1010,7 @@ class RunBloc extends Bloc<RunEvent, RunState> {
       // ignore: avoid_print
       print('coach.greeting.text=$greeting');
 
-      final audio = await _liveVoice.synthesize(
-        greeting,
-        voiceId: profile?.coachVoiceId,
-      );
+      final audio = await _liveVoice.synthesize(greeting);
       if (audio == null || isClosed) return;
       add(_CoachChunk(CoachCue(
         text: greeting,

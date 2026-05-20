@@ -60,24 +60,18 @@ class LiveCoachVoiceService {
     return null;
   }
 
-  Future<LiveSynthesisResult?> synthesize(
-    String text, {
-    String? voiceId,
-  }) async {
+  Future<LiveSynthesisResult?> synthesize(String text) async {
     if (text.trim().isEmpty) return null;
-    var result = await _trySynthesize(text, voiceId: voiceId);
+    var result = await _trySynthesize(text);
     if (result == null && _cachedToken != null) {
       _cachedToken = null;
       _cachedExpire = null;
-      result = await _trySynthesize(text, voiceId: voiceId);
+      result = await _trySynthesize(text);
     }
     return result;
   }
 
-  Future<LiveSynthesisResult?> _trySynthesize(
-    String text, {
-    String? voiceId,
-  }) async {
+  Future<LiveSynthesisResult?> _trySynthesize(String text) async {
     final token = await _fetchEphemeralToken();
     if (token == null) return null;
 
@@ -87,7 +81,7 @@ class LiveCoachVoiceService {
 
     try {
       // ignore: avoid_print
-      print('coach.live.connect.attempt model=$_model voice=${voiceId ?? _voiceDefault}');
+      print('coach.live.connect.attempt model=$_model voice=$_voiceDefault');
       // Ephemeral tokens exigem apiVersion 'v1alpha'.
       // Config MATCH com o que o server declarou no auth_tokens body
       // (responseModalities AUDIO + speechConfig.voiceConfig).
@@ -100,7 +94,7 @@ class LiveCoachVoiceService {
             speechConfig: SpeechConfig(
               voiceConfig: VoiceConfig(
                 prebuiltVoiceConfig: PrebuiltVoiceConfig(
-                  voiceName: voiceId ?? _voiceDefault,
+                  voiceName: _voiceDefault,
                 ),
               ),
             ),

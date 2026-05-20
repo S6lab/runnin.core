@@ -1,13 +1,10 @@
 import { z } from 'zod';
 import { getRealtimeLLM } from '@shared/infra/llm/llm.factory';
 import { formatRunningKnowledgeContext } from '@shared/knowledge/running/running-knowledge';
-import { ElevenLabsTtsService } from '@shared/infra/tts/elevenlabs-tts.service';
-import { GoogleTtsService } from '@shared/infra/tts/google-tts.service';
 import { GeminiLiveTtsService } from '@shared/infra/llm/gemini-live-tts.service';
 import { buildLiveCoachPrompt, getKnobs, isInDndWindow } from '@shared/infra/llm/prompts';
 import { CoachConfigService } from './coach-config.service';
 import { CoachRuntimeContextService } from './coach-runtime-context.service';
-import { resolveCoachVoicePreset } from './coach-voice-presets';
 import { CoachMessageLogRepository } from '../domain/coach-message-log.repository';
 import { CoachMessageLog } from '../domain/coach-message-log.entity';
 import { FirestoreCoachMessageLogRepository } from '../infra/firestore-coach-message-log.repository';
@@ -123,8 +120,6 @@ interface CachedRuntime {
 
 export class CoachMessageUseCase {
   private llm = getRealtimeLLM();
-  private googleTts = new GoogleTtsService();
-  private elevenLabsTts = new ElevenLabsTtsService();
   // Gemini Live TTS é o source primário (mesmo motor do chat ao vivo).
   // ElevenLabs/Google ficam como fallbacks pra resiliência.
   private liveTts = new GeminiLiveTtsService();
@@ -199,7 +194,6 @@ export class CoachMessageUseCase {
       runtimeContextJson,
       ctx: ctxEnriched,
       ragContext: knowledgeContext,
-      legacyLivePrompt: config.livePrompt,
     });
 
     const rawText = await this.llm.generate(built.userPrompt, {
@@ -208,36 +202,13 @@ export class CoachMessageUseCase {
       temperature: built.temperature,
     });
     const text = cleanCueText(rawText);
-    const voicePreset = resolveCoachVoicePreset(runtime.profile?.coachVoiceId);
     let audio = null as { audioBase64: string; mimeType: string } | null;
 
     if (config.ttsEnabled) {
-      // Cascata: Gemini Live (primário) → ElevenLabs → Google TTS.
-      // Live falhar (timeout/quota) cai pros legados pra não ficar mudo.
-      audio = await this.liveTts.synthesize(text, {
-        voiceId: voicePreset?.id ?? 'coach-bruno',
-      });
-
-      if (!audio && config.ttsProvider === 'elevenlabs') {
-        const voiceId =
-          config.elevenLabsVoiceIds[voicePreset?.id ?? 'coach-bruno'] ||
-          config.elevenLabsVoiceIds['coach-bruno'] ||
-          '';
-        audio = await this.elevenLabsTts.synthesize(text, {
-          voiceId,
-          modelId: config.elevenLabsModelId,
-          outputFormat: config.elevenLabsOutputFormat,
-          languageCode: 'pt',
-        });
-      }
-
-      if (!audio) {
-        audio = await this.googleTts.synthesize(text, {
-          voiceName: voicePreset?.googleVoiceName ?? config.ttsVoiceName,
-          languageCode: voicePreset?.languageCode ?? config.ttsLanguageCode,
-          speakingRate: voicePreset?.speakingRate ?? config.ttsSpeakingRate,
-        });
-      }
+      // Voz ÚNICA: só Gemini Live (Charon). SEM fallback ElevenLabs/Google na
+      // corrida — trocar de engine no meio gerava vozes diferentes ("dois
+      // coaches"). Se o Live falhar, o cue vai só como texto (sem áudio).
+      audio = await this.liveTts.synthesize(text, { voiceId: 'coach-bruno' });
     }
 
     if (ctx.runId && ctx.event !== 'question') {
@@ -321,7 +292,6 @@ export class CoachMessageUseCase {
     ctx: CoachContext,
     userId: string,
   ): Promise<CoachCueResponse> {
-    let voicePresetId: string | undefined;
     let firstName: string | null = null;
     try {
       // Profile read com timeout 4s — não quero saudação travada por
@@ -330,7 +300,6 @@ export class CoachMessageUseCase {
         this._userRepoForStart.findById(userId),
         new Promise<null>((resolve) => setTimeout(() => resolve(null), 4000)),
       ]);
-      voicePresetId = resolveCoachVoicePreset(profile?.coachVoiceId)?.id;
       const full = profile?.name?.trim();
       if (full) firstName = full.split(/\s+/)[0] ?? null;
     } catch {
@@ -348,7 +317,7 @@ export class CoachMessageUseCase {
     // ~3s. Se passar disso, retorna sem áudio — UI mostra só texto, request
     // não fica em 504. Web/Chrome esperam SSE em poucos segundos.
     const audio = await Promise.race([
-      this._synthesize(greeting, voicePresetId),
+      this._synthesize(greeting),
       new Promise<null>((resolve) => setTimeout(() => {
         logger.warn('coach.start.synthesize_timeout', { userId, textLen: greeting.length });
         resolve(null);
@@ -369,7 +338,7 @@ export class CoachMessageUseCase {
   private async _generateVoicePreview(ctx: CoachContext): Promise<CoachCueResponse> {
     const sample = 'Eu vou te acompanhar do início ao fim. Vamos correr juntos.';
     const audio = await Promise.race([
-      this._synthesize(sample, ctx.voiceId),
+      this._synthesize(sample),
       new Promise<null>((resolve) => setTimeout(() => resolve(null), 10000)),
     ]);
     return {
@@ -380,44 +349,16 @@ export class CoachMessageUseCase {
   }
 
   /**
-   * Cascata de TTS reutilizável: Live → ElevenLabs → Google. Retorna
-   * null se TUDO falhar (cue fica só com texto).
+   * Voz ÚNICA: só Gemini Live (Charon). Sem fallback ElevenLabs/Google —
+   * trocar de engine gerava vozes diferentes. Retorna null se o Live falhar
+   * (texto vai sem áudio).
    */
   private async _synthesize(
     text: string,
-    voicePresetId?: string,
   ): Promise<{ audioBase64: string; mimeType: string } | null> {
     const config = await this.config.getConfig();
     if (!config.ttsEnabled) return null;
-    const preset = voicePresetId
-      ? resolveCoachVoicePreset(voicePresetId)
-      : undefined;
-
-    let audio = await this.liveTts.synthesize(text, {
-      voiceId: preset?.id ?? 'coach-bruno',
-    });
-
-    if (!audio && config.ttsProvider === 'elevenlabs') {
-      const voiceId =
-        config.elevenLabsVoiceIds[preset?.id ?? 'coach-bruno'] ||
-        config.elevenLabsVoiceIds['coach-bruno'] ||
-        '';
-      audio = await this.elevenLabsTts.synthesize(text, {
-        voiceId,
-        modelId: config.elevenLabsModelId,
-        outputFormat: config.elevenLabsOutputFormat,
-        languageCode: 'pt',
-      });
-    }
-
-    if (!audio) {
-      audio = await this.googleTts.synthesize(text, {
-        voiceName: preset?.googleVoiceName ?? config.ttsVoiceName,
-        languageCode: preset?.languageCode ?? config.ttsLanguageCode,
-        speakingRate: preset?.speakingRate ?? config.ttsSpeakingRate,
-      });
-    }
-    return audio;
+    return this.liveTts.synthesize(text, { voiceId: 'coach-bruno' });
   }
 }
 

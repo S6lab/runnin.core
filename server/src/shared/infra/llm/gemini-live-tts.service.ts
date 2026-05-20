@@ -12,11 +12,9 @@ import { logger } from '@shared/logger/logger';
  * usar GeminiLiveSession direto via WS proxy.
  */
 export class GeminiLiveTtsService {
-  /** Mapa coachVoiceId (do app) → voz prebuilt do Gemini Live. */
+  /** Voz ÚNICA do Coach: masculina (Charon). Não há mais escolha de voz. */
   private readonly voiceMap: Record<string, string> = {
-    'coach-bruno': 'Charon',  // voz masculina firme
-    'coach-clara': 'Aoede',   // voz feminina calorosa
-    'coach-luna': 'Kore',     // voz feminina mais cool/neutra
+    'coach-bruno': 'Charon',  // voz masculina firme (única)
   };
 
   /**
