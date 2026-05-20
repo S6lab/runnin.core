@@ -1042,7 +1042,14 @@ class _ExpandableCoachAICardState extends State<_ExpandableCoachAICard> {
                   children: [
                     Expanded(
                       child: GestureDetector(
-                        onTap: () {},
+                        onTap: () {
+                          final now = DateTime.now();
+                          final monday =
+                              now.subtract(Duration(days: now.weekday - 1));
+                          final weekStart =
+                              '${monday.year}-${monday.month.toString().padLeft(2, '0')}-${monday.day.toString().padLeft(2, '0')}';
+                          context.push('/training/report/$weekStart');
+                        },
                         child: Container(
                           height: 38,
                           alignment: Alignment.center,
