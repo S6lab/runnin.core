@@ -9,6 +9,7 @@ import 'package:runnin/core/theme/theme_controller.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 import 'package:runnin/features/run/data/datasources/run_remote_datasource.dart';
 import 'package:runnin/features/run/domain/entities/run.dart';
+import 'package:runnin/features/subscriptions/presentation/subscription_controller.dart';
 import 'package:runnin/shared/widgets/figma/figma_top_nav.dart';
 
 /// Aggregated profile data shown in PERFIL root. Computed once on page load.
@@ -812,7 +813,7 @@ class _MenuSection extends StatelessWidget {
         _MenuItem(
           icon: Icons.star_outline,
           title: 'ASSINATURA',
-          subtitle: 'Premium',
+          subtitle: subscriptionController.isPro ? 'Plano Pro ativo' : 'Assine o Pro',
           onTap: () => context.push('/paywall?next=/profile'),
         ),
       ],

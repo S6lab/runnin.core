@@ -11,6 +11,7 @@ import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 import 'package:runnin/features/run/data/datasources/run_remote_datasource.dart';
 import 'package:runnin/features/run/domain/entities/run.dart';
+import 'package:runnin/features/subscriptions/presentation/subscription_controller.dart';
 import 'package:runnin/features/training/data/datasources/plan_remote_datasource.dart';
 import 'package:runnin/features/training/data/weekly_report_remote_datasource.dart';
 import 'package:runnin/features/training/domain/entities/plan.dart';
@@ -269,8 +270,10 @@ class _TrainingPageState extends State<TrainingPage> {
         throw Exception('Perfil incompleto');
       }
 
-      // Premium gate: gerar plano é feature Pro. Freemium vai pro paywall.
-      if (!profile.isPro) {
+      // Gate centralizado no billing plan: gerar plano é feature `generatePlan`
+      // (Pro). Freemium vai pro paywall.
+      await subscriptionController.refresh();
+      if (!subscriptionController.has('generatePlan')) {
         if (mounted) {
           setState(() => _generating = false);
           context.push('/paywall?next=/training');

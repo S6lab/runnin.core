@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:runnin/core/network/api_client.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/features/subscriptions/data/subscription_remote_datasource.dart';
+import 'package:runnin/features/subscriptions/presentation/subscription_controller.dart';
 import 'package:runnin/shared/widgets/runnin_app_bar.dart';
 
 /// Paywall pós-assessment ou ao tentar acessar feature premium.
@@ -12,10 +13,14 @@ import 'package:runnin/shared/widgets/runnin_app_bar.dart';
 ///
 /// Anônimo cai aqui automaticamente. Pode ir freemium (continuar grátis sem IA).
 class PaywallPage extends StatefulWidget {
-  const PaywallPage({super.key, this.nextRoute = '/home'});
+  const PaywallPage({super.key, this.nextRoute = '/home', this.startDate});
 
   /// Pra onde ir depois de assinar (ou continuar grátis).
   final String nextRoute;
+
+  /// D0 do plano (ISO YYYY-MM-DD) quando o paywall veio do onboarding. Se
+  /// presente e o user assinar, geramos o plano (vai pra /plan-loading).
+  final String? startDate;
 
   @override
   State<PaywallPage> createState() => _PaywallPageState();
@@ -28,12 +33,20 @@ class _PaywallPageState extends State<PaywallPage> {
   String _periodLabel = '/mês';
   bool _loading = true;
   bool _saving = false;
+  bool _isPro = false;
   String? _error;
 
   @override
   void initState() {
     super.initState();
-    _loadPricing();
+    _init();
+  }
+
+  Future<void> _init() async {
+    // Estado do plano vem do billing plan central (subscriptionController).
+    await subscriptionController.refresh();
+    if (mounted) setState(() => _isPro = subscriptionController.isPro);
+    await _loadPricing();
   }
 
   Future<void> _loadPricing() async {
@@ -59,8 +72,16 @@ class _PaywallPageState extends State<PaywallPage> {
     });
     try {
       await _dio.patch<void>('/users/me', data: {'premium': true});
+      // Atualiza o billing plan central antes de seguir (gate de geração lê dele).
+      await subscriptionController.refresh();
       if (!mounted) return;
-      context.go(widget.nextRoute);
+      // Veio do onboarding (tem startDate) + agora pode gerar → /plan-loading.
+      if (widget.startDate != null &&
+          subscriptionController.has('generatePlan')) {
+        context.go('/plan-loading?startDate=${widget.startDate}');
+      } else {
+        context.go(widget.nextRoute);
+      }
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -83,7 +104,9 @@ class _PaywallPageState extends State<PaywallPage> {
       body: SafeArea(
         child: _loading
             ? const Center(child: CircularProgressIndicator())
-            : SingleChildScrollView(
+            : _isPro
+                ? _ProActiveView(onBack: () => context.go(widget.nextRoute))
+                : SingleChildScrollView(
                 padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -154,6 +177,81 @@ class _PaywallPageState extends State<PaywallPage> {
                   ],
                 ),
               ),
+      ),
+    );
+  }
+}
+
+/// Estado quando o usuário JÁ é Pro: nada de upsell — confirma o plano ativo.
+class _ProActiveView extends StatelessWidget {
+  final VoidCallback onBack;
+  const _ProActiveView({required this.onBack});
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(20, 24, 20, 32),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: palette.primary.withValues(alpha: 0.08),
+              border: Border.all(color: palette.primary, width: 1.041),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.workspace_premium_outlined,
+                    size: 22, color: palette.primary),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'VOCÊ É PRO',
+                        style: context.runninType.labelCaps.copyWith(
+                          fontSize: 12,
+                          color: palette.primary,
+                          letterSpacing: 1.4,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Seu plano Pro está ativo — plano de treino AI, coach ao vivo, '
+                        'relatórios e integração com wearable liberados.',
+                        style: context.runninType.bodySm.copyWith(
+                          color: palette.text,
+                          height: 1.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 24),
+          OutlinedButton(
+            onPressed: onBack,
+            style: OutlinedButton.styleFrom(
+              side: BorderSide(color: palette.border, width: 1.041),
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+              minimumSize: const Size(double.infinity, 0),
+            ),
+            child: Text(
+              'VOLTAR',
+              style: context.runninType.labelMd.copyWith(
+                fontWeight: FontWeight.w500,
+                color: palette.text,
+                letterSpacing: 1.2,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

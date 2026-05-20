@@ -153,6 +153,7 @@ final appRouter = GoRouter(
       path: '/paywall',
       builder: (_, state) => PaywallPage(
         nextRoute: state.uri.queryParameters['next'] ?? '/home',
+        startDate: state.uri.queryParameters['startDate'],
       ),
     ),
     GoRoute(path: '/login', builder: (_, _) => const LoginPage()),
