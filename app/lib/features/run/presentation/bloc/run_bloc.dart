@@ -199,6 +199,11 @@ class RunBloc extends Bloc<RunEvent, RunState> {
   /// Atualiza em _onGpsUpdate quando distância cruza kmStart de outro.
   int _currentSegmentIdx = -1;
 
+  /// Janela da saudação inicial: até este timestamp (ms) os cues de
+  /// `/coach/message` são suprimidos pra NÃO tocarem por cima da saudação
+  /// (Live) — evita "dois coaches" no início. A saudação já anuncia a sessão.
+  int _suppressCuesUntilMs = 0;
+
   // Preferências de alerta do user (set em _onStart via StartRun.alertPrefs).
   // Defaults conservadores: tudo on exceto kmSplits (mais ruidoso).
   Map<String, bool> _alertPrefs = const {
@@ -353,6 +358,9 @@ class RunBloc extends Bloc<RunEvent, RunState> {
       // Saudação inicial via Gemini Live DIRETO (sem /coach/message).
       // App fala com Live → recebe áudio WAV → toca. Sem proxy, sem TTS
       // estático, sem 504 no Cloud Run. Roda em background.
+      // Suprime cues de /coach/message por 12s pra a saudação tocar SOZINHA
+      // (senão segment_start/km do início tocam por cima = "dois coaches").
+      _suppressCuesUntilMs = DateTime.now().millisecondsSinceEpoch + 12000;
       unawaited(_speakStartGreeting(event.type));
 
       // Timer de tempo decorrido
@@ -1119,6 +1127,14 @@ class RunBloc extends Bloc<RunEvent, RunState> {
     if (state.runId == null) {
       // ignore: avoid_print
       print('coach.cue.skip event=$event reason=no_run_id');
+      return;
+    }
+    // Janela da saudação: não deixa nenhum cue tocar por cima da saudação
+    // inicial (finish é exceção — nunca cai aqui no início de qualquer forma).
+    if (event != 'finish' &&
+        DateTime.now().millisecondsSinceEpoch < _suppressCuesUntilMs) {
+      // ignore: avoid_print
+      print('coach.cue.skip event=$event reason=greeting_window');
       return;
     }
     if (_coachRequestInFlight) {
