@@ -206,7 +206,7 @@ Organização por **momento da jornada** (não por modelo). Princípios: "pro de
 
 | # | Momento | Modelo | Prompt(s) | RAG |
 |---|---|---|---|---|
-| 1 | Indexação (RAG) | `text-embedding-004` | — | indexa |
+| 1 | Indexação (RAG) | `gemini-embedding-001` | — | indexa |
 | 2 | Plano + Ajuste | `gemini-3.1-pro-preview` | `plan-init`, `plan-revision` | lê |
 | 3 | Operação de texto | `gemini-3.5-flash` | `post-run-report`(+`-enriched`), `weekly-report`, `period-analysis`, `coach-chat`, `live-coach` | lê |
 | 4 | Multimodal / exame | `gemini-3.5-flash` | `exam-analysis` | lê/escreve |
@@ -218,7 +218,7 @@ sem painéis legados duplicados. Voz única e prompt da voz têm fonte única (c
 
 ### Infra LLM (`shared/infra/llm`)
 - **Factory** realtime + async + plano (env `LLM_REALTIME_PROVIDER` / `LLM_ASYNC_PROVIDER` / `GEMINI_PLAN_MODEL`, default gemini).
-- **Adapters**: Gemini (primário), Groq, Together. Embeddings `text-embedding-004`.
+- **Adapters**: Gemini (primário), Groq, Together. Embeddings `gemini-embedding-001`.
 - **Gemini Live**: áudio nativo, **voz ÚNICA masculina (Charon)** fim-a-fim — saudação, cues e voz ao vivo
   usam só Gemini Live (sem fallback ElevenLabs/Google na corrida, que gerava vozes diferentes). Token
   efêmero criado server-side. System prompt da voz vem do config-store (`live-voice`, Doc 5), sem RAG.

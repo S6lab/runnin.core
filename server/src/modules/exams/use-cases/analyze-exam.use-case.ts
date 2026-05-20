@@ -53,7 +53,7 @@ export class AnalyzeExamUseCase {
   constructor(
     private readonly examRepo: ExamRepository = new FirestoreExamRepository(),
     private readonly geminiMultimodal: GeminiMultimodalService = new GeminiMultimodalService(),
-    private readonly geminiEmbedding: GeminiEmbeddingService = new GeminiEmbeddingService('text-embedding-004'),
+    private readonly geminiEmbedding: GeminiEmbeddingService = new GeminiEmbeddingService(),
   ) {}
 
   async execute(examId: string, userId: string): Promise<void> {

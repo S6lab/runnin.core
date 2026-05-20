@@ -37,7 +37,7 @@ const _moments = <_Moment>[
   _Moment(
     n: 1,
     title: 'Indexação do conhecimento (RAG)',
-    model: 'text-embedding-004',
+    model: 'gemini-embedding-001',
     description: 'A base científica (Doc 1) é vetorizada e recuperada por similaridade. Os limites clínicos (seção R) são vinculantes.',
     promptIds: [],
     usesRag: true,
