@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_sign_in/google_sign_in.dart';
-import 'package:flutter/services.dart';
+import 'package:intl_phone_field/intl_phone_field.dart';
 import 'package:runnin/core/router/app_router.dart';
 import 'package:runnin/shared/widgets/runnin_app_bar.dart';
 import 'package:runnin/core/theme/app_palette.dart';
@@ -23,6 +23,10 @@ class LoginPage extends StatefulWidget {
 class _LoginPageState extends State<LoginPage> {
   final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _smsCodeController = TextEditingController();
+
+  /// Número completo em E.164 (ex: +5511999999999) montado pelo IntlPhoneField
+  /// com o código do país selecionado (Brasil = default).
+  String _completePhone = '';
 
   bool _loading = false;
   String? _error;
@@ -161,10 +165,12 @@ class _LoginPageState extends State<LoginPage> {
 
   Future<void> _beginPhoneAuth() async {
     setState(() { _loading = true; _error = null; });
-    final phoneNumber = _normalizePhoneNumber(_phoneController.text.trim());
-    if (phoneNumber == null) {
+    // O IntlPhoneField já entrega o número em E.164 com o código do país.
+    final phoneNumber = _completePhone.trim();
+    final digits = phoneNumber.replaceAll(RegExp(r'[^0-9]'), '');
+    if (phoneNumber.isEmpty || digits.length < 10) {
       setState(() {
-        _error = 'Informe um telefone valido com DDD.';
+        _error = 'Informe um telefone válido com DDD.';
         _loading = false;
       });
       return;
@@ -274,19 +280,6 @@ class _LoginPageState extends State<LoginPage> {
     return 'Erro ao autenticar. Tente novamente.';
   }
 
-  String? _normalizePhoneNumber(String input) {
-    final digits = RegExp(r'[0-9]').allMatches(input).map((m) => m.group(0)).join();
-    if (digits.length < 10 || digits.length > 11) return null;
-    if (digits.length == 10) {
-      final ddd = digits.substring(0, 2);
-      final number = digits.substring(2);
-      return '+55 $ddd $number';
-    }
-    final ddd = digits.substring(0, 2);
-    final number = digits.substring(2, 7) + digits.substring(7);
-    return '+55 $ddd $number';
-  }
-
   String? _phoneVerificationId;
   dynamic _phoneConfirmationResult;
 
@@ -332,14 +325,30 @@ class _LoginPageState extends State<LoginPage> {
                   const SizedBox(height: 28),
                   const FigmaFormFieldLabel(text: 'OU DIGITE SEU TELEFONE'),
                   const SizedBox(height: 8),
-                  FigmaFormTextField(
+                  IntlPhoneField(
                     controller: _phoneController,
-                    keyboardType: TextInputType.phone,
-                    placeholder: '+55 (11) 99999-9999',
-                    maxLength: 14,
-                    inputFormatters: [
-                      FilteringTextInputFormatter.allow(RegExp(r'[0-9+]')),
-                    ],
+                    initialCountryCode: 'BR',
+                    languageCode: 'pt',
+                    style: TextStyle(color: palette.text),
+                    dropdownTextStyle: TextStyle(color: palette.text),
+                    dropdownIcon: Icon(Icons.arrow_drop_down, color: palette.muted),
+                    invalidNumberMessage: 'Número inválido',
+                    decoration: InputDecoration(
+                      hintText: '11 99999-9999',
+                      hintStyle: TextStyle(color: palette.muted),
+                      filled: true,
+                      fillColor: palette.surface,
+                      counterText: '',
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.zero,
+                        borderSide: BorderSide(color: palette.border),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.zero,
+                        borderSide: BorderSide(color: palette.primary),
+                      ),
+                    ),
+                    onChanged: (phone) => _completePhone = phone.completeNumber,
                   ),
                   const SizedBox(height: 18),
                   SizedBox(
@@ -353,14 +362,17 @@ class _LoginPageState extends State<LoginPage> {
                 ] else ...[
                   const FigmaFormFieldLabel(text: 'TELEFONE'),
                   const SizedBox(height: 8),
-                  FigmaFormTextField(
-                    controller: _phoneController,
-                    keyboardType: TextInputType.phone,
-                    placeholder: '+55 (11) 99999-9999',
-                    maxLength: 14,
-                    inputFormatters: [
-                      FilteringTextInputFormatter.allow(RegExp(r'[0-9+]')),
-                    ],
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                    decoration: BoxDecoration(
+                      color: palette.surface,
+                      border: Border.all(color: palette.border),
+                    ),
+                    child: Text(
+                      _completePhone,
+                      style: TextStyle(color: palette.text),
+                    ),
                   ),
                   const SizedBox(height: 18),
                   const FigmaFormFieldLabel(text: 'CODIGO OTP'),

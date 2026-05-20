@@ -44,6 +44,7 @@ dependencies:
   # UI
   flutter_animate: ^4.5.2
   google_fonts: ^6.2.1
+  intl_phone_field: ^3.2.0
 
   # Utils
   freezed_annotation: ^3.0.0
