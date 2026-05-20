@@ -194,17 +194,39 @@ são lifetime)
 `POST /tester/seed` [cron] · `GET /diagnose/user` [cron] · `POST /diagnose/regenerate-plan` [cron] ·
 `POST /diagnose/reset-journey` [cron] · `POST /diagnose/weekly-revise` [cron] · `POST /prompts/preview` ·
 `GET /prompts/defaults` · `POST /prompts/invalidate-cache` · `GET /users` · `PATCH /users/:userId/plan` ·
-`POST /users/:userId/reset?mode=plan|full` · `GET /rag/status` · `POST /rag/reindex`
+`POST /users/:userId/reset?mode=plan|full` · `GET /rag/status` · `POST /rag/reindex` · `POST /rag/purge`
+
+> `GET /rag/status` agora retorna também `chunks[]` com metadados v3 (secao, vinculante, categoria,
+> encaminhamento) e `vinculanteChunks` no summary. `POST /rag/purge` zera `rag_chunks`/`rag_documents`
+> + uploads em Storage e reindexa o corpus canônico (operação destrutiva, troca total da base).
+
+### Arquitetura Coach.AI v3 — 4 modelos / 5 momentos
+Organização por **momento da jornada** (não por modelo). Princípios: "pro decide, flash escreve" e
+"a voz só fala na corrida (sem RAG)".
+
+| # | Momento | Modelo | Prompt(s) | RAG |
+|---|---|---|---|---|
+| 1 | Indexação (RAG) | `text-embedding-004` | — | indexa |
+| 2 | Plano + Ajuste | `gemini-3.1-pro-preview` | `plan-init`, `plan-revision` | lê |
+| 3 | Operação de texto | `gemini-3.5-flash` | `post-run-report`(+`-enriched`), `weekly-report`, `period-analysis`, `coach-chat`, `live-coach` | lê |
+| 4 | Multimodal / exame | `gemini-3.5-flash` | `exam-analysis` | lê/escreve |
+| 5 | Voz ao vivo | `gemini-2.5-flash-native-audio` | `live-voice` | **não** |
+
+Console de admin por momento em `/admin/coach-ai` (badge do modelo + prompts + painel RAG com purga).
 
 ### Infra LLM (`shared/infra/llm`)
-- **Factory** realtime + async (env `LLM_REALTIME_PROVIDER` / `LLM_ASYNC_PROVIDER`, default gemini).
+- **Factory** realtime + async + plano (env `LLM_REALTIME_PROVIDER` / `LLM_ASYNC_PROVIDER` / `GEMINI_PLAN_MODEL`, default gemini).
 - **Adapters**: Gemini (primário), Groq, Together. Embeddings `text-embedding-004`.
-- **Gemini Live**: áudio nativo, vozes (Charon default), token efêmero criado server-side.
-- **Prompts** (`prompts/`): 8 builders — `plan-init`, `plan-revision`, `live-coach`, `post-run-report`,
-  `post-run-report-enriched`, `period-analysis`, `coach-chat`, `exam-analysis`. + contexts (perfil, run, RAG)
-  + personas (motivador/técnico/sereno) + defaults com override via Firestore + **decision layer**
-  (silencia cue por frequência/DND → server responde 204).
-- **RAG**: corpus de conhecimento de corrida embeddado em Firestore.
+- **Gemini Live**: áudio nativo, vozes (Charon default), token efêmero criado server-side. System prompt
+  da voz vem do config-store (`live-voice`, Doc 5) — editável no admin, sem RAG em runtime.
+- **Prompts** (`prompts/`): 10 ids no config-store — `plan-init`, `plan-revision`, `live-coach`,
+  `live-voice`, `post-run-report`, `post-run-report-enriched`, `period-analysis`, `weekly-report`,
+  `coach-chat`, `exam-analysis`. + contexts (perfil, run, RAG) + personas (motivador/técnico/sereno) +
+  voz/invariantes §R compartilhadas (`defaults/_coach-voice.ts`) + override via Firestore + **decision
+  layer** (silencia cue por frequência/DND → server responde 204).
+- **RAG**: base = Doc 1 (Coach.AI v3) chunkada por subseção em `running-knowledge-corpus.json`, embeddada
+  por vetor em Firestore (`rag_chunks`). Recuperação garante chunk **vinculante** (seção R — limites
+  clínicos/legais) em query de tema sensível. Uploads do admin (`rag/uploads/`) complementam a base.
 
 ---
 
@@ -233,7 +255,8 @@ users/{uid}                              # perfil (level, goal, frequency, gêne
   └─ notifications/{id}
 
 app_config/{feature_flags|subscription_plans|notification_devices|prompts|coach}
-running_knowledge_chunks/{id}            # base RAG embeddada
+rag_chunks/{id}                          # base RAG embeddada (corpus Doc 1 + uploads), vetor + metadados v3
+rag_documents/{id}                       # metadados dos uploads de RAG (status indexed/pending)
 ```
 
 **Estruturas-chave:**
