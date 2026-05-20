@@ -80,7 +80,7 @@ class _CoachSettingsPageState extends State<CoachSettingsPage> {
     try {
       await apiClient.patch('/users/me', data: {
         'coachPersonality': _personality,
-        'coachVoiceId': _voiceId,
+        'coachVoiceId': 'coach-$_voiceId',
         'coachMessageFrequency': _frequency,
         'allowCriticalAlertsInSilent': _allowCriticalInSilent,
         'coachFeedbackEnabled': _feedback,
