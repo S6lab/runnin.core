@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:runnin/core/constants/marketing_copy.dart';
 import 'package:runnin/shared/widgets/figma/export.dart';
 
 class OnboardingStepFrequency extends StatelessWidget {
@@ -20,12 +21,12 @@ class OnboardingStepFrequency extends StatelessWidget {
       5: '5x',
       6: '6x+',
     };
-    final coachNotes = <int, String>{
-      2: 'Otimo para comecar com constancia sem pesar a rotina. Vamos priorizar adaptacao e recuperacao.',
-      3: 'Boa frequencia para criar base com seguranca. Ja da para evoluir volume e ritmo aos poucos.',
-      4: 'Excelente equilibrio entre progresso e recuperacao. Costuma render planos bem completos.',
-      5: 'Frequencia forte. O Coach vai distribuir carga com mais precisao para evitar excesso.',
-      6: 'Rotina de alto compromisso. Vamos controlar intensidade para sustentar consistencia.',
+    const coachNotes = <int, String>{
+      2: MarketingCopy.freqNote2,
+      3: MarketingCopy.freqNote3,
+      4: MarketingCopy.freqNote4,
+      5: MarketingCopy.freqNote5,
+      6: MarketingCopy.freqNote6,
     };
 
     return SingleChildScrollView(

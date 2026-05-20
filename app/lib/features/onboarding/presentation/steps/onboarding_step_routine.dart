@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:runnin/core/constants/marketing_copy.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/shared/widgets/figma/export.dart';
@@ -30,8 +31,7 @@ class OnboardingStepRoutine extends StatelessWidget {
         const FigmaAssessmentHeading(text: 'Rotina e horário'),
           const SizedBox(height: 10),
           const FigmaAssessmentDescription(
-            text:
-                'O Coach usa seu horário para calcular janela metabólica ideal, lembretes de hidratação, preparo nutricional e sugestão de melhor hora para correr.',
+            text: MarketingCopy.routineDescription,
           ),
           const SizedBox(height: 24),
           Text(
@@ -48,7 +48,7 @@ class OnboardingStepRoutine extends StatelessWidget {
                 icon: Icons.wb_sunny_outlined,
                 label: 'Manhã',
                 hours: '06-09h',
-                hint: 'Cortisol alto,\nqueima de gordura',
+                hint: MarketingCopy.routineHintManha,
                 selected: selectedPeriod == 'manha',
                 onTap: () => onPeriodSelect('manha'),
               ),
@@ -57,7 +57,7 @@ class OnboardingStepRoutine extends StatelessWidget {
                 icon: Icons.wb_twilight,
                 label: 'Tarde',
                 hours: '14-17h',
-                hint: 'Pico de temperatura\ncorporal',
+                hint: MarketingCopy.routineHintTarde,
                 selected: selectedPeriod == 'tarde',
                 onTap: () => onPeriodSelect('tarde'),
               ),
@@ -66,7 +66,7 @@ class OnboardingStepRoutine extends StatelessWidget {
                 icon: Icons.nightlight_outlined,
                 label: 'Noite',
                 hours: '19-21h',
-                hint: 'Força muscular\nelevada',
+                hint: MarketingCopy.routineHintNoite,
                 selected: selectedPeriod == 'noite',
                 onTap: () => onPeriodSelect('noite'),
               ),

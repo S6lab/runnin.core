@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:runnin/core/constants/marketing_copy.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 
@@ -20,55 +21,32 @@ class CoachIntroPage extends StatefulWidget {
 class _CoachIntroPageState extends State<CoachIntroPage> {
   static const _slides = [
     _SlideData(
-      label: '// QUEM SOU EU',
+      label: MarketingCopy.coachSlide1Label,
       icon: Icons.psychology_outlined,
-      heading: 'Eu sou seu Coach.AI',
-      paragraph:
-          'Não sou um app de cronômetro. Sou um treinador de inteligência artificial que te conhece, se adapta a você e evolui junto. Cada corrida que você faz me torna mais preciso.',
-      bullets: [
-        'Analiso seu pace, BPM, splits e padrão de recuperação',
-        'Comparo com milhares de corredores do seu nível',
-        'Aprendo com cada sessão para refinar seu plano',
-      ],
+      heading: MarketingCopy.coachSlide1Heading,
+      paragraph: MarketingCopy.coachSlide1Paragraph,
+      bullets: MarketingCopy.coachSlide1Bullets,
     ),
     _SlideData(
-      label: '// DURANTE A CORRIDA',
+      label: MarketingCopy.coachSlide2Label,
       icon: Icons.mic_none_outlined,
-      heading: 'Corro com você',
-      paragraph:
-          'Vou te guiar por voz em tempo real. Aviso quando acelerar, quando frear, quando respirar fundo. Você só precisa correr — eu cuido dos números.',
-      bullets: [
-        'Alertas de pace quando sair da zona alvo',
-        'Comentários a cada km sobre seu desempenho',
-        'Motivação nos últimos quilômetros mais difíceis',
-        'Volume da música abaixa automaticamente quando falo',
-      ],
+      heading: MarketingCopy.coachSlide2Heading,
+      paragraph: MarketingCopy.coachSlide2Paragraph,
+      bullets: MarketingCopy.coachSlide2Bullets,
     ),
     _SlideData(
-      label: '// PRIMEIRA CORRIDA',
+      label: MarketingCopy.coachSlide3Label,
       icon: Icons.analytics_outlined,
-      heading: 'Essa é a calibração',
-      paragraph:
-          'Na primeira corrida, vou te avaliar. Corra no seu ritmo natural — sem pressão. Preciso entender seu corpo para criar o plano perfeito.',
-      bullets: [
-        'Vou medir seu pace natural em diferentes intensidades',
-        'Identifico suas zonas cardíacas reais',
-        'Calibro a progressão semanal pro seu nível',
-        'Após essa corrida, refino todo o plano automaticamente',
-      ],
+      heading: MarketingCopy.coachSlide3Heading,
+      paragraph: MarketingCopy.coachSlide3Paragraph,
+      bullets: MarketingCopy.coachSlide3Bullets,
     ),
     _SlideData(
-      label: '// SEU PLANO',
+      label: MarketingCopy.coachSlide4Label,
       icon: Icons.calendar_today_outlined,
-      heading: 'Planejamento inteligente',
-      paragraph:
-          'Trabalho com ciclos mensais e ajustes semanais. Você pode pedir revisão do plano quando precisar — eu reorganizo tudo mantendo o foco no seu objetivo.',
-      bullets: [
-        'Periodização mensal com mesociclos de 4 semanas',
-        'Ajuste semanal baseado em como você está respondendo',
-        'Se não puder correr num dia, reequilibro a semana',
-        '1 revisão de plano por semana disponível',
-      ],
+      heading: MarketingCopy.coachSlide4Heading,
+      paragraph: MarketingCopy.coachSlide4Paragraph,
+      bullets: MarketingCopy.coachSlide4Bullets,
     ),
   ];
 

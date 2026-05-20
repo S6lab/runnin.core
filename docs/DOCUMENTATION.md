@@ -333,6 +333,23 @@ Trends (FC repouso, HRV, sono, passos) / Zones (zonas FC) / Exams (upload + OCR 
 
 ---
 
+## 13. Decisões de arquitetura registradas
+
+### 13.1 Copy de marketing centralizada em `MarketingCopy` (2026-05-20)
+
+Todas as strings visíveis ao usuário nos flows de intro/onboarding (slides do IntroPage, slides do CoachIntroPage, notas do coach na etapa de frequência e dicas de horário na etapa de rotina) foram movidas para `app/lib/core/constants/marketing_copy.dart`.
+
+**Motivação:** strings espalhadas em 4 widgets dificultam revisão de copy por produto sem tocar lógica de UI; uma única fonte de verdade evita inconsistências entre telas.
+
+**Arquivos afetados:**
+- `lib/core/constants/marketing_copy.dart` — criado (fonte de verdade)
+- `lib/features/intro/presentation/pages/intro_page.dart`
+- `lib/features/coach_intro/presentation/pages/coach_intro_page.dart`
+- `lib/features/onboarding/presentation/steps/onboarding_step_frequency.dart`
+- `lib/features/onboarding/presentation/steps/onboarding_step_routine.dart`
+
+---
+
 ## 12. Oportunidades de melhoria (base para roadmap)
 
 - **Persistência de exames** — apontar o controller pro `FirestoreExamRepository` (corrige perda de dados).

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:runnin/core/constants/marketing_copy.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 
@@ -23,27 +24,21 @@ class _IntroPageState extends State<IntroPage> {
 
   static const _slides = <_IntroSlide>[
     _IntroSlide(
-      eyebrow: '// COACH.AI',
-      title: 'Um coach que te conhece.',
-      body:
-          'Plano de corrida adaptado ao seu nível, objetivo, rotina e dados de saúde. '
-          'Não é template genérico — é seu plano, seu pace, seu progresso.',
+      eyebrow: MarketingCopy.introSlide1Eyebrow,
+      title: MarketingCopy.introSlide1Title,
+      body: MarketingCopy.introSlide1Body,
       icon: Icons.psychology_outlined,
     ),
     _IntroSlide(
-      eyebrow: '// CORRIDA AO VIVO',
-      title: 'Guia por voz na sua corrida.',
-      body:
-          'O coach acompanha cada km. Avisa quando segurar o pace, quando soltar, '
-          'quando descansar. Como ter um treinador no ouvido.',
+      eyebrow: MarketingCopy.introSlide2Eyebrow,
+      title: MarketingCopy.introSlide2Title,
+      body: MarketingCopy.introSlide2Body,
       icon: Icons.headphones_outlined,
     ),
     _IntroSlide(
-      eyebrow: '// EVOLUÇÃO',
-      title: 'Histórico que conta sua jornada.',
-      body:
-          'Todas as corridas, conquistas e relatórios em um lugar. '
-          'Compartilhe seus melhores momentos com a comunidade.',
+      eyebrow: MarketingCopy.introSlide3Eyebrow,
+      title: MarketingCopy.introSlide3Title,
+      body: MarketingCopy.introSlide3Body,
       icon: Icons.trending_up_outlined,
     ),
   ];
