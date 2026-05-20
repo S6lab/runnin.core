@@ -57,6 +57,13 @@ class PauseRun extends RunEvent {}
 
 class ResumeRun extends RunEvent {}
 
+/// Interno: disparado pelo timer de stall (30s sem deslocamento). Pausa a
+/// run e marca o flag pra UI mostrar o dialog de continuar/encerrar.
+class _NoMovementDetected extends RunEvent {}
+
+/// Limpa o flag do dialog de "parado" (ex: ao escolher continuar/encerrar).
+class DismissNoMovementPrompt extends RunEvent {}
+
 // ── State ────────────────────────────────────────────────────────────────────
 enum RunStatus { idle, starting, active, paused, completing, completed, error }
 
@@ -80,6 +87,9 @@ class RunState {
   /// UI consome em vez do `state.formattedPace` global. LLM recebe
   /// últimos N como `recentSplits` no evento `km_analysis`.
   final List<KmSplit> splits;
+  /// True quando a detecção de "parado" (sem deslocamento em 30s) pausou a
+  /// run e a UI deve exibir o dialog de continuar/encerrar.
+  final bool noMovementPrompt;
 
   const RunState({
     this.status = RunStatus.idle,
@@ -97,6 +107,7 @@ class RunState {
     this.error,
     this.completedRun,
     this.splits = const [],
+    this.noMovementPrompt = false,
   });
 
   RunState copyWith({
@@ -115,6 +126,7 @@ class RunState {
     String? error,
     Run? completedRun,
     List<KmSplit>? splits,
+    bool? noMovementPrompt,
   }) => RunState(
     status: status ?? this.status,
     runId: runId ?? this.runId,
@@ -131,6 +143,7 @@ class RunState {
     error: error ?? this.error,
     completedRun: completedRun ?? this.completedRun,
     splits: splits ?? this.splits,
+    noMovementPrompt: noMovementPrompt ?? this.noMovementPrompt,
   );
 
   String get formattedDistance => '${(distanceM / 1000).toStringAsFixed(2)}km';
@@ -231,6 +244,10 @@ class RunBloc extends Bloc<RunEvent, RunState> {
     on<AbandonRun>(_onAbandon);
     on<PauseRun>(_onPause);
     on<ResumeRun>(_onResume);
+    on<_NoMovementDetected>(_onNoMovementDetected);
+    on<DismissNoMovementPrompt>(
+      (e, emit) => emit(state.copyWith(noMovementPrompt: false)),
+    );
     _local.init();
   }
 
@@ -356,16 +373,20 @@ class RunBloc extends Bloc<RunEvent, RunState> {
       _stallCheckTimer = Timer(const Duration(seconds: 30), () {
         if (isClosed || _stallCueFired) return;
         if (state.status != RunStatus.active) return;
-        if (state.points.isEmpty) return; // sem GPS, outro caminho avisa
         if (state.distanceM >= 5.0) return; // moveu, OK
         _stallCueFired = true;
-        unawaited(_requestCoachCue(
-          event: 'no_movement',
-          distanceM: state.distanceM,
-          elapsedS: state.elapsedS,
-          currentPaceMinKm: state.currentPaceMinKm,
-        ));
-        _lastCueAt['no_movement'] = DateTime.now().millisecondsSinceEpoch;
+        // Disclaimer gentil do coach (só se houve fix GPS pra contextualizar).
+        if (state.points.isNotEmpty) {
+          unawaited(_requestCoachCue(
+            event: 'no_movement',
+            distanceM: state.distanceM,
+            elapsedS: state.elapsedS,
+            currentPaceMinKm: state.currentPaceMinKm,
+          ));
+          _lastCueAt['no_movement'] = DateTime.now().millisecondsSinceEpoch;
+        }
+        // Pausa a run e pede o dialog de continuar/encerrar.
+        add(_NoMovementDetected());
       });
 
       // GPS: web browser não emite stream confiável (depende de
@@ -844,6 +865,25 @@ class RunBloc extends Bloc<RunEvent, RunState> {
     _scheduledAnalysis = null;
     _stallCheckTimer = null;
     emit(state.copyWith(status: RunStatus.paused));
+  }
+
+  /// Parado em 30s sem deslocamento: pausa (mesmo cleanup do _onPause) e
+  /// marca noMovementPrompt pra UI abrir o dialog continuar/encerrar.
+  void _onNoMovementDetected(_NoMovementDetected event, Emitter<RunState> emit) {
+    if (state.status != RunStatus.active) return;
+    _timer?.cancel();
+    _gpsPollTimer?.cancel();
+    _gpsSub?.cancel();
+    _motivationTimer?.cancel();
+    _scheduledAnalysis?.cancel();
+    _stallCheckTimer?.cancel();
+    _timer = null;
+    _gpsPollTimer = null;
+    _gpsSub = null;
+    _motivationTimer = null;
+    _scheduledAnalysis = null;
+    _stallCheckTimer = null;
+    emit(state.copyWith(status: RunStatus.paused, noMovementPrompt: true));
   }
 
   /// Resume: re-inicia timer + GPS poll mantendo elapsed/distância atuais.

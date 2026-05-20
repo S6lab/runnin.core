@@ -172,13 +172,59 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
     }
   }
 
+  /// Dialog de "parado": a corrida foi pausada após 30s sem deslocamento.
+  /// CONTINUAR retoma; ENCERRAR abandona e volta pra home.
+  Future<void> _showNoMovementDialog(BuildContext context) async {
+    final bloc = context.read<RunBloc>();
+    final router = GoRouter.of(context);
+    final palette = context.runninPalette;
+    final keepGoing = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: palette.surface,
+        title: const Text('VOCÊ PAROU?'),
+        content: const Text(
+          'Não detectamos movimento nos primeiros 30 segundos, então pausamos '
+          'sua corrida. Quer continuar ou encerrar?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text('ENCERRAR', style: TextStyle(color: palette.muted)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('CONTINUAR'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted) return;
+    bloc.add(DismissNoMovementPrompt());
+    if (keepGoing == true) {
+      bloc.add(ResumeRun());
+    } else {
+      bloc.add(AbandonRun());
+      router.go('/home');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final palette = context.runninPalette;
 
     return Scaffold(
       backgroundColor: palette.background,
-      body: BlocListener<RunBloc, RunState>(
+      body: MultiBlocListener(
+        listeners: [
+          // Parado em 30s: a bloc pausou e marcou noMovementPrompt → dialog.
+          BlocListener<RunBloc, RunState>(
+            listenWhen: (prev, curr) =>
+                !prev.noMovementPrompt && curr.noMovementPrompt,
+            listener: (context, state) => _showNoMovementDialog(context),
+          ),
+          BlocListener<RunBloc, RunState>(
         // Tocar SÓ quando o audio MUDA. Antes só checava "tem audio?",
         // então cada tick do timer/GPS update reemitia o player → áudio
         // repetia em loop curto. Comparar prev != curr garante 1 play por cue.
@@ -212,6 +258,8 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
             volume: 1.0,
           ).then((_) => setState(() => _coachAudioPlaying = true));
         },
+          ),
+        ],
         child: BlocBuilder<RunBloc, RunState>(
           builder: (context, state) {
             // View ÚNICA — idle e active compartilham layout (mapa
