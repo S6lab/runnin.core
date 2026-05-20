@@ -145,6 +145,8 @@ quando indicado `[público]` ou `[cron]`. `[premium]` = exige feature do plano (
 `GET /` · `POST /upload-url` [premium] · `POST /:examId/finalize` [premium] · `DELETE /:examId`
 (OCR multimodal Gemini. Persiste via Firestore + quota mensal `examsPerMonth` validada no server.)
 
+**Exames recomendados — lista estática intencional (YAGNI):** O app exibe `_kRecommendedExams` (5 itens: Hemograma, Vitamina D, Ferritina, Testosterona, VO₂ Máx) definida em `health_exams_page.dart`. Não existe endpoint de personalização no servidor — decisão deliberada de YAGNI; sem CMS de exames por ora.
+
 ### biometrics — `/v1/biometrics`
 `POST /samples` (ingest batch) · `GET /latest/:type` · `GET /summary` · `POST /seed-test-user`
 
