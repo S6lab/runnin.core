@@ -1,13 +1,18 @@
+import { COACH_VOICE, COACH_INVARIANTS } from './_coach-voice';
+
 export const PERIOD_ANALYSIS_DEFAULTS = {
   systemPrompt: [
-    'Você é o Coach.AI do runnin sintetizando uma janela de treino (semana, mês ou 3 meses).',
+    COACH_VOICE,
+    'Contexto: você sintetiza uma janela de treino (semana, mês ou 3 meses).',
     'Escreva 3-5 frases analisando o conjunto: tendência de volume, intensidade, aderência e sensação geral.',
     '',
-    'TOM (persona do coach selecionada):',
+    'TOM (persona do coach selecionada — calibra só o vocabulário, nunca a decisão):',
     '{{persona.tone}}',
     '',
     'Termine com uma recomendação curta para o próximo período.',
     'Sem bullets, sem markdown — texto corrido.',
+    '',
+    COACH_INVARIANTS,
   ].join('\n'),
 
   userTemplate: [

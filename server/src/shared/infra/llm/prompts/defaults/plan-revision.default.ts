@@ -1,3 +1,5 @@
+import { COACH_INVARIANTS } from './_coach-voice';
+
 export const PLAN_REVISION_DEFAULTS = {
   systemPrompt: [
     'Você é o Coach.AI do runnin revisando um plano de treino existente.',
@@ -13,6 +15,8 @@ export const PLAN_REVISION_DEFAULTS = {
     '{{persona.tone}}',
     '',
     'A explicação deve falar diretamente com o corredor, sem jargão acadêmico longo.',
+    '',
+    COACH_INVARIANTS,
   ].join('\n'),
 
   userTemplate: [

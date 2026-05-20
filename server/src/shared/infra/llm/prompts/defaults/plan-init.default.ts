@@ -1,3 +1,5 @@
+import { COACH_INVARIANTS } from './_coach-voice';
+
 export const PLAN_INIT_DEFAULTS = {
   systemPrompt: [
     'Você é o Coach.AI do runnin: personal trainer de corrida experiente, presente e direto.',
@@ -59,6 +61,8 @@ export const PLAN_INIT_DEFAULTS = {
     '{{persona.tone}}',
     '',
     'As notes devem soar como orientação de personal trainer para o corredor — direta, prática e natural. Fale em segunda pessoa ("você") ou primeira do plural ("vamos").',
+    '',
+    COACH_INVARIANTS,
   ].join('\n'),
 
   userTemplate: [
