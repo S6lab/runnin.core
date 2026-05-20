@@ -19,7 +19,7 @@ const _promptIds = <String>[
   'exam-analysis',
 ];
 
-const _personaIds = <String>['motivador', 'tecnico', 'sereno'];
+const _personaIds = <String>['motivador', 'tecnico'];
 
 /// Minimal admin console for personas/prompts/knobs.
 /// Reads/writes directly to Firestore `app_config/prompts`.

@@ -12,7 +12,6 @@ import 'package:runnin/shared/widgets/section_heading.dart';
 
 const _hiveBox = 'runnin_settings';
 const _hiveKeyPersonality = 'coach_personality';
-const _hiveKeyVoice = 'coach_voice_id';
 const _hiveKeyFrequency = 'coach_message_frequency';
 const _hiveKeyFeedback = 'coach_feedback_enabled';
 const _hiveKeyAllowCriticalInSilent = 'coach_allow_critical_in_silent';
@@ -26,7 +25,6 @@ class CoachSettingsPage extends StatefulWidget {
 
 class _CoachSettingsPageState extends State<CoachSettingsPage> {
   String _personality = 'motivador';
-  String _voiceId = 'bruno';
   String _frequency = 'per_km';
   // Quando frequency=silent, deixa pace_alert/segment_pace_off/finish furarem
   // o silêncio. Default true (silêncio é pra ruído, não pra risco).
@@ -42,7 +40,6 @@ class _CoachSettingsPageState extends State<CoachSettingsPage> {
   };
 
   bool _saving = false;
-  bool _previewLoading = false;
 
   final _remote = UserRemoteDatasource();
 
@@ -58,7 +55,6 @@ class _CoachSettingsPageState extends State<CoachSettingsPage> {
     final box = Hive.box<dynamic>(_hiveBox);
     setState(() {
       _personality = box.get(_hiveKeyPersonality, defaultValue: 'motivador') as String;
-      _voiceId = box.get(_hiveKeyVoice, defaultValue: 'bruno') as String;
       _frequency = box.get(_hiveKeyFrequency, defaultValue: 'per_km') as String;
       _allowCriticalInSilent = box.get(_hiveKeyAllowCriticalInSilent, defaultValue: true) as bool;
       final stored = box.get(_hiveKeyFeedback);
@@ -76,10 +72,6 @@ class _CoachSettingsPageState extends State<CoachSettingsPage> {
       if (profile == null || !mounted) return;
       setState(() {
         if (profile.coachPersonality != null) _personality = profile.coachPersonality!;
-        // coachVoiceId from server has "coach-" prefix; strip it for local state
-        if (profile.coachVoiceId.isNotEmpty) {
-          _voiceId = profile.coachVoiceId.replaceFirst('coach-', '');
-        }
         if (profile.coachMessageFrequency != null) _frequency = profile.coachMessageFrequency!;
         if (profile.allowCriticalAlertsInSilent != null) {
           _allowCriticalInSilent = profile.allowCriticalAlertsInSilent!;
@@ -92,7 +84,6 @@ class _CoachSettingsPageState extends State<CoachSettingsPage> {
       if (Hive.isBoxOpen(_hiveBox)) {
         final box = Hive.box<dynamic>(_hiveBox);
         await box.put(_hiveKeyPersonality, _personality);
-        await box.put(_hiveKeyVoice, _voiceId);
         await box.put(_hiveKeyFrequency, _frequency);
         await box.put(_hiveKeyAllowCriticalInSilent, _allowCriticalInSilent);
         await box.put(_hiveKeyFeedback, _feedback);
@@ -106,7 +97,6 @@ class _CoachSettingsPageState extends State<CoachSettingsPage> {
     if (!Hive.isBoxOpen(_hiveBox)) return;
     final box = Hive.box<dynamic>(_hiveBox);
     await box.put(_hiveKeyPersonality, _personality);
-    await box.put(_hiveKeyVoice, _voiceId);
     await box.put(_hiveKeyFrequency, _frequency);
     await box.put(_hiveKeyAllowCriticalInSilent, _allowCriticalInSilent);
     await box.put(_hiveKeyFeedback, _feedback);
@@ -117,7 +107,6 @@ class _CoachSettingsPageState extends State<CoachSettingsPage> {
     try {
       await apiClient.patch('/users/me', data: {
         'coachPersonality': _personality,
-        'coachVoiceId': 'coach-$_voiceId',
         'coachMessageFrequency': _frequency,
         'allowCriticalAlertsInSilent': _allowCriticalInSilent,
         'coachFeedbackEnabled': _feedback,
@@ -135,7 +124,7 @@ class _CoachSettingsPageState extends State<CoachSettingsPage> {
     } on DioException catch (e) {
       if (mounted) {
         final msg = e.response?.statusCode == 422
-            ? 'Erro 422: voiceId inválido.'
+            ? 'Erro 422: dados inválidos.'
             : 'Erro ao salvar. Tente novamente.';
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -151,20 +140,6 @@ class _CoachSettingsPageState extends State<CoachSettingsPage> {
     }
   }
 
-  Future<void> _previewVoice(String voiceId) async {
-    if (_previewLoading) return;
-    setState(() => _previewLoading = true);
-    try {
-      await apiClient.post('/coach/message', data: {
-        'event': 'preview',
-        'voiceId': voiceId,
-      });
-    } catch (_) {
-      // Preview is best-effort; silence errors
-    } finally {
-      if (mounted) setState(() => _previewLoading = false);
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -196,57 +171,10 @@ class _CoachSettingsPageState extends State<CoachSettingsPage> {
                     selected: _personality == 'tecnico',
                     onTap: () => setState(() => _personality = 'tecnico'),
                   ),
-                  const SizedBox(height: AppSpacing.sm),
-                  FigmaSelectionButton(
-                    label: 'Sereno — "Respire fundo, mantenha o ritmo."',
-                    selected: _personality == 'sereno',
-                    onTap: () => setState(() => _personality = 'sereno'),
-                  ),
 
                   const SizedBox(height: AppSpacing.xxl),
 
-                  // §2 Voz
-                  const SectionHeading(label: 'VOZ DO COACH'),
-                  const SizedBox(height: 12),
-                  _VoiceOption(
-                    label: 'Bruno',
-                    subtitle: 'Voz masculina pt-BR',
-                    voiceId: 'bruno',
-                    selected: _voiceId == 'bruno',
-                    previewLoading: _previewLoading && _voiceId == 'bruno',
-                    onTap: () {
-                      setState(() => _voiceId = 'bruno');
-                      _previewVoice('bruno');
-                    },
-                  ),
-                  const SizedBox(height: AppSpacing.sm),
-                  _VoiceOption(
-                    label: 'Clara',
-                    subtitle: 'Voz feminina pt-BR',
-                    voiceId: 'clara',
-                    selected: _voiceId == 'clara',
-                    previewLoading: _previewLoading && _voiceId == 'clara',
-                    onTap: () {
-                      setState(() => _voiceId = 'clara');
-                      _previewVoice('clara');
-                    },
-                  ),
-                  const SizedBox(height: AppSpacing.sm),
-                  _VoiceOption(
-                    label: 'Luna',
-                    subtitle: 'Voz neutra ElevenLabs',
-                    voiceId: 'luna',
-                    selected: _voiceId == 'luna',
-                    previewLoading: _previewLoading && _voiceId == 'luna',
-                    onTap: () {
-                      setState(() => _voiceId = 'luna');
-                      _previewVoice('luna');
-                    },
-                  ),
-
-                  const SizedBox(height: AppSpacing.xxl),
-
-                  // §3 Frequência
+                  // §2 Frequência
                   const SectionHeading(label: 'FREQUÊNCIA DURANTE CORRIDA'),
                   const SizedBox(height: 12),
                   FigmaSelectionButton(
@@ -380,78 +308,3 @@ class _CoachSettingsPageState extends State<CoachSettingsPage> {
   }
 }
 
-class _VoiceOption extends StatelessWidget {
-  final String label;
-  final String subtitle;
-  final String voiceId;
-  final bool selected;
-  final bool previewLoading;
-  final VoidCallback onTap;
-
-  const _VoiceOption({
-    required this.label,
-    required this.subtitle,
-    required this.voiceId,
-    required this.selected,
-    required this.previewLoading,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: double.infinity,
-        height: 56.5,
-        padding: const EdgeInsets.symmetric(horizontal: 21.74, vertical: 10),
-        decoration: BoxDecoration(
-          color: selected ? FigmaColors.selectionActiveBg : FigmaColors.surfaceCard,
-          border: Border.all(
-            color: selected ? FigmaColors.selectionActiveBorder : FigmaColors.borderDefault,
-            width: FigmaDimensions.borderUniversal,
-          ),
-          borderRadius: FigmaBorderRadius.zero,
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    label,
-                    style: context.runninType.bodyMd.copyWith(
-                      fontWeight: FontWeight.w500,
-                      color: selected ? FigmaColors.textPrimary : const Color(0xB3FFFFFF),
-                    ),
-                  ),
-                  Text(
-                    subtitle,
-                    style: context.runninType.labelCaps.copyWith(
-                      fontWeight: FontWeight.w400,
-                      color: FigmaColors.textMuted,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            if (previewLoading)
-              const SizedBox(
-                width: 16,
-                height: 16,
-                child: CircularProgressIndicator(strokeWidth: 1.5),
-              )
-            else
-              Icon(
-                Icons.play_circle_outline,
-                size: 20,
-                color: selected ? context.runninPalette.primary : FigmaColors.textDim,
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}

@@ -1,4 +1,4 @@
-export type CoachPersonaId = 'motivador' | 'tecnico' | 'sereno';
+export type CoachPersonaId = 'motivador' | 'tecnico';
 
 export interface CoachPersona {
   id: CoachPersonaId;
@@ -25,16 +25,6 @@ export const DEFAULT_PERSONAS: Record<CoachPersonaId, CoachPersona> = {
       'Use vocabulário fisiológico preciso: limiar aeróbico, VO2, zona 2, frequência cardíaca de reserva.',
       'Sem exclamações. Frases informativas, neutras, com causa→efeito explícito.',
       'Quando recomendar algo, justifique brevemente com base em fisiologia ou periodização.',
-    ].join('\n'),
-  },
-  sereno: {
-    id: 'sereno',
-    label: 'Sereno',
-    description: [
-      'Tom calmo, contemplativo, sem urgência. Frases mais longas, com conectivos suaves.',
-      'Reforça escuta do corpo, recuperação e prazer no processo. Foca em respiração, postura e percepção.',
-      'Evita superlativos e exclamações. Quando há intensidade, traduz como "trabalho consciente".',
-      'Acolhedor mesmo quando aponta correção; sempre oferece alternativa de cuidado.',
     ].join('\n'),
   },
 };

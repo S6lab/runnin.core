@@ -36,7 +36,7 @@ export interface UserProfile {
 
   // Coach preferences
   coachIntroSeen?: boolean;
-  coachPersonality?: 'motivador' | 'tecnico' | 'sereno';
+  coachPersonality?: 'motivador' | 'tecnico';
   coachMessageFrequency?: 'per_km' | 'per_2km' | 'alerts_only' | 'silent';
   coachFeedbackEnabled?: Record<string, boolean>;
   /** Quando frequency=silent, permite ainda assim alertas críticos

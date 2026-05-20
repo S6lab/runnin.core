@@ -28,7 +28,7 @@ export const UpsertProfileSchema = z.object({
 
   // Coach preferences
   coachIntroSeen: z.boolean().optional(),
-  coachPersonality: z.enum(['motivador', 'tecnico', 'sereno']).optional(),
+  coachPersonality: z.enum(['motivador', 'tecnico']).optional(),
   coachMessageFrequency: z.enum(['per_km', 'per_2km', 'alerts_only', 'silent']).optional(),
   coachFeedbackEnabled: z.record(z.string(), z.boolean()).optional(),
   allowCriticalAlertsInSilent: z.boolean().optional(),

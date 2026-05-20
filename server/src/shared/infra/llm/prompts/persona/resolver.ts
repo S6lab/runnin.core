@@ -6,6 +6,7 @@ export async function resolvePersonaTone(id: string | undefined | null): Promise
 }
 
 export function normalizePersonaId(id: string | undefined | null): CoachPersonaId {
-  if (id === 'motivador' || id === 'tecnico' || id === 'sereno') return id;
+  if (id === 'motivador' || id === 'tecnico') return id;
+  // 'sereno' legado e qualquer outro → motivador (default).
   return DEFAULT_PERSONA_ID;
 }
