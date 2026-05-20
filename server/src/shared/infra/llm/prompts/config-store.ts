@@ -6,9 +6,11 @@ import { PromptId, PromptSource } from './versions';
 import { PLAN_INIT_DEFAULTS } from './defaults/plan-init.default';
 import { PLAN_REVISION_DEFAULTS } from './defaults/plan-revision.default';
 import { LIVE_COACH_DEFAULTS } from './defaults/live-coach.default';
+import { LIVE_VOICE_DEFAULTS } from './defaults/live-voice.default';
 import { POST_RUN_REPORT_DEFAULTS } from './defaults/post-run-report.default';
 import { POST_RUN_REPORT_ENRICHED_DEFAULTS } from './defaults/post-run-report-enriched.default';
 import { PERIOD_ANALYSIS_DEFAULTS } from './defaults/period-analysis.default';
+import { WEEKLY_REPORT_DEFAULTS } from './defaults/weekly-report.default';
 import { COACH_CHAT_DEFAULTS } from './defaults/coach-chat.default';
 import { EXAM_ANALYSIS_DEFAULTS } from './defaults/exam-analysis.default';
 
@@ -45,9 +47,11 @@ const DEFAULTS_BY_ID: Record<PromptId, PromptConfig> = {
   'plan-init': PLAN_INIT_DEFAULTS,
   'plan-revision': PLAN_REVISION_DEFAULTS,
   'live-coach': LIVE_COACH_DEFAULTS,
+  'live-voice': LIVE_VOICE_DEFAULTS,
   'post-run-report': POST_RUN_REPORT_DEFAULTS,
   'post-run-report-enriched': POST_RUN_REPORT_ENRICHED_DEFAULTS,
   'period-analysis': PERIOD_ANALYSIS_DEFAULTS,
+  'weekly-report': WEEKLY_REPORT_DEFAULTS,
   'coach-chat': COACH_CHAT_DEFAULTS,
   'exam-analysis': EXAM_ANALYSIS_DEFAULTS,
 };

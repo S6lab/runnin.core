@@ -1,6 +1,9 @@
 import { logger } from '@shared/logger/logger';
 import { getAsyncLLM } from '@shared/infra/llm/llm.factory';
 import { formatRunningKnowledgeContext } from '@shared/knowledge/running/running-knowledge';
+import { getPromptConfig } from '@shared/infra/llm/prompts/config-store';
+import { renderTemplate } from '@shared/infra/llm/prompts/render';
+import { resolvePersonaTone } from '@shared/infra/llm/prompts/persona/resolver';
 import { CoachRuntimeContextService } from '@modules/coach/use-cases/coach-runtime-context.service';
 import { Run } from '@modules/runs/domain/run.entity';
 import { RunRepository } from '@modules/runs/domain/run.repository';
@@ -94,20 +97,21 @@ export class GenerateWeeklyReportUseCase {
       3,
     );
 
-    const prompt = buildWeeklyReportPrompt({
-      plan,
-      week,
-      metrics,
-      runs,
-      profileName: runtime.profile?.name ?? 'corredor',
-      knowledge,
-    });
+    const { config } = await getPromptConfig('weekly-report');
+    const tone = await resolvePersonaTone(runtime.profile?.coachPersonality);
+    const weekValues = buildWeeklyReportValues({ week, metrics, runs });
+    const values = {
+      persona: { tone },
+      profile: { name: runtime.profile?.name ?? 'corredor' },
+      plan: { goal: plan.goal, level: plan.level },
+      week: { number: week.weekNumber, ...weekValues },
+      rag: knowledge,
+    };
 
-    const raw = await this.llm.generate(prompt, {
-      systemPrompt:
-        'Você é um coach de corrida brasileiro. Escreva análises semanais curtas, diretas e em Português.',
-      maxTokens: 600,
-      temperature: 0.7,
+    const raw = await this.llm.generate(renderTemplate(config.userTemplate, values), {
+      systemPrompt: renderTemplate(config.systemPrompt, values),
+      maxTokens: config.maxTokens,
+      temperature: config.temperature,
     });
 
     const { summary, coachHighlights } = parseResponse(raw);
@@ -198,15 +202,16 @@ function averagePace(paces: string[]): string {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-function buildWeeklyReportPrompt(args: {
-  plan: Plan;
+// Monta os blocos de DADOS da semana (foco/sessões/corridas/métricas) que
+// alimentam o prompt 'weekly-report' do config-store. A voz e as instruções
+// vivem no system/userTemplate (Doc 3), não aqui.
+function buildWeeklyReportValues(args: {
   week: PlanWeek;
   metrics: WeeklyReportMetrics;
   runs: Run[];
-  profileName: string;
-  knowledge: string;
-}): string {
-  const { plan, week, metrics, runs, profileName, knowledge } = args;
+}): { focus: string; sessionsPlanned: string; runsActual: string; metrics: string } {
+  const { week, metrics, runs } = args;
+  const focus = `${week.focus ?? '(sem foco definido)'}${week.narrative ? ` — ${week.narrative}` : ''}`;
   const sessionsPlanned = week.sessions
     .map((s) => `  - dia ${s.dayOfWeek}: ${s.type} ${s.distanceKm}km${s.targetPace ? ` @ ${s.targetPace}` : ''}`)
     .join('\n');
@@ -218,43 +223,16 @@ function buildWeeklyReportPrompt(args: {
             `  - ${r.createdAt.slice(0, 10)}: ${(r.distanceM / 1000).toFixed(1)}km, ${formatDuration(r.durationS)}, pace ${r.avgPace ?? '—'}, bpm ${r.avgBpm ?? '—'}`,
         )
         .join('\n');
-
-  return `# RELATÓRIO SEMANAL — Plano ${plan.goal} (${plan.level})
-
-## Foco da semana ${week.weekNumber}
-${week.focus ?? '(sem foco definido)'} — ${week.narrative ?? ''}
-
-## Sessões planejadas
-${sessionsPlanned}
-
-## Corridas registradas (${runs.length}/${week.sessions.length})
-${runsActual}
-
-## Métricas agregadas
-- Distância planejada: ${metrics.plannedDistanceKm.toFixed(1)} km
-- Distância real: ${metrics.actualDistanceKm.toFixed(1)} km
-- Taxa de aderência: ${Math.round(metrics.completionRate * 100)}%
-- BPM médio: ${metrics.avgBpm ?? '—'}
-- Pace médio: ${metrics.avgPaceStr ?? '—'}/km
-- Duração total: ${formatDuration(metrics.totalDurationS)}
-
-## Conhecimento base
-${knowledge}
-
-## Instruções
-Escreva uma análise semanal para ${profileName} em **Português brasileiro**, com **150-200 palavras**. Tom direto e empático, foco em:
-1. O que correu bem
-2. O que ficou abaixo do planejado (se aplicável)
-3. Como ajustar a próxima semana
-
-Depois da análise, liste **2 a 3 highlights** começando cada um com "- " (hífen + espaço), curtos (1 frase cada). Esse bloco virá depois de uma linha com "---".
-
-Formato de resposta:
-[análise 150-200 palavras]
----
-- [highlight 1]
-- [highlight 2]
-- [highlight 3 opcional]`;
+  const metricsBlock = [
+    `- Distância planejada: ${metrics.plannedDistanceKm.toFixed(1)} km`,
+    `- Distância real: ${metrics.actualDistanceKm.toFixed(1)} km`,
+    `- Taxa de aderência: ${Math.round(metrics.completionRate * 100)}%`,
+    `- Sessões: ${metrics.completedRuns}/${metrics.plannedSessions}`,
+    `- BPM médio: ${metrics.avgBpm ?? '—'}`,
+    `- Pace médio: ${metrics.avgPaceStr ?? '—'}/km`,
+    `- Duração total: ${formatDuration(metrics.totalDurationS)}`,
+  ].join('\n');
+  return { focus, sessionsPlanned, runsActual, metrics: metricsBlock };
 }
 
 function parseResponse(raw: string): { summary: string; coachHighlights: string[] } {

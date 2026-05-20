@@ -5,6 +5,8 @@ import { getAuth } from '@shared/infra/firebase/firebase.client';
 import { GeminiLiveSession } from '@shared/infra/llm/gemini-live.service';
 import { CoachRuntimeContextService } from '@modules/coach/use-cases/coach-runtime-context.service';
 import { resolvePersonaTone } from '@shared/infra/llm/prompts';
+import { getPromptConfig } from '@shared/infra/llm/prompts/config-store';
+import { renderTemplate } from '@shared/infra/llm/prompts/render';
 import { FirestoreCoachMessageLogRepository } from '@modules/coach/infra/firestore-coach-message-log.repository';
 import { CoachMessageLog } from '@modules/coach/domain/coach-message-log.entity';
 import { logger } from '@shared/logger/logger';
@@ -95,12 +97,17 @@ export function attachCoachLiveWebSocket(httpServer: HttpServer): void {
       ? `Plano em andamento (${runtime.currentPlan.weeksCount} semanas, ${runtime.currentPlan.goal}).`
       : 'Sem plano ativo.';
 
+    // System prompt da voz vem do config-store (id 'live-voice', Doc 5 §XIV) —
+    // editável no admin. Persona + snippet do perfil/plano entram como contexto.
+    const { config: voiceConfig } = await getPromptConfig('live-voice');
+    const values = {
+      persona: { tone },
+      profile: { snippet: profileSnippet },
+      plan: { snippet: planSnippet },
+    };
     const systemInstruction = [
-      'Você é o Coach.AI do runnin em conversa por voz com o atleta. PT-BR.',
-      `Persona: ${tone}`,
-      `Atleta: ${profileSnippet}.`,
-      planSnippet,
-      'Respostas curtas (1-3 frases, 10-20s de áudio). Tom direto e prático.',
+      renderTemplate(voiceConfig.systemPrompt, values),
+      renderTemplate(voiceConfig.userTemplate, values),
     ].join('\n\n');
 
     const session = new GeminiLiveSession({
