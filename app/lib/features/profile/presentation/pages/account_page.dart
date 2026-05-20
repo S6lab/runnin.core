@@ -789,13 +789,6 @@ class _MenuSection extends StatelessWidget {
         ),
         const SizedBox(height: AppSpacing.sm),
         _MenuItem(
-          icon: Icons.bar_chart_outlined,
-          title: 'ANALYTICS',
-          subtitle: 'Corridas, distância, pace, plano',
-          onTap: () => context.push('/dashboard'),
-        ),
-        const SizedBox(height: AppSpacing.sm),
-        _MenuItem(
           icon: Icons.lock_outline,
           title: 'CONTA & ACESSO',
           subtitle: 'Email, telefone, login',

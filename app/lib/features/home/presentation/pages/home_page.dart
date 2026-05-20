@@ -224,35 +224,7 @@ class _HomeHeader extends StatelessWidget {
         ),
         Row(
           children: [
-            // Analytics destacado: chip com borda da skin (primary) +
-            // ícone maior. Era um ícone sem label perdido entre outros.
-            InkWell(
-              onTap: () => context.push('/dashboard'),
-              borderRadius: BorderRadius.zero,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(
-                  color: palette.primary.withValues(alpha: 0.10),
-                  border: Border.all(color: palette.primary, width: 1.0),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.bar_chart_outlined, size: 18, color: palette.primary),
-                    const SizedBox(width: 6),
-                    Text(
-                      'ANALYTICS',
-                      style: TextStyle(
-                        fontSize: 10,
-                        color: palette.primary,
-                        letterSpacing: 1.0,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(width: 14),
+            // Analytics consolidado no Histórico — sem atalho aqui.
             InkWell(
               onTap: () => context.push('/profile'),
               borderRadius: BorderRadius.zero,
