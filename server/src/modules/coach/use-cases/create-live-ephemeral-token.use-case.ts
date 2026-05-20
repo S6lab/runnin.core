@@ -8,7 +8,7 @@ const AUTH_TOKENS_URL =
 // gemini_live e docs Google Live API).
 const DEFAULT_MODEL =
   process.env['GEMINI_LIVE_MODEL']?.trim() ||
-  'models/gemini-2.5-flash-native-audio-preview-12-2025';
+  'models/gemini-2.5-flash-native-audio-latest';
 
 /**
  * Cria token efêmero pra app Flutter conectar direto no Gemini Live

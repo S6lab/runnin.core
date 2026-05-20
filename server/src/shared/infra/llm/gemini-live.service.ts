@@ -15,7 +15,7 @@ const GEMINI_LIVE_URL = 'wss://generativelanguage.googleapis.com/ws/google.ai.ge
 // 'gemini-live-2.5-flash-preview' está ativo em v1alpha (auth_tokens)
 // E em v1beta (bidi WebSocket). Override via GEMINI_LIVE_MODEL env.
 const DEFAULT_MODEL = process.env['GEMINI_LIVE_MODEL']?.trim()
-  || 'models/gemini-2.0-flash-exp';
+  || 'models/gemini-2.5-flash-native-audio-latest';
 
 export interface GeminiLiveConfig {
   model?: string;

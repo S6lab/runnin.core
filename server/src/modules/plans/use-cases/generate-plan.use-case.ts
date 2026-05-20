@@ -1,6 +1,6 @@
 import { v4 as uuid } from 'uuid';
 import { z } from 'zod';
-import { getAsyncLLM } from '@shared/infra/llm/llm.factory';
+import { getPlanLLM } from '@shared/infra/llm/llm.factory';
 import { PlanRepository } from '../domain/plan.repository';
 import { Plan, PlanSegment, PlanSession, PlanWeek } from '../domain/plan.entity';
 import { buildExecutionSegments } from './build-execution-segments';
@@ -68,7 +68,7 @@ export const GeneratePlanSchema = z.object({
 export type GeneratePlanInput = z.infer<typeof GeneratePlanSchema>;
 
 export class GeneratePlanUseCase {
-  private llm = getAsyncLLM();
+  private llm = getPlanLLM();
   private runtime = new CoachRuntimeContextService();
   // Default impl injetada via construtor de classe pra não exigir DI
   // explícita no callsite, mas trocável em testes.

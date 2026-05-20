@@ -31,3 +31,18 @@ export function getRealtimeLLM(): LLMProvider {
 export function getAsyncLLM(): LLMProvider {
   return instantiateProvider(getProviderName('LLM_ASYNC_PROVIDER'));
 }
+
+/**
+ * LLM da GERAÇÃO DE PLANO. Permite um modelo dedicado (mais capaz/caro) via
+ * env GEMINI_PLAN_MODEL — ex: gemini-3.1-pro-preview pra raciocínio melhor —
+ * sem afetar os demais usos (coach/relatórios seguem GEMINI_MODEL). Só aplica
+ * quando o provider async é gemini; caso contrário cai no provider padrão.
+ */
+export function getPlanLLM(): LLMProvider {
+  const provider = getProviderName('LLM_ASYNC_PROVIDER');
+  if (provider === 'gemini') {
+    const planModel = process.env['GEMINI_PLAN_MODEL']?.trim();
+    return planModel ? new GeminiAdapter(planModel) : new GeminiAdapter();
+  }
+  return instantiateProvider(provider);
+}
