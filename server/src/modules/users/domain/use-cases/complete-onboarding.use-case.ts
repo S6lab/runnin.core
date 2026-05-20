@@ -4,6 +4,8 @@ import { UserProfile, isPremium } from '../user.entity';
 import { FirestorePlanRepository } from '@modules/plans/infra/firestore-plan.repository';
 import { GeneratePlanUseCase } from '@modules/plans/use-cases/generate-plan.use-case';
 import { CooldownError, PremiumRequiredError } from '@shared/errors/app-error';
+import { container } from '@shared/container';
+import { logger } from '@shared/logger/logger';
 
 // Ranges sensatos pra rejeitar dados nonsense (ex: peso 10kg, idade 200).
 // Server é a source of truth — mesmo se app pular validation, server barra.
@@ -93,7 +95,7 @@ export class CompleteOnboardingUseCase {
 
   constructor(private readonly userRepo: UserRepository) {}
 
-  async execute(userId: string, input: CompleteOnboardingInput): Promise<{ user: UserProfile; planId: string }> {
+  async execute(userId: string, input: CompleteOnboardingInput): Promise<{ user: UserProfile; planId: string | null }> {
     const now = new Date().toISOString();
     const existing = await this.userRepo.findById(userId);
     const isRedo = !!existing?.onboarded;
@@ -147,6 +149,18 @@ export class CompleteOnboardingUseCase {
     };
 
     await this.userRepo.upsert(profile);
+
+    // Geração de plano é feature do billing plan (Pro). Free conclui o
+    // onboarding SEM plano e SEM coach — o app oferece o upgrade. A permissão
+    // é centralizada no billing plan (getUserFeatures), não em flags soltas.
+    const canGeneratePlan = await container.useCases.getUserFeatures.hasFeature(
+      userId,
+      'generatePlan',
+    );
+    if (!canGeneratePlan) {
+      logger.info('onboarding.plan.skipped_free_tier', { userId });
+      return { user: profile, planId: null };
+    }
 
     const plan = await this.generatePlan.execute(userId, {
       goal: input.goal,
