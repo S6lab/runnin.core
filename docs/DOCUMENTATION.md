@@ -273,6 +273,7 @@ sessão anônima. `apiClient`: base `API_BASE_URL` (dart-define) + token Firebas
 
 **J1 — Onboarding:** Splash → Intro (slides) → Login (Google/Phone) → provision → Onboarding (~15 passos) →
 freemium cai em Paywall / premium vai pra Plan Loading (gera plano via LLM, polling) → Coach Intro → Home.
+> **Tratamento de erro no submit:** se `POST /onboarding` falhar, a navegação é bloqueada e uma mensagem de erro é exibida na tela ("Erro ao salvar perfil. Tente novamente."). O botão volta a ficar ativo para retry — perfil incompleto não avança pro paywall/plan-loading.
 
 **J2 — Registrar corrida:** Home/Training → Prep (tipo, alvo, alertas) → Active Run (GPS, métricas, splits
 km-a-km, coach por voz a cada km/evento, stall detection 30s) → Finalizar → Report (splits, mapa, stats,

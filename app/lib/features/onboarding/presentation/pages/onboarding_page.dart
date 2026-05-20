@@ -100,8 +100,12 @@ class _OnboardingPageState extends State<OnboardingPage> {
       _error = null;
       _submitting = true;
     });
-    _doSubmit();
+    final ok = await _doSubmit();
     if (!mounted) return;
+    if (!ok) {
+      setState(() => _submitting = false);
+      return;
+    }
     // Gate freemium: não-premium vai pro paywall. Premium → plan-loading.
     final profile = await _ds.getMe().catchError((_) => null);
     final premium = profile?.premium ?? false;
@@ -116,7 +120,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
     }
   }
 
-  Future<void> _doSubmit() async {
+  Future<bool> _doSubmit() async {
     try {
       await _ds.completeOnboarding(
         name: _nameCtrl.text.trim(),
@@ -141,8 +145,12 @@ class _OnboardingPageState extends State<OnboardingPage> {
         sleepTime: _sleepTime,
       );
       markOnboardingDone();
+      return true;
     } catch (_) {
-      // User already navigated to PlanLoadingPage; silent best-effort.
+      if (mounted) {
+        setState(() => _error = 'Erro ao salvar perfil. Tente novamente.');
+      }
+      return false;
     }
   }
 
