@@ -109,10 +109,10 @@ class _HistoryPageState extends State<HistoryPage> {
           _allRuns = runs;
           _plan = plan;
           _loading = false;
-          if (runs.isNotEmpty) {
-            _benchmarkPercentile = HistStatCard.computeBenchmarkPercentile(runs);
-          }
         });
+        if (runs.isNotEmpty) {
+          _loadBenchmarkTable(runs.first.id);
+        }
       }
     } catch (_) {
       if (mounted) setState(() { _error = 'Erro ao carregar corridas.'; _loading = false; });
@@ -120,22 +120,8 @@ class _HistoryPageState extends State<HistoryPage> {
   }
 
   Future<void> _loadBenchmark() async {
-    setState(() { _benchmarkLoading = true; });
-    try {
-      if (_allRuns != null && _allRuns!.isNotEmpty) {
-        await Future.delayed(const Duration(milliseconds: 300));
-        if (mounted) {
-          setState(() { 
-            _benchmarkPercentile = HistStatCard.computeBenchmarkPercentile(_allRuns!);
-            _benchmarkLoading = false; 
-          });
-        }
-      } else {
-        setState(() { _benchmarkLoading = false; });
-      }
-    } catch (_) {
-      if (mounted) setState(() { _benchmarkLoading = false; });
-    }
+    if (_allRuns == null || _allRuns!.isEmpty) return;
+    _loadBenchmarkTable(_allRuns!.first.id);
   }
 
   Future<void> _loadBenchmarkTable(String runId) async {

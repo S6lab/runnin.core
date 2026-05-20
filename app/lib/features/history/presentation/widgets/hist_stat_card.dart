@@ -154,7 +154,6 @@ class HistStatCard extends StatelessWidget {
       streakDays: streak,
       totalXp: totalXp,
       avgBpm: avgBpm,
-      benchmarkPercentile: computeBenchmarkPercentile(runs),
     );
   }
 
@@ -168,22 +167,6 @@ class HistStatCard extends StatelessWidget {
     return totalBpm ~/ runsWithBpm.length;
   }
 
-  static double computeBenchmarkPercentile(List<Run> runs) {
-    if (runs.isEmpty) return 0;
-    
-    final totalDistM = runs.fold<double>(0.0, (s, r) => s + r.distanceM);
-    final totalS = runs.fold<int>(0, (s, r) => s + r.durationS);
-    
-    final avgSpeedMps = totalDistM / totalS;
-    final avgKmph = avgSpeedMps * 3.6;
-    
-    if (avgKmph < 8) return 10;
-    if (avgKmph < 9) return 25;
-    if (avgKmph < 10) return 45;
-    if (avgKmph < 11) return 65;
-    if (avgKmph < 12) return 80;
-    return 95;
-  }
 }
 
 class _HistoryStats {
@@ -195,7 +178,6 @@ class _HistoryStats {
   final int streakDays;
   final int totalXp;
   final int? avgBpm;
-  final double benchmarkPercentile;
 
   const _HistoryStats({
     required this.count,
@@ -205,7 +187,6 @@ class _HistoryStats {
     required this.streakDays,
     required this.totalXp,
     required this.avgBpm,
-    required this.benchmarkPercentile,
   });
 
   String _formatDistance(double km) {
@@ -236,6 +217,5 @@ class _HistoryStats {
         streakDays: 0,
         totalXp: 0,
         avgBpm: null,
-        benchmarkPercentile: 0,
       );
 }
