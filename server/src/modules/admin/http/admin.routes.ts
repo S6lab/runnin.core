@@ -10,6 +10,7 @@ import {
   patchUserPlan,
   postSeedTester,
   postRagReindex,
+  postRagPurge,
   getRagStatus,
   getDiagnoseUser,
   postDiagnoseRegeneratePlan,
@@ -39,3 +40,4 @@ adminRouter.patch('/users/:userId/plan', patchUserPlan);
 adminRouter.post('/users/:userId/reset', postUserReset);
 adminRouter.get('/rag/status', getRagStatus);
 adminRouter.post('/rag/reindex', postRagReindex);
+adminRouter.post('/rag/purge', postRagPurge);

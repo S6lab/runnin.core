@@ -155,7 +155,8 @@ export function postInvalidateCache(_req: Request, res: Response): void {
 
 // === Admin: gerenciamento de plano de usuário ===
 import { FirestoreUserRepository } from '@modules/users/infra/firestore-user.repository';
-import { getAuth, getFirestore } from '@shared/infra/firebase/firebase.client';
+import { getAuth, getFirestore, getStorageBucket } from '@shared/infra/firebase/firebase.client';
+import { logger } from '@shared/logger/logger';
 import { SeedTesterUseCase } from '../use-cases/seed-tester.use-case';
 import {
   invalidateRunningKnowledgeStorageCache,
@@ -451,6 +452,63 @@ export async function postRagReindex(_req: Request, res: Response, next: NextFun
 }
 
 /**
+ * POST /admin/rag/purge — APAGA toda a base RAG operacional: zera as
+ * collections rag_chunks e rag_documents e remove os uploads em
+ * Storage (rag/uploads/). Em seguida re-seed + reindex a partir do corpus
+ * canônico (Doc 1) pra base voltar limpa. Operação destrutiva — usada na
+ * troca total da base.
+ */
+export async function postRagPurge(_req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const db = getFirestore();
+    const deletedChunks = await deleteAllDocs(db.collection('rag_chunks'));
+    const deletedDocs = await deleteAllDocs(db.collection('rag_documents'));
+
+    let deletedFiles = 0;
+    try {
+      const [files] = await getStorageBucket().getFiles({ prefix: 'rag/uploads/' });
+      await Promise.all(files.map(f => f.delete().then(() => { deletedFiles += 1; }).catch(() => undefined)));
+    } catch (err) {
+      logger.warn('admin.rag.purge.storage_failed', {
+        err: err instanceof Error ? err.message : String(err),
+      });
+    }
+
+    // Limpa caches e força reindex do corpus canônico (Doc 1).
+    invalidateRunningKnowledgeStorageCache();
+    const chunks = await getRunningKnowledgeCorpusWithStorage();
+    res.json({
+      ok: true,
+      purged: { ragChunks: deletedChunks, ragDocuments: deletedDocs, storageFiles: deletedFiles },
+      reindexed: {
+        totalChunks: chunks.length,
+        withEmbedding: chunks.filter(c => c.embedding && c.embedding.length > 0).length,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/** Apaga todos os documentos de uma collection em lotes de 400. */
+async function deleteAllDocs(
+  col: FirebaseFirestore.CollectionReference,
+): Promise<number> {
+  const db = getFirestore();
+  let total = 0;
+  for (;;) {
+    const snap = await col.limit(400).get();
+    if (snap.empty) break;
+    const batch = db.batch();
+    snap.docs.forEach(doc => batch.delete(doc.ref));
+    await batch.commit();
+    total += snap.size;
+    if (snap.size < 400) break;
+  }
+  return total;
+}
+
+/**
  * GET /admin/rag/status — lista documentos da base RAG com status indexed/
  * pending, contagem de chunks por doc e timestamps.
  */
@@ -472,16 +530,30 @@ export async function getRagStatus(_req: Request, res: Response, next: NextFunct
         size: data.size ?? null,
       };
     });
-    // Também conta chunks que vieram do corpus estático embutido
+    // Lista os chunks da base (Doc 1 + uploads) com os metadados v3 pro
+    // admin inspecionar seção/vinculante/encaminhamento.
     const chunks = await getRunningKnowledgeCorpusWithStorage();
+    const chunkList = chunks.map(c => ({
+      id: c.id,
+      secao: c.secao ?? null,
+      title: c.title,
+      tema: c.tema ?? null,
+      categoria: c.categoria ?? [],
+      vinculante: c.vinculante === true,
+      encaminhamento: c.encaminhamento ?? [],
+      hasEmbedding: Boolean(c.embedding && c.embedding.length > 0),
+      fromStorage: Boolean(c.storagePath),
+    }));
     res.json({
       documents: docs,
+      chunks: chunkList,
       summary: {
         adminDocs: docs.length,
         indexed: docs.filter(d => d.ragStatus === 'indexed').length,
         pending: docs.filter(d => d.ragStatus === 'pending').length,
         totalChunksInUse: chunks.length,
         chunksWithEmbedding: chunks.filter(c => c.embedding && c.embedding.length > 0).length,
+        vinculanteChunks: chunks.filter(c => c.vinculante).length,
         builtinCorpusChunks: chunks.filter(c => !c.storagePath).length,
       },
     });
