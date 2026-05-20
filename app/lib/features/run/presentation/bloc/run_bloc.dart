@@ -1052,6 +1052,13 @@ class RunBloc extends Bloc<RunEvent, RunState> {
       }
       if (found == null) return;
       _segments = found.executionSegments;
+      // Marca o 1º segment (aquecimento) como JÁ entrado: no km 0 o detector
+      // de transição não dispara segment_start pro segment inicial — a
+      // saudação já anuncia a largada. Sem isso, o segment_start do warmup
+      // toca por cima da saudação ("dois coaches" no início).
+      if (_segments.isNotEmpty && _currentSegmentIdx < 0) {
+        _currentSegmentIdx = 0;
+      }
       // ignore: avoid_print
       print('coach.plan_session.loaded id=$sessionId segments=${_segments.length}');
     } catch (_) {/* sem plano, segue Free Run */}
