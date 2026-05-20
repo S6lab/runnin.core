@@ -237,7 +237,10 @@ class _HistoryPageState extends State<HistoryPage> {
 
     final runs = _filteredRuns;
 
-    if (runs.isEmpty) {
+    // DADOS sempre renderiza: os gráficos mostram o PLANEJADO (do plano) +
+    // realizado, mesmo sem nenhuma corrida no período. O estado vazio só faz
+    // sentido na aba CORRIDAS (lista de corridas).
+    if (runs.isEmpty && _tab == _ContentTab.runs) {
       return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
         Icon(Icons.directions_run_outlined, size: 40, color: palette.border),
         const SizedBox(height: 12),
