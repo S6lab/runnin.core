@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:runnin/core/network/api_client.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
+import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 import 'package:runnin/shared/widgets/figma/figma_selection_button.dart';
 import 'package:runnin/shared/widgets/figma/figma_top_nav.dart';
 import 'package:runnin/shared/widgets/section_heading.dart';
@@ -18,21 +19,12 @@ class NotificationsSettingsPage extends StatefulWidget {
 
 class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
   bool _saving = false;
-  final Map<String, dynamic> _notificationPreferences = {
-    'notificationsEnabled': {
-      'push': true,
-      'in_app_banner': true,
-      'email': false,
-    },
-    'dndWindow': {
-      'start': '22:00',
-      'end': '06:30',
-    },
-  };
+  bool _loading = true;
+
   bool _pushEnabled = true;
   bool _inAppBannerEnabled = true;
 
-  final Map<String, bool> _dailyNotificationTypes = {
+  Map<String, bool> _dailyNotificationTypes = {
     'melhor_horario': true,
     'preparo_nutricional': true,
     'hidratacao': true,
@@ -41,6 +33,44 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
     'bpm_real': true,
     'fechamento_mensal': true,
   };
+
+  bool _dndEnabled = false;
+  String _dndStart = '22:00';
+  String _dndEnd = '06:30';
+
+  final _datasource = UserRemoteDatasource();
+
+  @override
+  void initState() {
+    super.initState();
+    _loadFromBackend();
+  }
+
+  Future<void> _loadFromBackend() async {
+    try {
+      final profile = await _datasource.getMe();
+      if (profile == null || !mounted) return;
+      final notif = profile.notificationsEnabled;
+      final dnd = profile.dndWindow;
+      setState(() {
+        if (notif != null) {
+          _pushEnabled = notif['push'] ?? true;
+          _inAppBannerEnabled = notif['in_app_banner'] ?? true;
+          _dailyNotificationTypes = {
+            for (final k in _dailyNotificationTypes.keys)
+              k: notif[k] ?? true,
+          };
+        }
+        if (dnd != null) {
+          _dndEnabled = true;
+          _dndStart = dnd['start'] ?? '22:00';
+          _dndEnd = dnd['end'] ?? '06:30';
+        }
+      });
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
 
   final List<Map<String, String>> _channels = [
     {'type': 'push', 'label': 'Push'},
@@ -58,11 +88,6 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
     {'key': 'fechamento_mensal', 'label': 'Fechamento Mensal'},
   ];
 
-  bool _dndEnabled = false;
-
-  String _dndStart = '22:00';
-  String _dndEnd = '06:30';
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -73,6 +98,15 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
             breadcrumb: 'ALERTAS',
             showBackButton: true,
           ),
+          if (_loading)
+            const Expanded(
+              child: Center(
+                child: CircularProgressIndicator(
+                  color: FigmaColors.brandCyan,
+                ),
+              ),
+            )
+          else
           Expanded(
             child: SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
@@ -88,10 +122,6 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
                       setState(() {
                         if (type == 'push') _pushEnabled = enabled;
                         if (type == 'in_app') _inAppBannerEnabled = enabled;
-                        _notificationPreferences['notificationsEnabled'] = {
-                          'push': _pushEnabled,
-                          'in_app_banner': _inAppBannerEnabled,
-                        };
                       });
                     },
                   ),
@@ -123,7 +153,6 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
                   const SizedBox(height: AppSpacing.xl),
                   _SaveButton(
                     saving: _saving,
-                    notificationPreferences: _notificationPreferences,
                     onSave: () => _save(),
                   ),
                   const SizedBox(height: AppSpacing.sm),
@@ -475,12 +504,10 @@ class _Section3State extends State<_Section3> {
 
 class _SaveButton extends StatelessWidget {
   final bool saving;
-  final Map<String, dynamic> notificationPreferences;
   final VoidCallback onSave;
 
   const _SaveButton({
     required this.saving,
-    required this.notificationPreferences,
     required this.onSave,
   });
 
