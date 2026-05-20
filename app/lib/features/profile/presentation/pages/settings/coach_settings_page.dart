@@ -95,7 +95,17 @@ class _CoachSettingsPageState extends State<CoachSettingsPage> {
           ),
         );
       }
-    } on DioException {
+    } on DioException catch (e) {
+        if (e.response?.statusCode == 422) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('Erro 422: voiceId inválido.'),
+              backgroundColor: FigmaColors.brandOrange,
+              duration: const Duration(seconds: 3),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        } else if (mounted) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
