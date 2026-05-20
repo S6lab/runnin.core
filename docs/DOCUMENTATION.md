@@ -30,8 +30,11 @@
 analisa o desempenho e adapta o plano semana a semana. Foco no mercado brasileiro (pt-BR).
 
 Pilares implementados:
-- **Planejamento inteligente** — plano mesocíclico gerado por LLM, com sessões dia-a-dia (pace, duração,
-  hidratação, nutrição) e segmentos de execução km-a-km; revisões automáticas + manuais; checkpoints semanais.
+- **Planejamento inteligente** — plano mesocíclico gerado por LLM em **dois níveis (two-tier)**: as 2
+  primeiras semanas vêm detalhadas (pace, duração, hidratação, nutrição, notas ricas + roteiro km-a-km) e
+  as semanas seguintes em **esqueleto** (só tipo/distância/pace + metadados de bloco: nome, objetivo, carga
+  projetada, targets). A cada **checkpoint** semanal o coach **detalha as próximas 2 semanas** (esqueleto→full)
+  e ajusta a carga pela evolução real; revisões automáticas + manuais; histórico em `plan.revisions[]`.
 - **Coach em tempo real** — cues por evento (km, pace, segmento) via SSE e voz via Gemini Live; relatório
   pós-corrida em duas fases (resumo rápido → análise enriquecida).
 - **Histórico & métricas** — runs com splits km-a-km (pace, FC, calorias, elevação), stats agregadas,
@@ -123,7 +126,12 @@ quando indicado `[público]` ou `[cron]`. `[premium]` = exige feature do plano (
 `GET /:id/weekly-reports/:weekNumber` · `GET /:id/checkpoints` · `GET /:id/checkpoints/:weekNumber` ·
 `POST /generate` [premium] · `POST /:id/request-revision` [premium] ·
 `POST /:id/weekly-reports/:weekNumber/generate` [premium] · `POST /:id/checkpoints/:weekNumber/inputs` ·
-`POST /:id/checkpoints/:weekNumber/apply` [premium]
+`POST /:id/checkpoints/:weekNumber/apply` [premium] · `POST /:id/checkpoints/:weekNumber/skip` ("Depois", sem cota)
+
+Cota de geração (`profile.planGenerations`): 1º plano livre; novo usuário pode gerar **2× nos primeiros 7
+dias**; depois **1 regeneração/semana** (overwrite via `?confirmOverwrite=true` descarta o anterior). Distinta
+de `planRevisions` (revisão manual) e do checkpoint (não consomem cota de geração). Two-tier: `PlanWeek` tem
+`detailLevel: 'full'|'skeleton'`, `blockName`, `objective`, `projectedLoadKm`, `targets[]`; `Plan.goalAssessment`.
 
 ### weekly-reports — `/v1/weekly-reports`
 `GET /` · `GET /:weekStart`
@@ -201,11 +209,13 @@ personalizada ainda; é um guia genérico, não dado por usuário.)
 ```
 users/{uid}                              # perfil (level, goal, frequency, gênero, biometria,
   │                                      #   medicalConditions, coachPersonality/messageFrequency,
-  │                                      #   units, subscriptionPlanId, planRevisions{usedThisWeek,max,resetAt})
+  │                                      #   units, subscriptionPlanId, planRevisions{usedThisWeek,max,resetAt},
+  │                                      #   planGenerations{total,firstPlanAt,usedThisWeek,resetAt})
   ├─ onboarding_history/{ts}
-  ├─ plans/{planId}                      # goal, level, weeksCount, status, startDate, weeks[], rationale
+  ├─ plans/{planId}                      # goal, level, weeksCount, status, startDate, goalAssessment,
+  │   │                                  #   weeks[]{detailLevel,blockName,objective,projectedLoadKm,targets[],sessions[]}
   │   ├─ revisions/{revisionId}          # auto/manual/checkpoint/weekly_cron
-  │   ├─ checkpoints/{weekNumber}        # questionário subjetivo semanal
+  │   ├─ checkpoints/{weekNumber}        # questionário subjetivo semanal (scheduled|in_progress|completed|skipped)
   │   └─ weekly_reports/{weekNumber}     # métricas + análise LLM
   ├─ runs/{runId}                        # distanceM, durationS, avgPace, avg/maxBpm, elevationGain,
   │   │                                  #   calories(MET), xpEarned, splits[], coachReportId
@@ -292,9 +302,11 @@ narrativa do coach) → Share (card + mapa) → corrida some no histórico.
 **J3 — Acompanhar progresso:** History → DADOS (stats agregadas por período + análise) / CORRIDAS (lista →
 RunDetail com splits, mapa, zonas FC, coach quote, replay) / BENCH (percentil vs coorte). Dashboard (PRs/tendências).
 
-**J4 — Plano de treino:** Training → ver plano mensal/semanal → DayDetail (segmentos km-a-km, hidratação,
-nutrição) → executar como corrida (vincula sessão) → Checkpoint semanal (questionário) → revisão automática
-ou manual → WeeklyReport (análise LLM).
+**J4 — Plano de treino:** Training → periodização mensal (cards em bullets: bloco/objetivo/carga/targets;
+semanas 3+ marcadas "esqueleto") → semana (sessões com marcador "concluído" por corrida real) → DayDetail
+(segmentos km-a-km, hidratação, nutrição — sem checklist nem "planejado vs realizado") → executar como corrida
+(vincula sessão via executedRunId) → Checkpoint semanal (chips + nota; APLICAR detalha as próximas 2 semanas e
+ajusta carga, ou DEPOIS adia) → revisão registrada em revisions[] → WeeklyReport (análise LLM).
 
 **J5 — Saúde:** Profile → Health → conectar wearable (HealthKit/Health Connect) → sincroniza biometria →
 Trends (FC repouso, HRV, sono, passos) / Zones (zonas FC) / Exams (upload + OCR + análise do coach).
