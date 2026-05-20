@@ -2,7 +2,9 @@ import { logger } from '@shared/logger/logger';
 import { LLMOptions, LLMProvider } from './llm.interface';
 
 const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
-const DEFAULT_MODEL = 'gemini-2.5-flash';
+// Modelo de texto. Override via env GEMINI_MODEL (ex: gemini-flash-latest,
+// gemini-3.1-pro-preview) pra A/B sem redeploy de código.
+const DEFAULT_MODEL = process.env['GEMINI_MODEL']?.trim() || 'gemini-3.5-flash';
 
 type GeminiGenerateResponse = {
   candidates?: Array<{

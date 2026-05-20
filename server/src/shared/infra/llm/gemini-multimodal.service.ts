@@ -1,7 +1,8 @@
 import { logger } from '@shared/logger/logger';
 
 const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
-const DEFAULT_MODEL = 'gemini-2.5-flash';
+// Override via env GEMINI_MODEL (mesmo do adapter de texto).
+const DEFAULT_MODEL = process.env['GEMINI_MODEL']?.trim() || 'gemini-3.5-flash';
 
 interface GeminiMultimodalContentPart {
   text?: string;
