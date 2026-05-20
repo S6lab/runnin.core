@@ -43,6 +43,9 @@ class _PrepViewState extends State<_PrepView> {
   PlanSession? _planTodaySession;
 
   StreamSubscription<CoachCue>? _coachSub;
+  // Vira true ao navegar pra /run. PrepPage segue montada (push), então
+  // bloqueia qualquer cue pre_run tardio de tocar por cima da saudação.
+  bool _navigatedToRun = false;
   Timer? _coachDebounce;
   String? _coachCue;
   bool _coachLoading = false;
@@ -279,6 +282,7 @@ class _PrepViewState extends State<_PrepView> {
   }
 
   void _requestPreRunCue() {
+    if (_navigatedToRun) return;
     _coachSub?.cancel();
     setState(() {
       _coachLoading = true;
@@ -301,7 +305,7 @@ class _PrepViewState extends State<_PrepView> {
               _coachLoading = false;
             });
             final audio = cue.audioBase64;
-            if (!_coachMuted && audio != null && audio.isNotEmpty) {
+            if (!_navigatedToRun && !_coachMuted && audio != null && audio.isNotEmpty) {
               playCoachAudio(
                 audio,
                 mimeType: cue.audioMimeType ?? 'audio/mpeg',
@@ -725,8 +729,11 @@ class _PrepViewState extends State<_PrepView> {
         : _selectedType as Object;
     if (!context.mounted) return;
     // push() mantém a PrepPage viva sob a /run (dispose não roda), então o
-    // stream do cue pre_run continua emitindo chunks e tocando por cima da
-    // saudação da corrida = "dois coaches". Corta o stream antes de navegar.
+    // cue pre_run (stream + debounce do _selectType) continua tocando por
+    // cima da saudação da corrida = "dois coaches". Corta tudo e bloqueia
+    // novos cues via _navigatedToRun antes de navegar.
+    _navigatedToRun = true;
+    _coachDebounce?.cancel();
     _coachSub?.cancel();
     _coachSub = null;
     context.push('/run', extra: extra);
