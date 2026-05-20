@@ -7,6 +7,8 @@ import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 import 'package:runnin/shared/widgets/figma/figma_selection_button.dart';
 import 'package:runnin/shared/widgets/figma/figma_top_nav.dart';
+import 'package:runnin/shared/widgets/settings_toggle.dart';
+import 'package:runnin/shared/widgets/time_picker_button.dart';
 import 'package:runnin/shared/widgets/section_heading.dart';
 
 class NotificationsSettingsPage extends StatefulWidget {
@@ -98,10 +100,10 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
             showBackButton: true,
           ),
           if (_loading)
-            const Expanded(
+            Expanded(
               child: Center(
                 child: CircularProgressIndicator(
-                  color: FigmaColors.brandCyan,
+                  color: context.runninPalette.primary,
                 ),
               ),
             )
@@ -184,9 +186,9 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
       });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Preferências salvas com sucesso.'),
-            backgroundColor: FigmaColors.brandCyan,
+          SnackBar(
+            content: const Text('Preferências salvas com sucesso.'),
+            backgroundColor: context.runninPalette.primary,
           ),
         );
         context.pop();
@@ -196,7 +198,7 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Erro ao salvar: ${e.message}'),
-            backgroundColor: FigmaColors.brandOrange,
+            backgroundColor: context.runninPalette.secondary,
           ),
         );
       }
@@ -229,8 +231,8 @@ class _Section1 extends StatelessWidget {
         const SectionHeading(label: 'CANAIS ATIVOS'),
         const SizedBox(height: AppSpacing.md),
         for (final channel in channels) ...[
-          _ChannelToggle(
-            type: channel['type']!,
+          SettingsToggle(
+            id: channel['type']!,
             label: channel['label']!,
             enabled: channel['type'] == 'push'
                 ? pushEnabled
@@ -240,45 +242,6 @@ class _Section1 extends StatelessWidget {
           const SizedBox(height: AppSpacing.sm),
         ],
       ],
-    );
-  }
-}
-
-class _ChannelToggle extends StatefulWidget {
-  final String type;
-  final String label;
-  final bool enabled;
-  final Function(bool) onToggle;
-
-  const _ChannelToggle({
-    required this.type,
-    required this.label,
-    required this.enabled,
-    required this.onToggle,
-  });
-
-  @override
-  State<_ChannelToggle> createState() => _ChannelToggleState();
-}
-
-class _ChannelToggleState extends State<_ChannelToggle> {
-  late bool _enabled;
-
-  @override
-  void initState() {
-    super.initState();
-    _enabled = widget.enabled;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return FigmaSelectionButton(
-      label: widget.label,
-      selected: _enabled,
-      onTap: () {
-        setState(() => _enabled = !_enabled);
-        widget.onToggle(_enabled);
-      },
     );
   }
 }
@@ -301,53 +264,13 @@ class _Section2 extends StatelessWidget {
       children: [
         const SectionHeading(label: 'TIPOS DE NOTIFICAÇÃO DIÁRIA'),
         const SizedBox(height: AppSpacing.md),
-        ...notificationTypes.map((type) => _DailyNotificationToggle(
-              keyId: type['key']!,
+        ...notificationTypes.map((type) => SettingsToggle(
+              id: type['key']!,
               label: type['label']!,
               enabled: dailyNotificationTypes[type['key']] ?? true,
               onToggle: (enabled) => onToggleType(type['key']!, enabled),
             )),
       ],
-    );
-  }
-}
-
-class _DailyNotificationToggle extends StatefulWidget {
-  final String keyId;
-  final String label;
-  final bool enabled;
-  final Function(bool) onToggle;
-
-  const _DailyNotificationToggle({
-    required this.keyId,
-    required this.label,
-    required this.enabled,
-    required this.onToggle,
-  });
-
-  @override
-  State<_DailyNotificationToggle> createState() =>
-      _DailyNotificationToggleState();
-}
-
-class _DailyNotificationToggleState extends State<_DailyNotificationToggle> {
-  late bool _enabled;
-
-  @override
-  void initState() {
-    super.initState();
-    _enabled = widget.enabled;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return FigmaSelectionButton(
-      label: widget.label,
-      selected: _enabled,
-      onTap: () {
-        setState(() => _enabled = !_enabled);
-        widget.onToggle(_enabled);
-      },
     );
   }
 }
@@ -375,15 +298,11 @@ class _Section3 extends StatefulWidget {
 
 class _Section3State extends State<_Section3> {
   late bool _dndEnabled;
-  late TimeOfDay _startTime;
-  late TimeOfDay _endTime;
 
   @override
   void initState() {
     super.initState();
     _dndEnabled = widget.dndEnabled;
-    _startTime = TimeOfDay(hour: 22, minute: 0);
-    _endTime = TimeOfDay(hour: 6, minute: 30);
   }
 
   @override
@@ -413,82 +332,20 @@ class _Section3State extends State<_Section3> {
             child: Row(
               children: [
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        'Início',
-                        style: context.runninType.labelCaps.copyWith(
-                          color: FigmaColors.textMuted,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      TextButton(
-                        onPressed: () async {
-                          final time = await showTimePicker(
-                            context: context,
-                            initialTime: _startTime,
-                          );
-                          if (time != null) {
-                            setState(() {
-                              _startTime = time;
-                              widget.onSelectStartTime(time);
-                            });
-                          }
-                        },
-                        style: TextButton.styleFrom(
-                          padding: EdgeInsets.zero,
-                          
-                        ),
-                        child: Text(
-                          widget.dndStart,
-                          style: context.runninType.dataSm.copyWith(
-                            color: FigmaColors.textPrimary,
-                          ),
-                        ),
-                      ),
-                    ],
+                  child: TimePickerButton(
+                    label: 'Início',
+                    displayValue: widget.dndStart,
+                    initialTime: const TimeOfDay(hour: 22, minute: 0),
+                    onTimeSelected: widget.onSelectStartTime,
                   ),
                 ),
                 const SizedBox(width: AppSpacing.sm),
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        'Fim',
-                        style: context.runninType.labelCaps.copyWith(
-                          color: FigmaColors.textMuted,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      TextButton(
-                        onPressed: () async {
-                          final time = await showTimePicker(
-                            context: context,
-                            initialTime: _endTime,
-                          );
-                          if (time != null) {
-                            setState(() {
-                              _endTime = time;
-                              widget.onSelectEndTime(time);
-                            });
-                          }
-                        },
-                        style: TextButton.styleFrom(
-                          padding: EdgeInsets.zero,
-                          
-                        ),
-                        child: Text(
-                          widget.dndEnd,
-                          style: context.runninType.dataSm.copyWith(
-                            color: FigmaColors.textPrimary,
-                          ),
-                        ),
-                      ),
-                    ],
+                  child: TimePickerButton(
+                    label: 'Fim',
+                    displayValue: widget.dndEnd,
+                    initialTime: const TimeOfDay(hour: 6, minute: 30),
+                    onTimeSelected: widget.onSelectEndTime,
                   ),
                 ),
               ],
@@ -518,7 +375,7 @@ class _SaveButton extends StatelessWidget {
       child: ElevatedButton(
         onPressed: saving ? null : onSave,
         style: ElevatedButton.styleFrom(
-          backgroundColor: FigmaColors.brandCyan,
+          backgroundColor: context.runninPalette.primary,
           foregroundColor: FigmaColors.bgBase,
           shape: const RoundedRectangleBorder(
             borderRadius: FigmaBorderRadius.zero,

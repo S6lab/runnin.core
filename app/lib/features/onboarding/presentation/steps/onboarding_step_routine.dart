@@ -3,6 +3,7 @@ import 'package:runnin/core/constants/marketing_copy.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/shared/widgets/figma/export.dart';
+import 'package:runnin/shared/widgets/time_option_button.dart';
 
 class OnboardingStepRoutine extends StatelessWidget {
   final String? selectedPeriod;
@@ -38,7 +39,7 @@ class OnboardingStepRoutine extends StatelessWidget {
             'QUANDO PREFERE CORRER?',
             style: context.runninType.bodyXs.copyWith(
               letterSpacing: 1.65,
-              color: FigmaColors.brandCyan,
+              color: context.runninPalette.primary,
             ),
           ),
           const SizedBox(height: 12),
@@ -91,7 +92,7 @@ class OnboardingStepRoutine extends StatelessWidget {
                     ...['05:00', '06:00', '07:00', '08:00'].map(
                       (time) => Padding(
                         padding: const EdgeInsets.only(bottom: 4),
-                        child: _TimeOptionButton(
+                        child: TimeOptionButton(
                           label: time,
                           selected: selectedWakeTime == time,
                           onTap: () => onWakeTimeSelect(time),
@@ -117,7 +118,7 @@ class OnboardingStepRoutine extends StatelessWidget {
                     ...['21:00', '22:00', '23:00', '00:00'].map(
                       (time) => Padding(
                         padding: const EdgeInsets.only(bottom: 4),
-                        child: _TimeOptionButton(
+                        child: TimeOptionButton(
                           label: time,
                           selected: selectedSleepTime == time,
                           onTap: () => onSleepTimeSelect(time),
@@ -131,49 +132,5 @@ class OnboardingStepRoutine extends StatelessWidget {
           ),
         ],
       );
-  }
-}
-
-class _TimeOptionButton extends StatelessWidget {
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  const _TimeOptionButton({
-    required this.label,
-    this.selected = false,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: double.infinity,
-        height: 44.5,
-        decoration: BoxDecoration(
-          color: selected
-              ? FigmaColors.selectionActiveBg
-              : FigmaColors.surfaceCard,
-          border: Border.all(
-            color: selected
-                ? FigmaColors.selectionActiveBorder
-                : FigmaColors.borderDefault,
-            width: FigmaDimensions.borderUniversal,
-          ),
-          borderRadius: FigmaBorderRadius.zero,
-        ),
-        alignment: Alignment.center,
-        child: Text(
-          label,
-          style: context.runninType.bodyMd.copyWith(
-            color: selected
-                ? FigmaColors.textPrimary
-                : FigmaColors.textSecondary,
-          ),
-        ),
-      ),
-    );
   }
 }

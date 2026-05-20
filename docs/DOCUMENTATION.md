@@ -256,6 +256,10 @@ running_knowledge_chunks/{id}            # base RAG embeddada
 | **steps / assessment** | Componentes reutilizáveis de fluxo multi-step |
 | **admin** | Config de coach/prompts, upload RAG |
 | **shared/widgets/figma** | ~48 widgets do design system (JetBrains Mono, FigmaColors, tokens) |
+| **shared/widgets/settings_toggle** | `SettingsToggle` — toggle genérico wrapping `FigmaSelectionButton`; substitui `_ChannelToggle` e `_DailyNotificationToggle` (SLA-22) |
+| **shared/widgets/feedback_toggle** | `FeedbackToggle` — toggle estilo checkbox custom (GestureDetector+Container+check); extraído de `coach_settings_page.dart` (SLA-22) |
+| **shared/widgets/time_picker_button** | `TimePickerButton` — label + TextButton que abre `showTimePicker`; substitui código inline de DND em `notifications_settings_page.dart` (SLA-22) |
+| **shared/widgets/time_option_button** | `TimeOptionButton` — botão de opção de horário fixo (preset); extraído de `onboarding_step_routine.dart` (SLA-22) |
 
 `main.dart`: Firebase init, Hive, themeController, FCM register, health sync em background, limpeza de
 sessão anônima. `apiClient`: base `API_BASE_URL` (dart-define) + token Firebase + refresh em 401.

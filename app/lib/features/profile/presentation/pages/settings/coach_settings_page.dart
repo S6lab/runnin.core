@@ -5,6 +5,7 @@ import 'package:runnin/core/network/api_client.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
+import 'package:runnin/shared/widgets/feedback_toggle.dart';
 import 'package:runnin/shared/widgets/figma/figma_selection_button.dart';
 import 'package:runnin/shared/widgets/figma/figma_top_nav.dart';
 import 'package:runnin/shared/widgets/section_heading.dart';
@@ -139,7 +140,7 @@ class _CoachSettingsPageState extends State<CoachSettingsPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(msg),
-            backgroundColor: FigmaColors.brandOrange,
+            backgroundColor: context.runninPalette.secondary,
             duration: const Duration(seconds: 3),
             behavior: SnackBarBehavior.floating,
           ),
@@ -278,7 +279,7 @@ class _CoachSettingsPageState extends State<CoachSettingsPage> {
                   // não tem efeito e a UI sumir reduz ruído.
                   if (_frequency == 'silent') ...[
                     const SizedBox(height: AppSpacing.sm),
-                    _FeedbackToggle(
+                    FeedbackToggle(
                       label: 'Permitir alertas críticos (pace fora do alvo / fim)',
                       feedbackKey: 'allow_critical_in_silent',
                       value: _allowCriticalInSilent,
@@ -291,42 +292,42 @@ class _CoachSettingsPageState extends State<CoachSettingsPage> {
                   // §4 Tipos de feedback
                   const SectionHeading(label: 'TIPOS DE FEEDBACK ATIVOS'),
                   const SizedBox(height: 12),
-                  _FeedbackToggle(
+                  FeedbackToggle(
                     label: 'Análise pré-treino',
                     feedbackKey: 'pre_training',
                     value: _feedback['pre_training'] ?? true,
                     onChanged: (v) => setState(() => _feedback['pre_training'] = v),
                   ),
                   const SizedBox(height: AppSpacing.sm),
-                  _FeedbackToggle(
+                  FeedbackToggle(
                     label: 'Alertas de pace',
                     feedbackKey: 'pace_alerts',
                     value: _feedback['pace_alerts'] ?? true,
                     onChanged: (v) => setState(() => _feedback['pace_alerts'] = v),
                   ),
                   const SizedBox(height: AppSpacing.sm),
-                  _FeedbackToggle(
+                  FeedbackToggle(
                     label: 'Alertas de BPM',
                     feedbackKey: 'bpm_alerts',
                     value: _feedback['bpm_alerts'] ?? true,
                     onChanged: (v) => setState(() => _feedback['bpm_alerts'] = v),
                   ),
                   const SizedBox(height: AppSpacing.sm),
-                  _FeedbackToggle(
+                  FeedbackToggle(
                     label: 'Splits ao vivo',
                     feedbackKey: 'live_splits',
                     value: _feedback['live_splits'] ?? true,
                     onChanged: (v) => setState(() => _feedback['live_splits'] = v),
                   ),
                   const SizedBox(height: AppSpacing.sm),
-                  _FeedbackToggle(
+                  FeedbackToggle(
                     label: 'Relatório pós-treino',
                     feedbackKey: 'post_training',
                     value: _feedback['post_training'] ?? true,
                     onChanged: (v) => setState(() => _feedback['post_training'] = v),
                   ),
                   const SizedBox(height: AppSpacing.sm),
-                  _FeedbackToggle(
+                  FeedbackToggle(
                     label: 'Notificações diárias',
                     feedbackKey: 'daily_notifications',
                     value: _feedback['daily_notifications'] ?? true,
@@ -349,8 +350,8 @@ class _CoachSettingsPageState extends State<CoachSettingsPage> {
               child: Container(
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: FigmaColors.brandCyan,
-                  border: Border.all(color: FigmaColors.brandCyan, width: 1.041),
+                  color: context.runninPalette.primary,
+                  border: Border.all(color: context.runninPalette.primary, width: 1.041),
                 ),
                 child: _saving
                     ? const SizedBox(
@@ -446,68 +447,8 @@ class _VoiceOption extends StatelessWidget {
               Icon(
                 Icons.play_circle_outline,
                 size: 20,
-                color: selected ? FigmaColors.brandCyan : FigmaColors.textDim,
+                color: selected ? context.runninPalette.primary : FigmaColors.textDim,
               ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _FeedbackToggle extends StatelessWidget {
-  final String label;
-  final String feedbackKey;
-  final bool value;
-  final ValueChanged<bool> onChanged;
-
-  const _FeedbackToggle({
-    required this.label,
-    required this.feedbackKey,
-    required this.value,
-    required this.onChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () => onChanged(!value),
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 21.74, vertical: 14),
-        decoration: BoxDecoration(
-          color: value ? FigmaColors.selectionActiveBg : FigmaColors.surfaceCard,
-          border: Border.all(
-            color: value ? FigmaColors.selectionActiveBorder : FigmaColors.borderDefault,
-            width: FigmaDimensions.borderUniversal,
-          ),
-          borderRadius: FigmaBorderRadius.zero,
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                label,
-                style: context.runninType.bodyMd.copyWith(
-                  fontWeight: FontWeight.w500,
-                  color: value ? FigmaColors.textPrimary : const Color(0xB3FFFFFF),
-                ),
-              ),
-            ),
-            Container(
-              width: 18,
-              height: 18,
-              decoration: BoxDecoration(
-                color: value ? FigmaColors.brandCyan : Colors.transparent,
-                border: Border.all(
-                  color: value ? FigmaColors.brandCyan : FigmaColors.borderDefault,
-                  width: 1.5,
-                ),
-              ),
-              child: value
-                  ? const Icon(Icons.check, size: 12, color: Colors.black)
-                  : null,
-            ),
           ],
         ),
       ),
