@@ -40,7 +40,8 @@ const IngestBenefitSchema = z.object({
   id: z.string().min(1).optional(),
   identifier: z.string().min(3),
   provider: z.string().min(1),
-  planId: z.string().min(1),
+  // ID do serviço junto ao parceiro — o plano é resolvido por ele na ativação.
+  serviceId: z.string().min(1),
   status: z.enum(['active', 'cancelled', 'reactivated', 'pending']).default('active'),
   cancelledAt: z.string().optional(),
   reactivatedAt: z.string().optional(),
@@ -65,7 +66,7 @@ export async function ingestBenefit(req: Request, res: Response, next: NextFunct
       identifier: normalized,
       identifierType: type,
       provider: body.provider,
-      planId: body.planId,
+      serviceId: body.serviceId,
       status: body.status,
       createdAt: now,
       cancelledAt: body.cancelledAt,

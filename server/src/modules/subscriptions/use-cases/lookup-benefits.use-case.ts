@@ -41,14 +41,17 @@ export class LookupBenefitsUseCase {
     return Promise.all(
       claimable.map(async (s) => ({
         subscription: s,
-        plan: await this.resolvePlan(s.planId),
+        plan: await this.resolvePlanByServiceId(s.serviceId),
       })),
     );
   }
 
-  private async resolvePlan(planId: string): Promise<SubscriptionPlan | null> {
-    const fromDb = await this.planRepo.findById(planId).catch(() => null);
-    if (fromDb) return fromDb;
-    return DEFAULT_PLANS.find((p) => p.id === planId) ?? null;
+  /** Resolve o plano do app casando `serviceId` (parceiro) com o catálogo. */
+  private async resolvePlanByServiceId(
+    serviceId: string,
+  ): Promise<SubscriptionPlan | null> {
+    const all = await this.planRepo.listAll().catch(() => [] as SubscriptionPlan[]);
+    const pool = all.length > 0 ? all : DEFAULT_PLANS;
+    return pool.find((p) => p.serviceId === serviceId) ?? null;
   }
 }

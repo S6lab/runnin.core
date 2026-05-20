@@ -3,7 +3,7 @@
 class Benefit {
   final String id; // subscription id
   final String provider; // 'claro', 's6lab', ...
-  final String planId;
+  final String serviceId; // id do serviço no parceiro (resolve o plano no BE)
   final String status;
   final String? activatedAt;
   final String planName; // ex: "Pro by Claro"
@@ -13,7 +13,7 @@ class Benefit {
   const Benefit({
     required this.id,
     required this.provider,
-    required this.planId,
+    required this.serviceId,
     required this.status,
     this.activatedAt,
     required this.planName,
@@ -36,7 +36,7 @@ class Benefit {
     return Benefit(
       id: sub['id'] as String? ?? '',
       provider: sub['provider'] as String? ?? '',
-      planId: sub['planId'] as String? ?? '',
+      serviceId: sub['serviceId'] as String? ?? '',
       status: sub['status'] as String? ?? '',
       activatedAt: sub['activatedAt'] as String?,
       planName: plan['name'] as String? ?? 'Plano Pro',

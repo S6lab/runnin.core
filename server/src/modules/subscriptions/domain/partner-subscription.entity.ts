@@ -19,8 +19,11 @@ export interface PartnerSubscription {
   identifierType: BenefitIdentifierType;
   /** Parceiro/provider (ex: 'claro'). */
   provider: string;
-  /** Plano de benefício concedido (ex: 'claro_basic'). */
-  planId: string;
+  /**
+   * ID do serviço junto ao parceiro (ex: 'claro_runnin_basic'). O plano do app
+   * é resolvido na ATIVAÇÃO casando este `serviceId` com `SubscriptionPlan.serviceId`.
+   */
+  serviceId: string;
   status: PartnerSubscriptionStatus;
   createdAt: string;
   cancelledAt?: string;
