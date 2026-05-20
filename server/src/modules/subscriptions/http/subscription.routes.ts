@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { authMiddleware } from '@shared/infra/http/middlewares/auth.middleware';
 import { listPlans, getMySubscription, seedPlans } from './subscription.controller';
+import { getBenefits, activateBenefit, ingestBenefit } from './benefit.controller';
 
 export const subscriptionRouter = Router();
 
@@ -9,6 +10,12 @@ subscriptionRouter.get('/plans', listPlans);
 
 // Auth — app sabe quais features o user tem
 subscriptionRouter.get('/me', authMiddleware, getMySubscription);
+
+// Benefícios de parceiro (collection `subscriptions`)
+subscriptionRouter.get('/benefits', authMiddleware, getBenefits);
+subscriptionRouter.post('/benefits/:id/activate', authMiddleware, activateBenefit);
+// Ingestão (stub) — em prod vira webhook autenticado por parceiro.
+subscriptionRouter.post('/benefits', authMiddleware, ingestBenefit);
 
 // Admin seed (idempotente). Sem requireAdmin por enquanto pra facilitar bootstrap
 // inicial; pode adicionar depois com `requireAdmin` middleware.
