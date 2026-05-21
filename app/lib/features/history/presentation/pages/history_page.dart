@@ -361,24 +361,33 @@ class _DataView extends StatelessWidget {
     // Valores: prioriza breakdown (BE); fallback no cálculo client-side.
     final volumeKm = (bd?.totalDistanceKm ?? stats.totalKm).toStringAsFixed(1);
     final pace = bd?.avgPace ?? stats.avgPaceLabel;
-    final nivel = bd != null ? '${bd.level}' : '--';
-    final nivelNome = bd?.levelName ?? '';
     final bpmMed = (bd?.avgBpm ?? stats.avgBpm)?.toString() ?? '--';
+    final bpmMax = bd?.maxBpm?.toString() ?? '--';
+    final elevTotal =
+        runs.fold<double>(0, (s, r) => s + (r.elevationGain ?? 0)).round();
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
       children: [
-        // Stats principais (referência: PNG /dados) — valores grandes, cores
-        // alternadas (cyan/laranja) em disposição zigue-zague.
-        _HeroStat(label: 'VOLUME', value: volumeKm, unit: 'km', color: p.primary, alignRight: true),
+        // Stats principais (referência: PNGs /dados) — valores grandes, cores
+        // por métrica, 2 por linha.
+        Row(children: [
+          Expanded(child: _HeroStat(label: 'VOLUME', value: volumeKm, unit: 'km', color: p.primary)),
+          const SizedBox(width: 12),
+          Expanded(child: _HeroStat(label: 'PACE MÉDIO', value: pace, unit: '/km', color: p.secondary)),
+        ]),
         const SizedBox(height: 18),
-        _HeroStat(label: 'PACE MÉDIO', value: pace, unit: '/km', color: p.secondary, alignRight: true),
+        Row(children: [
+          Expanded(child: _HeroStat(label: 'FC MÉDIA', value: bpmMed, unit: 'bpm', color: p.primary)),
+          const SizedBox(width: 12),
+          Expanded(child: _HeroStat(label: 'FC MÁX', value: bpmMax, unit: 'bpm', color: p.primary)),
+        ]),
         const SizedBox(height: 18),
-        _HeroStat(label: 'FC MÉDIA', value: bpmMed, unit: 'bpm', color: p.primary, alignRight: false),
-        const SizedBox(height: 18),
-        _HeroStat(label: 'ELEVAÇÃO', value: '+${runs.fold<double>(0, (s, r) => s + (r.elevationGain ?? 0)).round()}', unit: 'm', color: p.secondary, alignRight: true),
-        const SizedBox(height: 18),
-        _HeroStat(label: 'NÍVEL', value: nivel, unit: nivelNome, color: p.primary, alignRight: true),
+        Row(children: [
+          Expanded(child: _HeroStat(label: 'ELEVAÇÃO', value: '+$elevTotal', unit: 'm', color: p.secondary)),
+          const SizedBox(width: 12),
+          const Expanded(child: SizedBox()),
+        ]),
         const SizedBox(height: 20),
 
         // Seção Zonas Cardíacas
@@ -957,32 +966,27 @@ class _RunMetric extends StatelessWidget {
 }
 
 /// Stat principal do Histórico (referência PNG): label pequeno + valor grande
-/// colorido (+ unidade), alinhado à esquerda ou direita (disposição zigue-zague).
+/// colorido (+ unidade). Usado em grade de 2 por linha.
 class _HeroStat extends StatelessWidget {
   final String label;
   final String value;
   final String unit;
   final Color color;
-  final bool alignRight;
   const _HeroStat({
     required this.label,
     required this.value,
     this.unit = '',
     required this.color,
-    this.alignRight = true,
   });
 
   @override
   Widget build(BuildContext context) {
     final palette = context.runninPalette;
     final type = context.runninType;
-    return Align(
-      alignment: alignRight ? Alignment.centerRight : Alignment.centerLeft,
-      child: Column(
-        crossAxisAlignment:
-            alignRight ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
           Text(
             label,
             style: type.labelCaps.copyWith(
@@ -1019,8 +1023,7 @@ class _HeroStat extends StatelessWidget {
             ],
           ),
         ],
-      ),
-    );
+      );
   }
 }
 
