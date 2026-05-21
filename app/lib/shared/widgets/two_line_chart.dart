@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:runnin/core/theme/app_palette.dart';
+import 'package:runnin/shared/widgets/chart_tooltip.dart';
 
 /// Um ponto do gráfico de 2 linhas. Valores em segundos (pace). Null = sem
 /// dado naquele bucket (a linha quebra).
@@ -14,7 +15,10 @@ class TwoLineData {
 /// dependência externa, no estilo do TwoToneBarChart. Pensado pra PACE:
 /// menor = melhor, então o eixo é INVERTIDO (pace menor aparece mais no
 /// topo = melhora pra cima). Legenda "PROJETADO"/"MÉDIO".
-class TwoLineChart extends StatelessWidget {
+///
+/// Interativo: toque num bucket pra ver um tooltip com o valor de cada
+/// série (projetado/médio). Tocar de novo no mesmo bucket fecha.
+class TwoLineChart extends StatefulWidget {
   final List<TwoLineData> data;
   final Color? lineAColor;
   final Color? lineBColor;
@@ -30,11 +34,19 @@ class TwoLineChart extends StatelessWidget {
   });
 
   @override
+  State<TwoLineChart> createState() => _TwoLineChartState();
+}
+
+class _TwoLineChartState extends State<TwoLineChart> {
+  int? _selected;
+
+  @override
   Widget build(BuildContext context) {
     final palette = context.runninPalette;
     final type = context.runninType;
-    final aColor = lineAColor ?? palette.primary;
-    final bColor = lineBColor ?? palette.secondary;
+    final aColor = widget.lineAColor ?? palette.primary;
+    final bColor = widget.lineBColor ?? palette.secondary;
+    final data = widget.data;
 
     final all = <double>[
       ...data.map((d) => d.lineA).whereType<double>(),
@@ -52,7 +64,7 @@ class TwoLineChart extends StatelessWidget {
 
     final minV = all.reduce((a, b) => a < b ? a : b);
     final maxV = all.reduce((a, b) => a > b ? a : b);
-    final fmt = formatValue ?? _defaultFmt;
+    final fmt = widget.formatValue ?? _defaultFmt;
 
     return Column(
       children: [
@@ -74,16 +86,70 @@ class TwoLineChart extends StatelessWidget {
               ),
               const SizedBox(width: 4),
               Expanded(
-                child: CustomPaint(
-                  size: Size.infinite,
-                  painter: _TwoLinePainter(
-                    data: data,
-                    minV: minV,
-                    maxV: maxV,
-                    aColor: aColor,
-                    bColor: bColor,
-                    gridColor: palette.border,
-                  ),
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final w = constraints.maxWidth;
+                    final n = data.length;
+                    double xFor(int i) => n <= 1 ? w / 2 : w * i / (n - 1);
+
+                    Widget? tooltip;
+                    if (_selected != null && _selected! < n) {
+                      final i = _selected!;
+                      final d = data[i];
+                      const tw = 120.0;
+                      final left = (xFor(i) - tw / 2).clamp(0.0, (w - tw).clamp(0.0, w));
+                      tooltip = Positioned(
+                        left: left,
+                        top: 0,
+                        child: ChartTooltip(
+                          width: tw,
+                          title: d.label,
+                          rows: [
+                            ChartTooltipRow(
+                              color: aColor,
+                              label: 'PROJETADO',
+                              value: d.lineA == null ? '--' : fmt(d.lineA!),
+                            ),
+                            ChartTooltipRow(
+                              color: bColor,
+                              label: 'MÉDIO',
+                              value: d.lineB == null ? '--' : fmt(d.lineB!),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
+
+                    return GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTapDown: (details) {
+                        final dx = details.localPosition.dx;
+                        final i = n <= 1
+                            ? 0
+                            : (dx / (w / (n - 1))).round().clamp(0, n - 1);
+                        setState(() => _selected = _selected == i ? null : i);
+                      },
+                      child: Stack(
+                        children: [
+                          Positioned.fill(
+                            child: CustomPaint(
+                              size: Size.infinite,
+                              painter: _TwoLinePainter(
+                                data: data,
+                                minV: minV,
+                                maxV: maxV,
+                                aColor: aColor,
+                                bColor: bColor,
+                                gridColor: palette.border,
+                                selectedIndex: _selected,
+                              ),
+                            ),
+                          ),
+                          ?tooltip,
+                        ],
+                      ),
+                    );
+                  },
                 ),
               ),
             ],
@@ -96,10 +162,19 @@ class TwoLineChart extends StatelessWidget {
             ...List.generate(
               data.length,
               (i) => Expanded(
-                child: Text(
-                  data[i].label,
-                  textAlign: TextAlign.center,
-                  style: type.labelCaps.copyWith(fontSize: 8),
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () =>
+                      setState(() => _selected = _selected == i ? null : i),
+                  child: Text(
+                    data[i].label,
+                    textAlign: TextAlign.center,
+                    style: type.labelCaps.copyWith(
+                      fontSize: 8,
+                      color: _selected == i ? palette.text : null,
+                      fontWeight: _selected == i ? FontWeight.w700 : null,
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -133,6 +208,7 @@ class _TwoLinePainter extends CustomPainter {
   final Color aColor;
   final Color bColor;
   final Color gridColor;
+  final int? selectedIndex;
 
   _TwoLinePainter({
     required this.data,
@@ -141,6 +217,7 @@ class _TwoLinePainter extends CustomPainter {
     required this.aColor,
     required this.bColor,
     required this.gridColor,
+    this.selectedIndex,
   });
 
   @override
@@ -174,6 +251,17 @@ class _TwoLinePainter extends CustomPainter {
       return 4 + frac * (h - 8);
     }
 
+    // Indicador vertical do bucket selecionado (atrás das linhas).
+    if (selectedIndex != null &&
+        selectedIndex! >= 0 &&
+        selectedIndex! < data.length) {
+      final x = xFor(selectedIndex!);
+      final marker = Paint()
+        ..color = gridColor
+        ..strokeWidth = 1.0;
+      canvas.drawLine(Offset(x, 0), Offset(x, h), marker);
+    }
+
     void drawSeries(double? Function(TwoLineData) sel, Color color) {
       final stroke = Paint()
         ..style = PaintingStyle.stroke
@@ -190,7 +278,20 @@ class _TwoLinePainter extends CustomPainter {
         }
         final p = Offset(xFor(i), yFor(v));
         if (prev != null) canvas.drawLine(prev, p, stroke);
-        canvas.drawCircle(p, 2.6, dot);
+        // Ponto selecionado fica maior + anel pra destacar a leitura.
+        if (i == selectedIndex) {
+          canvas.drawCircle(p, 5.0, dot);
+          canvas.drawCircle(
+            p,
+            5.0,
+            Paint()
+              ..style = PaintingStyle.stroke
+              ..color = color.withValues(alpha: 0.35)
+              ..strokeWidth = 3.0,
+          );
+        } else {
+          canvas.drawCircle(p, 2.6, dot);
+        }
         prev = p;
       }
     }
@@ -201,7 +302,10 @@ class _TwoLinePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_TwoLinePainter old) =>
-      old.data != data || old.minV != minV || old.maxV != maxV;
+      old.data != data ||
+      old.minV != minV ||
+      old.maxV != maxV ||
+      old.selectedIndex != selectedIndex;
 }
 
 class _LegendDot extends StatelessWidget {
