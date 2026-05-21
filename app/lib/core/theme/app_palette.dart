@@ -202,6 +202,12 @@ class RunninPalette {
 const Color _kCardSurface = Color(0xFF0E0E12);
 const Color _kCardSurfaceAlt = Color(0xFF15151A);
 
+// Texto NEUTRO (branco/cinza) — igual em todas as skins, pra fontes (sobretudo
+// as pequenas) não terem "película" tingida. A identidade da skin fica nos
+// acentos (primary/secondary), não no texto.
+const Color _kTextNeutral = Color(0xFFF2F4F7); // branco neutro
+const Color _kMutedNeutral = Color(0xFF8A909C); // cinza neutro
+
 enum RunninSkin {
   artico,
   magenta,
@@ -218,8 +224,8 @@ enum RunninSkin {
           surface: _kCardSurface,
           surfaceAlt: _kCardSurfaceAlt,
           border: Color(0xFF1A1D28),
-          text: Color(0xFFF5F7FB),
-          muted: Color(0xFF8C97AD),
+          text: _kTextNeutral,
+          muted: _kMutedNeutral,
           // Alinhado aos hex de FigmaColors.brandCyan/brandOrange (dominantes no
           // app) pra o skin artico ficar idêntico após a migração brand->palette.
           primary: Color(0xFF00D4FF),
@@ -237,8 +243,8 @@ enum RunninSkin {
           surface: _kCardSurface,
           surfaceAlt: _kCardSurfaceAlt,
           border: Color(0xFF1F1A28),
-          text: Color(0xFFF8F5FF),
-          muted: Color(0xFFA893BF),
+          text: _kTextNeutral,
+          muted: _kMutedNeutral,
           primary: Color(0xFFFF0E7A),
           secondary: Color(0xFF2CE0F0),
           tertiary: Color(0xFF8A56FF),
@@ -254,8 +260,8 @@ enum RunninSkin {
           surface: _kCardSurface,
           surfaceAlt: _kCardSurfaceAlt,
           border: Color(0xFF1B1E26),
-          text: Color(0xFFF4F8F2),
-          muted: Color(0xFF9DA4AF),
+          text: _kTextNeutral,
+          muted: _kMutedNeutral,
           primary: Color(0xFFD7FF3C),
           secondary: Color(0xFF8B66FF),
           tertiary: Color(0xFF39D5FF),
@@ -273,8 +279,8 @@ enum RunninSkin {
           surface: _kCardSurface,
           surfaceAlt: _kCardSurfaceAlt,
           border: Color(0xFF193823),
-          text: Color(0xFFD2DAD2),
-          muted: Color(0xFF6E7A6E),
+          text: _kTextNeutral,
+          muted: _kMutedNeutral,
           primary: Color(0xFF00CC5C), // verde solicitado (RGB 0/204/92)
           secondary: Color(0xFF9AA39A), // cinza
           tertiary: Color(0xFF00A84B), // verde mais escuro
