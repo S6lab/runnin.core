@@ -15,6 +15,9 @@ class HomeData {
   final int completedSessions;
   final int plannedSessions;
   final int streakDays;
+  /// Número da semana do PLANO em curso (1-based, vem de PlanWeek.weekNumber).
+  /// Null quando não há plano ativo. Não confundir com a semana ISO do ano.
+  final int? currentPlanWeekNumber;
 
   const HomeData({
     required this.profile,
@@ -27,6 +30,7 @@ class HomeData {
     required this.completedSessions,
     required this.plannedSessions,
     required this.streakDays,
+    this.currentPlanWeekNumber,
   });
 }
 
@@ -168,6 +172,7 @@ class GetHomeDataUseCase {
       completedSessions: completedSessions,
       plannedSessions: plannedSessions,
       streakDays: _calculateStreakDays(completedRuns),
+      currentPlanWeekNumber: currentPlanWeek?.weekNumber,
     );
   }
 

@@ -188,7 +188,6 @@ class _HomeHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final palette = context.runninPalette;
-    final user = FirebaseAuth.instance.currentUser;
 
     // Cyber theme: Use JetBrains Mono for header
     return Row(
@@ -220,52 +219,18 @@ class _HomeHeader extends StatelessWidget {
             ),
           ],
         ),
-        Row(
+        // Canto superior direito: sino de notificações (substituiu o avatar
+        // de perfil — o perfil fica na aba PERFIL da navegação).
+        const Row(
           children: [
-            // Analytics consolidado no Histórico — sem atalho aqui.
-            InkWell(
-              onTap: () => context.push('/profile'),
-              borderRadius: BorderRadius.zero,
-              child: Container(
-                width: 34,
-                height: 34,
-                decoration: BoxDecoration(
-                  border: Border.all(color: palette.border),
-                  color: palette.surface,
-                  shape: BoxShape.circle,
-                  image: user?.photoURL != null
-                      ? DecorationImage(
-                          image: NetworkImage(user!.photoURL!),
-                          fit: BoxFit.cover,
-                        )
-                      : null,
-                ),
-                alignment: Alignment.center,
-                child: user?.photoURL == null
-                    ? Text(
-                        _initial(user),
-                        style: TextStyle(
-                          color: palette.primary,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      )
-                    : null,
-              ),
-            ),
+            _NotificationBell(),
           ],
         ),
       ],
     );
   }
-
-  String _initial(User? user) {
-    final name = (profileName ?? user?.displayName ?? user?.email ?? '').trim();
-    if (name.isEmpty) return 'A';
-    return name[0].toUpperCase();
-  }
 }
 
-// ─── Cyber Status Bar ─────────────────────────────────────────────────────────
 // ─── Iniciar Sessão ───────────────────────────────────────────────────────────
 
 class _IniciarSessaoButton extends StatelessWidget {
@@ -601,7 +566,8 @@ class _SemanaSection extends StatelessWidget {
     final now = DateTime.now();
     final monday = now.subtract(Duration(days: now.weekday - 1));
     final sunday = monday.add(const Duration(days: 6));
-    final weekNum = _isoWeekNumber(now);
+    // Semana do plano em curso (não a semana ISO do ano).
+    final weekNum = data.currentPlanWeekNumber ?? _isoWeekNumber(now);
     final monthAbbr = _monthAbbr(monday.month);
     final volumePct = data.plannedSessions == 0
         ? 0.0
@@ -1919,7 +1885,9 @@ class _HeroSection extends StatelessWidget {
         : 'assets/img/hero/runner_2.png';
 
     final weekdayLabel = _weekdayLabel(now.weekday).toUpperCase();
-    final weekNumber = _isoWeekNumber(now);
+    // Semana do PLANO em curso (não a semana ISO do ano). Fallback p/ ISO só
+    // quando não há plano ativo.
+    final weekNumber = data.currentPlanWeekNumber ?? _isoWeekNumber(now);
     final sessionType = (session?.type ?? 'LIVRE').toUpperCase();
     final distanceLabel = session != null
         ? '${session.distanceKm.toStringAsFixed(session.distanceKm % 1 == 0 ? 0 : 1)}K'
@@ -1986,25 +1954,25 @@ class _HeroSection extends StatelessWidget {
                         '${dateLabel.toUpperCase()} — $greeting, ${firstName.toUpperCase()}',
                         style: GoogleFonts.jetBrainsMono(
                           fontSize: 12,
-                          fontWeight: FontWeight.w600,
+                          fontWeight: FontWeight.w400,
                           color: Colors.white,
                           letterSpacing: 1.0,
                         ),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    const SizedBox(width: 10),
-                    const _NotificationBell(),
                   ],
                 ),
                 const SizedBox(height: 14),
                 // Chips: WATCH + AUDIO
                 Row(
                   children: [
+                    // Ponto azul SÓ quando realmente conectado. Sem detecção de
+                    // conexão de wearable/áudio ainda → cinza (desconectado).
                     _HeroChip(
                       icon: Icons.watch_outlined,
                       label: 'WATCH',
-                      dotColor: palette.primary,
+                      dotColor: Colors.white.withValues(alpha: 0.45),
                     ),
                     const SizedBox(width: 10),
                     _HeroChip(
@@ -2019,7 +1987,7 @@ class _HeroSection extends StatelessWidget {
                 Text(
                   'HOJE',
                   style: GoogleFonts.jetBrainsMono(
-                    fontSize: 56,
+                    fontSize: 53,
                     fontWeight: FontWeight.w500,
                     color: Colors.white,
                     letterSpacing: -1.4,
@@ -2048,7 +2016,7 @@ class _HeroSection extends StatelessWidget {
                       '$weekdayLabel · SEM $weekNumber',
                       style: GoogleFonts.jetBrainsMono(
                         fontSize: 12,
-                        fontWeight: FontWeight.w600,
+                        fontWeight: FontWeight.w400,
                         color: Colors.white.withValues(alpha: 0.75),
                         letterSpacing: 1.0,
                       ),
