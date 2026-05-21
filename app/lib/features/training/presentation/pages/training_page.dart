@@ -1247,6 +1247,98 @@ class _WeeklyPlanView extends StatelessWidget {
           planId: plan.id,
           weekNumber: selectedWeek + 1,
         ),
+        const SizedBox(height: 16),
+        // Volume da semana em barras (km por dia), similar ao mensal.
+        _WeeklyVolumeBars(
+          sessions: orderedSessions,
+          todayDow: selectedWeek == _currentPlanWeekIndex(plan)
+              ? DateTime.now().weekday
+              : 0,
+        ),
+      ],
+    );
+  }
+}
+
+/// Barras de VOLUME por dia da semana (km de cada sessão). Dia de HOJE em cyan
+/// sólido; demais dias com sessão em cyan suave; descanso fica vazio. Espelha o
+/// gráfico de carga do mensal, mas no recorte diário.
+class _WeeklyVolumeBars extends StatelessWidget {
+  final List<PlanSession> sessions;
+  final int todayDow; // 1..7 se HOJE está nesta semana; 0 caso contrário.
+  const _WeeklyVolumeBars({required this.sessions, required this.todayDow});
+
+  static const _dayShort = ['', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB', 'DOM'];
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    final type = context.runninType;
+    final byDay = <int, double>{};
+    for (final s in sessions) {
+      byDay[s.dayOfWeek] = (byDay[s.dayOfWeek] ?? 0) + s.distanceKm;
+    }
+    final loads = List.generate(7, (i) => byDay[i + 1] ?? 0.0);
+    final maxLoad = loads.fold<double>(1, (m, l) => l > m ? l : m);
+    const maxBarH = 80.0;
+    const minBarH = 14.0;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'VOLUME DA SEMANA',
+          style: type.labelCaps.copyWith(
+            color: palette.muted,
+            fontSize: 11,
+            letterSpacing: 1.2,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: List.generate(7, (i) {
+            final dow = i + 1;
+            final load = loads[i];
+            final isToday = dow == todayDow;
+            final hasRun = load > 0;
+            final barColor = !hasRun
+                ? palette.border
+                : isToday
+                    ? palette.primary
+                    : palette.primary.withValues(alpha: 0.3);
+            final h = hasRun ? minBarH + (load / maxLoad) * (maxBarH - minBarH) : 6.0;
+            return Expanded(
+              child: Padding(
+                padding: EdgeInsets.only(right: i < 6 ? 6 : 0),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      hasRun ? '${load.toStringAsFixed(0)}K' : '·',
+                      style: type.labelCaps.copyWith(
+                        color: isToday ? palette.primary : palette.muted,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 10,
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    Container(height: h, color: barColor),
+                    const SizedBox(height: 5),
+                    Text(
+                      _dayShort[dow],
+                      style: type.labelCaps.copyWith(
+                        color: isToday ? palette.primary : palette.muted,
+                        fontSize: 9,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }),
+        ),
       ],
     );
   }
