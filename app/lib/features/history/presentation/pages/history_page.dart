@@ -358,35 +358,45 @@ class _DataView extends StatelessWidget {
     final p = context.runninPalette;
     final bd = breakdown?.stats;
 
-    // Valores: prioriza breakdown (BE); fallback no cálculo client-side.
+    // Valores do PERÍODO selecionado: prioriza breakdown (BE); fallback no
+    // cálculo client-side. Todos "wired".
+    final corridas = '${bd?.runs ?? stats.count}';
     final volumeKm = (bd?.totalDistanceKm ?? stats.totalKm).toStringAsFixed(1);
+    final tempoTotal = bd?.totalTimeLabel ?? stats.totalTimeLabel;
     final pace = bd?.avgPace ?? stats.avgPaceLabel;
     final bpmMed = (bd?.avgBpm ?? stats.avgBpm)?.toString() ?? '--';
     final bpmMax = bd?.maxBpm?.toString() ?? '--';
-    final elevTotal =
-        runs.fold<double>(0, (s, r) => s + (r.elevationGain ?? 0)).round();
+    final calorias = bd != null ? '${bd.calories}' : '--';
+    final distMedia = (bd?.avgDistanceKm ??
+            (stats.count > 0 ? stats.totalKm / stats.count : 0))
+        .toStringAsFixed(1);
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
       children: [
-        // Stats principais (referência: PNGs /dados) — valores grandes, cores
-        // por métrica, 2 por linha.
+        // Stats do período — cards com outline, 2 por linha, cores por métrica.
         Row(children: [
-          Expanded(child: _HeroStat(label: 'VOLUME', value: volumeKm, unit: 'km', color: p.primary)),
+          Expanded(child: _HeroStat(label: 'CORRIDAS', value: corridas, color: p.text)),
+          const SizedBox(width: 12),
+          Expanded(child: _HeroStat(label: 'DISTÂNCIA TOTAL', value: volumeKm, unit: 'km', color: p.primary)),
+        ]),
+        const SizedBox(height: 12),
+        Row(children: [
+          Expanded(child: _HeroStat(label: 'TEMPO TOTAL', value: tempoTotal, color: p.text)),
           const SizedBox(width: 12),
           Expanded(child: _HeroStat(label: 'PACE MÉDIO', value: pace, unit: '/km', color: p.secondary)),
         ]),
-        const SizedBox(height: 18),
+        const SizedBox(height: 12),
         Row(children: [
-          Expanded(child: _HeroStat(label: 'FC MÉDIA', value: bpmMed, unit: 'bpm', color: p.primary)),
+          Expanded(child: _HeroStat(label: 'BPM MÉDIO', value: bpmMed, unit: 'bpm', color: p.primary)),
           const SizedBox(width: 12),
-          Expanded(child: _HeroStat(label: 'FC MÁX', value: bpmMax, unit: 'bpm', color: p.primary)),
+          Expanded(child: _HeroStat(label: 'BPM MÁXIMO', value: bpmMax, unit: 'bpm', color: p.primary)),
         ]),
-        const SizedBox(height: 18),
+        const SizedBox(height: 12),
         Row(children: [
-          Expanded(child: _HeroStat(label: 'ELEVAÇÃO', value: '+$elevTotal', unit: 'm', color: p.secondary)),
+          Expanded(child: _HeroStat(label: 'CALORIAS', value: calorias, unit: 'kcal', color: p.text)),
           const SizedBox(width: 12),
-          const Expanded(child: SizedBox()),
+          Expanded(child: _HeroStat(label: 'DIST. MÉDIA', value: distMedia, unit: 'km/corr', color: p.text)),
         ]),
         const SizedBox(height: 20),
 
