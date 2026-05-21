@@ -852,11 +852,14 @@ class _WeekTile extends StatelessWidget {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      // Mesma nomenclatura do mensal: prefere o blockName do BE
-                      // (canônico) e só cai no derivado do focus quando não houver.
+                      // Mesma nomenclatura do mensal: prefere o blockName do BE;
+                      // com focus, usa o label de fase; sem focus, deriva das
+                      // sessões (nunca cai em "PROGRESSÃO").
                       (week.blockName?.trim().isNotEmpty ?? false)
                           ? week.blockName!.trim().toUpperCase()
-                          : _phaseLabelFromFocus(week.focus, week.narrative),
+                          : (week.focus?.trim().isNotEmpty ?? false)
+                              ? _phaseLabelFromFocus(week.focus, week.narrative)
+                              : _phaseFromSessions(week),
                       overflow: TextOverflow.ellipsis,
                       style: context.runninType.labelMd.copyWith(color: palette.text, letterSpacing: 0.8),
                     ),
@@ -930,6 +933,20 @@ String _phaseLabelFromFocus(String? focus, String? narrative) {
   return cleanSub.length > 50
       ? '$phase · ${cleanSub.substring(0, 50)}…'
       : (cleanSub.isEmpty ? phase : '$phase · $cleanSub');
+}
+
+/// Fase derivada das sessões da semana (fallback quando não há blockName nem
+/// focus). Mesma lógica de fase do mensal — evita o label genérico "PROGRESSÃO".
+String _phaseFromSessions(PlanWeek week) {
+  final types = week.sessions.map((s) => s.type.toLowerCase()).toList();
+  if (types.any((t) =>
+      t.contains('interval') || t.contains('tiro') || t.contains('tempo'))) {
+    return 'BUILD';
+  }
+  if (types.any((t) => t.contains('long') || t.contains('longã') || t.contains('longao'))) {
+    return 'SPECIFIC';
+  }
+  return 'BASE';
 }
 
 String _normalizePhase(String f) {
