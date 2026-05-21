@@ -852,7 +852,11 @@ class _WeekTile extends StatelessWidget {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      _phaseLabelFromFocus(week.focus, week.narrative),
+                      // Mesma nomenclatura do mensal: prefere o blockName do BE
+                      // (canônico) e só cai no derivado do focus quando não houver.
+                      (week.blockName?.trim().isNotEmpty ?? false)
+                          ? week.blockName!.trim().toUpperCase()
+                          : _phaseLabelFromFocus(week.focus, week.narrative),
                       overflow: TextOverflow.ellipsis,
                       style: context.runninType.labelMd.copyWith(color: palette.text, letterSpacing: 0.8),
                     ),

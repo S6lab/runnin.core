@@ -17,6 +17,7 @@ import 'package:runnin/features/training/data/weekly_report_remote_datasource.da
 import 'package:runnin/features/training/domain/entities/plan.dart';
 import 'package:runnin/features/training/domain/entities/weekly_report.dart';
 import 'package:runnin/shared/widgets/figma/figma_top_nav.dart';
+import 'package:runnin/shared/widgets/figma/figma_coach_ai_block.dart';
 import 'package:runnin/shared/widgets/app_panel.dart';
 import 'package:runnin/shared/widgets/app_tag.dart';
 import 'package:runnin/shared/widgets/coach_narrative_card.dart';
@@ -1345,7 +1346,8 @@ class _MonthlyPlanView extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 12),
-        ...plan.weeks.asMap().entries.map((entry) {
+        // Mostra só as 4 PRIMEIRAS semanas do plano (o resto se ajusta).
+        ...plan.weeks.take(4).toList().asMap().entries.map((entry) {
           final weekIndex = entry.key;
           final week = entry.value;
           final currentWeekIndex = _currentPlanWeekIndex(plan);
@@ -1376,7 +1378,99 @@ class _MonthlyPlanView extends StatelessWidget {
             onTap: () => onWeekTap(week.weekNumber),
           );
         }),
+        const SizedBox(height: 8),
+        // Resumo de carga (km projetados) das 4 primeiras semanas, em barras.
+        _CargaBars(
+          weeks: plan.weeks.take(4).toList(),
+          currentWeekIndex: _currentPlanWeekIndex(plan),
+        ),
+        const SizedBox(height: 16),
+        // Box estática do coach explicando o recorte das 4 semanas.
+        FigmaCoachAIBlock(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const FigmaCoachAIBreadcrumb(action: 'PERIODIZAÇÃO'),
+              const SizedBox(height: 10),
+              Text(
+                'Aqui aparecem só as 4 primeiras semanas do plano. O plano vai '
+                'se ajustando conforme o seu andamento e a sua performance — por '
+                'isso as semanas seguintes não são fixas. O resumo detalhado, '
+                'semana a semana, está no Plano Base.',
+                style: context.runninType.bodySm.copyWith(
+                  color: context.runninPalette.text.withValues(alpha: 0.85),
+                  height: 1.5,
+                ),
+              ),
+            ],
+          ),
+        ),
       ],
+    );
+  }
+}
+
+/// Barras de carga (km projetados) por semana, conforme o PNG da periodização.
+/// A semana ATUAL fica em cyan sólido; as demais em cyan suave. Label de km
+/// em cima e "S{n}" embaixo.
+class _CargaBars extends StatelessWidget {
+  final List<PlanWeek> weeks;
+  final int currentWeekIndex;
+  const _CargaBars({required this.weeks, required this.currentWeekIndex});
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    final type = context.runninType;
+    if (weeks.isEmpty) return const SizedBox.shrink();
+    final loads = weeks
+        .map((w) =>
+            w.projectedLoadKm ??
+            w.sessions.fold<double>(0, (s, x) => s + x.distanceKm))
+        .toList();
+    final maxLoad = loads.fold<double>(1, (m, l) => l > m ? l : m);
+    const maxBarH = 90.0;
+    const minBarH = 18.0;
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: List.generate(weeks.length, (i) {
+        final w = weeks[i];
+        final load = loads[i];
+        final isCurrent = i == currentWeekIndex;
+        final barColor =
+            isCurrent ? palette.primary : palette.primary.withValues(alpha: 0.3);
+        final h = minBarH + (load / maxLoad) * (maxBarH - minBarH);
+        return Expanded(
+          child: Padding(
+            padding: EdgeInsets.only(right: i < weeks.length - 1 ? 10 : 0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  '${load.toStringAsFixed(0)}K',
+                  style: type.labelCaps.copyWith(
+                    color: isCurrent ? palette.primary : palette.muted,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 11,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Container(height: h, color: barColor),
+                const SizedBox(height: 6),
+                Text(
+                  'S${w.weekNumber}',
+                  style: type.labelCaps.copyWith(
+                    color: isCurrent ? palette.primary : palette.muted,
+                    fontSize: 10,
+                    letterSpacing: 0.8,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      }),
     );
   }
 }
