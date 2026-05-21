@@ -141,12 +141,6 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
     // automaticamente quando getCurrentPosition é chamado.
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
-      // Abre a sessão do coach JÁ na entrada da tela (antes do INICIAR) →
-      // o atleta é recebido com a saudação sem esperar apertar o botão.
-      context.read<RunBloc>().add(PrepareCoach(
-            type: widget.initialType,
-            planSessionId: widget.planSessionId,
-          ));
       await _refreshGpsStatus();
       if (!mounted) return;
       final needsAction = _gpsStatus == _GpsStatus.denied ||

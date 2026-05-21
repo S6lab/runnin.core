@@ -64,14 +64,6 @@ class _NoMovementDetected extends RunEvent {}
 /// Limpa o flag do dialog de "parado" (ex: ao escolher continuar/encerrar).
 class DismissNoMovementPrompt extends RunEvent {}
 
-/// Disparado quando a tela de iniciar corrida abre (antes do INICIAR): abre a
-/// sessão Live e já toca a saudação, pra o atleta ser recebido na entrada.
-class PrepareCoach extends RunEvent {
-  final String type;
-  final String? planSessionId;
-  PrepareCoach({required this.type, this.planSessionId});
-}
-
 /// Push-to-talk: abre a janela de fala com o coach (botão "Coach" pressionado).
 /// Streama o mic pra sessão Live já aberta; o coach responde e volta a narrar.
 class CoachTalkStart extends RunEvent {}
@@ -184,9 +176,6 @@ class RunBloc extends Bloc<RunEvent, RunState> {
   // start, recebe telemetria por momento e narra; transcript == voz no banner.
   final _coachSession = LiveRunCoachSession();
   StreamSubscription<String>? _coachTranscriptSub;
-  /// True após a sessão ser preparada (aberta + saudação) — seja na abertura
-  /// da tela (PrepareCoach) ou no start (fallback). Evita abrir/saudar 2x.
-  bool _coachPrepared = false;
   final _local = RunLocalDatasource();
   final _planRemote = PlanRemoteDatasource();
 
@@ -268,7 +257,6 @@ class RunBloc extends Bloc<RunEvent, RunState> {
     on<DismissNoMovementPrompt>(
       (e, emit) => emit(state.copyWith(noMovementPrompt: false)),
     );
-    on<PrepareCoach>(_onPrepareCoach);
     on<CoachTalkStart>((e, emit) => unawaited(_coachSession.startTalk()));
     on<CoachTalkStop>((e, emit) => unawaited(_coachSession.stopTalk()));
     _local.init();
@@ -373,11 +361,10 @@ class RunBloc extends Bloc<RunEvent, RunState> {
 
       _lastCoachKm = 0;
       _lastKmStartElapsedS = 0;
-      // Fallback: se a tela não chamou PrepareCoach (sessão já aberta + saudada
-      // na entrada), abre+saúda agora. Suprime cues por 12s pra a saudação
+      // Abre a sessão Live e saúda AGORA — ao iniciar, quando a tela passa a
+      // exibir o mapa (corrida ativa). Suprime cues por 12s pra a saudação
       // falar sozinha. A transcrição alimenta o banner; o áudio toca na sessão.
-      if (!_coachPrepared && !_coachSession.isOpen) {
-        _coachPrepared = true;
+      if (!_coachSession.isOpen) {
         _suppressCuesUntilMs = DateTime.now().millisecondsSinceEpoch + 12000;
         _coachTranscriptSub?.cancel();
         _coachTranscriptSub = _coachSession.transcripts.listen((t) {
@@ -931,8 +918,6 @@ class RunBloc extends Bloc<RunEvent, RunState> {
     _motivationTimer = null;
     _scheduledAnalysis = null;
     _stallCheckTimer = null;
-    // Run terminou (complete/abandon) → próxima corrida re-prepara o coach.
-    _coachPrepared = false;
   }
 
   @override
@@ -1028,28 +1013,6 @@ class RunBloc extends Bloc<RunEvent, RunState> {
       if (d > maxDist) maxDist = d;
     }
     return maxDist < 20.0;
-  }
-
-  /// Abre a sessão Live e toca a saudação JÁ na abertura da tela de iniciar
-  /// corrida (antes do INICIAR), pra o atleta ser recebido na entrada. Quando
-  /// pressiona INICIAR, a sessão já está aberta e só seguem as telemetrias.
-  Future<void> _onPrepareCoach(PrepareCoach event, Emitter<RunState> emit) async {
-    if (_coachPrepared || _coachSession.isOpen) return;
-    _coachPrepared = true;
-    if (event.planSessionId != null) {
-      _planSessionId = event.planSessionId;
-      unawaited(_loadPlanSession(event.planSessionId!));
-    }
-    _suppressCuesUntilMs = DateTime.now().millisecondsSinceEpoch + 12000;
-    _coachTranscriptSub?.cancel();
-    _coachTranscriptSub = _coachSession.transcripts.listen((t) {
-      if (!isClosed) add(_CoachChunk(CoachCue(text: t)));
-    });
-    final type = event.type;
-    final ok = await _coachSession.open(planSessionId: event.planSessionId);
-    if (ok && !isClosed) {
-      _coachSession.sendTelemetry(_telemetryText('start', runType: type));
-    }
   }
 
   /// Provoca UMA fala curta do coach na sessão Live. Toda a lógica de
