@@ -30,7 +30,8 @@ export async function buildCoachChatPrompt(args: CoachChatBuildInput): Promise<B
   return {
     systemPrompt: renderTemplate(config.systemPrompt, values),
     userPrompt: renderTemplate(config.userTemplate, values),
-    maxTokens: config.maxTokens,
+    // Piso: resposta do chat não pode cortar no meio.
+    maxTokens: Math.max(config.maxTokens, 1024),
     temperature: config.temperature,
     ragChunks: config.ragChunks,
     version: stampVersion('coach-chat', source),

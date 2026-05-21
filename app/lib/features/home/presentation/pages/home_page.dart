@@ -317,11 +317,14 @@ class _IniciarSessaoButton extends StatelessWidget {
     }
 
     final session = data.todaySession;
+    final sessionDone = session != null && session.isExecuted;
 
     // Coach AI message block from Figma
     final coachMessage = session == null
         ? 'Nenhuma sessao planejada para hoje. Use uma corrida livre ou revise a distribuicao da semana no modulo de treino.'
-        : '${session.type} hoje — pace alvo ${session.targetPace ?? "livre"}. Foco em cadencia e respiracao.';
+        : sessionDone
+            ? '✓ Sessão de hoje concluída: ${session.type}. Bom trabalho! Quer uma corrida livre extra?'
+            : '${session.type} hoje — pace alvo ${session.targetPace ?? "livre"}. Foco em cadencia e respiracao.';
 
     // _CyberTodayCard movido pra dentro do _HeroSection (evita duplicação).
     // Aqui fica só Coach AI + CTA INICIAR.
@@ -329,12 +332,13 @@ class _IniciarSessaoButton extends StatelessWidget {
     return _CoachMessageCard(
       palette: palette,
       message: coachMessage,
-      ctaLabel: isPremium
-          ? (session != null ? 'INICIAR SESSAO ↗' : 'INICIAR CORRIDA LIVRE ↗')
+      ctaLabel: isPremium && session != null && !sessionDone
+          ? 'INICIAR SESSAO ↗'
           : 'INICIAR CORRIDA LIVRE ↗',
       onCta: () async {
-        // Sem premium: corrida livre OK; sessão guiada AI = paywall
-        if (!isPremium && session != null) {
+        // Sessão guiada AI (não concluída) sem premium = paywall. Sessão já
+        // concluída ou sem sessão → corrida livre, sem paywall.
+        if (!isPremium && session != null && !sessionDone) {
           context.push('/paywall?next=/home');
           return;
         }
@@ -632,12 +636,14 @@ class _SemanaSection extends StatelessWidget {
             for (final d in data.weekDays)
               wg.WeekDayCellData(
                 label: d.shortName,
+                // Concluída tem precedência sobre "hoje": a sessão de hoje já
+                // feita mostra o estado "done" (flag concluída), não "today".
                 status: d.session == null
                     ? wg.WeekDayCellStatus.rest
-                    : d.isToday
-                        ? wg.WeekDayCellStatus.today
-                        : d.isDone
-                            ? wg.WeekDayCellStatus.done
+                    : d.isDone
+                        ? wg.WeekDayCellStatus.done
+                        : d.isToday
+                            ? wg.WeekDayCellStatus.today
                             : wg.WeekDayCellStatus.planned,
                 type: d.session == null
                     ? null

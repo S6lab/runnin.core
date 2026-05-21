@@ -824,6 +824,12 @@ class RunBloc extends Bloc<RunEvent, RunState> {
         splits: state.splits,
       );
       await _local.clearRun(storageRunId);
+      // Sessão planejada concluída → o server marcou executedRunId na sessão.
+      // Invalida o cache do plano (cacheFirst na home) pra a próxima abertura
+      // buscar o plano fresco e mostrar a flag "concluída".
+      if (_planSessionId != null) {
+        PlanRemoteDatasource.clearPlanCache();
+      }
       emit(state.copyWith(status: RunStatus.completed, completedRun: run));
     } catch (e) {
       emit(state.copyWith(status: RunStatus.error, error: e.toString()));

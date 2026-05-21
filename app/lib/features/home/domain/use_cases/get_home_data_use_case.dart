@@ -131,10 +131,15 @@ class GetHomeDataUseCase {
         }
       }
 
-      final doneOnDay = runsThisWeek.any((run) {
-        final createdAt = DateTime.tryParse(run.createdAt);
-        return createdAt != null && createdAt.weekday == dayOfWeek;
-      });
+      // "Concluída" = a sessão planejada do dia foi executada (server seta
+      // executedRunId no complete da run vinculada). Fallback: dia sem sessão
+      // mas com corrida registrada (corrida livre) continua marcado como feito.
+      final doneOnDay = (session?.isExecuted ?? false) ||
+          (session == null &&
+              runsThisWeek.any((run) {
+                final createdAt = DateTime.tryParse(run.createdAt);
+                return createdAt != null && createdAt.weekday == dayOfWeek;
+              }));
 
       return WeekDayData(
         dayOfWeek: dayOfWeek,

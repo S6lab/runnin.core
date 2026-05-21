@@ -44,7 +44,8 @@ export async function buildPostRunReportEnrichedPrompt(
   return {
     systemPrompt: renderTemplate(config.systemPrompt, values),
     userPrompt: renderTemplate(config.userTemplate, values),
-    maxTokens: config.maxTokens,
+    // Piso: as 4 seções JSON não podem cortar (quebraria o parse).
+    maxTokens: Math.max(config.maxTokens, 4096),
     temperature: config.temperature,
     ragChunks: config.ragChunks,
     version: stampVersion('post-run-report-enriched', source),

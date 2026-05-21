@@ -30,7 +30,9 @@ export async function buildPostRunReportPrompt(args: PostRunReportBuildInput): P
   return {
     systemPrompt: renderTemplate(config.systemPrompt, values),
     userPrompt: renderTemplate(config.userTemplate, values),
-    maxTokens: config.maxTokens,
+    // Piso: relatório não pode cortar. Mesmo se um override antigo no Firestore
+    // tiver maxTokens baixo, garante o mínimo pra fechar o texto.
+    maxTokens: Math.max(config.maxTokens, 2048),
     temperature: config.temperature,
     ragChunks: config.ragChunks,
     version: stampVersion('post-run-report', source),

@@ -26,7 +26,8 @@ export async function buildPeriodAnalysisPrompt(args: PeriodAnalysisBuildInput):
   return {
     systemPrompt: renderTemplate(config.systemPrompt, values),
     userPrompt: renderTemplate(config.userTemplate, values),
-    maxTokens: config.maxTokens,
+    // Piso: análise do período não pode cortar no meio.
+    maxTokens: Math.max(config.maxTokens, 1200),
     temperature: config.temperature,
     ragChunks: config.ragChunks,
     version: stampVersion('period-analysis', source),
