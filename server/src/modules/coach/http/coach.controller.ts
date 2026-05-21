@@ -44,6 +44,30 @@ export async function postCoachLiveToken(req: Request, res: Response, next: Next
   }
 }
 
+/**
+ * Beacon de diagnóstico da sessão Gemini Live da run (que conecta direto no
+ * Google via token efêmero — o close 1008 não passa pelo nosso server). O
+ * cliente reporta open/close/error aqui pra cair no log do Cloud Run, onde
+ * dá pra inspecionar `coach.live.client_diag code=1008` em staging.
+ */
+export function postCoachLiveDiag(req: Request, res: Response): void {
+  const b = (req.body ?? {}) as Record<string, unknown>;
+  const code = typeof b['code'] === 'number' ? (b['code'] as number) : undefined;
+  logger.warn('coach.live.client_diag', {
+    uid: req.uid,
+    phase: b['phase'],            // 'open_ok' | 'open_failed' | 'ws_close' | 'ws_error'
+    code,                         // close code (1008 = safety/size excedido)
+    is1008: code === 1008,
+    reason: b['reason'],
+    error: b['error'],
+    sysInstrLen: b['sysInstrLen'],
+    outputTranscription: b['outputTranscription'],
+    model: b['model'],
+    runId: b['runId'],
+  });
+  res.json({ ok: true });
+}
+
 export async function postGenerateReport(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const runId = req.params['runId'] as string;

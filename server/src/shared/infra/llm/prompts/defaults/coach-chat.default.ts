@@ -33,6 +33,8 @@ export const COACH_CHAT_DEFAULTS = {
   ].join('\n'),
 
   temperature: 0.7,
-  maxTokens: 220,
+  // 220 cortava respostas no meio. 1024 deixa a resposta completar; o
+  // systemPrompt mantém a concisão (2-4 frases) sem teto rígido cortar.
+  maxTokens: 1024,
   ragChunks: 3,
 };

@@ -63,8 +63,8 @@ export const POST_RUN_REPORT_ENRICHED_DEFAULTS = {
   ].join('\n'),
 
   temperature: 0.7,
-  // 2200 cobre os 4 parágrafos pedidos (~500 tokens cada). Acima disso vira
-  // verbose desnecessário. Se truncar muito, subir pra 2800.
-  maxTokens: 2200,
+  // 2200 ainda cortava as 4 seções JSON no meio (quebrava o parse). 4096 dá
+  // folga pra fechar o JSON completo.
+  maxTokens: 4096,
   ragChunks: 4,
 };

@@ -35,16 +35,26 @@ class LiveRunCoachSession {
   bool _open = false;
   bool _talking = false;
 
+  // Snapshot da config pra anexar nos beacons de diagnóstico (rastrear 1008).
+  String? _model;
+  int _sysInstrLen = 0;
+  bool _outTranscript = false;
+  String? _runId;
+
   /// Cada item é o transcript de UMA fala completa do coach (texto == voz).
   Stream<String> get transcripts => _transcriptsCtrl.stream;
   bool get isOpen => _open;
   bool get isTalking => _talking;
 
   /// Abre a sessão. Retorna false se não conseguiu (cai pra run sem voz).
-  Future<bool> open({String? planSessionId}) async {
+  Future<bool> open({String? planSessionId, String? runId}) async {
     if (_open) return true;
+    _runId = runId;
     final cfg = await _fetchConfig(planSessionId);
     if (cfg == null) return false;
+    _model = cfg.model;
+    _sysInstrLen = cfg.systemInstruction?.length ?? 0;
+    _outTranscript = cfg.outputTranscription;
     try {
       _session = await LiveService(apiKey: cfg.token, apiVersion: 'v1alpha')
           .connect(
@@ -70,22 +80,53 @@ class LiveRunCoachSession {
             onError: (err, _) {
               // ignore: avoid_print
               print('run.coach.live.error: $err');
+              unawaited(_beacon('ws_error', error: err.toString()));
             },
             onClose: (code, reason) {
+              final is1008 = code == 1008;
               // ignore: avoid_print
-              print('run.coach.live.close code=$code reason=$reason');
+              print('run.coach.live.close code=$code reason=$reason is1008=$is1008 sysInstrLen=$_sysInstrLen outTranscript=$_outTranscript');
               _open = false;
+              unawaited(_beacon('ws_close', code: code, reason: reason));
             },
           ),
         ),
       );
       _open = true;
+      // ignore: avoid_print
+      print('run.coach.live.open_ok model=$_model sysInstrLen=$_sysInstrLen outTranscript=$_outTranscript');
+      unawaited(_beacon('open_ok'));
       return true;
     } catch (e) {
+      // open_failed costuma ser o 1008 de SETUP (systemInstruction grande na
+      // constraint / safety) — o connect() lança antes do setupComplete.
       // ignore: avoid_print
-      print('run.coach.live.open_failed: $e');
+      print('run.coach.live.open_failed: $e sysInstrLen=$_sysInstrLen outTranscript=$_outTranscript');
+      unawaited(_beacon('open_failed', error: e.toString()));
       return false;
     }
+  }
+
+  /// Reporta open/close/error pro servidor (cai no log do Cloud Run, onde dá
+  /// pra inspecionar `coach.live.client_diag is1008=true`). Best-effort.
+  Future<void> _beacon(
+    String phase, {
+    int? code,
+    String? reason,
+    String? error,
+  }) async {
+    try {
+      await _dio.post<void>('/coach/live-diag', data: {
+        'phase': phase,
+        'code': ?code,
+        'reason': ?reason,
+        'error': ?error,
+        'sysInstrLen': _sysInstrLen,
+        'outputTranscription': _outTranscript,
+        'model': _model,
+        'runId': ?_runId,
+      });
+    } catch (_) {/* diagnóstico é best-effort */}
   }
 
   void _onMessage(LiveServerMessage msg) {
@@ -123,34 +164,52 @@ class LiveRunCoachSession {
     }
   }
 
-  /// Abre janela de fala (wake word "coach"): streama o mic pra sessão.
+  /// Abre janela de fala (push-to-talk): streama o mic pra sessão. NÃO usa
+  /// sendActivityStart/End — com VAD automático (default) esses sinais dão
+  /// erro; o modelo detecta início/fim de fala pelo próprio áudio.
   Future<void> startTalk() async {
-    if (!_open || _talking) return;
+    if (!_open) {
+      // ignore: avoid_print
+      print('run.coach.live.talk_skip reason=session_closed');
+      return;
+    }
+    if (_talking) return;
     try {
       final ok = await _audio.requestMicPermission();
-      if (!ok) return;
-      _session?.sendActivityStart();
+      // ignore: avoid_print
+      print('run.coach.live.talk_perm granted=$ok');
+      if (!ok) {
+        unawaited(_beacon('talk_no_permission'));
+        return;
+      }
       await _audio.startCapture((chunk) {
         try {
           _session?.sendAudio(chunk);
         } catch (_) {/* ignore */}
       });
       _talking = true;
+      // ignore: avoid_print
+      print('run.coach.live.talk_start ok');
     } catch (e) {
       // ignore: avoid_print
       print('run.coach.live.talk_start_failed: $e');
+      unawaited(_beacon('talk_error', error: e.toString()));
     }
   }
 
-  /// Fecha a janela de fala → o coach responde e volta a narrar.
+  /// Fecha a janela de fala → o VAD automático detecta o silêncio e o coach
+  /// responde.
   Future<void> stopTalk() async {
     if (!_talking) return;
     _talking = false;
     try {
       await _audio.stopCapture();
-      _session?.sendAudioStreamEnd();
-      _session?.sendActivityEnd();
-    } catch (_) {/* ignore */}
+      // ignore: avoid_print
+      print('run.coach.live.talk_stop ok');
+    } catch (e) {
+      // ignore: avoid_print
+      print('run.coach.live.talk_stop_failed: $e');
+    }
   }
 
   Future<void> close() async {

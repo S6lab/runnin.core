@@ -34,8 +34,8 @@ export const POST_RUN_REPORT_DEFAULTS = {
   ].join('\n'),
 
   temperature: 0.7,
-  // 400 estava truncando relatórios no meio (ex: "Eduardo, essa corrida
-  // de 0.01km mostra" — fim). 900 cobre 2-4 parágrafos pedidos pelo system.
-  maxTokens: 900,
+  // 400→900 ainda cortava relatórios longos no meio. 2048 cobre o relatório
+  // completo com folga; o systemPrompt controla o tamanho-alvo.
+  maxTokens: 2048,
   ragChunks: 3,
 };

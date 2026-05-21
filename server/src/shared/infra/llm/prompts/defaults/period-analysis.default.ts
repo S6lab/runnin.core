@@ -31,6 +31,7 @@ export const PERIOD_ANALYSIS_DEFAULTS = {
   ].join('\n'),
 
   temperature: 0.7,
-  maxTokens: 400,
+  // 400 cortava a análise no meio; 1200 deixa completar sem teto rígido.
+  maxTokens: 1200,
   ragChunks: 3,
 };
