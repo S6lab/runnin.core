@@ -439,6 +439,10 @@ class _RunDataGrid extends StatelessWidget {
     if (run.calories != null && run.calories! > 0) {
       entries.add(('CALORIAS', '${run.calories}', 'kcal'));
     }
+    // Ganho de elevação capturado via GPS/altímetro durante a corrida.
+    if (run.elevationGain != null && run.elevationGain! > 0) {
+      entries.add(('ELEVAÇÃO', '+${run.elevationGain!.round()}', 'm'));
+    }
     if (run.xpEarned != null && run.xpEarned! > 0) {
       entries.add(('XP', '+${run.xpEarned}', null));
     }
