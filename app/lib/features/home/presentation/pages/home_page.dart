@@ -853,7 +853,7 @@ class _PerformanceSection extends StatelessWidget {
             children: [
               Expanded(
                 child: AppPanel(
-                  padding: const EdgeInsets.all(17.7),
+                  padding: const EdgeInsets.all(16),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -861,7 +861,7 @@ class _PerformanceSection extends StatelessWidget {
                         'PACE TREND',
                         style: TextStyle(
                           color: palette.muted,
-                          fontSize: 10,
+                          fontSize: 11,
                           fontWeight: FontWeight.w500,
                           letterSpacing: 0.08,
                         ),
@@ -871,7 +871,7 @@ class _PerformanceSection extends StatelessWidget {
                         avgPace ?? '--',
                         style: TextStyle(
                           color: palette.secondary,
-                          fontSize: 23,
+                          fontSize: 28,
                           fontWeight: FontWeight.w500,
                           letterSpacing: -0.02,
                         ),
@@ -897,7 +897,7 @@ class _PerformanceSection extends StatelessWidget {
               const SizedBox(width: 8),
               Expanded(
                 child: AppPanel(
-                  padding: const EdgeInsets.all(17.7),
+                  padding: const EdgeInsets.all(16),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -905,7 +905,7 @@ class _PerformanceSection extends StatelessWidget {
                         'CARDIACO',
                         style: TextStyle(
                           color: palette.muted,
-                          fontSize: 10,
+                          fontSize: 11,
                           fontWeight: FontWeight.w500,
                           letterSpacing: 0.08,
                         ),
@@ -915,7 +915,7 @@ class _PerformanceSection extends StatelessWidget {
                         run?.avgBpm != null ? '${run!.avgBpm}' : '--',
                         style: TextStyle(
                           color: palette.primary,
-                          fontSize: 23,
+                          fontSize: 28,
                           fontWeight: FontWeight.w500,
                         ),
                       ),
@@ -967,7 +967,7 @@ class _PerformanceSection extends StatelessWidget {
               Expanded(
                 child: AppPanel(
                   color: palette.primary,
-                  padding: const EdgeInsets.all(17.7),
+                  padding: const EdgeInsets.all(16),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -975,21 +975,25 @@ class _PerformanceSection extends StatelessWidget {
                         'BENCHMARK',
                         style: TextStyle(
                           color: Colors.black.withValues(alpha: 0.6),
-                          fontSize: 10,
+                          fontSize: 11,
                           fontWeight: FontWeight.w500,
                           letterSpacing: 0.08,
                         ),
                       ),
                       const SizedBox(height: 20),
-                      Text(
-                        weeklyCompletion == null
-                            ? 'SEM BASE'
-                            : '${(weeklyCompletion * 100).round()}%',
-                        style: TextStyle(
-                          color: Colors.black,
-                          fontSize: 23,
-                          fontWeight: FontWeight.w500,
-                          letterSpacing: -0.02,
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.bottomLeft,
+                        child: Text(
+                          weeklyCompletion == null
+                              ? 'SEM BASE'
+                              : '${(weeklyCompletion * 100).round()}%',
+                          style: const TextStyle(
+                            color: Colors.black,
+                            fontSize: 28,
+                            fontWeight: FontWeight.w500,
+                            letterSpacing: -0.02,
+                          ),
                         ),
                       ),
                       const Spacer(),
@@ -1014,7 +1018,7 @@ class _PerformanceSection extends StatelessWidget {
               const SizedBox(width: 8),
               Expanded(
                 child: AppPanel(
-                  padding: const EdgeInsets.all(17.7),
+                  padding: const EdgeInsets.all(16),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -1022,7 +1026,7 @@ class _PerformanceSection extends StatelessWidget {
                         'STREAK',
                         style: TextStyle(
                           color: palette.muted,
-                          fontSize: 10,
+                          fontSize: 11,
                           fontWeight: FontWeight.w500,
                           letterSpacing: 0.08,
                         ),
@@ -1032,7 +1036,7 @@ class _PerformanceSection extends StatelessWidget {
                         '${data.streakDays}',
                         style: TextStyle(
                           color: palette.text,
-                          fontSize: 29,
+                          fontSize: 28,
                           fontWeight: FontWeight.w500,
                           letterSpacing: -0.02,
                         ),
