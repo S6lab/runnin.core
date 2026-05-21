@@ -630,7 +630,7 @@ class _SemanaSection extends StatelessWidget {
               'VOLUME',
               style: TextStyle(
                 color: palette.muted,
-                fontSize: 9,
+                fontSize: 10,
                 fontWeight: FontWeight.w500,
                 letterSpacing: 0.08,
               ),
@@ -640,14 +640,14 @@ class _SemanaSection extends StatelessWidget {
               '${data.weeklyDistanceKm.toStringAsFixed(1)} / ${(data.plannedSessions * 5.0).toStringAsFixed(0)} km',
               style: TextStyle(
                 color: palette.text,
-                fontSize: 10,
+                fontSize: 11,
                 fontWeight: FontWeight.w500,
               ),
             ),
           ],
         ),
         const SizedBox(height: 20),
-        _MiniProgressBar(value: volumePct, color: palette.primary),
+        _MiniProgressBar(value: volumePct, color: palette.primary, minHeight: 6),
         if (data.plannedSessions == 0) ...[
           const SizedBox(height: 16),
           Text(
@@ -797,8 +797,13 @@ class _CoachSummaryBlock extends StatelessWidget {
 class _MiniProgressBar extends StatelessWidget {
   final double value;
   final Color color;
+  final double minHeight;
 
-  const _MiniProgressBar({required this.value, required this.color});
+  const _MiniProgressBar({
+    required this.value,
+    required this.color,
+    this.minHeight = 3,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -806,7 +811,7 @@ class _MiniProgressBar extends StatelessWidget {
     return ClipRRect(
       borderRadius: BorderRadius.zero,
       child: LinearProgressIndicator(
-        minHeight: 3,
+        minHeight: minHeight,
         value: value.clamp(0.0, 1.0),
         backgroundColor: palette.border,
         valueColor: AlwaysStoppedAnimation<Color>(color),
@@ -855,7 +860,7 @@ class _PerformanceSection extends StatelessWidget {
                         'PACE TREND',
                         style: TextStyle(
                           color: palette.muted,
-                          fontSize: 9,
+                          fontSize: 10,
                           fontWeight: FontWeight.w500,
                           letterSpacing: 0.08,
                         ),
@@ -865,7 +870,7 @@ class _PerformanceSection extends StatelessWidget {
                         avgPace ?? '--',
                         style: TextStyle(
                           color: palette.secondary,
-                          fontSize: 22,
+                          fontSize: 23,
                           fontWeight: FontWeight.w500,
                           letterSpacing: -0.02,
                         ),
@@ -874,7 +879,7 @@ class _PerformanceSection extends StatelessWidget {
                         avgPace != null
                             ? '/km · media das corridas'
                             : 'sem corridas suficientes',
-                        style: TextStyle(color: palette.muted, fontSize: 9),
+                        style: TextStyle(color: palette.muted, fontSize: 10),
                       ),
                       const Spacer(),
                       if (avgPace == null)
@@ -899,7 +904,7 @@ class _PerformanceSection extends StatelessWidget {
                         'CARDIACO',
                         style: TextStyle(
                           color: palette.muted,
-                          fontSize: 9,
+                          fontSize: 10,
                           fontWeight: FontWeight.w500,
                           letterSpacing: 0.08,
                         ),
@@ -909,7 +914,7 @@ class _PerformanceSection extends StatelessWidget {
                         run?.avgBpm != null ? '${run!.avgBpm}' : '--',
                         style: TextStyle(
                           color: palette.primary,
-                          fontSize: 22,
+                          fontSize: 23,
                           fontWeight: FontWeight.w500,
                         ),
                       ),
@@ -917,7 +922,7 @@ class _PerformanceSection extends StatelessWidget {
                         run?.avgBpm != null
                             ? 'bpm medio na ultima corrida'
                             : 'sem BPM registrado',
-                        style: TextStyle(color: palette.muted, fontSize: 9),
+                        style: TextStyle(color: palette.muted, fontSize: 10),
                       ),
                       const Spacer(),
                       if (run?.avgBpm != null) ...[
@@ -925,7 +930,7 @@ class _PerformanceSection extends StatelessWidget {
                           'ZONA ESTIMADA',
                           style: TextStyle(
                             color: palette.muted,
-                            fontSize: 9,
+                            fontSize: 10,
                             fontWeight: FontWeight.w500,
                           ),
                         ),
@@ -934,7 +939,7 @@ class _PerformanceSection extends StatelessWidget {
                           '${run!.avgBpm}',
                           style: TextStyle(
                             color: palette.secondary,
-                            fontSize: 14,
+                            fontSize: 15,
                             fontWeight: FontWeight.w500,
                           ),
                         ),
@@ -969,7 +974,7 @@ class _PerformanceSection extends StatelessWidget {
                         'BENCHMARK',
                         style: TextStyle(
                           color: Colors.black.withValues(alpha: 0.6),
-                          fontSize: 9,
+                          fontSize: 10,
                           fontWeight: FontWeight.w500,
                           letterSpacing: 0.08,
                         ),
@@ -981,7 +986,7 @@ class _PerformanceSection extends StatelessWidget {
                             : '${(weeklyCompletion * 100).round()}%',
                         style: TextStyle(
                           color: Colors.black,
-                          fontSize: 22,
+                          fontSize: 23,
                           fontWeight: FontWeight.w500,
                           letterSpacing: -0.02,
                         ),
@@ -993,7 +998,7 @@ class _PerformanceSection extends StatelessWidget {
                             : 'do volume previsto nesta semana',
                         style: TextStyle(
                           color: Colors.black.withValues(alpha: 0.7),
-                          fontSize: 10,
+                          fontSize: 11,
                         ),
                       ),
                       if (weeklyCompletion == null)
@@ -1016,7 +1021,7 @@ class _PerformanceSection extends StatelessWidget {
                         'STREAK',
                         style: TextStyle(
                           color: palette.muted,
-                          fontSize: 9,
+                          fontSize: 10,
                           fontWeight: FontWeight.w500,
                           letterSpacing: 0.08,
                         ),
@@ -1026,14 +1031,14 @@ class _PerformanceSection extends StatelessWidget {
                         '${data.streakDays}',
                         style: TextStyle(
                           color: palette.text,
-                          fontSize: 28,
+                          fontSize: 29,
                           fontWeight: FontWeight.w500,
                           letterSpacing: -0.02,
                         ),
                       ),
                       Text(
                         'dias',
-                        style: TextStyle(color: palette.muted, fontSize: 11),
+                        style: TextStyle(color: palette.muted, fontSize: 12),
                       ),
                       const Spacer(),
                       _MonthStats(data: data),
@@ -1117,7 +1122,7 @@ class _MonthStats extends StatelessWidget {
           monthNames[now.month],
           style: TextStyle(
             color: palette.muted,
-            fontSize: 9,
+            fontSize: 10,
             fontWeight: FontWeight.w500,
             letterSpacing: 0.06,
           ),
@@ -1126,12 +1131,12 @@ class _MonthStats extends StatelessWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text('KM', style: TextStyle(color: palette.muted, fontSize: 9)),
+            Text('KM', style: TextStyle(color: palette.muted, fontSize: 10)),
             Text(
               data.weeklyDistanceKm.toStringAsFixed(1),
               style: TextStyle(
                 color: palette.text,
-                fontSize: 11,
+                fontSize: 12,
                 fontWeight: FontWeight.w500,
               ),
             ),

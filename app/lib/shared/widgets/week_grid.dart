@@ -108,13 +108,13 @@ class _HeaderCell extends StatelessWidget {
   Widget build(BuildContext context) {
     final bg = switch (data.status) {
       WeekDayCellStatus.done => context.runninPalette.primary,
-      WeekDayCellStatus.today =>
-        const Color(0x1700D4FF), // rgba(0,212,255,0.09) per HOME.md
+      // Topo do card de HOJE em cor secundária (sólida) da palette.
+      WeekDayCellStatus.today => context.runninPalette.secondary,
       _ => Colors.transparent,
     };
     final fg = switch (data.status) {
       WeekDayCellStatus.done => FigmaColors.bgBase,
-      WeekDayCellStatus.today => context.runninPalette.primary,
+      WeekDayCellStatus.today => FigmaColors.bgBase,
       _ => FigmaColors.textSecondary,
     };
 
@@ -198,54 +198,72 @@ class _BodyCell extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Icon(icon, size: iconSize, color: iconColor),
+          // Colunas têm ~1/7 da largura → FittedBox(scaleDown) mantém cada
+          // texto em UMA linha, escalando pra caber sem cortar/quebrar.
           if (data.type != null)
-            Text(
+            _FitText(
               data.type!,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: GoogleFonts.jetBrainsMono(
-                fontSize: 9,
-                height: 13.5 / 9,
-                fontWeight: FontWeight.w400,
+              GoogleFonts.jetBrainsMono(
+                fontSize: 11,
+                height: 1.2,
+                fontWeight: FontWeight.w500,
                 color: typeColor,
               ),
             ),
           if (data.distance != null)
-            Text(
+            _FitText(
               data.distance!,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: GoogleFonts.jetBrainsMono(
-                fontSize: 13,
-                height: 19.5 / 13,
-                fontWeight: FontWeight.w500,
+              GoogleFonts.jetBrainsMono(
+                fontSize: 16,
+                height: 1.2,
+                fontWeight: FontWeight.w600,
                 color: distanceColor,
               ),
             ),
           if (data.paceOrDuration != null)
-            Text(
+            _FitText(
               data.paceOrDuration!,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: GoogleFonts.jetBrainsMono(
-                fontSize: 9,
-                height: 13.5 / 9,
+              GoogleFonts.jetBrainsMono(
+                fontSize: 11,
+                height: 1.2,
                 fontWeight: FontWeight.w500,
                 color: paceColor,
               ),
             ),
           if (data.isToday)
-            Text(
+            _FitText(
               'HOJE',
-              style: GoogleFonts.jetBrainsMono(
-                fontSize: 8,
-                height: 12 / 8,
+              GoogleFonts.jetBrainsMono(
+                fontSize: 10,
+                height: 1.2,
                 letterSpacing: 0.8,
-                fontWeight: FontWeight.w500,
-                color: context.runninPalette.primary,
+                fontWeight: FontWeight.w600,
+                color: context.runninPalette.secondary,
               ),
             ),
         ],
+      ),
+    );
+  }
+}
+
+/// Texto de uma linha que escala pra caber na largura da coluna (sem cortar
+/// nem quebrar). Mantém o tamanho natural quando há espaço; reduz só quando
+/// a coluna é estreita demais.
+class _FitText extends StatelessWidget {
+  const _FitText(this.text, this.style);
+
+  final String text;
+  final TextStyle style;
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        alignment: Alignment.centerLeft,
+        child: Text(text, maxLines: 1, softWrap: false, style: style),
       ),
     );
   }
