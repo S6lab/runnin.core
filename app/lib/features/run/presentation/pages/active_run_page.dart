@@ -605,28 +605,25 @@ class _RouteMap extends StatelessWidget {
   Widget build(BuildContext context) => _RouteMapBody(points: points);
 }
 
-/// Background do estado IDLE — foto do runner (mesma da home, alternada
-/// por dia ímpar/par). Usado em vez do mapa quando user ainda não iniciou.
-/// Durante corrida ativa, o mapa real substitui esse hero.
+/// Background do estado IDLE — foto da corredora na orla do Rio. Usado em
+/// vez do mapa quando user ainda não iniciou. Durante corrida ativa, o mapa
+/// real substitui esse hero.
 class _IdleHeroBackground extends StatelessWidget {
   const _IdleHeroBackground();
 
   @override
   Widget build(BuildContext context) {
-    final dayOfYear = DateTime.now().difference(DateTime(DateTime.now().year, 1, 1)).inDays;
-    final heroAsset = dayOfYear.isEven
-        ? 'assets/img/hero/runner_1.png'
-        : 'assets/img/hero/runner_2.png';
     return Positioned.fill(
       child: Container(
-        decoration: BoxDecoration(
-          color: const Color(0xFF0A0A1A),
+        decoration: const BoxDecoration(
+          color: Color(0xFF0A0A1A),
           image: DecorationImage(
-            image: AssetImage(heroAsset),
+            image: AssetImage('assets/img/hero/runner_start.jpg'),
             fit: BoxFit.cover,
-            onError: (e, _) {
-              debugPrint('IDLE_HERO image error: $e');
-            },
+            // Recorte deslocado pra direita → a corredora assenta no
+            // MEIO-DIREITA da tela (a foto é landscape; numa tela retrato
+            // o cover corta as laterais).
+            alignment: Alignment(0.2, 0.0),
           ),
         ),
       ),
