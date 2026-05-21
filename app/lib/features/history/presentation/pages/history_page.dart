@@ -862,19 +862,19 @@ class _RunHistoryCard extends StatelessWidget {
               children: [
                 // Badge: distância planejada (ou alvo/real p/ livre).
                 Container(
-                  width: 48,
-                  height: 48,
+                  width: 56,
+                  height: 56,
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
-                    color: accent.withValues(alpha: 0.10),
-                    border: Border.all(color: accent, width: 1.4),
+                    color: accent.withValues(alpha: 0.08),
+                    border: Border.all(color: accent, width: 1.5),
                   ),
                   child: Text(
                     _badgeNumber(),
                     style: type.dataXs.copyWith(
                       color: accent,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
+                      fontSize: 24,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
                 ),
@@ -904,13 +904,14 @@ class _RunHistoryCard extends StatelessWidget {
                   actualStr,
                   style: type.dataMd.copyWith(
                     color: palette.secondary,
-                    fontWeight: FontWeight.w600,
+                    fontSize: 38,
+                    fontWeight: FontWeight.w700,
                     letterSpacing: -0.5,
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 18),
             // Linha de métricas: pace à ESQUERDA em LARANJA; FC e ganho de
             // elevação ao CENTRO em CYAN (referência: cards canônicos).
             Row(
@@ -957,9 +958,11 @@ class _RunMetric extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       value,
-      style: context.runninType.bodyMd.copyWith(
+      style: context.runninType.dataMd.copyWith(
         color: color,
-        fontWeight: FontWeight.w500,
+        fontSize: 26,
+        fontWeight: FontWeight.w600,
+        letterSpacing: -0.3,
       ),
     );
   }
