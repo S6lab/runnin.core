@@ -359,57 +359,27 @@ class _DataView extends StatelessWidget {
     final bd = breakdown?.stats;
 
     // Valores: prioriza breakdown (BE); fallback no cálculo client-side.
-    final corridas = '${bd?.runs ?? stats.count}';
     final volumeKm = (bd?.totalDistanceKm ?? stats.totalKm).toStringAsFixed(1);
-    final distMedia = (bd?.avgDistanceKm ??
-            (stats.count > 0 ? stats.totalKm / stats.count : 0))
-        .toStringAsFixed(1);
-    final tempo = bd?.totalTimeLabel ?? stats.totalTimeLabel;
     final pace = bd?.avgPace ?? stats.avgPaceLabel;
-    final calorias = bd != null ? '${bd.calories}' : '--';
     final nivel = bd != null ? '${bd.level}' : '--';
     final nivelNome = bd?.levelName ?? '';
     final bpmMed = (bd?.avgBpm ?? stats.avgBpm)?.toString() ?? '--';
-    final bpmMax = bd?.maxBpm?.toString() ?? '--';
-    final streak = '${bd?.streak ?? stats.streakDays}';
-    final xp = '${bd?.totalXp ?? stats.totalXp}';
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
       children: [
-        // 11 stats consolidados (respeitam o período; nível/streak lifetime).
-        Row(children: [
-          Expanded(child: FigmaHistStatCard(label: 'CORRIDAS', value: corridas, valueColor: p.primary)),
-          const SizedBox(width: 8),
-          Expanded(child: FigmaHistStatCard(label: 'VOLUME', value: volumeKm, unit: 'km', valueColor: p.secondary)),
-          const SizedBox(width: 8),
-          Expanded(child: FigmaHistStatCard(label: 'DIST. MÉDIA', value: distMedia, unit: 'km', valueColor: FigmaColors.textPrimary)),
-        ]),
-        const SizedBox(height: 8),
-        Row(children: [
-          Expanded(child: FigmaHistStatCard(label: 'TEMPO', value: tempo, valueColor: p.primary)),
-          const SizedBox(width: 8),
-          Expanded(child: FigmaHistStatCard(label: 'PACE', value: pace, unit: '/km', valueColor: p.secondary)),
-          const SizedBox(width: 8),
-          Expanded(child: FigmaHistStatCard(label: 'CALORIAS', value: calorias, unit: 'kcal', valueColor: FigmaColors.textPrimary)),
-        ]),
-        const SizedBox(height: 8),
-        Row(children: [
-          Expanded(child: FigmaHistStatCard(label: 'NÍVEL', value: nivel, unit: nivelNome, valueColor: p.primary)),
-          const SizedBox(width: 8),
-          Expanded(child: FigmaHistStatCard(label: 'BPM MÉD.', value: bpmMed, unit: 'BPM', valueColor: p.secondary)),
-          const SizedBox(width: 8),
-          Expanded(child: FigmaHistStatCard(label: 'BPM MÁX.', value: bpmMax, unit: 'BPM', valueColor: FigmaColors.textPrimary)),
-        ]),
-        const SizedBox(height: 8),
-        Row(children: [
-          Expanded(child: FigmaHistStatCard(label: 'STREAK', value: streak, unit: 'd', valueColor: p.primary)),
-          const SizedBox(width: 8),
-          Expanded(child: FigmaHistStatCard(label: 'XP', value: xp, valueColor: p.secondary)),
-          const SizedBox(width: 8),
-          const Expanded(child: SizedBox()),
-        ]),
-        const SizedBox(height: 16),
+        // Stats principais (referência: PNG /dados) — valores grandes, cores
+        // alternadas (cyan/laranja) em disposição zigue-zague.
+        _HeroStat(label: 'VOLUME', value: volumeKm, unit: 'km', color: p.primary, alignRight: true),
+        const SizedBox(height: 18),
+        _HeroStat(label: 'PACE MÉDIO', value: pace, unit: '/km', color: p.secondary, alignRight: true),
+        const SizedBox(height: 18),
+        _HeroStat(label: 'FC MÉDIA', value: bpmMed, unit: 'bpm', color: p.primary, alignRight: false),
+        const SizedBox(height: 18),
+        _HeroStat(label: 'ELEVAÇÃO', value: '+${runs.fold<double>(0, (s, r) => s + (r.elevationGain ?? 0)).round()}', unit: 'm', color: p.secondary, alignRight: true),
+        const SizedBox(height: 18),
+        _HeroStat(label: 'NÍVEL', value: nivel, unit: nivelNome, color: p.primary, alignRight: true),
+        const SizedBox(height: 20),
 
         // Seção Zonas Cardíacas
         if (stats.zoneDistribution.isNotEmpty)
@@ -968,6 +938,74 @@ class _RunMetric extends StatelessWidget {
       style: context.runninType.bodyMd.copyWith(
         color: color,
         fontWeight: FontWeight.w500,
+      ),
+    );
+  }
+}
+
+/// Stat principal do Histórico (referência PNG): label pequeno + valor grande
+/// colorido (+ unidade), alinhado à esquerda ou direita (disposição zigue-zague).
+class _HeroStat extends StatelessWidget {
+  final String label;
+  final String value;
+  final String unit;
+  final Color color;
+  final bool alignRight;
+  const _HeroStat({
+    required this.label,
+    required this.value,
+    this.unit = '',
+    required this.color,
+    this.alignRight = true,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    final type = context.runninType;
+    return Align(
+      alignment: alignRight ? Alignment.centerRight : Alignment.centerLeft,
+      child: Column(
+        crossAxisAlignment:
+            alignRight ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label,
+            style: type.labelCaps.copyWith(
+              color: palette.muted,
+              fontSize: 10,
+              letterSpacing: 1.2,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Text(
+                value,
+                style: type.dataMd.copyWith(
+                  color: color,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 34,
+                  letterSpacing: -0.5,
+                ),
+              ),
+              if (unit.isNotEmpty) ...[
+                const SizedBox(width: 5),
+                Text(
+                  unit,
+                  style: type.labelCaps.copyWith(
+                    color: color.withValues(alpha: 0.7),
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ],
       ),
     );
   }
