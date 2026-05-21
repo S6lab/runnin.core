@@ -986,31 +986,33 @@ class _HeroStat extends StatelessWidget {
   Widget build(BuildContext context) {
     final palette = context.runninPalette;
     final type = context.runninType;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-          Text(
-            label,
-            style: type.labelCaps.copyWith(
-              color: palette.muted,
-              fontSize: 10,
-              letterSpacing: 1.2,
-            ),
-          ),
-          const SizedBox(height: 2),
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+      decoration: BoxDecoration(
+        color: palette.surface,
+        border: Border.all(color: palette.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Valor grande (cor da métrica) no topo.
           Row(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.baseline,
             textBaseline: TextBaseline.alphabetic,
             children: [
-              Text(
-                value,
-                style: type.dataMd.copyWith(
-                  color: color,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 34,
-                  letterSpacing: -0.5,
+              Flexible(
+                child: Text(
+                  value,
+                  maxLines: 1,
+                  overflow: TextOverflow.visible,
+                  style: type.dataMd.copyWith(
+                    color: color,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 32,
+                    letterSpacing: -0.5,
+                  ),
                 ),
               ),
               if (unit.isNotEmpty) ...[
@@ -1025,8 +1027,19 @@ class _HeroStat extends StatelessWidget {
               ],
             ],
           ),
+          const SizedBox(height: 6),
+          // Label embaixo, em caixa-alta suave.
+          Text(
+            label,
+            style: type.labelCaps.copyWith(
+              color: palette.muted,
+              fontSize: 10,
+              letterSpacing: 1.2,
+            ),
+          ),
         ],
-      );
+      ),
+    );
   }
 }
 
