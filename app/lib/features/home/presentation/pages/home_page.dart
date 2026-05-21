@@ -1885,10 +1885,7 @@ class _HeroSection extends StatelessWidget {
     final dateLabel = _formatDate(now);
     
     final session = data.todaySession;
-    final dayOfYear = now.difference(DateTime(now.year, 1, 1)).inDays;
-    final heroAsset = dayOfYear.isEven
-        ? 'assets/img/hero/runner_1.png'
-        : 'assets/img/hero/runner_2.png';
+    const heroAsset = 'assets/img/hero/runner_hero.jpg';
 
     final weekdayLabel = _weekdayLabel(now.weekday).toUpperCase();
     // Semana do PLANO em curso (não a semana ISO do ano). Fallback p/ ISO só
@@ -1909,8 +1906,12 @@ class _HeroSection extends StatelessWidget {
       decoration: BoxDecoration(
         color: const Color(0xFF0A0A1A),
         image: DecorationImage(
-          image: AssetImage(heroAsset),
+          image: const AssetImage(heroAsset),
           fit: BoxFit.cover,
+          // Recorte deslocado pra esquerda → a corredora (centrada na foto)
+          // assenta no MEIO-DIREITA do hero, deixando a esquerda livre pro
+          // texto de saudação. y=0: altura cobre o corpo inteiro.
+          alignment: const Alignment(-0.3, 0.0),
           onError: (e, _) {
             debugPrint('HERO image error: $e');
           },
