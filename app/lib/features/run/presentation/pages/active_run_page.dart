@@ -285,14 +285,10 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
                 : (state.points.isNotEmpty
                     ? _GpsStatus.ok
                     : _GpsStatus.unknown);
-            return Column(
+            return Stack(
               children: [
-                Expanded(
-                  flex: 5,
-                  child: Stack(
-                    children: [
-                // Mapa em DESTAQUE (flex maior que o painel): ocupa a região
-                // acima do painel de stats (seções fixas, sem sobreposição).
+                // Mapa em DESTAQUE no FUNDO (tela cheia). A telemetria fica na
+                // metade de baixo e o cronômetro no meio-esquerda (overlays).
                 if (isIdle)
                   const _IdleHeroBackground()
                 else
@@ -447,14 +443,44 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
                       ),
                     ),
                   ),
-                    ],
+                // Cronômetro no MEIO da tela, alinhado à ESQUERDA (sobre o mapa).
+                if (!isIdle)
+                  Positioned(
+                    left: 24,
+                    right: 24,
+                    top: MediaQuery.of(context).size.height * 0.34,
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            state.formattedElapsed,
+                            style: context.runninType.dataXl.copyWith(
+                              fontSize: 58,
+                              color: palette.text,
+                              height: 1.0,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'TEMPO',
+                            style: context.runninType.labelCaps.copyWith(
+                              color: palette.muted,
+                              fontSize: 11,
+                              letterSpacing: 1.4,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
-                ),
-                // PAINEL de stats ABAIXO do mapa (seção fixa): Expanded com
-                // flex menor que o mapa; rola por dentro e os botões ficam
-                // fixos. No fluxo da coluna, nunca sobrepõe chips/banner.
-                Expanded(
-                  flex: 4,
+                // TELEMETRIA na metade de baixo: sempre visível, sem rolagem.
+                Positioned(
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
                   child: _StatsOverlay(
                     state: state,
                     initialType: widget.initialType,
@@ -1189,19 +1215,13 @@ class _ActiveStatsLayout extends StatelessWidget {
           stops: const [0.0, 0.45, 0.80, 1.0],
         ),
       ),
-      padding: const EdgeInsets.fromLTRB(24, 16, 24, 20),
+      padding: const EdgeInsets.fromLTRB(24, 14, 24, 18),
       child: SafeArea(
         top: false,
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            // Stats + timer + splits rolam aqui dentro (não estouram a tela);
-            // os botões ficam FIXOS abaixo, sempre visíveis.
-            Expanded(
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-            // Header: brand chip + tipo de corrida (texto limpo, sem decoração).
+            // Header compacto: tipo de corrida.
             Row(
               children: [
                 Container(width: 10, height: 10, color: palette.primary),
@@ -1216,69 +1236,81 @@ class _ActiveStatsLayout extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 14),
+            // PACE + DIST — destaque principal (maiores).
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: _StatCell(
+                    stat: _GridStat(
+                      label: 'PACE',
+                      value: paceVal,
+                      unit: '/km',
+                      valueColor: palette.primary,
+                      valueSize: 38,
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: _StatCell(
+                    stat: _GridStat(
+                      label: 'DIST',
+                      value: state.formattedDistance.replaceAll('km', '').trim(),
+                      unit: 'km',
+                      valueColor: palette.secondary,
+                      valueSize: 38,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            Container(height: 1, color: palette.border, margin: const EdgeInsets.symmetric(vertical: 12)),
+            // BPM · ELEV · CAL — secundários (menores).
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: _StatCell(
+                    stat: _GridStat(
+                      label: 'BPM',
+                      value: bpm?.toString() ?? '—',
+                      unit: _bpmZone(bpm),
+                      valueColor: palette.secondary,
+                      valueSize: 20,
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: _StatCell(
+                    stat: _GridStat(
+                      label: 'ELEV',
+                      value: state.splits
+                          .fold<double>(0, (s, sp) => s + (sp.elevationGain ?? 0))
+                          .round()
+                          .toString(),
+                      unit: 'm D+',
+                      valueColor: palette.text,
+                      valueSize: 20,
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: _StatCell(
+                    stat: _GridStat(
+                      label: 'CAL',
+                      value: kcal.toString(),
+                      unit: 'KCAL',
+                      valueColor: palette.text,
+                      valueSize: 20,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
 
-            // Grid 2x2 de stats. Cores conforme palette do user:
-            // PACE → primary (cyan), DIST → secondary (orange),
-            // BPM → secondary (orange), CAL → text default.
-            _StatGridRow(
-              left: _GridStat(
-                label: 'PACE',
-                value: paceVal,
-                unit: '/km',
-                valueColor: palette.primary,
-              ),
-              right: _GridStat(
-                label: 'DIST',
-                value: state.formattedDistance.replaceAll('km', '').trim(),
-                unit: 'km',
-                valueColor: palette.secondary,
-              ),
-            ),
-            Container(height: 1, color: palette.border, margin: const EdgeInsets.symmetric(vertical: 14)),
-            _StatGridRow(
-              left: _GridStat(
-                label: 'BPM',
-                value: bpm?.toString() ?? '—',
-                unit: _bpmZone(bpm),
-                valueColor: palette.secondary,
-              ),
-              right: _GridStat(
-                label: 'CAL',
-                value: kcal.toString(),
-                unit: 'KCAL',
-                valueColor: palette.text,
-              ),
-            ),
-            Container(height: 1, color: palette.border, margin: const EdgeInsets.symmetric(vertical: 14)),
-            // ELEVAÇÃO: ganho acumulado (m), somado dos splits fechados. Já vai
-            // pro coach por km (elevationGainM no cue) — aqui é só o display.
-            _StatGridRow(
-              left: _GridStat(
-                label: 'ELEV',
-                value: state.splits
-                    .fold<double>(0, (s, sp) => s + (sp.elevationGain ?? 0))
-                    .round()
-                    .toString(),
-                unit: 'm D+',
-                valueColor: palette.text,
-              ),
-            ),
-            const SizedBox(height: 24),
-
-            // Timer central grande
-            Text(
-              state.formattedElapsed,
-              style: type.dataXl.copyWith(fontSize: 58, color: palette.text),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'TEMPO',
-              style: type.labelCaps.copyWith(color: palette.muted, fontSize: 11, letterSpacing: 1.4),
-            ),
-            const SizedBox(height: 20),
-
-            // Splits row: SPLITS → + horizontal scroll de km cards
+            // Splits: faixa horizontal (rola só na horizontal), sempre visível.
             if (state.distanceM > 0) ...[
               Row(
                 children: [
@@ -1292,17 +1324,13 @@ class _ActiveStatsLayout extends StatelessWidget {
                   ),
                 ],
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 8),
               SizedBox(
-                height: 92,
+                height: 86,
                 child: ListView.separated(
                   scrollDirection: Axis.horizontal,
-                  // 1 card por split fechado + 1 placeholder pro km em
-                  // andamento. Min 5 placeholders pra UI não ficar vazia
-                  // no início. Ordem: mais antigo → mais recente.
-                  itemCount: state.splits.length < 5
-                      ? 5
-                      : state.splits.length + 1,
+                  itemCount:
+                      state.splits.length < 5 ? 5 : state.splits.length + 1,
                   separatorBuilder: (_, _) => const SizedBox(width: 8),
                   itemBuilder: (_, i) {
                     if (i < state.splits.length) {
@@ -1314,7 +1342,6 @@ class _ActiveStatsLayout extends StatelessWidget {
                         done: true,
                       );
                     }
-                    // Placeholder pro próximo KM (em andamento ou futuro)
                     final kmIdx = i + 1;
                     final currentKm = (state.distanceM / 1000).floor() + 1;
                     final isCurrent = kmIdx == currentKm;
@@ -1327,13 +1354,8 @@ class _ActiveStatsLayout extends StatelessWidget {
                   },
                 ),
               ),
-              const SizedBox(height: 18),
+              const SizedBox(height: 14),
             ],
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 14),
             // Buttons row: idle → INICIAR; active → PAUSAR + FINALIZAR; paused → RETOMAR + FINALIZAR.
             _ButtonsRow(
               isIdle: state.status == RunStatus.idle ||
@@ -1494,31 +1516,15 @@ class _GridStat {
   final String value;
   final String unit;
   final Color valueColor;
+  /// Tamanho do número. PACE/DIST grandes (38); BPM/ELEV/CAL menores (20).
+  final double valueSize;
   const _GridStat({
     required this.label,
     required this.value,
     required this.unit,
     required this.valueColor,
+    this.valueSize = 30,
   });
-}
-
-class _StatGridRow extends StatelessWidget {
-  final _GridStat left;
-  final _GridStat? right;
-  const _StatGridRow({required this.left, this.right});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(child: _StatCell(stat: left)),
-        Expanded(
-          child: right != null ? _StatCell(stat: right!) : const SizedBox(),
-        ),
-      ],
-    );
-  }
 }
 
 class _StatCell extends StatelessWidget {
@@ -1539,7 +1545,7 @@ class _StatCell extends StatelessWidget {
         const SizedBox(height: 4),
         Text(
           stat.value,
-          style: type.dataMd.copyWith(color: stat.valueColor, fontSize: 30, letterSpacing: -0.4),
+          style: type.dataMd.copyWith(color: stat.valueColor, fontSize: stat.valueSize, letterSpacing: -0.4),
         ),
         const SizedBox(height: 2),
         Text(
