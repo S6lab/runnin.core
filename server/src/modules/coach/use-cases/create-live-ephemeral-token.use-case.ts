@@ -26,8 +26,26 @@ const DEFAULT_MODEL =
  * gasto e cues subsequentes falhavam silenciosamente com
  * resource_exhausted.
  */
+export interface CreateLiveTokenOptions {
+  /** systemInstruction travado no token (objetivo + mood + sessão+segments).
+   *  O app é OBRIGADO a enviar o MESMO texto no setup pra casar a constraint. */
+  systemInstruction?: string;
+  /** Liga a transcrição do áudio de saída — o app exibe o transcript no
+   *  banner, garantindo texto == voz (uma fonte só). */
+  outputTranscription?: boolean;
+}
+
 export class CreateLiveEphemeralTokenUseCase {
-  async execute(): Promise<{ token: string; expireTime: string }> {
+  async execute(
+    opts: CreateLiveTokenOptions = {},
+  ): Promise<{
+    token: string;
+    expireTime: string;
+    model: string;
+    voice: string;
+    systemInstruction?: string;
+    outputTranscription: boolean;
+  }> {
     const apiKey = (process.env['GEMINI_API_KEY'] ?? '').trim();
     if (!apiKey) {
       throw new Error('GEMINI_API_KEY not configured on server');
@@ -75,6 +93,15 @@ export class CreateLiveEphemeralTokenUseCase {
                 },
               },
             },
+            // Declaramos TUDO que o app vai enviar no setup (a constraint
+            // precisa casar 1:1, senão o setupComplete não chega — vide
+            // histórico do speechConfig). systemInstruction define o cérebro
+            // server-side; outputAudioTranscription liga o transcript pro
+            // banner (texto == voz).
+            ...(opts.systemInstruction
+              ? { systemInstruction: { parts: [{ text: opts.systemInstruction }] } }
+              : {}),
+            ...(opts.outputTranscription ? { outputAudioTranscription: {} } : {}),
           },
         }),
       });
@@ -99,6 +126,13 @@ export class CreateLiveEphemeralTokenUseCase {
       throw new Error('auth_tokens response missing name');
     }
     // API devolve "name": "auth_tokens/<id>" — usar como apiKey.
-    return { token: data.name, expireTime };
+    return {
+      token: data.name,
+      expireTime,
+      model: DEFAULT_MODEL,
+      voice: 'Charon',
+      systemInstruction: opts.systemInstruction,
+      outputTranscription: !!opts.outputTranscription,
+    };
   }
 }

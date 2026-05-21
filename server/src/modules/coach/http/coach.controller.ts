@@ -5,6 +5,8 @@ import { GetCoachReportUseCase } from '../use-cases/get-coach-report.use-case';
 import { GenerateReportUseCase } from '../use-cases/generate-report.use-case';
 import { GeneratePeriodAnalysisUseCase } from '../use-cases/generate-period-analysis.use-case';
 import { CreateLiveEphemeralTokenUseCase } from '../use-cases/create-live-ephemeral-token.use-case';
+import { CoachRuntimeContextService } from '../use-cases/coach-runtime-context.service';
+import { buildRunCoachInstruction } from '../use-cases/build-run-coach-instruction';
 import { FirestoreCoachReportRepository } from '../infra/firestore-coach-report.repository';
 import { FirestoreRunRepository } from '@modules/runs/infra/firestore-run.repository';
 import { NotFoundError } from '@shared/errors/app-error';
@@ -18,10 +20,24 @@ const getReport = new GetCoachReportUseCase(reportRepo);
 const generateReport = new GenerateReportUseCase(reportRepo, runRepoForReports);
 const generatePeriodAnalysis = new GeneratePeriodAnalysisUseCase(runRepoForReports);
 const createLiveToken = new CreateLiveEphemeralTokenUseCase();
+const liveRuntimeContext = new CoachRuntimeContextService();
 
-export async function postCoachLiveToken(_req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function postCoachLiveToken(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const result = await createLiveToken.execute();
+    // planSessionId (opcional) resolve a sessão planejada do dia → o coach
+    // recebe o roteiro/segments no systemInstruction. Sem ele = corrida livre.
+    const planSessionId =
+      (req.query['planSessionId'] as string | undefined) ??
+      (req.body?.['planSessionId'] as string | undefined);
+    const runtime = await liveRuntimeContext.getContext(req.uid, planSessionId);
+    const systemInstruction = await buildRunCoachInstruction(
+      runtime,
+      runtime.profile?.coachPersonality,
+    );
+    const result = await createLiveToken.execute({
+      systemInstruction,
+      outputTranscription: true,
+    });
     res.json(result);
   } catch (err) {
     next(err);

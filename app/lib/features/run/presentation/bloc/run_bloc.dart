@@ -7,7 +7,7 @@ import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 import 'package:runnin/features/run/data/datasources/run_local_datasource.dart';
 import 'package:runnin/features/run/data/datasources/run_remote_datasource.dart';
 import 'package:runnin/features/run/data/datasources/run_coach_remote_datasource.dart';
-import 'package:runnin/features/run/data/live_coach_voice_service.dart';
+import 'package:runnin/features/run/data/live_run_coach_session.dart';
 import 'package:runnin/features/run/domain/entities/run.dart';
 import 'package:runnin/features/training/data/datasources/plan_remote_datasource.dart';
 import 'package:runnin/features/training/domain/entities/plan.dart';
@@ -63,6 +63,13 @@ class _NoMovementDetected extends RunEvent {}
 
 /// Limpa o flag do dialog de "parado" (ex: ao escolher continuar/encerrar).
 class DismissNoMovementPrompt extends RunEvent {}
+
+/// Push-to-talk: abre a janela de fala com o coach (botão "Coach" pressionado).
+/// Streama o mic pra sessão Live já aberta; o coach responde e volta a narrar.
+class CoachTalkStart extends RunEvent {}
+
+/// Fecha a janela de fala (botão solto) → o coach responde.
+class CoachTalkStop extends RunEvent {}
 
 // ── State ────────────────────────────────────────────────────────────────────
 enum RunStatus { idle, starting, active, paused, completing, completed, error }
@@ -164,9 +171,11 @@ class RunState {
 // ── BLoC ─────────────────────────────────────────────────────────────────────
 class RunBloc extends Bloc<RunEvent, RunState> {
   final _remote = RunRemoteDatasource();
-  final _coachRemote = RunCoachRemoteDatasource();
   final _userRemote = UserRemoteDatasource();
-  final _liveVoice = LiveCoachVoiceService();
+  // Sessão Gemini Live nativa ÚNICA da corrida (cérebro do coach). Aberta no
+  // start, recebe telemetria por momento e narra; transcript == voz no banner.
+  final _coachSession = LiveRunCoachSession();
+  StreamSubscription<String>? _coachTranscriptSub;
   final _local = RunLocalDatasource();
   final _planRemote = PlanRemoteDatasource();
 
@@ -177,11 +186,6 @@ class RunBloc extends Bloc<RunEvent, RunState> {
   Timer? _timer;
   Timer? _flushTimer;
   int _pendingFlushCount = 0;
-  bool _coachRequestInFlight = false;
-  /// Timestamp em ms quando o cue atual começou — usado pra log de diagnostic
-  /// quando outro cue tenta disparar e é skipado (mostra quanto tempo o
-  /// anterior está pendurado). Null quando nenhum cue rodando.
-  int? _coachRequestStartedAt;
   int _lastCoachKm = 0;
   /// Timestamp (s desde start da run) em que o último km foi cruzado.
   /// Usado pra calcular kmDurationS = elapsedS - _lastKmStartElapsedS no
@@ -253,6 +257,8 @@ class RunBloc extends Bloc<RunEvent, RunState> {
     on<DismissNoMovementPrompt>(
       (e, emit) => emit(state.copyWith(noMovementPrompt: false)),
     );
+    on<CoachTalkStart>((e, emit) => unawaited(_coachSession.startTalk()));
+    on<CoachTalkStop>((e, emit) => unawaited(_coachSession.stopTalk()));
     _local.init();
   }
 
@@ -355,13 +361,21 @@ class RunBloc extends Bloc<RunEvent, RunState> {
 
       _lastCoachKm = 0;
       _lastKmStartElapsedS = 0;
-      // Saudação inicial via Gemini Live DIRETO (sem /coach/message).
-      // App fala com Live → recebe áudio WAV → toca. Sem proxy, sem TTS
-      // estático, sem 504 no Cloud Run. Roda em background.
-      // Suprime cues de /coach/message por 12s pra a saudação tocar SOZINHA
-      // (senão segment_start/km do início tocam por cima = "dois coaches").
+      // Abre a sessão Live única do coach (cérebro nativo). A transcrição da
+      // fala alimenta o banner (texto == voz); o áudio toca dentro da sessão.
+      // Suprime cues por 12s pra a saudação de largada falar sozinha.
       _suppressCuesUntilMs = DateTime.now().millisecondsSinceEpoch + 12000;
-      unawaited(_speakStartGreeting(event.type));
+      _coachTranscriptSub?.cancel();
+      _coachTranscriptSub = _coachSession.transcripts.listen((t) {
+        if (!isClosed) add(_CoachChunk(CoachCue(text: t)));
+      });
+      final startType = event.type;
+      unawaited(() async {
+        final ok = await _coachSession.open(planSessionId: _planSessionId);
+        if (ok && !isClosed) {
+          _coachSession.sendTelemetry(_telemetryText('start', runType: startType));
+        }
+      }());
 
       // Timer de tempo decorrido
       _timer = Timer.periodic(
@@ -497,37 +511,16 @@ class RunBloc extends Bloc<RunEvent, RunState> {
   }
 
   void _onCoachChunk(_CoachChunk event, Emitter<RunState> emit) {
-    final cue = event.cue;
-    // Banner do coach atualiza imediato com o texto. Áudio: se o cue
-    // já vier com audioBase64 (saudação via _speakStartGreeting OU
-    // legado /coach/message), toca direto. Caso contrário (cues
-    // automáticos pós-saudação devem vir só com texto), sintetiza via
-    // Live e despacha um novo chunk pra reativar o listener de player.
+    // O texto vem da transcrição da fala da sessão Live (texto == voz). O
+    // áudio toca dentro da própria sessão (LiveRunCoachSession), por isso
+    // NÃO passamos audioBase64 — o player da tela não duplica a fala.
     emit(
       state.copyWith(
-        coachLiveMessage: cue.text,
-        coachAudioBase64: cue.audioBase64 ?? '',
-        coachAudioMimeType: cue.audioMimeType ?? '',
+        coachLiveMessage: event.cue.text,
+        coachAudioBase64: '',
+        coachAudioMimeType: '',
       ),
     );
-    final hasAudio = (cue.audioBase64 ?? '').isNotEmpty;
-    if (!hasAudio && cue.text.isNotEmpty) {
-      unawaited(_synthesizeAndDispatch(cue.text));
-    }
-  }
-
-  /// Sintetiza texto via Gemini Live (client→Google direto) e despacha
-  /// novo `_CoachChunk` carregando o áudio. UI player escuta.
-  Future<void> _synthesizeAndDispatch(String text) async {
-    try {
-      final audio = await _liveVoice.synthesize(text);
-      if (audio == null || isClosed) return;
-      add(_CoachChunk(CoachCue(
-        text: text,
-        audioBase64: audio.audioBase64,
-        audioMimeType: audio.mimeType,
-      )));
-    } catch (_) {/* sem áudio, banner segue */}
   }
 
   void _onGpsUpdate(_GpsUpdate event, Emitter<RunState> emit) {
@@ -624,6 +617,8 @@ class RunBloc extends Bloc<RunEvent, RunState> {
       // Cue 1: km_reached (info imediato sobre o km que acabou).
       // _lastCoachKm já dedup (1x por km), sem cooldown adicional.
       if (_alertPrefs['kmAlert'] == true) {
+        // UMA fala por km: pace + tempo do km + ganho de elevação, e o coach
+        // compara com a fase do roteiro (contexto vem no systemInstruction).
         unawaited(_requestCoachCue(
           event: 'km_reached',
           kmReached: kmReached,
@@ -631,31 +626,10 @@ class RunBloc extends Bloc<RunEvent, RunState> {
           elapsedS: state.elapsedS,
           currentPaceMinKm: smoothedPace,
           kmDurationS: kmDurationS,
+          elevationGainM:
+              updatedSplits.isNotEmpty ? updatedSplits.last.elevationGain : null,
         ));
         _lastCueAt['km_reached'] = DateTime.now().millisecondsSinceEpoch;
-
-        // Cue 2: km_analysis (técnico, ~10s depois). Análise compara
-        // splits recentes com alvo do plano e sugere ação ("acelerar",
-        // "manter", "recuperar"). LLM tem recentSplits[] como insumo.
-        // Cancela cue agendado anterior se ainda pendente — só 1 análise
-        // por km.
-        _scheduledAnalysis?.cancel();
-        _scheduledAnalysis = Timer(const Duration(seconds: 10), () {
-          if (state.status != RunStatus.active || isClosed) return;
-          final recent = updatedSplits
-              .skip(updatedSplits.length > 5 ? updatedSplits.length - 5 : 0)
-              .map((s) => s.toCoachPayload())
-              .toList();
-          unawaited(_requestCoachCue(
-            event: 'km_analysis',
-            kmReached: kmReached,
-            distanceM: state.distanceM,
-            elapsedS: state.elapsedS,
-            currentPaceMinKm: state.currentPaceMinKm,
-            recentSplits: recent,
-          ));
-          _lastCueAt['km_analysis'] = DateTime.now().millisecondsSinceEpoch;
-        });
       }
       // kmSplits: ao fechar um km, manda delta de pace vs km anterior.
       // Só dispara do 2º km em diante (precisa ter referência).
@@ -806,6 +780,11 @@ class RunBloc extends Bloc<RunEvent, RunState> {
     if (state.runId == null) return;
     if (state.distanceM >= stationaryDistanceThresholdM) {
       _requestCoachCue(event: 'finish');
+      // Mantém a sessão aberta até o resumo terminar de tocar, depois fecha
+      // (não cortar o fechamento). Fallback de 15s se o turno não completar.
+      Timer(const Duration(seconds: 15), () => unawaited(_coachSession.close()));
+    } else {
+      unawaited(_coachSession.close());
     }
     emit(state.copyWith(status: RunStatus.completing));
     _stop();
@@ -932,94 +911,14 @@ class RunBloc extends Bloc<RunEvent, RunState> {
     _motivationTimer = null;
     _scheduledAnalysis = null;
     _stallCheckTimer = null;
-    _coachRequestInFlight = false;
-    _coachRequestStartedAt = null;
   }
 
   @override
   Future<void> close() {
     _stop();
+    _coachTranscriptSub?.cancel();
+    unawaited(_coachSession.close());
     return super.close();
-  }
-
-  /// Saudação inicial via Gemini Live (client → Gemini direto, sem
-  /// proxy server). Texto montado localmente a partir do perfil em
-  /// cache (UserRemoteDatasource). Falha silenciosa — UI segue mesmo
-  /// se Live indisponível.
-  Future<void> _speakStartGreeting(String runType) async {
-    try {
-      // Profile + plano em paralelo — economiza ~300-500ms vs sequencial.
-      final results = await Future.wait<dynamic>([
-        _userRemote.getMe().timeout(
-              const Duration(seconds: 3),
-              onTimeout: () => null,
-            ),
-        _planRemote.getCurrentPlan().timeout(
-              const Duration(seconds: 3),
-              onTimeout: () => null,
-            ).catchError((_) => null),
-      ]);
-      final profile = results[0];
-      final plan = results[1] as Plan?;
-
-      final fullName = (profile?.name as String?)?.trim() ?? '';
-      final firstName = fullName.isEmpty
-          ? null
-          : fullName.split(RegExp(r'\s+')).first;
-
-      // Sessão planejada pra hoje (se houver plano ativo).
-      PlanSession? todaySession;
-      if (plan != null && plan.isReady && plan.weeks.isNotEmpty) {
-        final today = DateTime.now().weekday; // 1=Mon..7=Sun
-        final daysFromStart = DateTime.now().difference(plan.effectiveStartDate).inDays;
-        final weekIdx = (daysFromStart / 7).floor().clamp(0, plan.weeks.length - 1);
-        final week = plan.weeks[weekIdx];
-        try {
-          todaySession = week.sessions.firstWhere((s) => s.dayOfWeek == today);
-        } catch (_) {/* sem sessão hoje */}
-      }
-
-      // Tipo escolhido pelo user (Free Run ou tipo do plano).
-      final typeLower = runType.toLowerCase();
-      final isFree = typeLower.contains('free');
-      final typeNice = typeLower.replaceFirst('free run', 'corrida livre');
-
-      // Monta contexto da sessão pra greeting natural.
-      final ctxParts = <String>[];
-      if (todaySession != null) {
-        final km = todaySession.distanceKm.toStringAsFixed(
-          todaySession.distanceKm % 1 == 0 ? 0 : 1,
-        );
-        if (isFree) {
-          // User escolheu Free Run mesmo tendo plano hoje — coach reconhece.
-          ctxParts.add('Você tinha planejado ${todaySession.type.toLowerCase()} de ${km}km hoje, mas escolheu corrida livre');
-        } else {
-          ctxParts.add('Hoje é ${todaySession.type.toLowerCase()} de ${km}km');
-          if (todaySession.targetPace != null) {
-            ctxParts.add('pace alvo ${todaySession.targetPace}/km');
-          }
-        }
-      } else {
-        // Sem plano OU sem sessão hoje
-        ctxParts.add(isFree ? 'Corrida livre, sem distância pré-definida' : 'Começando a $typeNice');
-      }
-
-      final nameStr = firstName != null && firstName.isNotEmpty ? ', $firstName' : '';
-      final greeting = 'Bora$nameStr! ${ctxParts.join('. ')}. Vou te acompanhar do início ao fim.';
-
-      // ignore: avoid_print
-      print('coach.greeting.text=$greeting');
-
-      final audio = await _liveVoice.synthesize(greeting);
-      if (audio == null || isClosed) return;
-      add(_CoachChunk(CoachCue(
-        text: greeting,
-        audioBase64: audio.audioBase64,
-        audioMimeType: audio.mimeType,
-      )));
-    } catch (_) {
-      // best-effort; sem saudação em caso de erro
-    }
   }
 
   /// Resolve a PlanSession da run atual e cacheia segments pra
@@ -1109,6 +1008,10 @@ class RunBloc extends Bloc<RunEvent, RunState> {
     return maxDist < 20.0;
   }
 
+  /// Provoca UMA fala curta do coach na sessão Live. Toda a lógica de
+  /// gatilho/cooldown/dedup fica nos call sites; aqui só formatamos a
+  /// telemetria do momento e enviamos. O modelo decide O QUE dizer; o áudio
+  /// e a transcrição voltam pela sessão (LiveRunCoachSession).
   Future<void> _requestCoachCue({
     required String event,
     int? kmReached,
@@ -1117,92 +1020,79 @@ class RunBloc extends Bloc<RunEvent, RunState> {
     double? currentPaceMinKm,
     double? targetPaceMinKm,
     int? currentSegmentIndex,
-    List<Map<String, dynamic>>? recentSplits,
     int? kmDurationS,
     int? kmAvgBpm,
+    double? elevationGainM,
   }) async {
-    if (state.runId == null) {
-      // ignore: avoid_print
-      print('coach.cue.skip event=$event reason=no_run_id');
-      return;
-    }
-    // Janela da saudação: não deixa nenhum cue tocar por cima da saudação
-    // inicial (finish é exceção — nunca cai aqui no início de qualquer forma).
+    if (state.runId == null || !_coachSession.isOpen) return;
+    // Janela da saudação: não provoca falas por cima da largada.
     if (event != 'finish' &&
         DateTime.now().millisecondsSinceEpoch < _suppressCuesUntilMs) {
-      // ignore: avoid_print
-      print('coach.cue.skip event=$event reason=greeting_window');
       return;
     }
-    if (_coachRequestInFlight) {
-      final blockedAge = _coachRequestStartedAt == null
-          ? '?'
-          : '${DateTime.now().millisecondsSinceEpoch - _coachRequestStartedAt!}ms';
-      // ignore: avoid_print
-      print('coach.cue.skip event=$event reason=in_flight inFlightFor=$blockedAge');
-      return;
-    }
+    _coachSession.sendTelemetry(_telemetryText(
+      event,
+      runType: state.runType,
+      kmReached: kmReached,
+      kmDurationS: kmDurationS,
+      currentPaceMinKm: currentPaceMinKm ?? _computePaceMinKm(),
+      targetPaceMinKm: targetPaceMinKm ?? _parsePaceMinKm(state.targetPace),
+      elevationGainM: elevationGainM,
+      kmAvgBpm: kmAvgBpm,
+    ));
+  }
 
-    // ignore: avoid_print
-    print('coach.cue.fire event=$event km=$kmReached distanceM=${distanceM ?? state.distanceM}');
-    _coachRequestInFlight = true;
-    _coachRequestStartedAt = DateTime.now().millisecondsSinceEpoch;
-    // Safety net curto (15s): se await for não terminar por algum motivo
-    // bizarro, finally cobre tudo. Mas mantemos pra garantir que mesmo
-    // se Future fica pendurada o flag libera.
-    Timer(const Duration(seconds: 15), () {
-      if (_coachRequestInFlight &&
-          _coachRequestStartedAt != null &&
-          DateTime.now().millisecondsSinceEpoch - _coachRequestStartedAt! >= 15000) {
-        // ignore: avoid_print
-        print('coach.cue.safety_release event=$event');
-        _coachRequestInFlight = false;
-        _coachRequestStartedAt = null;
-      }
-    });
-
-    try {
-      // await for + try/finally: substituiu .listen(onError/onDone).
-      // O bug que segurava o flag: stream Dio com response 204 podia
-      // não disparar onDone() em tempo confiável (especialmente web,
-      // SSE encerrado por server-side res.end() sem chunk). Agora o
-      // flag SEMPRE libera no finally, independente de como o stream
-      // termina (chunks, vazio, erro).
-      await for (final cue in _coachRemote.streamCoachCue(
-        runId: state.runId!,
-        event: event,
-        runType: state.runType,
-        currentPaceMinKm: currentPaceMinKm ?? _computePaceMinKm(),
-        targetPaceMinKm: targetPaceMinKm ?? _parsePaceMinKm(state.targetPace),
-        targetDistance: state.targetDistance,
-        distanceM: distanceM ?? state.distanceM,
-        elapsedS: elapsedS ?? state.elapsedS,
-        kmReached: kmReached,
-        kmDurationS: kmDurationS,
-        kmAvgBpm: kmAvgBpm,
-        // Sempre passa planSessionId/currentSegmentIndex quando
-        // disponíveis. Server resolve briefing completo só pra eventos
-        // estruturais (start/finish/segment_*/pace_alert); ruído
-        // (km_reached/motivation) já economiza via sessionSummary.
-        planSessionId: _planSessionId,
-        currentSegmentIndex: currentSegmentIndex ??
-            (_currentSegmentIdx >= 0 ? _currentSegmentIdx : null),
-        recentSplits: recentSplits,
-      )) {
-        // ignore: avoid_print
-        print('coach.cue.chunk event=$event textLen=${cue.text.length} hasAudio=${(cue.audioBase64 ?? '').isNotEmpty}');
-        if (isClosed) return;
-        add(_CoachChunk(cue));
-      }
-    } catch (err) {
-      // ignore: avoid_print
-      print('coach.cue.error event=$event err=$err');
-    } finally {
-      _coachRequestInFlight = false;
-      _coachRequestStartedAt = null;
-      // ignore: avoid_print
-      print('coach.cue.done event=$event');
+  /// Formata o turn de telemetria por momento. Frases instrucionais curtas —
+  /// o estilo/objetivo já estão no systemInstruction travado pelo servidor.
+  String _telemetryText(
+    String event, {
+    String? runType,
+    int? kmReached,
+    int? kmDurationS,
+    double? currentPaceMinKm,
+    double? targetPaceMinKm,
+    double? elevationGainM,
+    int? kmAvgBpm,
+  }) {
+    String pace(double? p) => p == null ? '—' : _fmtPaceMinKm(p);
+    String dur(int? s) => s == null ? '—' : '${s ~/ 60}min ${s % 60}s';
+    switch (event) {
+      case 'start':
+        return 'LARGADA${runType != null ? ' ($runType)' : ''}. Dê a saudação inicial curta com o foco do dia.';
+      case 'km_reached':
+        final parts = <String>['KM $kmReached concluído'];
+        if (currentPaceMinKm != null) parts.add('pace ${pace(currentPaceMinKm)}/km');
+        if (kmDurationS != null) parts.add('tempo do km ${dur(kmDurationS)}');
+        if (elevationGainM != null && elevationGainM > 0) {
+          parts.add('+${elevationGainM.toStringAsFixed(0)}m de elevação');
+        }
+        if (kmAvgBpm != null) parts.add('frequência cardíaca $kmAvgBpm');
+        return '${parts.join(', ')}. Compare com a fase do roteiro e dê um feedback curto.';
+      case 'km_split':
+        return 'KM $kmReached fechado: pace ${pace(currentPaceMinKm)}/km contra ${pace(targetPaceMinKm)}/km do km anterior. Diga se acelerou, manteve ou caiu.';
+      case 'pace_alert':
+        return 'ALERTA: pace ${pace(currentPaceMinKm)}/km fora do alvo ${pace(targetPaceMinKm)}/km. Corrija com firmeza e cuidado.';
+      case 'segment_pace_off':
+        return 'ALERTA: pace ${pace(currentPaceMinKm)}/km fora do alvo ${pace(targetPaceMinKm)}/km da fase atual do roteiro. Cite o alvo da fase.';
+      case 'segment_start':
+        return 'Entrou na próxima fase do roteiro. Anuncie a transição em 1 frase (fase e alvo).';
+      case 'segment_end':
+        return 'Terminou a fase atual do roteiro. Valide a execução e prepare a transição em 1 frase.';
+      case 'motivation':
+        return 'Dê uma frase curta de motivação, foco na constância. Sem alerta específico.';
+      case 'no_movement':
+        return 'O atleta iniciou mas não se moveu em 30 segundos. Sem alarme, diga que pode começar quando estiver pronto.';
+      case 'finish':
+        return 'FIM DA CORRIDA: distância ${(state.distanceM / 1000).toStringAsFixed(2)}km, tempo ${dur(state.elapsedS)}, pace médio ${pace(currentPaceMinKm ?? _computePaceMinKm())}/km. Dê o resumo geral.';
+      default:
+        return event;
     }
+  }
+
+  String _fmtPaceMinKm(double p) {
+    final m = p.floor();
+    final s = ((p - m) * 60).round();
+    return '$m:${s.toString().padLeft(2, '0')}';
   }
 
   double _computePaceMinKm() {
