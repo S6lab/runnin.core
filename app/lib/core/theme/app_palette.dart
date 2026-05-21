@@ -199,7 +199,8 @@ class RunninPalette {
 enum RunninSkin {
   artico,
   magenta,
-  volt;
+  volt,
+  matrix;
 
   RunninPalette get palette {
     switch (this) {
@@ -255,6 +256,25 @@ enum RunninSkin {
           success: Color(0xFF32D17C),
           warning: Color(0xFFFFC93C),
           error: Color(0xFFFF5B66),
+        );
+      case RunninSkin.matrix:
+        // Inspirada em terminal MS-DOS / fósforo verde: fundo quase preto,
+        // texto cinza-claro (CRT), acento verde (0/204/92) e cinza.
+        return const RunninPalette(
+          id: 'matrix',
+          label: 'Matrix',
+          background: Color(0xFF010601),
+          surface: Color(0xFF06110A),
+          surfaceAlt: Color(0xFF0A1810),
+          border: Color(0xFF193823),
+          text: Color(0xFFD2DAD2),
+          muted: Color(0xFF6E7A6E),
+          primary: Color(0xFF00CC5C), // verde solicitado (RGB 0/204/92)
+          secondary: Color(0xFF9AA39A), // cinza
+          tertiary: Color(0xFF00A84B), // verde mais escuro
+          success: Color(0xFF00CC5C),
+          warning: Color(0xFFCBB300),
+          error: Color(0xFFE05050),
         );
     }
   }

@@ -536,6 +536,7 @@ class _ThemeCardsGrid extends StatelessWidget {
         _ThemeCard(skin: RunninSkin.artico, label: 'ÁRTICO'),
         _ThemeCard(skin: RunninSkin.magenta, label: 'MAGENTA'),
         _ThemeCard(skin: RunninSkin.volt, label: 'VOLT'),
+        _ThemeCard(skin: RunninSkin.matrix, label: 'MATRIX'),
       ],
     );
   }
