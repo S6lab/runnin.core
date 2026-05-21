@@ -137,7 +137,13 @@ class _DayDetailPageState extends State<DayDetailPage> {
         _DateHeader(date: dateLabel, weekNumber: widget.weekNumber),
         const SizedBox(height: 16),
         if (session != null) ...[
-          _PlannedSessionCard(session: session),
+          // Two-tier: hidratação/nutrição/roteiro/tempo só em semanas `full`
+          // (1-2). Em skeleton (3+), guarda dura esconde tudo isso mesmo que
+          // venha algum campo solto, e mostra um aviso de "liberado no checkpoint".
+          _PlannedSessionCard(
+            session: session,
+            isDetailed: !(_week?.isSkeleton ?? false),
+          ),
           // "Concluído" vem da corrida real vinculada (executedRunId),
           // não de comparação data×plano.
           if (session.isExecuted) ...[
@@ -201,7 +207,10 @@ class _DateHeader extends StatelessWidget {
 
 class _PlannedSessionCard extends StatelessWidget {
   final PlanSession session;
-  const _PlannedSessionCard({required this.session});
+  // `isDetailed`: a semana é `full` (1-2). Quando false (skeleton), esconde
+  // hidratação/nutrição/roteiro/tempo e mostra aviso de liberação no checkpoint.
+  final bool isDetailed;
+  const _PlannedSessionCard({required this.session, this.isDetailed = true});
   @override
   Widget build(BuildContext context) {
     final palette = context.runninPalette;
@@ -250,20 +259,20 @@ class _PlannedSessionCard extends StatelessWidget {
                 label: 'PACE ALVO',
                 value: '${session.targetPace}/km',
               ),
-            if (session.durationMin != null)
+            if (isDetailed && session.durationMin != null)
               _Detail(
                 icon: Icons.timer_outlined,
                 label: 'TEMPO ALVO',
                 value: '~${session.durationMin!.round()}min',
               ),
-            if (session.hydrationLiters != null)
+            if (isDetailed && session.hydrationLiters != null)
               _Detail(
                 icon: Icons.water_drop_outlined,
                 label: 'HIDRATAÇÃO',
                 value: '${session.hydrationLiters!.toStringAsFixed(1)}L no dia',
               ),
           ]),
-          if ((session.nutritionPre ?? '').isNotEmpty) ...[
+          if (isDetailed && (session.nutritionPre ?? '').isNotEmpty) ...[
             const SizedBox(height: 18),
             _NutritionBlock(
               icon: Icons.restaurant_outlined,
@@ -271,7 +280,7 @@ class _PlannedSessionCard extends StatelessWidget {
               text: session.nutritionPre!,
             ),
           ],
-          if ((session.nutritionPost ?? '').isNotEmpty) ...[
+          if (isDetailed && (session.nutritionPost ?? '').isNotEmpty) ...[
             const SizedBox(height: 10),
             _NutritionBlock(
               icon: Icons.fastfood_outlined,
@@ -283,9 +292,13 @@ class _PlannedSessionCard extends StatelessWidget {
             const SizedBox(height: 18),
             _OrientationBlock(text: session.notes),
           ],
-          if (session.executionSegments.isNotEmpty) ...[
+          if (isDetailed && session.executionSegments.isNotEmpty) ...[
             const SizedBox(height: 20),
             _ExecutionTimeline(segments: session.executionSegments),
+          ],
+          if (!isDetailed) ...[
+            const SizedBox(height: 18),
+            _CheckpointLockNote(),
           ],
         ],
       ),
@@ -821,6 +834,41 @@ class _OrientationBlock extends StatelessWidget {
               color: palette.text,
               fontSize: 12.5,
               height: 1.55,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Aviso em dias de semana SKELETON (3+): hidratação, nutrição e roteiro são
+/// liberados progressivamente no checkpoint da semana anterior (plano vivo).
+class _CheckpointLockNote extends StatelessWidget {
+  const _CheckpointLockNote();
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: palette.muted.withValues(alpha: 0.06),
+        border: Border.all(color: palette.border, width: 1.0),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.lock_clock_outlined, size: 16, color: palette.muted),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Hidratação, nutrição e o roteiro de fases desta semana são '
+              'liberados no checkpoint da semana anterior — o plano se ajusta '
+              'à sua evolução antes de detalhar.',
+              style: context.runninType.bodySm.copyWith(
+                color: palette.muted,
+                height: 1.5,
+              ),
             ),
           ),
         ],
