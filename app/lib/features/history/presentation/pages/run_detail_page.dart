@@ -449,15 +449,20 @@ class _RunDataGrid extends StatelessWidget {
     final rows = <Widget>[];
     for (var i = 0; i < entries.length; i += 2) {
       final hasSecond = i + 1 < entries.length;
-      rows.add(Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Expanded(child: cardFor(entries[i])),
-          const SizedBox(width: 8),
-          Expanded(
-            child: hasSecond ? cardFor(entries[i + 1]) : const SizedBox(),
-          ),
-        ],
+      // IntrinsicHeight dá altura FINITA pro stretch (sem ele, num
+      // SingleChildScrollView o cross-axis é infinito e o layout estoura,
+      // sumindo com tudo abaixo do mapa).
+      rows.add(IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(child: cardFor(entries[i])),
+            const SizedBox(width: 8),
+            Expanded(
+              child: hasSecond ? cardFor(entries[i + 1]) : const SizedBox(),
+            ),
+          ],
+        ),
       ));
       if (i + 2 < entries.length) rows.add(const SizedBox(height: 8));
     }
