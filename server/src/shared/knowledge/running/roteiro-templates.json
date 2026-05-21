@@ -1,0 +1,112 @@
+{
+  "_doc": "Dossiê 4 — templates de roteiro de sessão por tipo. CONTEÚDO EDITÁVEL (RAG): o build-execution-segments lê as instruções daqui em vez de hardcodar. Placeholders: {km}=km da fase, {pace}=linha de pace (resolvida pelo builder), {n}=nº do tiro, {total}=total de tiros. Cada fase traz VÁRIAS opções — o builder alterna entre elas (por dia da semana) pra variar a redação entre sessões do mesmo tipo. Nutrição educacional (sem alimentos específicos, §R).",
+  "easy": {
+    "label": "Easy Run",
+    "phases": {
+      "main_short": [
+        "Easy run de {km}km, conversável. {pace}. Sem heroísmo — easy é easy.",
+        "Corrida leve de {km}km. {pace}. Mantém o ritmo de conversa do começo ao fim.",
+        "{km}km soltos, respiração tranquila. {pace}. Hoje é construir base, não buscar tempo."
+      ],
+      "warmup": [
+        "Aquecimento: comece bem leve, 5-7 min caminhando rápido ou trote suave. Solte os ombros, respire pelo nariz.",
+        "Aquece sem pressa: 5-7 min de trote leve, soltando o corpo. A primeira parte é só acordar o motor.",
+        "Largue devagar: 5-7 min de transição caminhada → trote. Respiração nasal, ombros soltos."
+      ],
+      "main": [
+        "Núcleo da sessão ({km}km). {pace}. Se acelerar e perder a conversa, é sinal de que está rápido demais.",
+        "Parte principal ({km}km) em ritmo de conversa. {pace}. Easy de verdade — segura o gás se ele vier.",
+        "Corpo da corrida ({km}km). {pace}. Mantém constante; é a constância que constrói a base aeróbica."
+      ],
+      "cooldown": [
+        "Cooldown: 5 min de trote bem leve até caminhada. Foco em recuperar fôlego e baixar o cardio antes de parar.",
+        "Desacelera: 5 min de trote → caminhada. Deixa o coração voltar ao normal antes de parar de vez.",
+        "Volta à calma: 5 min reduzindo até caminhar. Respira fundo e hidrata ao terminar."
+      ]
+    }
+  },
+  "tempo": {
+    "label": "Tempo Run",
+    "phases": {
+      "warmup": [
+        "Aquecimento progressivo (8-10 min): comece em trote suave e nos últimos 2 min acelere até quase o pace de tempo. 4-5 inspirações profundas no final.",
+        "Aquece em rampa (8-10 min): do trote leve subindo gradual até perto do pace alvo. Prepara o corpo pro esforço de limiar."
+      ],
+      "main": [
+        "Tempo Run ({km}km). {pace}. Sensação alvo: \"confortavelmente difícil\" — você falaria 2-3 palavras, não mais. Se passar disso, segura.",
+        "Bloco de limiar ({km}km). {pace}. Esforço forte e sustentável; controla desde o primeiro km pra não estourar no fim."
+      ],
+      "cooldown": [
+        "Cooldown ativo: 5 min de trote leve. Solta os braços, respira fundo. Hidrate logo após e estique posterior + panturrilha.",
+        "Desacelera: 5 min de trote leve até caminhada. Baixa o cardio com calma e hidrata."
+      ]
+    }
+  },
+  "long": {
+    "label": "Long Run",
+    "phases": {
+      "warmup": [
+        "Largue MUITO devagar. Os primeiros 5-7 min do longão são pra acordar o motor aeróbico — se sair rápido, paga lá no fim. Respiração toda nasal.",
+        "Começa lento de propósito: 5-7 min bem leves. No longão, paciência no início é o que garante o fim."
+      ],
+      "main_base": [
+        "Núcleo aeróbico ({km}km). {pace}. Hidrate a cada 20-25 min (gole pequeno). Acima de 60 min, reponha carboidrato de fácil absorção pra manter o glicogênio.",
+        "Base do longão ({km}km) em ritmo conversável. {pace}. Hidratação em pequenos goles ao longo; passando de 1h, carboidrato durante."
+      ],
+      "main_finish": [
+        "Reta final ({km}km). Se está bem, segura o pace ou acelera 5-10s/km nos últimos km — simula final de prova. Se não está, mantém e termina. Não force o que não tem.",
+        "Fechamento ({km}km). Sentindo-se forte, pode apertar levemente no fim; sentindo cansaço, mantém o ritmo e conclui com técnica."
+      ],
+      "cooldown": [
+        "Cooldown longo (5-7 min de trote → caminhada). Reponha carboidrato e eletrólitos nos 30 min seguintes, alongue posterior, quadril e panturrilha.",
+        "Volta à calma (5-7 min). Hidratação com eletrólitos + carboidrato logo após; alongamento e, se possível, liberação miofascial à noite."
+      ]
+    }
+  },
+  "interval": {
+    "label": "Intervalado",
+    "phases": {
+      "warmup": [
+        "Aquecimento robusto (10-12 min): trote crescente + 4 educativos (skipping, puxada, caneco, anfersen) de 20m cada. Sem isso o primeiro tiro vira lesão.",
+        "Aquece bem (10-12 min): trote progressivo e educativos curtos. Em intervalado, o aquecimento é P0 — não pule."
+      ],
+      "rep": [
+        "Tiro {n}/{total} (400m). {pace}. Postura ereta, frequência alta, respiração ritmada (2 inspira / 2 expira).",
+        "Repetição {n}/{total} (400m). {pace}. Forte e controlado — não é all-out. Mantém a técnica mesmo cansando.",
+        "Tiro {n}/{total}. {pace}. Controle o ritmo nos primeiros para sobrar nos últimos."
+      ],
+      "recovery": [
+        "Recovery {n}/{total} (200m): trote bem leve ou caminhada. Foco em baixar o pulso pro próximo tiro. Não é descanso parado.",
+        "Recuperação {n}/{total} (200m): trote leve, respiração controlada. Recupera o suficiente pra manter a qualidade do próximo tiro."
+      ],
+      "cooldown": [
+        "Cooldown: 5-8 min de trote → caminhada. Alongue quadríceps, isquios e panturrilha. Reponha carboidrato + proteína em 30 min.",
+        "Volta à calma (5-8 min). Desacelera gradual; recuperação com carboidrato + proteína na janela seguinte."
+      ]
+    }
+  },
+  "recovery": {
+    "label": "Recovery",
+    "phases": {
+      "main": [
+        "Recuperação ativa ({km}km). {pace}. Se acelerar, perde o ponto: hoje é circulação, não estímulo. Perna pesada? Vira caminhada — sem culpa.",
+        "Regenerativo de {km}km bem leve. {pace}. O objetivo é circular sangue e soltar o corpo, não treinar. Pode caminhar se precisar."
+      ]
+    }
+  },
+  "fartlek": {
+    "label": "Fartlek",
+    "phases": {
+      "warmup": [
+        "Aquecimento (8-10 min): trote leve subindo gradual + alguns toques de ritmo curtos pra preparar as trocas de pace."
+      ],
+      "main": [
+        "Fartlek ({km}km): alterne trechos mais fortes e trechos leves por referências externas (postes, quarteirões). Brinque com o pace — o objetivo é variar o estímulo de forma controlada.",
+        "Jogo de ritmo ({km}km): alterne acelerações e recuperações livres, sem cronômetro rígido. Sinta o corpo e varie a intensidade."
+      ],
+      "cooldown": [
+        "Cooldown: 5 min de trote leve → caminhada. Respira fundo, hidrata e solta as pernas."
+      ]
+    }
+  }
+}
