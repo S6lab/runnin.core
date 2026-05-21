@@ -352,7 +352,6 @@ class _ProfilePageState extends State<ProfilePage> {
     }
 
     final streak = calculateStreak(_runs ?? []);
-    final badges = (totalXp / 100).floor();
 
     return Scaffold(
       backgroundColor: palette.background,
@@ -403,29 +402,26 @@ class _ProfilePageState extends State<ProfilePage> {
                             _AnonPromoBanner(onTap: () => context.push('/profile/access')),
                           ],
                           const SizedBox(height: 8),
+                          // Destaque: métricas de EXECUÇÃO (corridas + km) em
+                          // cards grandes. Gamification (streak/xp/nível) desce
+                          // pra linha-subtítulo abaixo.
                           Row(
                             children: [
                               Expanded(
                                 child: _StatCard(
                                   label: 'CORRIDAS',
                                   value: '$totalRuns',
+                                  big: true,
                                 ),
                               ),
                               const SizedBox(width: 8),
                               Expanded(
                                 child: _StatCard(
-                                  label: 'DISTÂNCIA',
+                                  label: 'KM TOTAIS',
                                   value: totalDistKm >= 1
-                                      ? '${totalDistKm.toStringAsFixed(1)} km'
+                                      ? totalDistKm.toStringAsFixed(1)
                                       : '${(totalDistKm * 1000).toStringAsFixed(0)} m',
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: _StatCard(
-                                  label: 'NÍVEL',
-                                  value: '$levelNumber',
-                                  accent: true,
+                                  big: true,
                                 ),
                               ),
                             ],
@@ -439,11 +435,11 @@ class _ProfilePageState extends State<ProfilePage> {
                             xp: StatData(
                               label: 'XP',
                               value: '$totalXp',
-                              accent: true,
                             ),
                             badges: StatData(
-                              label: 'BADGES',
-                              value: '$badges',
+                              label: 'NÍVEL',
+                              value: '$levelNumber',
+                              accent: true,
                             ),
                           ),
                           const SizedBox(height: 24),
@@ -646,12 +642,14 @@ class _FieldLabel extends StatelessWidget {
 class _StatCard extends StatelessWidget {
   final String label;
   final String value;
-  final bool accent;
+  // `big`: card de destaque (métrica de execução — corridas/distância). Valor
+  // maior e mais respiro, prevalecendo sobre gamification (decisão de produto).
+  final bool big;
 
   const _StatCard({
     required this.label,
     required this.value,
-    this.accent = false,
+    this.big = false,
   });
 
   @override
@@ -659,26 +657,25 @@ class _StatCard extends StatelessWidget {
     final palette = context.runninPalette;
 
     return AppPanel(
-      padding: const EdgeInsets.all(16),
-      borderColor: accent
-          ? palette.primary.withValues(alpha: 0.4)
-          : palette.border,
+      padding: EdgeInsets.all(big ? 20 : 16),
+      borderColor: palette.border,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             label,
             style: context.runninType.labelCaps.copyWith(
-              fontSize: 10,
+              fontSize: big ? 11 : 10,
               color: palette.muted,
               letterSpacing: 0.1,
             ),
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: big ? 10 : 8),
           Text(
             value,
-            style: context.runninType.displaySm.copyWith(
-              color: accent ? palette.primary : palette.text,
+            style: (big ? context.runninType.displayLg : context.runninType.displaySm)
+                .copyWith(
+              color: palette.text,
               letterSpacing: -0.02,
             ),
           ),
