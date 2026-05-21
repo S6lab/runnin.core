@@ -1199,6 +1199,7 @@ class _ActiveStatsLayout extends StatelessWidget {
                   runType.toUpperCase(),
                   style: type.labelMd.copyWith(
                     color: palette.primary,
+                    fontSize: 13,
                     letterSpacing: 1.4,
                   ),
                 ),
@@ -1211,14 +1212,12 @@ class _ActiveStatsLayout extends StatelessWidget {
             // BPM → secondary (orange), CAL → text default.
             _StatGridRow(
               left: _GridStat(
-                index: '01',
                 label: 'PACE',
                 value: paceVal,
                 unit: '/km',
                 valueColor: palette.primary,
               ),
               right: _GridStat(
-                index: '02',
                 label: 'DIST',
                 value: state.formattedDistance.replaceAll('km', '').trim(),
                 unit: 'km',
@@ -1228,17 +1227,29 @@ class _ActiveStatsLayout extends StatelessWidget {
             Container(height: 1, color: palette.border, margin: const EdgeInsets.symmetric(vertical: 14)),
             _StatGridRow(
               left: _GridStat(
-                index: '03',
                 label: 'BPM',
                 value: bpm?.toString() ?? '—',
                 unit: _bpmZone(bpm),
                 valueColor: palette.secondary,
               ),
               right: _GridStat(
-                index: '04',
                 label: 'CAL',
                 value: kcal.toString(),
                 unit: 'KCAL',
+                valueColor: palette.text,
+              ),
+            ),
+            Container(height: 1, color: palette.border, margin: const EdgeInsets.symmetric(vertical: 14)),
+            // ELEVAÇÃO: ganho acumulado (m), somado dos splits fechados. Já vai
+            // pro coach por km (elevationGainM no cue) — aqui é só o display.
+            _StatGridRow(
+              left: _GridStat(
+                label: 'ELEV',
+                value: state.splits
+                    .fold<double>(0, (s, sp) => s + (sp.elevationGain ?? 0))
+                    .round()
+                    .toString(),
+                unit: 'm D+',
                 valueColor: palette.text,
               ),
             ),
@@ -1247,12 +1258,12 @@ class _ActiveStatsLayout extends StatelessWidget {
             // Timer central grande
             Text(
               state.formattedElapsed,
-              style: type.dataXl.copyWith(fontSize: 64, color: palette.text),
+              style: type.dataXl.copyWith(fontSize: 65, color: palette.text),
             ),
             const SizedBox(height: 4),
             Text(
-              'TEMPO DECORRIDO',
-              style: type.labelCaps.copyWith(color: palette.muted, letterSpacing: 1.4),
+              'TEMPO',
+              style: type.labelCaps.copyWith(color: palette.muted, fontSize: 11, letterSpacing: 1.4),
             ),
             const SizedBox(height: 20),
 
@@ -1264,6 +1275,7 @@ class _ActiveStatsLayout extends StatelessWidget {
                     'SPLITS  →',
                     style: type.labelMd.copyWith(
                       color: palette.muted,
+                      fontSize: 13,
                       letterSpacing: 1.2,
                     ),
                   ),
@@ -1285,9 +1297,8 @@ class _ActiveStatsLayout extends StatelessWidget {
                     if (i < state.splits.length) {
                       final s = state.splits[i];
                       return _SplitCard(
-                        kmLabel: 'KM${s.kmIndex.toString().padLeft(2, '0')}',
+                        kmLabel: 'KM ${s.kmIndex.toString().padLeft(2, '0')}',
                         paceLabel: s.formattedPace,
-                        timeLabel: s.formattedDuration,
                         speedLabel: '${s.avgSpeedKmh.toStringAsFixed(1)} km/h',
                         done: true,
                       );
@@ -1297,9 +1308,8 @@ class _ActiveStatsLayout extends StatelessWidget {
                     final currentKm = (state.distanceM / 1000).floor() + 1;
                     final isCurrent = kmIdx == currentKm;
                     return _SplitCard(
-                      kmLabel: 'KM${kmIdx.toString().padLeft(2, '0')}',
+                      kmLabel: 'KM ${kmIdx.toString().padLeft(2, '0')}',
                       paceLabel: isCurrent ? state.formattedPace : '--:--',
-                      timeLabel: isCurrent ? state.formattedElapsed : '--:--',
                       speedLabel: isCurrent ? 'em andamento' : '--',
                       done: false,
                     );
@@ -1424,6 +1434,8 @@ class _ButtonsRow extends StatelessWidget {
                 isPaused ? 'RETOMAR' : 'PAUSAR',
                 style: type.labelMd.copyWith(
                   color: isPaused ? palette.primary : palette.muted,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
                   letterSpacing: 1.2,
                 ),
               ),
@@ -1449,6 +1461,8 @@ class _ButtonsRow extends StatelessWidget {
                       'FINALIZAR  ↗',
                       style: type.labelMd.copyWith(
                         color: palette.background,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
                         letterSpacing: 1.2,
                       ),
                     ),
@@ -1461,13 +1475,11 @@ class _ButtonsRow extends StatelessWidget {
 }
 
 class _GridStat {
-  final String index;
   final String label;
   final String value;
   final String unit;
   final Color valueColor;
   const _GridStat({
-    required this.index,
     required this.label,
     required this.value,
     required this.unit,
@@ -1477,8 +1489,8 @@ class _GridStat {
 
 class _StatGridRow extends StatelessWidget {
   final _GridStat left;
-  final _GridStat right;
-  const _StatGridRow({required this.left, required this.right});
+  final _GridStat? right;
+  const _StatGridRow({required this.left, this.right});
 
   @override
   Widget build(BuildContext context) {
@@ -1486,7 +1498,9 @@ class _StatGridRow extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Expanded(child: _StatCell(stat: left)),
-        Expanded(child: _StatCell(stat: right)),
+        Expanded(
+          child: right != null ? _StatCell(stat: right!) : const SizedBox(),
+        ),
       ],
     );
   }
@@ -1503,28 +1517,19 @@ class _StatCell extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              stat.label,
-              style: type.labelCaps.copyWith(color: palette.muted, fontSize: 11, letterSpacing: 1.2),
-            ),
-            Text(
-              stat.index,
-              style: type.labelCaps.copyWith(color: palette.muted.withValues(alpha: 0.5), fontSize: 9),
-            ),
-          ],
+        Text(
+          stat.label,
+          style: type.labelCaps.copyWith(color: palette.muted, fontSize: 12, letterSpacing: 1.2),
         ),
         const SizedBox(height: 4),
         Text(
           stat.value,
-          style: type.dataMd.copyWith(color: stat.valueColor, fontSize: 30, letterSpacing: -0.4),
+          style: type.dataMd.copyWith(color: stat.valueColor, fontSize: 31, letterSpacing: -0.4),
         ),
         const SizedBox(height: 2),
         Text(
           stat.unit,
-          style: type.labelCaps.copyWith(color: palette.muted, fontSize: 10, letterSpacing: 1.0),
+          style: type.labelCaps.copyWith(color: palette.muted, fontSize: 11, letterSpacing: 1.0),
         ),
       ],
     );
@@ -1533,17 +1538,14 @@ class _StatCell extends StatelessWidget {
 
 class _SplitCard extends StatelessWidget {
   final String kmLabel;
-  /// Pace AGREGADO do split (mm:ss/km), não o smoothed instantâneo.
+  /// Pace AGREGADO (médio) do split (mm:ss/km), não o smoothed instantâneo.
   final String paceLabel;
-  /// Duração do split (mm:ss), ou tempo decorrido se em andamento.
-  final String timeLabel;
   /// Velocidade média (km/h), ou "em andamento" pra split em curso.
   final String speedLabel;
   final bool done;
   const _SplitCard({
     required this.kmLabel,
     required this.paceLabel,
-    required this.timeLabel,
     required this.speedLabel,
     required this.done,
   });
@@ -1566,34 +1568,25 @@ class _SplitCard extends StatelessWidget {
         children: [
           Text(
             kmLabel,
-            style: type.labelCaps.copyWith(color: accent, letterSpacing: 1.2),
+            style: type.labelCaps.copyWith(color: accent, fontSize: 11, letterSpacing: 1.2),
           ),
           const SizedBox(height: 4),
-          // Pace agregado — destaque principal do card
+          // Pace médio (agregado) — destaque principal do card
           Text(
             paceLabel,
             style: type.labelMd.copyWith(
               color: done ? palette.text : mutedFg,
+              fontSize: 13,
               fontWeight: FontWeight.w600,
             ),
           ),
           const SizedBox(height: 2),
-          // Tempo do split
-          Text(
-            timeLabel,
-            style: type.labelCaps.copyWith(
-              color: done ? palette.text.withValues(alpha: 0.85) : mutedFg,
-              fontSize: 10,
-              letterSpacing: 0.6,
-            ),
-          ),
-          const SizedBox(height: 2),
-          // Velocidade média
+          // Velocidade média (km/h)
           Text(
             speedLabel,
             style: type.labelCaps.copyWith(
               color: mutedFg,
-              fontSize: 9,
+              fontSize: 10,
               letterSpacing: 0.5,
             ),
           ),
