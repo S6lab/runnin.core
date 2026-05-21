@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:intl/intl.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/features/history/data/benchmark_remote_datasource.dart' show BenchmarkRemoteDatasource;
@@ -825,66 +824,152 @@ class _RunsListView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final palette = context.runninPalette;
-
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
       itemCount: runs.length,
       itemBuilder: (_, i) {
         final run = runs[i];
-        return Stack(
-          children: [
-            FigmaRunCard(
-              typeLabel: run.type.toUpperCase(),
-              dateLabel: _fmtDate(run.createdAt),
-              distanceKm: run.distanceM / 1000,
-              pace: run.avgPace ?? '--:--',
-              duration: _fmtDuration(run.durationS),
-              coachPreview: run.coachQuote ?? 'Sem análise gerada ainda',
-              onTap: () => context.push('/history/run/${run.id}'),
-            ),
-            if (run.planSessionId == null)
-              Positioned(
-                top: 8,
-                right: 0,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(0, 0, 8, 0),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: palette.primary,
-                      borderRadius: const BorderRadius.only(
-                        topLeft: Radius.circular(4),
-                        bottomLeft: Radius.circular(4),
-                      ),
-                    ),
-                    child: Text(
-                      'FREE',
-                      style: context.runninType.labelCaps.copyWith(
-                        color: Colors.white,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-          ],
+        return _RunHistoryCard(
+          run: run,
+          onTap: () => context.push('/history/run/${run.id}'),
         );
       },
     );
   }
+}
 
-  String _fmtDate(String iso) {
-    try {
-      return DateFormat('dd/MM').format(DateTime.parse(iso).toLocal());
-    } catch (_) {
-      return iso.substring(0, 10);
+/// Card de corrida no histórico (referência: PNG /corridas).
+/// Esquerda: badge da distância planejada (cyan; laranja + "FREE" p/ corrida
+/// livre). Direita: distância REAL grande em laranja. Embaixo: pace, FC e
+/// ganho de elevação em cyan.
+class _RunHistoryCard extends StatelessWidget {
+  final Run run;
+  final VoidCallback onTap;
+  const _RunHistoryCard({required this.run, required this.onTap});
+
+  String _badgeNumber() {
+    final t = run.targetDistance;
+    if (t != null) {
+      final n = double.tryParse(t.replaceAll(RegExp(r'[^0-9.]'), ''));
+      if (n != null && n > 0) return n.toStringAsFixed(0);
     }
+    return (run.distanceM / 1000).round().toString();
   }
 
-  String _fmtDuration(int s) {
-    final m = s ~/ 60;
-    final sec = s % 60;
-    return '${m.toString().padLeft(2, '0')}:${sec.toString().padLeft(2, '0')}';
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    final type = context.runninType;
+    final isFree = run.planSessionId == null;
+    final accent = isFree ? palette.secondary : palette.primary;
+    final actual = run.distanceM / 1000;
+    final actualStr = actual.toStringAsFixed(actual % 1 == 0 ? 0 : 1);
+    final pace = run.avgPace ?? '--:--';
+
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        decoration: BoxDecoration(
+          border: Border(
+            bottom: BorderSide(color: palette.border.withValues(alpha: 0.5)),
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                // Badge: distância planejada (ou alvo/real p/ livre).
+                Container(
+                  width: 48,
+                  height: 48,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: accent.withValues(alpha: 0.10),
+                    border: Border.all(color: accent, width: 1.4),
+                  ),
+                  child: Text(
+                    _badgeNumber(),
+                    style: type.dataXs.copyWith(
+                      color: accent,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: Center(
+                    child: isFree
+                        ? Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: palette.secondary.withValues(alpha: 0.12),
+                            ),
+                            child: Text(
+                              'FREE',
+                              style: type.labelCaps.copyWith(
+                                color: palette.secondary,
+                                fontSize: 10,
+                                letterSpacing: 1.0,
+                              ),
+                            ),
+                          )
+                        : const SizedBox.shrink(),
+                  ),
+                ),
+                // Distância REAL (km) — destaque laranja.
+                Text(
+                  actualStr,
+                  style: type.dataMd.copyWith(
+                    color: palette.secondary,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: -0.5,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            // Métricas em cyan: pace · FC · ganho de elevação.
+            Row(
+              children: [
+                _RunMetric(value: pace, color: palette.primary),
+                if (run.avgBpm != null) ...[
+                  const SizedBox(width: 28),
+                  _RunMetric(value: '${run.avgBpm}', color: palette.primary),
+                ],
+                if (run.elevationGain != null) ...[
+                  const SizedBox(width: 28),
+                  _RunMetric(
+                    value: '+${run.elevationGain!.round()}',
+                    color: palette.primary,
+                  ),
+                ],
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _RunMetric extends StatelessWidget {
+  final String value;
+  final Color color;
+  const _RunMetric({required this.value, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      value,
+      style: context.runninType.bodyMd.copyWith(
+        color: color,
+        fontWeight: FontWeight.w500,
+      ),
+    );
   }
 }
 
