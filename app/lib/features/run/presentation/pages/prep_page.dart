@@ -601,7 +601,7 @@ class _PrepViewState extends State<_PrepView> {
                   ),
                   Expanded(
                     child: Text(
-                      items[i],
+                      items[i].toUpperCase(),
                       style: type.bodySm.copyWith(
                         color: _checkedItems.contains(i) ? palette.text : palette.muted,
                       ),
@@ -612,6 +612,21 @@ class _PrepViewState extends State<_PrepView> {
             ),
           ),
         ],
+        const SizedBox(height: 16),
+        // Pular o checklist: avança sem exigir todos os itens marcados.
+        Align(
+          alignment: Alignment.center,
+          child: TextButton(
+            onPressed: () => setState(() => _step++),
+            child: Text(
+              'PULAR ESTA ETAPA  →',
+              style: type.bodySm.copyWith(
+                color: palette.muted,
+                letterSpacing: 1.0,
+              ),
+            ),
+          ),
+        ),
       ],
     );
   }
@@ -1172,9 +1187,10 @@ class _PlanSessionHeroCard extends StatelessWidget {
     final palette = context.runninPalette;
     final type = context.runninType;
     final label = isFreeOnly ? 'FREE RUN' : 'SESSÃO DO PLANO';
-    final title = isFreeOnly
-        ? 'Corrida livre'
-        : (session?.type ?? '').replaceAll('_', ' ');
+    final title = (isFreeOnly
+            ? 'Corrida livre'
+            : (session?.type ?? '').replaceAll('_', ' '))
+        .toUpperCase();
     final dist = session?.distanceKm;
     final pace = session?.targetPace;
     final desc = isFreeOnly
