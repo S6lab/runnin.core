@@ -550,7 +550,7 @@ class _StatusChip extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
-          color: palette.background.withValues(alpha: 0.92),
+          color: palette.surface.withValues(alpha: 0.92),
           border: Border.all(color: color.withValues(alpha: 0.55), width: 1),
         ),
         child: Row(
@@ -589,7 +589,7 @@ class _CoachMuteButton extends StatelessWidget {
       tooltip: muted ? 'Ativar voz do coach' : 'Mutar voz do coach',
       onPressed: onTap,
       style: IconButton.styleFrom(
-        backgroundColor: palette.background.withValues(alpha: 0.82),
+        backgroundColor: palette.surface.withValues(alpha: 0.82),
         foregroundColor: muted ? palette.muted : palette.primary,
         side: BorderSide(color: palette.border),
       ),
@@ -708,7 +708,7 @@ class _RouteMapBodyState extends State<_RouteMapBody> {
           options: MapOptions(
             initialCenter: center,
             initialZoom: hasFix ? 16 : 4,
-            backgroundColor: palette.background,
+            backgroundColor: palette.surface,
           ),
           children: [
             TileLayer(
@@ -823,8 +823,8 @@ class _StatsOverlay extends StatelessWidget {
           begin: Alignment.bottomCenter,
           end: Alignment.topCenter,
           colors: [
-            palette.background,
-            palette.background.withValues(alpha: 0.95),
+            palette.surface,
+            palette.surface.withValues(alpha: 0.95),
             Colors.transparent,
           ],
         ),
@@ -1078,7 +1078,7 @@ class _CoachLiveBanner extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        color: palette.background.withValues(alpha: 0.86),
+        color: palette.surface.withValues(alpha: 0.86),
         border: Border.all(color: palette.primary.withValues(alpha: 0.35)),
       ),
       child: Row(
@@ -1144,7 +1144,7 @@ class _CoachTalkButtonState extends State<_CoachTalkButton> {
               shape: BoxShape.circle,
               color: _pressed
                   ? palette.primary
-                  : palette.background.withValues(alpha: 0.86),
+                  : palette.surface.withValues(alpha: 0.86),
               border: Border.all(color: palette.primary, width: 2),
             ),
             child: Icon(
@@ -1233,9 +1233,9 @@ class _ActiveStatsLayout extends StatelessWidget {
           begin: Alignment.bottomCenter,
           end: Alignment.topCenter,
           colors: [
-            palette.background,
-            palette.background.withValues(alpha: 0.85),
-            palette.background.withValues(alpha: 0.40),
+            palette.surface,
+            palette.surface.withValues(alpha: 0.85),
+            palette.surface.withValues(alpha: 0.40),
             Colors.transparent,
           ],
           stops: const [0.0, 0.45, 0.80, 1.0],
