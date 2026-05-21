@@ -38,6 +38,7 @@ import 'package:runnin/features/profile/presentation/pages/profile_page.dart';
 import 'package:runnin/features/profile/presentation/pages/settings/settings_index_page.dart';
 import 'package:runnin/features/profile/presentation/pages/settings/coach_settings_page.dart';
 import 'package:runnin/features/profile/presentation/pages/settings/notifications_settings_page.dart';
+import 'package:runnin/features/notifications/presentation/pages/notifications_page.dart';
 import 'package:runnin/features/profile/presentation/pages/settings/units_settings_page.dart';
 import 'package:runnin/features/dashboard/presentation/pages/dashboard_page.dart';
 import 'package:runnin/features/profile/presentation/pages/health/health_index_page.dart';
@@ -303,6 +304,10 @@ final appRouter = GoRouter(
         GoRoute(
           path: '/profile/settings/notifications',
           builder: (_, _) => const NotificationsSettingsPage(),
+        ),
+        GoRoute(
+          path: '/notifications',
+          builder: (_, _) => const NotificationsPage(),
         ),
         GoRoute(
           path: '/profile/settings/units',

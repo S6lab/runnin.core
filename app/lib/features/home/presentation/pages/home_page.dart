@@ -10,7 +10,6 @@ import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 import 'package:runnin/features/home/domain/use_cases/get_home_data_use_case.dart';
 import 'package:runnin/features/home/presentation/cubit/home_cubit.dart';
-import 'package:runnin/features/notifications/domain/entities/app_notification.dart';
 import 'package:runnin/features/notifications/presentation/cubit/notifications_cubit.dart';
 import 'package:runnin/features/run/domain/entities/run.dart';
 import 'package:runnin/shared/widgets/app_panel.dart';
@@ -143,9 +142,8 @@ class _HomeViewState extends State<_HomeView> {
                     // B2 SUP-406 Section 1 — Coach Brief + INICIAR
                     _IniciarSessaoButton(data: state.data),
                     const SizedBox(height: 20),
-                    // B3 SUP-407 Section 2 — Notificações
-                    const _CoachNotifications(),
-                    const SizedBox(height: 20),
+                    // Notificações migraram pro ícone (sino) no cabeçalho da
+                    // Home → tela /notifications. Dropdown antigo removido.
                     // B4 SUP-408 Section 3 — Semana
                     _SemanaSection(data: state.data),
                     const SizedBox(height: 20),
@@ -417,511 +415,6 @@ class _CoachMessageCard extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-// ─── Coach Notificações ───────────────────────────────────────────────────────
-
-class _CoachNotifications extends StatelessWidget {
-  const _CoachNotifications();
-
-  @override
-  Widget build(BuildContext context) {
-    return BlocBuilder<NotificationsCubit, NotificationsState>(
-      builder: (context, state) {
-        if (state is! NotificationsLoaded) return const SizedBox.shrink();
-        return _NotificationsHub(items: state.items);
-      },
-    );
-  }
-}
-
-/// Central de notificações da home — dropdown colapsável, 5 grupos fixos
-/// na ordem definida pelo board (SUP).
-///
-/// Cada grupo lê do mesmo NotificationsCubit (wired) e filtra por tipo:
-/// - Hidratação      → type 'hidratacao' (+ ação especial: registrar copo)
-/// - Preparo nutric. → type 'preparo_nutricional'
-/// - Sono+performance→ types 'sono_performance' + 'bpm_real'
-/// - Coach (alertas) → types 'melhor_horario' + 'checklist_pre_easy_run'
-/// - Outras          → demais types ('fechamento_mensal' etc)
-/// Tipos de notificação reconhecidos — fonte única (evita magic strings
-/// espalhadas). O que não casar com `claimed` cai no grupo "OUTRAS".
-class _NotifTypes {
-  static const hidratacao = 'hidratacao';
-  static const nutricional = 'preparo_nutricional';
-  static const sono = 'sono_performance';
-  static const bpm = 'bpm_real';
-  static const melhorHorario = 'melhor_horario';
-  static const checklist = 'checklist_pre_easy_run';
-  static const claimed = {hidratacao, nutricional, sono, bpm, melhorHorario, checklist};
-}
-
-class _NotificationsHub extends StatefulWidget {
-  final List<AppNotification> items;
-  const _NotificationsHub({required this.items});
-
-  @override
-  State<_NotificationsHub> createState() => _NotificationsHubState();
-}
-
-class _NotificationsHubState extends State<_NotificationsHub> {
-  // Apenas a primeira (hidratação) começa aberta; demais colapsadas.
-  final Set<int> _expanded = {0};
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.runninPalette;
-    final hidratacao = widget.items.where((n) => n.type == _NotifTypes.hidratacao).toList();
-    final nutricional = widget.items.where((n) => n.type == _NotifTypes.nutricional).toList();
-    final sonoPerf = widget.items.where((n) => n.type == _NotifTypes.sono || n.type == _NotifTypes.bpm).toList();
-    final coachMsgs = widget.items.where((n) => n.type == _NotifTypes.melhorHorario || n.type == _NotifTypes.checklist).toList();
-    final outras = widget.items.where((n) => !_NotifTypes.claimed.contains(n.type)).toList();
-
-    final groups = <_NotifGroup>[
-      _NotifGroup(
-        label: 'HIDRATAÇÃO',
-        icon: Icons.water_drop_outlined,
-        accent: const Color(0xFF4FB3F0),
-        items: hidratacao,
-      ),
-      _NotifGroup(
-        label: 'PREPARO NUTRICIONAL',
-        icon: Icons.restaurant_outlined,
-        accent: const Color(0xFFFFC857),
-        items: nutricional,
-      ),
-      _NotifGroup(
-        label: 'SONO → PERFORMANCE',
-        icon: Icons.bedtime_outlined,
-        accent: const Color(0xFF6E8AFA),
-        items: sonoPerf,
-      ),
-      _NotifGroup(
-        label: 'MENSAGENS DO COACH',
-        icon: Icons.chat_bubble_outline,
-        accent: const Color(0xFFE85D2A),
-        items: coachMsgs,
-      ),
-      _NotifGroup(
-        label: 'OUTRAS',
-        icon: Icons.inbox_outlined,
-        accent: const Color(0xFFB37BFA),
-        items: outras,
-      ),
-    ];
-
-    final totalCount = widget.items.length;
-    final cubit = context.read<NotificationsCubit>();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SectionHeading(
-          label: 'CENTRAL DE NOTIFICAÇÕES',
-          dotColor: palette.primary,
-          badge: '$totalCount',
-          action: totalCount > 0 ? 'LIMPAR' : null,
-          onAction: totalCount > 0 ? cubit.clear : null,
-        ),
-        const SizedBox(height: 12),
-        Container(
-          decoration: BoxDecoration(
-            color: palette.surface,
-            border: Border.all(color: palette.border, width: 1.041),
-          ),
-          child: Column(
-            children: [
-              for (int i = 0; i < groups.length; i++) ...[
-                if (i > 0) Divider(height: 1, color: palette.border),
-                _NotifGroupTile(
-                  group: groups[i],
-                  expanded: _expanded.contains(i),
-                  onToggle: () => setState(() {
-                    if (_expanded.contains(i)) {
-                      _expanded.remove(i);
-                    } else {
-                      _expanded.add(i);
-                    }
-                  }),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-enum _NotifSpecial { none, hydrationLog }
-
-class _NotifGroup {
-  final String label;
-  final IconData icon;
-  final Color accent;
-  final List<AppNotification> items;
-  final _NotifSpecial special = _NotifSpecial.none;
-  const _NotifGroup({
-    required this.label,
-    required this.icon,
-    required this.accent,
-    required this.items,
-  });
-}
-
-class _NotifGroupTile extends StatelessWidget {
-  final _NotifGroup group;
-  final bool expanded;
-  final VoidCallback onToggle;
-
-  const _NotifGroupTile({
-    required this.group,
-    required this.expanded,
-    required this.onToggle,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.runninPalette;
-    final count = group.items.length;
-    final hasContent = count > 0 || group.special != _NotifSpecial.none;
-
-    return Column(
-      children: [
-        InkWell(
-          onTap: hasContent ? onToggle : null,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-            child: Row(
-              children: [
-                Container(
-                  width: 8,
-                  height: 8,
-                  decoration: BoxDecoration(color: group.accent, shape: BoxShape.circle),
-                ),
-                const SizedBox(width: 10),
-                Icon(group.icon, size: 18, color: palette.text.withValues(alpha: 0.75)),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    group.label,
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                      color: palette.text,
-                      letterSpacing: 1.0,
-                    ),
-                  ),
-                ),
-                if (count > 0)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: group.accent.withValues(alpha: 0.18),
-                    ),
-                    child: Text(
-                      '$count',
-                      style: GoogleFonts.jetBrainsMono(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w500,
-                        color: group.accent,
-                      ),
-                    ),
-                  ),
-                const SizedBox(width: 8),
-                AnimatedRotation(
-                  turns: expanded ? 0.5 : 0,
-                  duration: const Duration(milliseconds: 180),
-                  child: Icon(
-                    Icons.expand_more,
-                    color: hasContent ? palette.text.withValues(alpha: 0.6) : palette.text.withValues(alpha: 0.2),
-                    size: 20,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        AnimatedSize(
-          duration: const Duration(milliseconds: 220),
-          curve: Curves.easeInOut,
-          alignment: Alignment.topCenter,
-          child: !expanded
-              ? const SizedBox.shrink()
-              : Padding(
-                  padding: const EdgeInsets.fromLTRB(38, 0, 14, 14),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      for (final n in group.items) ...[
-                        _NotifItemRow(notification: n, accent: group.accent),
-                        const SizedBox(height: 8),
-                      ],
-                      if (group.special == _NotifSpecial.hydrationLog) _HydrationLogger(accent: group.accent),
-                      if (group.items.isEmpty && group.special == _NotifSpecial.none)
-                        Text(
-                          'Sem alertas neste grupo agora.',
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: 11,
-                            color: palette.text.withValues(alpha: 0.45),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-        ),
-      ],
-    );
-  }
-}
-
-class _NotifItemRow extends StatelessWidget {
-  final AppNotification notification;
-  final Color accent;
-  const _NotifItemRow({required this.notification, required this.accent});
-
-  Future<void> _onTap(BuildContext context) async {
-    // Intercept: notif de hidratação faz scroll pro Status Corporal
-    // (onde tem o "registrar copo"). Não navega pra outra rota.
-    if (notification.type == 'hidratacao') {
-      final key = statusCorporalSectionKey;
-      final ctx = key.currentContext;
-      if (ctx != null) {
-        await Scrollable.ensureVisible(
-          ctx,
-          duration: const Duration(milliseconds: 350),
-          curve: Curves.easeOut,
-          alignment: 0.05,
-        );
-      }
-      return;
-    }
-    if (notification.ctaRoute != null) {
-      context.push(notification.ctaRoute!);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.runninPalette;
-    return GestureDetector(
-      onTap: (notification.type == 'hidratacao' || notification.ctaRoute != null)
-          ? () => _onTap(context)
-          : null,
-      behavior: HitTestBehavior.opaque,
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-        decoration: BoxDecoration(
-          color: FigmaColors.surfaceCard,
-          border: Border.all(color: FigmaColors.borderDefault, width: 1.041),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
-                  child: Text(
-                    notification.title,
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w500,
-                      color: palette.text,
-                      letterSpacing: 0.8,
-                    ),
-                  ),
-                ),
-                if (notification.timeLabel != null)
-                  Text(
-                    notification.timeLabel!,
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: 9,
-                      fontWeight: FontWeight.w600,
-                      color: palette.muted,
-                      letterSpacing: 0.6,
-                    ),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 6),
-            Text(
-              notification.body,
-              style: GoogleFonts.jetBrainsMono(
-                fontSize: 11,
-                fontWeight: FontWeight.w400,
-                color: palette.text.withValues(alpha: 0.7),
-                height: 1.55,
-              ),
-            ),
-            if (notification.ctaLabel != null) ...[
-              const SizedBox(height: 8),
-              Text(
-                '${notification.ctaLabel!} →',
-                style: GoogleFonts.jetBrainsMono(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w500,
-                  color: accent,
-                  letterSpacing: 1.0,
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _HydrationLogger extends StatefulWidget {
-  final Color accent;
-  const _HydrationLogger({required this.accent});
-
-  @override
-  State<_HydrationLogger> createState() => _HydrationLoggerState();
-}
-
-class _HydrationLoggerState extends State<_HydrationLogger> {
-  static const _hydrationBoxName = 'runnin_settings';
-  static const _hydrationKey = 'hydration_ml_today';
-  static const _hydrationDateKey = 'hydration_date';
-  static const _defaultGoalMl = 2000;
-
-  int _todayMl = 0;
-  int? _goalMl;
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-    _loadGoal();
-  }
-
-  Future<Box<dynamic>> _box() async {
-    if (Hive.isBoxOpen(_hydrationBoxName)) return Hive.box<dynamic>(_hydrationBoxName);
-    return Hive.openBox<dynamic>(_hydrationBoxName);
-  }
-
-  Future<void> _load() async {
-    final b = await _box();
-    final storedDate = b.get(_hydrationDateKey) as String?;
-    final today = DateTime.now().toIso8601String().substring(0, 10);
-    if (storedDate != today) {
-      await b.put(_hydrationDateKey, today);
-      await b.put(_hydrationKey, 0);
-    }
-    if (mounted) setState(() => _todayMl = (b.get(_hydrationKey) as int?) ?? 0);
-  }
-
-  Future<void> _loadGoal() async {
-    try {
-      final profile = await UserRemoteDatasource().getMe();
-      final weightStr = profile?.weight?.trim();
-      if (weightStr == null || weightStr.isEmpty) return;
-      final weightKg = double.tryParse(weightStr.replaceAll(',', '.'));
-      if (weightKg == null || weightKg <= 0) return;
-      if (mounted) setState(() => _goalMl = (weightKg * 35).round());
-    } catch (_) {}
-  }
-
-  Future<void> _add(int ml) async {
-    final b = await _box();
-    final newTotal = _todayMl + ml;
-    await b.put(_hydrationKey, newTotal);
-    if (mounted) setState(() => _todayMl = newTotal);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.runninPalette;
-    final goalMl = _goalMl ?? _defaultGoalMl;
-    final progress = (_todayMl / goalMl).clamp(0.0, 1.0);
-    final isGoalReached = _todayMl >= goalMl;
-    final goalLiters = (goalMl / 1000).toStringAsFixed(goalMl % 1000 == 0 ? 1 : 2);
-    final currentLiters = (_todayMl / 1000).toStringAsFixed(2);
-    final goalSourceLabel = _goalMl == null
-        ? 'meta 2L (cadastre seu peso para meta personalizada)'
-        : 'meta ${goalLiters}L (35ml/kg)';
-
-    return Container(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-      decoration: BoxDecoration(
-        color: FigmaColors.surfaceCard,
-        border: Border.all(color: FigmaColors.borderDefault, width: 1.041),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'REGISTRAR HOJE',
-                style: GoogleFonts.jetBrainsMono(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w500,
-                  color: palette.text,
-                  letterSpacing: 0.8,
-                ),
-              ),
-              if (isGoalReached)
-                Text(
-                  '✓ META',
-                  style: GoogleFonts.jetBrainsMono(
-                    fontSize: 9,
-                    fontWeight: FontWeight.w500,
-                    color: widget.accent,
-                    letterSpacing: 0.8,
-                  ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Text(
-            '${currentLiters}L / ${goalLiters}L',
-            style: GoogleFonts.jetBrainsMono(
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-              color: palette.text,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            goalSourceLabel,
-            style: GoogleFonts.jetBrainsMono(
-              fontSize: 10,
-              color: palette.text.withValues(alpha: 0.55),
-            ),
-          ),
-          const SizedBox(height: 8),
-          _MiniProgressBar(value: progress, color: widget.accent),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 6,
-            children: [
-              for (final ml in const [200, 350, 500, 750])
-                OutlinedButton(
-                  onPressed: () => _add(ml),
-                  style: OutlinedButton.styleFrom(
-                    side: BorderSide(color: widget.accent),
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-                    minimumSize: const Size(0, 32),
-                  ),
-                  child: Text(
-                    '+${ml}ml',
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w500,
-                      color: widget.accent,
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ],
-      ),
     );
   }
 }
@@ -2494,6 +1987,8 @@ class _HeroSection extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
+                    const SizedBox(width: 10),
+                    const _NotificationBell(),
                   ],
                 ),
                 const SizedBox(height: 14),
@@ -2739,3 +2234,53 @@ class _PremiumUpsellBanner extends StatelessWidget {
 }
 
 
+
+// ─── Sino de notificações (cabeçalho da Home) ────────────────────────────────
+class _NotificationBell extends StatelessWidget {
+  const _NotificationBell();
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    return BlocBuilder<NotificationsCubit, NotificationsState>(
+      builder: (context, state) {
+        final unread = state is NotificationsLoaded
+            ? state.items.where((n) => n.readAt == null && n.dismissedAt == null).length
+            : 0;
+        return GestureDetector(
+          onTap: () => context.push('/notifications'),
+          behavior: HitTestBehavior.opaque,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              const Icon(Icons.notifications_outlined, color: Colors.white, size: 24),
+              if (unread > 0)
+                Positioned(
+                  right: -2,
+                  top: -2,
+                  child: Container(
+                    padding: const EdgeInsets.all(3),
+                    constraints: const BoxConstraints(minWidth: 14, minHeight: 14),
+                    decoration: BoxDecoration(
+                      color: palette.primary,
+                      shape: BoxShape.circle,
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      unread > 9 ? '9+' : '$unread',
+                      style: const TextStyle(
+                        color: Colors.black,
+                        fontSize: 8,
+                        fontWeight: FontWeight.w700,
+                        height: 1.0,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
