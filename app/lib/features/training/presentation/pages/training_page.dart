@@ -1409,6 +1409,9 @@ class _MonthlyPlanView extends StatelessWidget {
           subtitle: 'Mesociclo 1 · Objetivo: ${plan.goal}',
         ),
         const SizedBox(height: 12),
+        // Grid 2×2: numa única linha de 4, os labels longos (VOL TOTAL,
+        // DIAS TREINO, DESCANSO) não cabiam e quebravam/cortavam. 2 por linha
+        // dá largura suficiente — mesmo padrão do Histórico/DADOS.
         Row(
           children: [
             Expanded(
@@ -1424,7 +1427,11 @@ class _MonthlyPlanView extends StatelessWidget {
                 value: '${stats.totalSessions}',
               ),
             ),
-            const SizedBox(width: 8),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
             Expanded(
               child: MetricCard(
                 label: 'DIAS TREINO',
