@@ -90,7 +90,7 @@ class _PlanDetailPageState extends State<PlanDetailPage> {
     final palette = context.runninPalette;
     return Scaffold(
       backgroundColor: palette.background,
-      appBar: const RunninAppBar(title: 'PLANO COMPLETO', fallbackRoute: '/training'),
+      appBar: const RunninAppBar(title: 'PLANO BASE', fallbackRoute: '/training'),
       body: _loading
           ? Center(child: CircularProgressIndicator(color: palette.primary, strokeWidth: 2))
           : _error != null

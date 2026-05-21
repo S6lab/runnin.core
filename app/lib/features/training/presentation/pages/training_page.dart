@@ -847,7 +847,7 @@ class _PlanContextCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              AppTag(label: 'PLANO REAL', color: palette.primary),
+              AppTag(label: 'PLANO BASE', color: palette.primary),
               const SizedBox(width: 8),
               Text(
                 'Gerado em $planDateLabel',
@@ -879,7 +879,7 @@ class _PlanContextCard extends StatelessWidget {
             child: ElevatedButton.icon(
               onPressed: () => context.push('/training/plan-detail'),
               icon: Icon(Icons.menu_book_outlined, size: 16, color: palette.background),
-              label: const Text('VER PLANO COMPLETO'),
+              label: const Text('VER PLANO BASE'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: palette.primary,
                 foregroundColor: palette.background,

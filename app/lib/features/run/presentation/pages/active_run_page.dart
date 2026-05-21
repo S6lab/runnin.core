@@ -1076,11 +1076,6 @@ class _ActiveStatsLayout extends StatelessWidget {
     return 'Z5:VO2';
   }
 
-  String _typeAsExe(String t) {
-    final norm = t.toUpperCase().replaceAll(' ', '_').replaceAll(RegExp(r'[^A-Z0-9_]'), '');
-    return '$norm.exe';
-  }
-
   @override
   Widget build(BuildContext context) {
     final palette = context.runninPalette;
@@ -1112,24 +1107,16 @@ class _ActiveStatsLayout extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Header: brand chip + run type como .exe
+            // Header: brand chip + tipo de corrida (texto limpo, sem decoração).
             Row(
               children: [
                 Container(width: 10, height: 10, color: palette.primary),
                 const SizedBox(width: 8),
                 Text(
-                  'RUN.ACTIVE',
+                  runType.toUpperCase(),
                   style: type.labelMd.copyWith(
                     color: palette.primary,
                     letterSpacing: 1.4,
-                  ),
-                ),
-                const Spacer(),
-                Text(
-                  _typeAsExe(runType),
-                  style: type.labelMd.copyWith(
-                    color: palette.muted,
-                    letterSpacing: 1.0,
                   ),
                 ),
               ],
