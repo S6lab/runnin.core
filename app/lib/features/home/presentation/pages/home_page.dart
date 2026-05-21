@@ -799,11 +799,15 @@ class _MiniProgressBar extends StatelessWidget {
   final double value;
   final Color color;
   final double minHeight;
+  /// Cor do trilho (fundo). Null = palette.border. Útil quando a barra fica
+  /// sobre um card colorido (ex.: hidratação no card primário).
+  final Color? trackColor;
 
   const _MiniProgressBar({
     required this.value,
     required this.color,
     this.minHeight = 3,
+    this.trackColor,
   });
 
   @override
@@ -814,7 +818,7 @@ class _MiniProgressBar extends StatelessWidget {
       child: LinearProgressIndicator(
         minHeight: minHeight,
         value: value.clamp(0.0, 1.0),
-        backgroundColor: palette.border,
+        backgroundColor: trackColor ?? palette.border,
         valueColor: AlwaysStoppedAnimation<Color>(color),
       ),
     );
@@ -966,15 +970,15 @@ class _PerformanceSection extends StatelessWidget {
             children: [
               Expanded(
                 child: AppPanel(
-                  color: palette.primary,
+                  color: palette.secondary,
                   padding: const EdgeInsets.all(16),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'BENCHMARK',
+                        'VOLUME SEMANAL',
                         style: TextStyle(
-                          color: Colors.black.withValues(alpha: 0.6),
+                          color: palette.background.withValues(alpha: 0.65),
                           fontSize: 11,
                           fontWeight: FontWeight.w500,
                           letterSpacing: 0.08,
@@ -986,10 +990,10 @@ class _PerformanceSection extends StatelessWidget {
                         alignment: Alignment.bottomLeft,
                         child: Text(
                           weeklyCompletion == null
-                              ? 'SEM BASE'
+                              ? 'SEM PLANO'
                               : '${(weeklyCompletion * 100).round()}%',
-                          style: const TextStyle(
-                            color: Colors.black,
+                          style: TextStyle(
+                            color: palette.background,
                             fontSize: 28,
                             fontWeight: FontWeight.w500,
                             letterSpacing: -0.02,
@@ -999,16 +1003,21 @@ class _PerformanceSection extends StatelessWidget {
                       const Spacer(),
                       Text(
                         weeklyCompletion == null
-                            ? 'faltam km planejados para comparar'
-                            : 'do volume previsto nesta semana',
+                            ? 'Crie um plano pra acompanhar seu volume'
+                            : 'do volume planejado que você já correu nesta semana',
                         style: TextStyle(
-                          color: Colors.black.withValues(alpha: 0.7),
+                          color: palette.background.withValues(alpha: 0.78),
                           fontSize: 11,
+                          height: 1.35,
                         ),
                       ),
                       if (weeklyCompletion == null)
                         TextButton(
                           onPressed: () => context.push('/training'),
+                          style: TextButton.styleFrom(
+                            foregroundColor: palette.background,
+                            padding: const EdgeInsets.only(top: 4),
+                          ),
                           child: const Text('VER PLANO'),
                         ),
                     ],
@@ -1288,13 +1297,18 @@ class _StatusCorporalSectionState extends State<_StatusCorporalSection> {
               Expanded(
                 child: MetricCard(
                   label: 'HIDRATACAO',
+                  // Card com fundo da cor primária da skin → texto/elementos
+                  // na cor base (escura) pra contraste. MetricCard já deixa
+                  // label/sub na base; valueColor explícito p/ não herdar o
+                  // primary (invisível sobre fundo primary).
+                  backgroundColor: context.runninPalette.primary,
                   value: hydrationLoggedL == null
                       ? '--'
                       : '${hydrationLoggedL.toStringAsFixed(1)}L',
                   unit: hydrationGoalL == null
                       ? null
                       : '/${hydrationGoalL.toStringAsFixed(1)}L',
-                  valueColor: context.runninPalette.primary,
+                  valueColor: context.runninPalette.background,
                   sub: hydrationGoalL == null
                       ? 'Informe peso para calcular meta'
                       : hydrationLoggedL == null
@@ -1306,7 +1320,9 @@ class _StatusCorporalSectionState extends State<_StatusCorporalSection> {
                       if (hydrationPct != null) ...[
                         _MiniProgressBar(
                           value: hydrationPct,
-                          color: context.runninPalette.primary,
+                          color: context.runninPalette.background,
+                          trackColor: context.runninPalette.background
+                              .withValues(alpha: 0.25),
                         ),
                         const SizedBox(height: 8),
                       ],
@@ -1314,6 +1330,13 @@ class _StatusCorporalSectionState extends State<_StatusCorporalSection> {
                         onPressed: hydrationGoalL == null
                             ? () => context.push('/profile/edit')
                             : () => _openHydrationSheet(goalLiters: hydrationGoalL),
+                        style: TextButton.styleFrom(
+                          foregroundColor: context.runninPalette.background,
+                          padding: EdgeInsets.zero,
+                          minimumSize: const Size(0, 32),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          alignment: Alignment.centerLeft,
+                        ),
                         child: Text(
                           hydrationGoalL == null
                               ? 'INFORMAR PESO'
