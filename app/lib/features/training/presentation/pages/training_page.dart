@@ -1723,56 +1723,13 @@ class _WeeklySessionRow extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 4),
+                // Só o tipo da sessão (sem hidratação/nutrição/duração — vide PNG).
                 Text(
                   isRest ? 'Descanso' : session!.type,
-                  style: context.runninType.bodySm,
+                  style: context.runninType.bodyMd.copyWith(
+                    color: palette.muted,
+                  ),
                 ),
-                if (!isRest && session!.durationMin != null) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    '~${session!.durationMin!.round()}min',
-                    style: context.runninType.bodyXs,
-                  ),
-                ],
-                if (!isRest && session!.hydrationLiters != null) ...[
-                  const SizedBox(height: 2),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.water_drop_outlined,
-                          size: 11, color: palette.muted),
-                      const SizedBox(width: 3),
-                      Text(
-                        '${session!.hydrationLiters!.toStringAsFixed(1)}L',
-                        style: context.runninType.bodyXs,
-                      ),
-                    ],
-                  ),
-                ],
-                if (!isRest &&
-                    (session!.nutritionPre?.isNotEmpty ?? false)) ...[
-                  const SizedBox(height: 4),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(Icons.restaurant_outlined,
-                          size: 11, color: palette.muted),
-                      const SizedBox(width: 4),
-                      Expanded(
-                        child: Text(
-                          session!.nutritionPre!,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: context.runninType.bodyXs.copyWith(
-                            color: palette.muted.withValues(alpha: 0.85),
-                            fontSize: 10.5,
-                            height: 1.35,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
               ],
             ),
           ),
@@ -1783,14 +1740,17 @@ class _WeeklySessionRow extends StatelessWidget {
                 Text(
                   _distanceLabel(session!),
                   style: context.runninType.dataXs.copyWith(
-                    fontSize: 24,
+                    fontSize: 26,
+                    fontWeight: FontWeight.w600,
                     color: palette.secondary,
                   ),
                 ),
                 if (session!.targetPace != null)
                   Text(
                     '${session!.targetPace!}/km',
-                    style: context.runninType.bodySm,
+                    style: context.runninType.bodySm.copyWith(
+                      color: palette.muted,
+                    ),
                   ),
               ],
             ),
