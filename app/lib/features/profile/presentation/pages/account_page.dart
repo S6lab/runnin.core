@@ -334,10 +334,11 @@ class _StatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Mesmo padrão do _HeroStat do Histórico: valor grande colorido no topo
+    // (dataMd w700, 32px), label pequeno embaixo (labelCaps 10px, ls 1.2).
+    final type = context.runninType;
     return Container(
-      // BUG fix: era AppSpacing.sm (~6px) horizontal → quebrava ritmo da
-      // página vs home (24px). Agora xl (~16px) pra match card padrão.
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl, vertical: 14),
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
       decoration: BoxDecoration(
         color: FigmaColors.surfaceCard,
         border: Border.all(
@@ -347,20 +348,25 @@ class _StatCard extends StatelessWidget {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            label,
-            style: context.runninType.labelCaps.copyWith(
-              color: FigmaColors.textMuted,
-              letterSpacing: AppDimensions.borderUniversal,
+            value,
+            maxLines: 1,
+            style: type.dataMd.copyWith(
+              color: valueColor,
+              fontWeight: FontWeight.w700,
+              fontSize: 32,
+              letterSpacing: -0.5,
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           Text(
-            value,
-            style: context.runninType.dataSm.copyWith(
-              color: valueColor,
-              fontSize: 18,
+            label,
+            style: type.labelCaps.copyWith(
+              color: FigmaColors.textMuted,
+              fontSize: 10,
+              letterSpacing: 1.2,
             ),
           ),
         ],
@@ -469,21 +475,27 @@ class _InfoCard extends StatelessWidget {
             label,
             style: context.runninType.labelCaps.copyWith(
               color: FigmaColors.textMuted,
-              letterSpacing: AppDimensions.borderUniversal - 0.2,
+              fontSize: 9,
+              letterSpacing: 0.8,
             ),
           ),
           const SizedBox(height: 6),
           Text(
             value,
-            style: context.runninType.bodyMd.copyWith(
+            maxLines: 1,
+            style: context.runninType.dataXs.copyWith(
               color: FigmaColors.textPrimary,
-              fontWeight: FontWeight.w500,
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+              letterSpacing: -0.3,
             ),
           ),
+          const SizedBox(height: 2),
           Text(
             unit,
             style: context.runninType.labelCaps.copyWith(
               color: FigmaColors.textDim,
+              fontSize: 9,
             ),
           ),
         ],
@@ -504,9 +516,9 @@ class _SkinSection extends StatelessWidget {
       children: [
         Text(
           'SKIN',
-          style: context.runninType.bodyMd.copyWith(
+          style: context.runninType.displaySm.copyWith(
             color: FigmaColors.textPrimary,
-            fontWeight: FontWeight.w500,
+            fontSize: 14,
           ),
         ),
         const SizedBox(height: AppSpacing.md),
@@ -682,9 +694,9 @@ class _AccessibilitySection extends StatelessWidget {
       children: [
         Text(
           'ACESSIBILIDADE',
-          style: context.runninType.bodyMd.copyWith(
+          style: context.runninType.displaySm.copyWith(
             color: FigmaColors.textPrimary,
-            fontWeight: FontWeight.w500,
+            fontSize: 14,
           ),
         ),
         const SizedBox(height: AppSpacing.md),
@@ -777,9 +789,9 @@ class _MenuSection extends StatelessWidget {
       children: [
         Text(
           'MENU',
-          style: context.runninType.bodyMd.copyWith(
+          style: context.runninType.displaySm.copyWith(
             color: FigmaColors.textPrimary,
-            fontWeight: FontWeight.w500,
+            fontSize: 14,
           ),
         ),
         const SizedBox(height: AppSpacing.md),
@@ -869,10 +881,11 @@ class _MenuItem extends StatelessWidget {
                 children: [
                   Text(
                     title,
-                    style: context.runninType.bodyXs.copyWith(
+                    style: context.runninType.labelMd.copyWith(
                       color: FigmaColors.textPrimary,
-                      fontWeight: FontWeight.w500,
-                      letterSpacing: AppDimensions.borderUniversal - 0.7,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.3,
                     ),
                   ),
                   const SizedBox(height: 3),
@@ -880,6 +893,7 @@ class _MenuItem extends StatelessWidget {
                     subtitle,
                     style: context.runninType.labelCaps.copyWith(
                       color: FigmaColors.textMuted,
+                      fontSize: 10,
                       letterSpacing: 0,
                     ),
                   ),
