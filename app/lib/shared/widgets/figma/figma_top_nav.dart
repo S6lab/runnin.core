@@ -41,9 +41,7 @@ class FigmaTopNav extends StatelessWidget {
             const SizedBox(width: 10.97),
           ],
           _LogoLockup(palette),
-          const SizedBox(width: 4),
-          _Separator(color: palette.muted),
-          const SizedBox(width: 4),
+          const SizedBox(width: 8),
           Flexible(
             child: Text(
               breadcrumb,
@@ -123,21 +121,3 @@ class _LogoLockup extends StatelessWidget {
   }
 }
 
-class _Separator extends StatelessWidget {
-  final Color color;
-
-  const _Separator({required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      '/',
-      style: TextStyle(
-        fontSize: 12,
-        fontWeight: FontWeight.w400,
-        letterSpacing: 0,
-        color: color,
-      ),
-    );
-  }
-}

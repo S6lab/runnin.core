@@ -26,9 +26,7 @@ class AppTopNav extends StatelessWidget {
       child: Row(
         children: [
           const _LogoLockup(),
-          const SizedBox(width: 4),
-          const _Separator(),
-          const SizedBox(width: 4),
+          const SizedBox(width: 8),
           Text(
             sectionLabel,
             style: GoogleFonts.jetBrainsMono(
@@ -79,19 +77,3 @@ class _LogoLockup extends StatelessWidget {
   }
 }
 
-class _Separator extends StatelessWidget {
-  const _Separator();
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      '/',
-      style: GoogleFonts.jetBrainsMono(
-        fontSize: 12,
-        fontWeight: FontWeight.w400,
-        letterSpacing: 0,
-        color: const Color(0x1FFFFFFF),
-      ),
-    );
-  }
-}
