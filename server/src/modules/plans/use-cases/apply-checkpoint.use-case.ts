@@ -1,6 +1,10 @@
 import { v4 as uuid } from 'uuid';
 import { Plan, PlanRevision as PlanRevisionLog, PlanSession, PlanWeek } from '../domain/plan.entity';
 import { buildExecutionSegments } from './build-execution-segments';
+import {
+  getRoteiroTemplates,
+  RoteiroTemplates,
+} from '@shared/knowledge/running/roteiro-templates.store';
 import { PlanRepository } from '../domain/plan.repository';
 import { PlanRevision } from '../domain/plan-revision.entity';
 import { PlanRevisionRepository } from '../domain/plan-revision.repository';
@@ -107,10 +111,12 @@ export class ApplyCheckpointUseCase {
     // Two-tier: detalha (full) as 2 próximas semanas e mantém o resto
     // esqueleto, preservando metadados de bloco e gerando o roteiro km-a-km.
     if (analysisOut.newWeeks.length > 0) {
+      const roteiroTpl = await getRoteiroTemplates();
       analysisOut.newWeeks = this._enrichTwoTier(
         analysisOut.newWeeks,
         oldFollowingWeeks,
         weekNumber,
+        roteiroTpl,
       );
     }
 
@@ -270,6 +276,7 @@ export class ApplyCheckpointUseCase {
     newWeeks: PlanWeek[],
     oldFollowingWeeks: PlanWeek[],
     weekNumber: number,
+    roteiroTpl: RoteiroTemplates,
   ): PlanWeek[] {
     const detailNums = oldFollowingWeeks
       .map((w) => w.weekNumber)
@@ -299,7 +306,7 @@ export class ApplyCheckpointUseCase {
           const segs =
             (s.executionSegments?.length ?? 0) > 0
               ? s.executionSegments
-              : buildExecutionSegments(base);
+              : buildExecutionSegments(base, roteiroTpl);
           return { ...base, executionSegments: segs } satisfies PlanSession;
         }
         // Skeleton: só tipo/distância/pace + notes curta.

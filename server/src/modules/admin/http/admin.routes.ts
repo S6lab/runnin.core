@@ -12,6 +12,8 @@ import {
   postRagReindex,
   postRagPurge,
   getRagStatus,
+  getRoteiroTemplatesDefaults,
+  postInvalidateRoteiroCache,
   getDiagnoseUser,
   postDiagnoseRegeneratePlan,
   postDiagnoseResetJourney,
@@ -41,3 +43,5 @@ adminRouter.post('/users/:userId/reset', postUserReset);
 adminRouter.get('/rag/status', getRagStatus);
 adminRouter.post('/rag/reindex', postRagReindex);
 adminRouter.post('/rag/purge', postRagPurge);
+adminRouter.get('/roteiro-templates/defaults', getRoteiroTemplatesDefaults);
+adminRouter.post('/roteiro-templates/invalidate-cache', postInvalidateRoteiroCache);

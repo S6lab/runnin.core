@@ -1,5 +1,8 @@
 import { PlanSegment, PlanSession } from '../domain/plan.entity';
-import roteiroTemplates from '../../../shared/knowledge/running/roteiro-templates.json';
+import {
+  getRoteiroTemplatesDefault,
+  RoteiroTemplates,
+} from '@shared/knowledge/running/roteiro-templates.store';
 
 /**
  * Gera o roteiro km-a-km (executionSegments) de uma sessão de forma
@@ -14,10 +17,6 @@ import roteiroTemplates from '../../../shared/knowledge/running/roteiro-template
  * Sem LLM porque (a) salva quota, (b) é instantâneo e reproduzível, (c) o
  * conteúdo (estrutura + instrução por fase) é curado no RAG.
  */
-
-type TemplatePhases = Record<string, string[]>;
-type TemplateEntry = { label?: string; phases?: TemplatePhases };
-const TEMPLATES = roteiroTemplates as unknown as Record<string, TemplateEntry>;
 
 interface InstrVars {
   km?: number;
@@ -37,19 +36,20 @@ function paceToken(pace: string | null | undefined): string {
  * pra string genérica se o template não cobrir o tipo/fase.
  */
 function instr(
+  t: RoteiroTemplates,
   typeKey: string,
   phaseKey: string,
   rotation: number,
   vars: InstrVars = {},
 ): string {
-  const opts = TEMPLATES[typeKey]?.phases?.[phaseKey];
+  const opts = t[typeKey]?.phases?.[phaseKey];
   let text: string;
   if (opts && opts.length > 0) {
     const idx = ((rotation % opts.length) + opts.length) % opts.length;
     text = opts[idx]!;
   } else {
     text = vars.km != null
-      ? `${TEMPLATES[typeKey]?.label ?? 'Sessão'} (${vars.km.toFixed(1)}km). {pace}.`
+      ? `${t[typeKey]?.label ?? 'Sessão'} (${vars.km.toFixed(1)}km). {pace}.`
       : 'Siga a orientação do coach para esta fase. {pace}.';
   }
   return text
@@ -59,7 +59,15 @@ function instr(
     .replace(/\{total\}/g, vars.total != null ? String(vars.total) : '');
 }
 
-export function buildExecutionSegments(session: PlanSession): PlanSegment[] {
+/**
+ * `templates`: por padrão usa o default versionado. Os use-cases passam o
+ * override do Firestore (via getRoteiroTemplates) pra refletir edições do
+ * admin sem deploy.
+ */
+export function buildExecutionSegments(
+  session: PlanSession,
+  templates: RoteiroTemplates = getRoteiroTemplatesDefault(),
+): PlanSegment[] {
   const dist = session.distanceKm;
   if (!dist || dist <= 0) return [];
 
@@ -68,28 +76,29 @@ export function buildExecutionSegments(session: PlanSession): PlanSegment[] {
   // Rotação estável por dia da semana → varia a redação entre sessões do
   // mesmo tipo sem virar aleatório (reproduzível).
   const rot = session.dayOfWeek ?? 1;
+  const t = templates;
 
   if (type.includes('interval') || type.includes('tiro')) {
-    return buildIntervalSegments(dist, pace, rot);
+    return buildIntervalSegments(dist, pace, rot, t);
   }
   if (type.includes('tempo') || type.includes('limiar')) {
-    return buildTempoSegments(dist, pace, rot);
+    return buildTempoSegments(dist, pace, rot, t);
   }
   if (type.includes('long') || type.includes('longão') || type.includes('longao')) {
-    return buildLongSegments(dist, pace, rot);
+    return buildLongSegments(dist, pace, rot, t);
   }
   if (type.includes('fartlek')) {
-    return buildFartlekSegments(dist, pace, rot);
+    return buildFartlekSegments(dist, pace, rot, t);
   }
   if (
     type.includes('recovery') ||
     type.includes('regenerativ') ||
     type.includes('recup')
   ) {
-    return buildRecoverySegments(dist, pace, rot);
+    return buildRecoverySegments(dist, pace, rot, t);
   }
   // default = easy / base / qualquer outro
-  return buildEasySegments(dist, pace, rot);
+  return buildEasySegments(dist, pace, rot, t);
 }
 
 function durationMinFromKm(km: number, pace: string | null, defaultMinPerKm: number): number {
@@ -107,7 +116,7 @@ function parsePaceToMinPerKm(pace: string | null): number | null {
   return min + sec / 60;
 }
 
-function buildEasySegments(dist: number, pace: string | null, rot: number): PlanSegment[] {
+function buildEasySegments(dist: number, pace: string | null, rot: number, t: RoteiroTemplates): PlanSegment[] {
   if (dist < 3) {
     return [
       {
@@ -116,7 +125,7 @@ function buildEasySegments(dist: number, pace: string | null, rot: number): Plan
         phase: 'main',
         targetPace: pace ?? undefined,
         durationMin: durationMinFromKm(dist, pace, 6.5),
-        instruction: instr('easy', 'main_short', rot, { km: dist, pace }),
+        instruction: instr(t, 'easy', 'main_short', rot, { km: dist, pace }),
       },
     ];
   }
@@ -129,7 +138,7 @@ function buildEasySegments(dist: number, pace: string | null, rot: number): Plan
       kmEnd: warmKm,
       phase: 'warmup',
       durationMin: durationMinFromKm(warmKm, null, 7.5),
-      instruction: instr('easy', 'warmup', rot),
+      instruction: instr(t, 'easy', 'warmup', rot),
     },
     {
       kmStart: warmKm,
@@ -137,24 +146,24 @@ function buildEasySegments(dist: number, pace: string | null, rot: number): Plan
       phase: 'main',
       targetPace: pace ?? undefined,
       durationMin: durationMinFromKm(mainKm, pace, 6.5),
-      instruction: instr('easy', 'main', rot, { km: mainKm, pace }),
+      instruction: instr(t, 'easy', 'main', rot, { km: mainKm, pace }),
     },
     {
       kmStart: round1(warmKm + mainKm),
       kmEnd: dist,
       phase: 'cooldown',
       durationMin: durationMinFromKm(coolKm, null, 7.5),
-      instruction: instr('easy', 'cooldown', rot),
+      instruction: instr(t, 'easy', 'cooldown', rot),
     },
   ];
 }
 
-function buildTempoSegments(dist: number, pace: string | null, rot: number): PlanSegment[] {
+function buildTempoSegments(dist: number, pace: string | null, rot: number, t: RoteiroTemplates): PlanSegment[] {
   const warmKm = Math.min(1.5, Math.max(1, dist * 0.2));
   const coolKm = 1;
   const tempoKm = round1(dist - warmKm - coolKm);
   if (tempoKm <= 0) {
-    return buildEasySegments(dist, pace, rot);
+    return buildEasySegments(dist, pace, rot, t);
   }
   return [
     {
@@ -162,7 +171,7 @@ function buildTempoSegments(dist: number, pace: string | null, rot: number): Pla
       kmEnd: round1(warmKm),
       phase: 'warmup',
       durationMin: durationMinFromKm(warmKm, null, 7.0),
-      instruction: instr('tempo', 'warmup', rot),
+      instruction: instr(t, 'tempo', 'warmup', rot),
     },
     {
       kmStart: round1(warmKm),
@@ -170,23 +179,23 @@ function buildTempoSegments(dist: number, pace: string | null, rot: number): Pla
       phase: 'main',
       targetPace: pace ?? undefined,
       durationMin: durationMinFromKm(tempoKm, pace, 5.5),
-      instruction: instr('tempo', 'main', rot, { km: tempoKm, pace }),
+      instruction: instr(t, 'tempo', 'main', rot, { km: tempoKm, pace }),
     },
     {
       kmStart: round1(warmKm + tempoKm),
       kmEnd: dist,
       phase: 'cooldown',
       durationMin: durationMinFromKm(coolKm, null, 7.5),
-      instruction: instr('tempo', 'cooldown', rot),
+      instruction: instr(t, 'tempo', 'cooldown', rot),
     },
   ];
 }
 
-function buildLongSegments(dist: number, pace: string | null, rot: number): PlanSegment[] {
+function buildLongSegments(dist: number, pace: string | null, rot: number, t: RoteiroTemplates): PlanSegment[] {
   const warmKm = 1;
   const coolKm = 1;
   const remaining = dist - warmKm - coolKm;
-  if (remaining <= 0) return buildEasySegments(dist, pace, rot);
+  if (remaining <= 0) return buildEasySegments(dist, pace, rot, t);
   const baseKm = round1(remaining * 0.7);
   const finishKm = round1(remaining - baseKm);
   return [
@@ -195,7 +204,7 @@ function buildLongSegments(dist: number, pace: string | null, rot: number): Plan
       kmEnd: warmKm,
       phase: 'warmup',
       durationMin: durationMinFromKm(warmKm, null, 8.0),
-      instruction: instr('long', 'warmup', rot),
+      instruction: instr(t, 'long', 'warmup', rot),
     },
     {
       kmStart: warmKm,
@@ -203,7 +212,7 @@ function buildLongSegments(dist: number, pace: string | null, rot: number): Plan
       phase: 'main',
       targetPace: pace ?? undefined,
       durationMin: durationMinFromKm(baseKm, pace, 7.0),
-      instruction: instr('long', 'main_base', rot, { km: baseKm, pace }),
+      instruction: instr(t, 'long', 'main_base', rot, { km: baseKm, pace }),
     },
     {
       kmStart: round1(warmKm + baseKm),
@@ -211,23 +220,23 @@ function buildLongSegments(dist: number, pace: string | null, rot: number): Plan
       phase: 'main',
       targetPace: pace ?? undefined,
       durationMin: durationMinFromKm(finishKm, pace, 6.7),
-      instruction: instr('long', 'main_finish', rot, { km: finishKm, pace }),
+      instruction: instr(t, 'long', 'main_finish', rot, { km: finishKm, pace }),
     },
     {
       kmStart: round1(warmKm + baseKm + finishKm),
       kmEnd: dist,
       phase: 'cooldown',
       durationMin: durationMinFromKm(coolKm, null, 8.5),
-      instruction: instr('long', 'cooldown', rot),
+      instruction: instr(t, 'long', 'cooldown', rot),
     },
   ];
 }
 
-function buildIntervalSegments(dist: number, pace: string | null, rot: number): PlanSegment[] {
+function buildIntervalSegments(dist: number, pace: string | null, rot: number, t: RoteiroTemplates): PlanSegment[] {
   const warmKm = 1.5;
   const coolKm = 1;
   const remaining = dist - warmKm - coolKm;
-  if (remaining <= 0.8) return buildEasySegments(dist, pace, rot);
+  if (remaining <= 0.8) return buildEasySegments(dist, pace, rot, t);
   const cycles = Math.max(3, Math.min(10, Math.floor(remaining / 0.6)));
   const segments: PlanSegment[] = [];
   segments.push({
@@ -235,7 +244,7 @@ function buildIntervalSegments(dist: number, pace: string | null, rot: number): 
     kmEnd: warmKm,
     phase: 'warmup',
     durationMin: durationMinFromKm(warmKm, null, 7.0),
-    instruction: instr('interval', 'warmup', rot),
+    instruction: instr(t, 'interval', 'warmup', rot),
   });
   let cursor = warmKm;
   for (let i = 0; i < cycles; i++) {
@@ -246,7 +255,7 @@ function buildIntervalSegments(dist: number, pace: string | null, rot: number): 
       phase: 'interval',
       targetPace: repPace ?? undefined,
       durationMin: durationMinFromKm(0.4, repPace, 4.0),
-      instruction: instr('interval', 'rep', rot + i, { n: i + 1, total: cycles, pace: repPace }),
+      instruction: instr(t, 'interval', 'rep', rot + i, { n: i + 1, total: cycles, pace: repPace }),
     });
     cursor += 0.4;
     segments.push({
@@ -254,7 +263,7 @@ function buildIntervalSegments(dist: number, pace: string | null, rot: number): 
       kmEnd: round1(cursor + 0.2),
       phase: 'recovery',
       durationMin: durationMinFromKm(0.2, null, 9.0),
-      instruction: instr('interval', 'recovery', rot + i, { n: i + 1, total: cycles }),
+      instruction: instr(t, 'interval', 'recovery', rot + i, { n: i + 1, total: cycles }),
     });
     cursor += 0.2;
   }
@@ -263,12 +272,12 @@ function buildIntervalSegments(dist: number, pace: string | null, rot: number): 
     kmEnd: dist,
     phase: 'cooldown',
     durationMin: durationMinFromKm(coolKm, null, 8.0),
-    instruction: instr('interval', 'cooldown', rot),
+    instruction: instr(t, 'interval', 'cooldown', rot),
   });
   return segments;
 }
 
-function buildRecoverySegments(dist: number, pace: string | null, rot: number): PlanSegment[] {
+function buildRecoverySegments(dist: number, pace: string | null, rot: number, t: RoteiroTemplates): PlanSegment[] {
   return [
     {
       kmStart: 0,
@@ -276,23 +285,23 @@ function buildRecoverySegments(dist: number, pace: string | null, rot: number): 
       phase: 'recovery',
       targetPace: pace ?? undefined,
       durationMin: durationMinFromKm(dist, pace, 7.5),
-      instruction: instr('recovery', 'main', rot, { km: dist, pace }),
+      instruction: instr(t, 'recovery', 'main', rot, { km: dist, pace }),
     },
   ];
 }
 
-function buildFartlekSegments(dist: number, pace: string | null, rot: number): PlanSegment[] {
+function buildFartlekSegments(dist: number, pace: string | null, rot: number, t: RoteiroTemplates): PlanSegment[] {
   const warmKm = Math.min(1.5, Math.max(1, dist * 0.2));
   const coolKm = 1;
   const mainKm = round1(dist - warmKm - coolKm);
-  if (mainKm <= 0) return buildEasySegments(dist, pace, rot);
+  if (mainKm <= 0) return buildEasySegments(dist, pace, rot, t);
   return [
     {
       kmStart: 0,
       kmEnd: round1(warmKm),
       phase: 'warmup',
       durationMin: durationMinFromKm(warmKm, null, 7.0),
-      instruction: instr('fartlek', 'warmup', rot),
+      instruction: instr(t, 'fartlek', 'warmup', rot),
     },
     {
       kmStart: round1(warmKm),
@@ -300,14 +309,14 @@ function buildFartlekSegments(dist: number, pace: string | null, rot: number): P
       phase: 'main',
       targetPace: pace ?? undefined,
       durationMin: durationMinFromKm(mainKm, pace, 6.0),
-      instruction: instr('fartlek', 'main', rot, { km: mainKm, pace }),
+      instruction: instr(t, 'fartlek', 'main', rot, { km: mainKm, pace }),
     },
     {
       kmStart: round1(warmKm + mainKm),
       kmEnd: dist,
       phase: 'cooldown',
       durationMin: durationMinFromKm(coolKm, null, 7.5),
-      instruction: instr('fartlek', 'cooldown', rot),
+      instruction: instr(t, 'fartlek', 'cooldown', rot),
     },
   ];
 }

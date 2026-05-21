@@ -173,6 +173,16 @@ class _MomentCard extends StatelessWidget {
             _RagPanel(rag: rag)
           else
             _PromptList(promptIds: moment.promptIds),
+          if (moment.n == 2) ...[
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerRight,
+              child: OutlinedButton(
+                onPressed: () => context.push('/admin/roteiro-templates'),
+                child: const Text('ROTEIROS (DOSSIÊ 4)'),
+              ),
+            ),
+          ],
         ],
       ),
     );

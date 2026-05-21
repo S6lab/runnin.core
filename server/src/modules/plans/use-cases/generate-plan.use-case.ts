@@ -4,6 +4,11 @@ import { getPlanLLM } from '@shared/infra/llm/llm.factory';
 import { PlanRepository } from '../domain/plan.repository';
 import { Plan, PlanSegment, PlanSession, PlanWeek } from '../domain/plan.entity';
 import { buildExecutionSegments } from './build-execution-segments';
+import {
+  getRoteiroTemplates,
+  getRoteiroTemplatesDefault,
+  RoteiroTemplates,
+} from '@shared/knowledge/running/roteiro-templates.store';
 import { ScheduleCheckpointsUseCase } from './schedule-checkpoints.use-case';
 import { FirestorePlanCheckpointRepository } from '../infra/firestore-plan-checkpoint.repository';
 import { logger } from '@shared/logger/logger';
@@ -75,6 +80,11 @@ export class GeneratePlanUseCase {
   private scheduleCheckpoints = new ScheduleCheckpointsUseCase(
     new FirestorePlanCheckpointRepository(),
   );
+
+  // Templates de roteiro efetivos (default + override do Firestore).
+  // Global config (não por-usuário), resolvido 1x por geração em _generateAsync
+  // e lido pelos builders síncronos. Default in-memory até ser resolvido.
+  private _roteiroTpl: RoteiroTemplates = getRoteiroTemplatesDefault();
 
   constructor(private repo: PlanRepository) {}
 
@@ -212,6 +222,7 @@ export class GeneratePlanUseCase {
         input.frequency ??
         (input.level === 'iniciante' ? 3 : input.level === 'intermediario' ? 4 : 5);
 
+    this._roteiroTpl = await getRoteiroTemplates();
     const runtime = await this.runtime.getContext(plan.userId);
     const knowledgeContext = await formatRunningKnowledgeContext(
       `${input.goal} ${input.level} ${input.weeksCount} semanas corrida`,
@@ -701,14 +712,14 @@ ${repaired}`,
           targetPace,
           durationMin,
           hydrationLiters: 2.5,
-          nutritionPre: 'Banana + pão integral com mel 60min antes.',
-          nutritionPost: 'Whey ou ovos + 1 fruta em até 30min; refeição completa em 1h.',
+          nutritionPre: 'Carboidrato de fácil digestão 60-90min antes, leve em gordura e fibra.',
+          nutritionPost: 'Carboidrato + proteína na janela de recuperação (até 1h) e boa hidratação.',
           // Nota acionável (não-placeholder). Explica o objetivo da sessão
           // sem usar "[BASE] Sessão preenchida automaticamente" que o
           // user reportou como sinal de plano pobre.
           notes: `Easy Run complementar pra fechar a frequência de ${targetFreq}x/semana. Mantenha pace conversável (você consegue falar frases curtas). Foco em consistência, não em performance.`,
         } satisfies Omit<PlanSession, 'executionSegments'>;
-        const segs = buildExecutionSegments(base as PlanSession);
+        const segs = buildExecutionSegments(base as PlanSession, this._roteiroTpl);
         newSessions.push({ ...base, executionSegments: segs } satisfies PlanSession);
         totalPadded++;
       }
@@ -777,7 +788,7 @@ ${repaired}`,
           const segments: PlanSegment[] | undefined =
             (session.executionSegments?.length ?? 0) > 0
               ? (session.executionSegments as PlanSegment[])
-              : buildExecutionSegments(base);
+              : buildExecutionSegments(base, this._roteiroTpl);
           return { ...base, executionSegments: segments } satisfies PlanSession;
         }
         // Skeleton: só tipo/distância/pace + notes curta. Sem hidratação/

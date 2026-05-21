@@ -153,6 +153,24 @@ export function postInvalidateCache(_req: Request, res: Response): void {
   res.json({ ok: true });
 }
 
+// === Admin: roteiro templates (Dossiê 4) ===
+// Editáveis sem deploy. O admin lê os defaults daqui, escreve o override
+// direto no Firestore (app_config/roteiro_templates.templates) e invalida o
+// cache do servidor pra refletir na próxima geração de plano.
+import {
+  getRoteiroTemplatesDefault,
+  invalidateRoteiroTemplatesCache,
+} from '@shared/knowledge/running/roteiro-templates.store';
+
+export function getRoteiroTemplatesDefaults(_req: Request, res: Response): void {
+  res.json({ templates: getRoteiroTemplatesDefault() });
+}
+
+export function postInvalidateRoteiroCache(_req: Request, res: Response): void {
+  invalidateRoteiroTemplatesCache();
+  res.json({ ok: true });
+}
+
 // === Admin: gerenciamento de plano de usuário ===
 import { FirestoreUserRepository } from '@modules/users/infra/firestore-user.repository';
 import { getAuth, getFirestore, getStorageBucket } from '@shared/infra/firebase/firebase.client';

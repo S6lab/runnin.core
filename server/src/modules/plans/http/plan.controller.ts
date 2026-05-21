@@ -5,6 +5,7 @@ import { NotFoundError } from '@shared/errors/app-error';
 import { getRunningKnowledgeCorpusWithStorage } from '@shared/knowledge/running/running-knowledge';
 import { Plan, PlanSession } from '../domain/plan.entity';
 import { buildExecutionSegments } from '../use-cases/build-execution-segments';
+import { getRoteiroTemplates } from '@shared/knowledge/running/roteiro-templates.store';
 
 const repo = new FirestorePlanRepository();
 const generatePlan = new GeneratePlanUseCase(repo);
@@ -15,14 +16,15 @@ const generatePlan = new GeneratePlanUseCase(repo);
  * solto vindo do LLM. Regenera in-memory na leitura sem mutar Firestore
  * — migration silenciosa só pra resposta.
  */
-function ensureSessionSegments(plan: Plan): Plan {
+async function ensureSessionSegments(plan: Plan): Promise<Plan> {
   let patched = false;
+  const tpl = await getRoteiroTemplates();
   const weeks = plan.weeks.map((w) => ({
     ...w,
     sessions: w.sessions.map((s: PlanSession) => {
       if ((s.executionSegments?.length ?? 0) >= 2) return s;
       patched = true;
-      return { ...s, executionSegments: buildExecutionSegments(s) };
+      return { ...s, executionSegments: buildExecutionSegments(s, tpl) };
     }),
   }));
   return patched ? { ...plan, weeks } : plan;
@@ -32,7 +34,7 @@ export async function getCurrentPlan(req: Request, res: Response, next: NextFunc
   try {
     const plan = await repo.findCurrent(req.uid);
     if (!plan) { res.status(404).json({ error: 'No active plan' }); return; }
-    res.json(ensureSessionSegments(plan));
+    res.json(await ensureSessionSegments(plan));
   } catch (err) { next(err); }
 }
 
@@ -71,6 +73,6 @@ export async function getPlanById(req: Request, res: Response, next: NextFunctio
   try {
     const plan = await repo.findById(req.params['id'] as string, req.uid);
     if (!plan) throw new NotFoundError('Plan');
-    res.json(ensureSessionSegments(plan));
+    res.json(await ensureSessionSegments(plan));
   } catch (err) { next(err); }
 }
