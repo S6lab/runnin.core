@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
-import 'package:runnin/features/history/data/benchmark_remote_datasource.dart' show BenchmarkRemoteDatasource;
 import 'package:runnin/features/history/data/period_analysis_remote_datasource.dart';
 import 'package:runnin/features/history/data/stats_remote_datasource.dart';
 import 'package:runnin/features/history/domain/entities/period_analysis.dart';
@@ -20,7 +19,7 @@ import 'package:runnin/shared/widgets/segmented_tab_bar.dart';
 
 enum _Period { week, month, threeMonths }
 
-enum _ContentTab { data, runs, bench }
+enum _ContentTab { data, runs }
 
 class HistoryPage extends StatefulWidget {
   const HistoryPage({super.key});
@@ -38,11 +37,6 @@ class _HistoryPageState extends State<HistoryPage> {
   String? _error;
   _Period _period = _Period.month;
   _ContentTab _tab = _ContentTab.data;
-  final bool _benchmarkLoading = false;
-  double? _benchmarkPercentile;
-  List<BenchmarkRow> _benchmarkTableData = [];
-  bool _benchmarkEmpty = false;
-  final _benchmarkDatasource = BenchmarkRemoteDatasource();
   final _periodAnalysisDatasource = PeriodAnalysisRemoteDatasource();
   PeriodAnalysis? _periodAnalysis;
   bool _loadingAnalysis = false;
@@ -119,33 +113,9 @@ class _HistoryPageState extends State<HistoryPage> {
           _plan = plan;
           _loading = false;
         });
-        if (runs.isNotEmpty) {
-          _loadBenchmarkTable(runs.first.id);
-        }
       }
     } catch (_) {
       if (mounted) setState(() { _error = 'Erro ao carregar corridas.'; _loading = false; });
-    }
-  }
-
-  Future<void> _loadBenchmark() async {
-    if (_allRuns == null || _allRuns!.isEmpty) return;
-    _loadBenchmarkTable(_allRuns!.first.id);
-  }
-
-  Future<void> _loadBenchmarkTable(String runId) async {
-    setState(() { });
-    try {
-      final result = await _benchmarkDatasource.getBenchmark(runId);
-      if (mounted) {
-        setState(() { 
-          _benchmarkTableData = result.items;
-          _benchmarkPercentile = result.percentileTop.toDouble();
-          _benchmarkEmpty = result.cohortSize == 0;
-        });
-      }
-    } catch (_) {
-      if (mounted) setState(() { });
     }
   }
 
@@ -178,23 +148,15 @@ class _HistoryPageState extends State<HistoryPage> {
           children: [
             const FigmaTopNav(breadcrumb: 'HISTÓRICO'),
             const SizedBox(height: 16),
-            // Submenu de CONTEÚDO em cima (DADOS/CORRIDAS/BENCH)...
+            // Submenu de CONTEÚDO em cima (DADOS/CORRIDAS)...
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxl),
               child: SegmentedTabBar(
                 fontSize: 12,
-                tabs: const ['DADOS', 'CORRIDAS', 'BENCH'],
+                tabs: const ['DADOS', 'CORRIDAS'],
                 selectedIndex: _ContentTab.values.indexOf(_tab),
                 onChanged: (i) {
-                  final newTab = _ContentTab.values[i];
-                  setState(() => _tab = newTab);
-                  if (newTab == _ContentTab.bench) {
-                    _loadBenchmark();
-                    if (_allRuns != null && _allRuns!.isNotEmpty) {
-                      final lastRunId = _allRuns!.first.id;
-                      _loadBenchmarkTable(lastRunId);
-                    }
-                  }
+                  setState(() => _tab = _ContentTab.values[i]);
                 },
               ),
             ),
@@ -249,93 +211,13 @@ class _HistoryPageState extends State<HistoryPage> {
       ]));
     }
 
-    final benchmarkWidget = Padding(
-      padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
-      child: Column(
-        children: [
-          if (_benchmarkEmpty)
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: palette.surface,
-                border: Border.all(color: palette.border),
-              ),
-              child: Center(
-                    child: Text(
-                      'Sem dados suficientes na sua cohort ainda',
-                      style: context.runninType.bodySm.copyWith(color: palette.muted),
-                    ),
-                  )
-            )
-          else if (_benchmarkLoading || _benchmarkPercentile == null)
-            const SizedBox(
-              height: 120,
-              child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
-            )
-          else ...[
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: palette.surface,
-                border: Border.all(color: palette.border),
-              ),
-              child: Column(
-                children: [
-                  Text(
-                    'BENCHMARK',
-                    style: context.runninType.bodyMd.copyWith(
-                      fontWeight: FontWeight.w500,
-                      fontSize: 13,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  FigmaBenchmarkBellCurve(userPercentile: _benchmarkPercentile!),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Você está no ${_benchmarkPercentile!.toInt()}º percentil '
-                    'em relação à média dos usuários.',
-                    textAlign: TextAlign.center,
-                    style: context.runninType.bodySm,
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-            if (_benchmarkTableData.isNotEmpty)
-              FigmaBenchmarkTable(benchmarkData: _benchmarkTableData)
-            else if (_benchmarkLoading)
-              const SizedBox(
-                height: 200,
-                child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
-              )
-            else
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: palette.surface,
-                  border: Border.all(color: palette.border),
-                ),
-                child: Center(
-                  child: Text(
-                    'Carregando dados de benchmark...',
-                    style: context.runninType.bodySm.copyWith(color: palette.muted),
-                  ),
-                ),
-              ),
-          ],
-        ],
-      ),
-    );
-
     return RefreshIndicator(
       color: palette.primary,
       backgroundColor: palette.surface,
       onRefresh: _load,
       child: _tab == _ContentTab.data
           ? _DataView(runs: runs, plan: _plan, period: _period, periodAnalysis: _periodAnalysis, loadingAnalysis: _loadingAnalysis, aggregate: _aggregate, breakdown: _breakdown)
-          : _tab == _ContentTab.runs
-              ? _RunsListView(runs: runs, plan: _plan)
-              : benchmarkWidget,
+          : _RunsListView(runs: runs, plan: _plan),
     );
   }
 }
