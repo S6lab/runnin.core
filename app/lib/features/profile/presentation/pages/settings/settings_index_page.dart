@@ -26,7 +26,7 @@ class SettingsIndexPage extends StatelessWidget {
                 children: [
                   const SizedBox(height: AppSpacing.md),
                   Text(
-                    'Coach, alertas e unidades',
+                    'Coach e alertas',
                     style: context.runninType.bodySm.copyWith(
                       color: palette.muted,
                       height: 1.5,
@@ -46,13 +46,6 @@ class SettingsIndexPage extends StatelessWidget {
                     subtitle: 'Push, in-app, janela de silêncio',
                     onTap: () =>
                         context.push('/profile/settings/notifications'),
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                  _SettingsCard(
-                    icon: Icons.straighten_outlined,
-                    title: 'UNIDADES',
-                    subtitle: 'Métrico / Imperial, pace, horário',
-                    onTap: () => context.push('/profile/settings/units'),
                   ),
                 ],
               ),
