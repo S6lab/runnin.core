@@ -350,14 +350,24 @@ class _StatCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
-            value,
-            maxLines: 1,
-            style: type.dataMd.copyWith(
-              color: valueColor,
-              fontWeight: FontWeight.w700,
-              fontSize: 32,
-              letterSpacing: -0.5,
+          // FittedBox: o XP ("120/300") é longo e a 32px estourava o card
+          // estreito (1/3 da largura), cortando o número e deixando só a "/"
+          // visível. Escala pra caber mantendo os números curtos grandes.
+          SizedBox(
+            width: double.infinity,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(
+                value,
+                maxLines: 1,
+                style: type.dataMd.copyWith(
+                  color: valueColor,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 32,
+                  letterSpacing: -0.5,
+                ),
+              ),
             ),
           ),
           const SizedBox(height: 6),
