@@ -1,8 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:gemini_live/gemini_live.dart';
+import 'package:runnin/core/audio/coach_audio_player.dart';
 import 'package:runnin/core/network/api_client.dart';
 import 'package:runnin/features/coach_live/data/live_audio_service.dart';
 
@@ -32,6 +35,9 @@ class LiveRunCoachSession {
   LiveSession? _session;
   final _transcriptsCtrl = StreamController<String>.broadcast();
   final StringBuffer _turnTranscript = StringBuffer();
+  // Web: acumula o PCM do turno e toca pelo <audio> persistente (desbloqueado
+  // no INICIAR). audioplayers não fica desbloqueado no Chrome mobile.
+  final BytesBuilder _webPcm = BytesBuilder();
   bool _open = false;
   bool _talking = false;
 
@@ -132,10 +138,16 @@ class LiveRunCoachSession {
   void _onMessage(LiveServerMessage msg) {
     final sc = msg.serverContent;
 
-    // Áudio: acumula chunks PCM 24kHz pro speaker.
+    // Áudio: acumula chunks PCM 24kHz. Web acumula localmente; nativo vai pro
+    // buffer do speaker do LiveAudioService.
     final b64 = msg.data;
     if (b64 != null && b64.isNotEmpty) {
-      _audio.addSpeakerChunk(base64.decode(b64));
+      final pcm = base64.decode(b64);
+      if (kIsWeb) {
+        _webPcm.add(pcm);
+      } else {
+        _audio.addSpeakerChunk(pcm);
+      }
     }
 
     // Transcript do áudio de saída (texto == voz).
@@ -144,13 +156,56 @@ class LiveRunCoachSession {
 
     // Fim do turno: toca o áudio acumulado e publica o transcript da fala.
     if (sc?.turnComplete == true) {
-      unawaited(_audio.flushAndPlay());
+      if (kIsWeb) {
+        // Web: monta WAV e toca pelo <audio> persistente (desbloqueado no
+        // INICIAR via unlockAudioContext) — funciona no Chrome mobile.
+        final pcm = _webPcm.takeBytes();
+        if (pcm.isNotEmpty) {
+          final wav = _pcmToWav(pcm, 24000);
+          playCoachAudio(base64Encode(wav), mimeType: 'audio/wav');
+        }
+      } else {
+        unawaited(_audio.flushAndPlay());
+      }
       final spoken = _turnTranscript.toString().trim();
       _turnTranscript.clear();
       if (spoken.isNotEmpty && !_transcriptsCtrl.isClosed) {
         _transcriptsCtrl.add(spoken);
       }
     }
+  }
+
+  /// PCM 16-bit mono → WAV (RIFF). Usado só no web pra tocar via <audio>.
+  Uint8List _pcmToWav(Uint8List pcm, int sampleRate) {
+    const channels = 1;
+    const bits = 16;
+    final byteRate = sampleRate * channels * bits ~/ 8;
+    final blockAlign = channels * bits ~/ 8;
+    final dataLen = pcm.length;
+    final h = ByteData(44);
+    void str(int o, String v) {
+      for (var i = 0; i < v.length; i++) {
+        h.setUint8(o + i, v.codeUnitAt(i));
+      }
+    }
+
+    str(0, 'RIFF');
+    h.setUint32(4, 36 + dataLen, Endian.little);
+    str(8, 'WAVE');
+    str(12, 'fmt ');
+    h.setUint32(16, 16, Endian.little);
+    h.setUint16(20, 1, Endian.little);
+    h.setUint16(22, channels, Endian.little);
+    h.setUint32(24, sampleRate, Endian.little);
+    h.setUint32(28, byteRate, Endian.little);
+    h.setUint16(32, blockAlign, Endian.little);
+    h.setUint16(34, bits, Endian.little);
+    str(36, 'data');
+    h.setUint32(40, dataLen, Endian.little);
+    final out = Uint8List(44 + dataLen);
+    out.setRange(0, 44, h.buffer.asUint8List());
+    out.setRange(44, 44 + dataLen, pcm);
+    return out;
   }
 
   /// Envia uma atualização (largada/km/alerta/fim) → provoca uma fala curta.
