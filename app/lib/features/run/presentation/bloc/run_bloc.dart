@@ -1063,52 +1063,50 @@ class RunBloc extends Bloc<RunEvent, RunState> {
   }) {
     String pace(double? p) => p == null ? '—' : _fmtPaceMinKm(p);
     String dur(int? s) => s == null ? '—' : '${s ~/ 60}min ${s % 60}s';
-    final curPace = currentPaceMinKm ?? _computePaceMinKm();
+    final dist = (state.distanceM / 1000).toStringAsFixed(2);
+    final avgPace = _fmtPaceMinKm(_computePaceMinKm());
+    final tgt = targetPaceMinKm != null ? '${pace(targetPaceMinKm)}/km' : 'livre';
 
-    // Estado vivo SEMPRE anexado (exceto largada): garante que o coach tenha
-    // distância/tempo/pace em toda fala e nunca precise perguntar ao atleta.
-    final liveState =
-        'Estado atual: ${(state.distanceM / 1000).toStringAsFixed(2)}km percorridos, tempo decorrido ${dur(state.elapsedS)}, pace atual ${pace(curPace)}/km.';
-    String withState(String s) => '$liveState $s';
+    // Totais da corrida — anexados em primeira pessoa pra o coach ter sempre
+    // o panorama e nunca precisar perguntar.
+    final totals = 'No total já são ${dist}km em ${dur(state.elapsedS)}, pace médio $avgPace/km.';
 
+    // IMPORTANTE: o turn é a VOZ DO ATLETA falando com o coach, em primeira
+    // pessoa, pedindo feedback. O modelo nativo trata cada turn como fala de
+    // um interlocutor; se mandarmos instrução em 3ª pessoa ("dê feedback") ele
+    // responde como um COLEGA ("fechei sim, e vc?"). Em 1ª pessoa ele responde
+    // como COACH.
     switch (event) {
       case 'start':
-        return 'LARGADA${runType != null ? ' ($runType)' : ''}. Dê a saudação inicial curta com o foco do dia.';
+        return 'Oi coach! Vou começar agora minha ${runType ?? 'corrida'}. Me recebe e me dá a largada com o foco de hoje.';
       case 'km_reached':
-        final parts = <String>['KM $kmReached concluído'];
-        parts.add('pace do km ${pace(currentPaceMinKm)}/km');
-        if (kmDurationS != null) parts.add('tempo do km ${dur(kmDurationS)}');
-        if (elevationGainM != null && elevationGainM > 0) {
-          parts.add('+${elevationGainM.toStringAsFixed(0)}m de elevação');
-        }
-        if (kmAvgBpm != null) parts.add('frequência cardíaca $kmAvgBpm');
-        return withState(
-            '${parts.join(', ')}. Compare com a fase do roteiro e dê um feedback curto.');
+        final m = <String>[
+          'pace deste km ${pace(currentPaceMinKm)}/km',
+          'pace alvo $tgt',
+          if (kmDurationS != null) 'tempo do km ${dur(kmDurationS)}',
+          if (elevationGainM != null && elevationGainM > 0)
+            'ganho de elevação +${elevationGainM.toStringAsFixed(0)}m',
+          if (kmAvgBpm != null) 'frequência cardíaca $kmAvgBpm',
+        ];
+        return 'Coach, como estou indo? Acabei de fechar o km $kmReached: ${m.join(', ')}. $totals';
       case 'km_split':
-        return withState(
-            'KM $kmReached fechado: pace ${pace(currentPaceMinKm)}/km contra ${pace(targetPaceMinKm)}/km do km anterior. Diga se acelerou, manteve ou caiu.');
+        return 'Coach, fechei o km $kmReached em ${pace(currentPaceMinKm)}/km (o km anterior foi ${pace(targetPaceMinKm)}/km). Acelerei, mantive ou caí? $totals';
       case 'pace_alert':
-        return withState(
-            'ALERTA: pace ${pace(currentPaceMinKm)}/km fora do alvo ${pace(targetPaceMinKm)}/km. Corrija com firmeza e cuidado.');
+        return 'Coach, meu pace está ${pace(currentPaceMinKm)}/km e o alvo é $tgt. Me corrige? $totals';
       case 'segment_pace_off':
-        return withState(
-            'ALERTA: pace ${pace(currentPaceMinKm)}/km fora do alvo ${pace(targetPaceMinKm)}/km da fase atual do roteiro. Cite o alvo da fase.');
+        return 'Coach, na fase atual do roteiro meu pace está ${pace(currentPaceMinKm)}/km mas o alvo da fase é $tgt. Como ajusto? $totals';
       case 'segment_start':
-        return withState(
-            'Entrou na próxima fase do roteiro. Anuncie a transição em 1 frase (fase e alvo).');
+        return 'Coach, entrei na próxima fase do roteiro. O que muda agora? $totals';
       case 'segment_end':
-        return withState(
-            'Terminou a fase atual do roteiro. Valide a execução e prepare a transição em 1 frase.');
+        return 'Coach, terminei a fase atual do roteiro. Como fui? $totals';
       case 'motivation':
-        return withState(
-            'Dê uma frase curta de motivação com base no estado atual, foco na constância. Sem alerta específico.');
+        return 'Coach, como estou indo? $totals Me dá um gás pra manter a constância.';
       case 'no_movement':
-        return withState(
-            'O atleta iniciou mas não se moveu em 30 segundos. Sem alarme, diga que pode começar quando estiver pronto.');
+        return 'Coach, apertei iniciar mas ainda não comecei a me mexer. Tudo certo pra largar?';
       case 'finish':
-        return 'FIM DA CORRIDA: distância ${(state.distanceM / 1000).toStringAsFixed(2)}km, tempo ${dur(state.elapsedS)}, pace médio ${pace(curPace)}/km. Dê o resumo geral.';
+        return 'Coach, terminei a corrida! Total ${dist}km em ${dur(state.elapsedS)}, pace médio $avgPace/km. Me dá o resumo geral.';
       default:
-        return withState(event);
+        return 'Coach, como estou indo? $totals';
     }
   }
 

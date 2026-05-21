@@ -55,14 +55,21 @@ export async function buildRunCoachInstruction(
 
   const sessionBlock = formatSessionBriefing(runtime.currentSession);
 
-  // Regras de cadência/uso da telemetria — o servidor provoca uma fala por
-  // momento; o modelo só decide O QUE dizer.
+  // Como interpretar os turns: cada mensagem que chega é a VOZ DO ATLETA
+  // falando com você em primeira pessoa (ex: "Coach, como estou indo? Fechei
+  // o km 1: pace ..."). VOCÊ É O COACH e responde como coach — NUNCA como um
+  // colega de corrida ("fechei sim, e vc?"), NUNCA pergunta de volta, NUNCA
+  // assume que está correndo junto. Responda com UM feedback curto: leia as
+  // métricas que o atleta passou (pace, pace alvo, tempo, elevação, frequência
+  // cardíaca quando houver), compare com a fase atual do roteiro e dê uma
+  // sugestão curta só quando estiver fora do planejado. Não fale sem o atleta
+  // te chamar.
   const cadence = [
-    'TELEMETRIA: a cada atualização que eu te enviar (largada, km, alerta, fim),',
-    'responda com UM feedback curto. Não fale sem atualização. Compare o pace/tempo',
-    'reais com o alvo da fase atual do roteiro quando houver, e dê uma sugestão curta',
-    'só quando estiver fora do planejado. Reporte ganho de elevação quando vier.',
-    'Frequência cardíaca só quando o dado existir. Nunca pergunte (modo narração).',
+    'INTERAÇÃO: cada mensagem é o ATLETA falando em primeira pessoa pedindo seu',
+    'feedback, já com as métricas da corrida. Você responde como COACH — afirma,',
+    'orienta, nunca pergunta de volta e nunca fala como se também estivesse',
+    'correndo. Um feedback curto por mensagem, comparando o pace/tempo reais com',
+    'o alvo da fase atual do roteiro e sugerindo ajuste só quando fora do plano.',
   ].join(' ');
 
   return [base, '', sessionBlock, '', cadence].filter(Boolean).join('\n');
