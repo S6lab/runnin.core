@@ -13,6 +13,7 @@ import 'package:runnin/features/run/data/datasources/run_coach_remote_datasource
 import 'package:runnin/features/run/presentation/bloc/run_bloc.dart';
 import 'package:runnin/features/training/data/datasources/plan_remote_datasource.dart';
 import 'package:runnin/features/training/domain/entities/plan.dart';
+import 'package:runnin/features/training/presentation/widgets/execution_timeline.dart';
 import 'package:runnin/features/run/presentation/widgets/gps_permission_modal.dart';
 import 'package:runnin/shared/widgets/runnin_app_bar.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -54,12 +55,13 @@ class _PrepViewState extends State<_PrepView> {
 
   List<WarmupExercise> _exercises = const [];
 
-  /// Wizard step (4 telas):
+  /// Wizard step (5 telas):
   ///   0 = TIPO (como vai correr hoje)
   ///   1 = CHECKLIST DA SESSÃO (mesmo padrão do DayDetail)
   ///   2 = ALERTAS + MÚSICA + GPS
-  ///   3 = AQUECIMENTO
-  /// Tela 5 = /run (corrida ativa) após CONTINUAR na 4.
+  ///   3 = AQUECIMENTO (só mobilidade/exercícios)
+  ///   4 = BRIEFING DA SESSÃO (briefing do coach + roteiro km-a-km)
+  /// Após CONTINUAR na 5 → /run (corrida ativa).
   int _step = 0;
 
   /// Status do GPS no warm-up. unknown=ainda checando, ok=permissão+pos
@@ -375,23 +377,25 @@ class _PrepViewState extends State<_PrepView> {
       child: Scaffold(
         backgroundColor: palette.background,
         appBar: RunninAppBar(
-          title: 'PREPARAR · ${_step + 1}/4',
+          title: 'PREPARAR · ${_step + 1}/5',
         ),
         body: Padding(
           padding: const EdgeInsets.all(24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _StepProgressBar(step: _step, total: 4),
+              _StepProgressBar(step: _step, total: 5),
               const SizedBox(height: 16),
               Expanded(
                 child: SingleChildScrollView(
-                  // Ordem: 0 TIPO → 1 CHECKLIST → 2 ALERTAS+MÚSICA → 3 AQUECIMENTO
+                  // Ordem: 0 TIPO → 1 CHECKLIST → 2 ALERTAS+MÚSICA →
+                  // 3 AQUECIMENTO → 4 BRIEFING DA SESSÃO
                   child: switch (_step) {
                     0 => _buildTypeStep(context, type),
                     1 => _buildChecklistStep(context, type),
                     2 => _buildConfigStep(context, type),
-                    _ => _buildWarmupStep(context, type),
+                    3 => _buildWarmupStep(context, type),
+                    _ => _buildBriefingStep(context, type),
                   },
                 ),
               ),
@@ -668,22 +672,11 @@ class _PrepViewState extends State<_PrepView> {
     return items;
   }
 
-  // ─── Step 3: Aquecimento ────────────────────────────────────────
+  // ─── Step 3: Aquecimento (só mobilidade/exercícios) ─────────────
   Widget _buildWarmupStep(BuildContext context, RunninTypography type) {
     final palette = context.runninPalette;
     final session = _planTodaySession;
     final hasPlanned = session != null;
-
-    // Briefing dinâmico: usa notes da sessão se houver, senão monta linha
-    // genérica com tipo + km + pace.
-    final briefingText = !hasPlanned
-        ? 'Corrida livre. Sem distância pré-definida — coach observa e adapta a próxima sessão do plano com base nesses dados.'
-        : (session.notes.trim().isNotEmpty
-            ? session.notes.trim()
-            : '${session.type} hoje — '
-                '${session.distanceKm.toStringAsFixed(session.distanceKm % 1 == 0 ? 0 : 1)}km'
-                '${session.targetPace != null ? ", pace alvo ${session.targetPace}/km" : ""}. '
-                'Foco em consistência.');
 
     final tipText = !hasPlanned
         ? 'Faça 5min de trote leve antes de começar — articulações soltas + frequência cardíaca elevada gradualmente reduzem chance de lesão e melhoram o desempenho.'
@@ -692,14 +685,6 @@ class _PrepViewState extends State<_PrepView> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('BRIEFING', style: type.displaySm),
-        const SizedBox(height: 14),
-        _CoachAccentCard(
-          topic: 'BRIEFING',
-          body: briefingText,
-          accent: context.runninPalette.secondary,
-        ),
-        const SizedBox(height: 32),
         Text(
           'AQUECIMENTO & MOBILIDADE',
           style: type.displaySm,
@@ -728,6 +713,52 @@ class _PrepViewState extends State<_PrepView> {
           body: tipText,
           accent: context.runninPalette.secondary,
         ),
+      ],
+    );
+  }
+
+  // ─── Step 4: Briefing da sessão (briefing do coach + roteiro km-a-km)
+  // O roteiro reusa o mesmo widget do detalhe da sessão em TREINO/PLANO/
+  // SEMANA (ExecutionTimeline).
+  Widget _buildBriefingStep(BuildContext context, RunninTypography type) {
+    final palette = context.runninPalette;
+    final session = _planTodaySession;
+    final hasPlanned = session != null &&
+        _selectedType == session.type;
+
+    // Briefing dinâmico: usa notes da sessão se houver, senão monta linha
+    // genérica com tipo + km + pace.
+    final briefingText = !hasPlanned
+        ? 'Corrida livre. Sem distância pré-definida — coach observa e adapta a próxima sessão do plano com base nesses dados.'
+        : (session.notes.trim().isNotEmpty
+            ? session.notes.trim()
+            : '${session.type} hoje — '
+                '${session.distanceKm.toStringAsFixed(session.distanceKm % 1 == 0 ? 0 : 1)}km'
+                '${session.targetPace != null ? ", pace alvo ${session.targetPace}/km" : ""}. '
+                'Foco em consistência.');
+
+    final segments = hasPlanned ? session.executionSegments : const <PlanSegment>[];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('BRIEFING DA SESSÃO', style: type.displaySm),
+        const SizedBox(height: 14),
+        _CoachAccentCard(
+          topic: 'BRIEFING',
+          body: briefingText,
+          accent: context.runninPalette.secondary,
+        ),
+        if (segments.isNotEmpty) ...[
+          const SizedBox(height: 28),
+          ExecutionTimeline(segments: segments),
+        ] else if (hasPlanned) ...[
+          const SizedBox(height: 20),
+          Text(
+            'Roteiro km-a-km ainda não disponível para esta sessão.',
+            style: type.bodySm.copyWith(color: palette.muted),
+          ),
+        ],
       ],
     );
   }
@@ -784,7 +815,7 @@ class _PrepViewState extends State<_PrepView> {
 
   // ─── Bottom navigation ──────────────────────────────────────────
   Widget _buildStepNav(BuildContext context, RunninPalette palette) {
-    final isLast = _step == 3;
+    final isLast = _step == 4;
     // Gate do step 1 (CHECKLIST): só libera CONTINUAR quando todos os
     // items estão marcados. Item explícito do produto pra forçar revisão.
     final checklistBlocked = _step == 1 &&
