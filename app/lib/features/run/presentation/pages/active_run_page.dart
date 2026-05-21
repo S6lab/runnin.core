@@ -453,8 +453,8 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
                     top: MediaQuery.of(context).size.height *
                         (state.splits.isNotEmpty ? 0.24 : 0.34),
                     child: Align(
-                      // Meia-direita da tela (levemente à direita do centro).
-                      alignment: const Alignment(0.45, 0),
+                      // Alinhado à esquerda.
+                      alignment: Alignment.centerLeft,
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.start,
