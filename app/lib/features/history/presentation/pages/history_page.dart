@@ -835,6 +835,22 @@ class _RunHistoryCard extends StatelessWidget {
     return (run.distanceM / 1000).round().toString();
   }
 
+  String _fmtDate(String iso) {
+    final d = DateTime.tryParse(iso)?.toLocal();
+    if (d == null) return '';
+    const months = ['', 'JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
+    return '${d.day.toString().padLeft(2, '0')} ${months[d.month]} ${d.year}';
+  }
+
+  String _fmtDur(int s) {
+    final h = s ~/ 3600;
+    final m = (s % 3600) ~/ 60;
+    final sec = s % 60;
+    return h > 0
+        ? '${h}h${m.toString().padLeft(2, '0')}'
+        : '$m:${sec.toString().padLeft(2, '0')}';
+  }
+
   @override
   Widget build(BuildContext context) {
     final palette = context.runninPalette;
@@ -843,7 +859,7 @@ class _RunHistoryCard extends StatelessWidget {
     final accent = isFree ? palette.secondary : palette.primary;
     final actual = run.distanceM / 1000;
     final actualStr = actual.toStringAsFixed(actual % 1 == 0 ? 0 : 1);
-    final pace = run.avgPace ?? '--:--';
+    final title = isFree ? 'Corrida livre' : run.type;
 
     return InkWell(
       onTap: onTap,
@@ -857,13 +873,14 @@ class _RunHistoryCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Topo: badge (esq) + título/data · volume realizado (dir).
             Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                // Badge: distância planejada (ou alvo/real p/ livre).
+                // Badge azul (cyan) com o numeral — laranja p/ corrida livre.
                 Container(
-                  width: 56,
-                  height: 56,
+                  width: 48,
+                  height: 48,
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
                     color: accent.withValues(alpha: 0.08),
@@ -873,75 +890,93 @@ class _RunHistoryCard extends StatelessWidget {
                     _badgeNumber(),
                     style: type.dataXs.copyWith(
                       color: accent,
-                      fontSize: 24,
+                      fontSize: 20,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
                 ),
+                const SizedBox(width: 12),
+                // Título da sessão + data abaixo.
                 Expanded(
-                  child: Center(
-                    child: isFree
-                        ? Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 3),
-                            decoration: BoxDecoration(
-                              color: palette.secondary.withValues(alpha: 0.12),
-                            ),
-                            child: Text(
-                              'FREE',
-                              style: type.labelCaps.copyWith(
-                                color: palette.secondary,
-                                fontSize: 10,
-                                letterSpacing: 1.0,
-                              ),
-                            ),
-                          )
-                        : const SizedBox.shrink(),
-                  ),
-                ),
-                // Distância REAL (km) — destaque laranja.
-                Text(
-                  actualStr,
-                  style: type.dataMd.copyWith(
-                    color: palette.secondary,
-                    fontSize: 38,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: -0.5,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 18),
-            // Linha de métricas: pace à ESQUERDA em LARANJA; FC e ganho de
-            // elevação ao CENTRO em CYAN (referência: cards canônicos).
-            Row(
-              children: [
-                Expanded(
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: _RunMetric(value: pace, color: palette.secondary),
-                  ),
-                ),
-                Expanded(
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    mainAxisSize: MainAxisSize.max,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      if (run.avgBpm != null)
-                        _RunMetric(value: '${run.avgBpm}', color: palette.primary),
-                      if (run.avgBpm != null && run.elevationGain != null)
-                        const SizedBox(width: 28),
-                      if (run.elevationGain != null)
-                        _RunMetric(
-                          value: '+${run.elevationGain!.round()}',
-                          color: palette.primary,
+                      Text(
+                        title.toUpperCase(),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: type.labelMd.copyWith(
+                          color: palette.text,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.5,
                         ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        _fmtDate(run.createdAt),
+                        style: type.labelCaps.copyWith(
+                          color: palette.muted,
+                          fontSize: 10,
+                          letterSpacing: 0.8,
+                        ),
+                      ),
                     ],
                   ),
                 ),
-                const Expanded(child: SizedBox()),
+                const SizedBox(width: 12),
+                // Volume realizado: número laranja grande + "KM" cinza.
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                  textBaseline: TextBaseline.alphabetic,
+                  children: [
+                    Text(
+                      actualStr,
+                      style: type.dataMd.copyWith(
+                        color: palette.secondary,
+                        fontSize: 34,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: -0.5,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      'KM',
+                      style: type.labelCaps.copyWith(
+                        color: palette.muted,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
               ],
             ),
+            const SizedBox(height: 14),
+            // Divisor horizontal fino.
+            Container(height: 1, color: palette.border.withValues(alpha: 0.6)),
+            const SizedBox(height: 14),
+            // Métricas: PACE · DURAÇÃO · BPM AVG · XP.
+            Row(
+              children: [
+                Expanded(child: _RunStat(label: 'PACE', value: run.avgPace ?? '--:--', color: palette.secondary)),
+                Expanded(child: _RunStat(label: 'DURAÇÃO', value: _fmtDur(run.durationS), color: palette.text)),
+                Expanded(child: _RunStat(label: 'BPM AVG', value: run.avgBpm?.toString() ?? '--', color: palette.primary)),
+                Expanded(child: _RunStat(label: 'XP', value: '${run.xpEarned ?? 0}', color: palette.primary)),
+              ],
+            ),
+            // Nota do coach (avaliação da sessão).
+            if ((run.coachQuote ?? '').trim().isNotEmpty) ...[
+              const SizedBox(height: 14),
+              Text(
+                run.coachQuote!.trim(),
+                style: type.bodySm.copyWith(
+                  color: palette.muted,
+                  height: 1.4,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -949,21 +984,40 @@ class _RunHistoryCard extends StatelessWidget {
   }
 }
 
-class _RunMetric extends StatelessWidget {
+class _RunStat extends StatelessWidget {
+  final String label;
   final String value;
   final Color color;
-  const _RunMetric({required this.value, required this.color});
+  const _RunStat({required this.label, required this.value, required this.color});
 
   @override
   Widget build(BuildContext context) {
-    return Text(
-      value,
-      style: context.runninType.dataMd.copyWith(
-        color: color,
-        fontSize: 26,
-        fontWeight: FontWeight.w600,
-        letterSpacing: -0.3,
-      ),
+    final palette = context.runninPalette;
+    final type = context.runninType;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          value,
+          maxLines: 1,
+          style: type.dataXs.copyWith(
+            color: color,
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.3,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          label,
+          style: type.labelCaps.copyWith(
+            color: palette.muted,
+            fontSize: 9,
+            letterSpacing: 0.8,
+          ),
+        ),
+      ],
     );
   }
 }
