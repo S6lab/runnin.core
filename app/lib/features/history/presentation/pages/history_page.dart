@@ -183,6 +183,7 @@ class _HistoryPageState extends State<HistoryPage> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxl),
               child: SegmentedTabBar(
+                fontSize: 12,
                 tabs: const ['DADOS', 'CORRIDAS', 'BENCH'],
                 selectedIndex: _ContentTab.values.indexOf(_tab),
                 onChanged: (i) {
@@ -203,6 +204,7 @@ class _HistoryPageState extends State<HistoryPage> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxl),
               child: SegmentedTabBar(
+                outlineSelection: true,
                 tabs: const ['SEMANA', 'MÊS', '3 MESES'],
                 selectedIndex: _Period.values.indexOf(_period),
                 onChanged: (i) {
