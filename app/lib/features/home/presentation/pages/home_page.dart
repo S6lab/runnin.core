@@ -602,14 +602,15 @@ class _SemanaSection extends StatelessWidget {
             for (final d in data.weekDays)
               wg.WeekDayCellData(
                 label: d.shortName,
-                // Concluída tem precedência sobre "hoje": a sessão de hoje já
-                // feita mostra o estado "done" (flag concluída), não "today".
+                // HOJE tem precedência: o card do dia atual fica sempre com o
+                // topo em cor secundária (laranja), mesmo se a sessão já foi
+                // concluída. "done" (azul/primária) é só pros dias passados.
                 status: d.session == null
                     ? wg.WeekDayCellStatus.rest
-                    : d.isDone
-                        ? wg.WeekDayCellStatus.done
-                        : d.isToday
-                            ? wg.WeekDayCellStatus.today
+                    : d.isToday
+                        ? wg.WeekDayCellStatus.today
+                        : d.isDone
+                            ? wg.WeekDayCellStatus.done
                             : wg.WeekDayCellStatus.planned,
                 type: d.session == null
                     ? null
