@@ -2058,7 +2058,7 @@ class _HeroSection extends StatelessWidget {
                                   style: GoogleFonts.jetBrainsMono(
                                     fontSize: 22,
                                     fontWeight: FontWeight.w500,
-                                    color: const Color(0xFFE85D2A),
+                                    color: palette.secondary,
                                     letterSpacing: -0.5,
                                   ),
                                 ),
@@ -2067,7 +2067,7 @@ class _HeroSection extends StatelessWidget {
                                   style: GoogleFonts.jetBrainsMono(
                                     fontSize: 12,
                                     fontWeight: FontWeight.w600,
-                                    color: const Color(0xFFE85D2A).withValues(alpha: 0.85),
+                                    color: palette.secondary.withValues(alpha: 0.85),
                                     letterSpacing: 0.4,
                                   ),
                                 ),
