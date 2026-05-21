@@ -334,7 +334,7 @@ class _HistoryPageState extends State<HistoryPage> {
       child: _tab == _ContentTab.data
           ? _DataView(runs: runs, plan: _plan, period: _period, periodAnalysis: _periodAnalysis, loadingAnalysis: _loadingAnalysis, aggregate: _aggregate, breakdown: _breakdown)
           : _tab == _ContentTab.runs
-              ? _RunsListView(runs: runs)
+              ? _RunsListView(runs: runs, plan: _plan)
               : benchmarkWidget,
     );
   }
@@ -809,7 +809,8 @@ List<TwoToneBarData> _bucketByMonth(DateTime now, Plan? plan, List<Run> runs) {
 
 class _RunsListView extends StatelessWidget {
   final List<Run> runs;
-  const _RunsListView({required this.runs});
+  final Plan? plan;
+  const _RunsListView({required this.runs, this.plan});
 
   @override
   Widget build(BuildContext context) {
@@ -820,6 +821,7 @@ class _RunsListView extends StatelessWidget {
         final run = runs[i];
         return _RunHistoryCard(
           run: run,
+          plan: plan,
           onTap: () => context.push('/history/run/${run.id}'),
         );
       },
@@ -833,23 +835,31 @@ class _RunsListView extends StatelessWidget {
 /// ganho de elevação em cyan.
 class _RunHistoryCard extends StatelessWidget {
   final Run run;
+  final Plan? plan;
   final VoidCallback onTap;
-  const _RunHistoryCard({required this.run, required this.onTap});
+  const _RunHistoryCard({required this.run, this.plan, required this.onTap});
 
-  String _badgeNumber() {
-    final t = run.targetDistance;
-    if (t != null) {
-      final n = double.tryParse(t.replaceAll(RegExp(r'[^0-9.]'), ''));
-      if (n != null && n > 0) return n.toStringAsFixed(0);
+  /// Posição da sessão no plano: (semana, índice 1-based, total da semana).
+  /// Null = corrida livre (sem planSessionId) ou sessão não encontrada no plano.
+  ({int week, int idx, int total})? _planPos() {
+    final pid = run.planSessionId;
+    if (pid == null || plan == null) return null;
+    for (final w in plan!.weeks) {
+      final ordered = [...w.sessions]
+        ..sort((a, b) => a.dayOfWeek.compareTo(b.dayOfWeek));
+      final i = ordered.indexWhere((s) => s.id == pid);
+      if (i >= 0) {
+        return (week: w.weekNumber, idx: i + 1, total: ordered.length);
+      }
     }
-    return (run.distanceM / 1000).round().toString();
+    return null;
   }
 
+  // Data no formato brasileiro: dd/MM/yyyy (ex.: 21/05/2026).
   String _fmtDate(String iso) {
     final d = DateTime.tryParse(iso)?.toLocal();
     if (d == null) return '';
-    const months = ['', 'JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
-    return '${d.day.toString().padLeft(2, '0')} ${months[d.month]} ${d.year}';
+    return '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
   }
 
   String _fmtDur(int s) {
@@ -865,20 +875,21 @@ class _RunHistoryCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final palette = context.runninPalette;
     final type = context.runninType;
-    final isFree = run.planSessionId == null;
-    final accent = isFree ? palette.secondary : palette.primary;
+    final pos = _planPos();
+    final isPlan = pos != null;
+    final accent = isPlan ? palette.primary : palette.secondary;
     final actual = run.distanceM / 1000;
     final actualStr = actual.toStringAsFixed(actual % 1 == 0 ? 0 : 1);
-    final title = isFree ? 'Corrida livre' : run.type;
+    final title = run.type;
 
     return InkWell(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 16),
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          border: Border(
-            bottom: BorderSide(color: palette.border.withValues(alpha: 0.5)),
-          ),
+          color: palette.surface,
+          border: Border.all(color: palette.border),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -887,23 +898,48 @@ class _RunHistoryCard extends StatelessWidget {
             Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                // Badge azul (cyan) com o numeral — laranja p/ corrida livre.
+                // Badge: SEM{semana} + sessão {i}/{n} (cyan, sessão do plano)
+                // ou "FREE" (laranja, corrida extra/livre).
                 Container(
-                  width: 48,
-                  height: 48,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
                     color: accent.withValues(alpha: 0.08),
                     border: Border.all(color: accent, width: 1.5),
                   ),
-                  child: Text(
-                    _badgeNumber(),
-                    style: type.dataXs.copyWith(
-                      color: accent,
-                      fontSize: 20,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
+                  child: isPlan
+                      ? Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              'SEM ${pos.week}',
+                              style: type.labelCaps.copyWith(
+                                color: accent,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                            const SizedBox(height: 1),
+                            Text(
+                              '${pos.idx}/${pos.total}',
+                              style: type.labelCaps.copyWith(
+                                color: accent,
+                                fontSize: 10,
+                              ),
+                            ),
+                          ],
+                        )
+                      : Text(
+                          'FREE',
+                          style: type.labelCaps.copyWith(
+                            color: accent,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 1.0,
+                          ),
+                        ),
                 ),
                 const SizedBox(width: 12),
                 // Título da sessão + data abaixo.
@@ -918,6 +954,7 @@ class _RunHistoryCard extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: type.labelMd.copyWith(
                           color: palette.text,
+                          fontSize: 15,
                           fontWeight: FontWeight.w600,
                           letterSpacing: 0.5,
                         ),
