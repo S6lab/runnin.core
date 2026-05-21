@@ -307,10 +307,13 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
                 // Push-to-talk: segure o botão "Coach" pra falar com o coach
                 // (canal bidirecional sob demanda). Solta → o coach responde.
                 if (state.status == RunStatus.active)
-                  const Positioned(
+                  Positioned(
                     right: 16,
-                    bottom: 180,
-                    child: _CoachTalkButton(),
+                    // Sobe acima do painel quando os splits aparecem (painel
+                    // cresce assim que a corrida começa a andar), pra não ser
+                    // coberto pelo painel de baixo.
+                    bottom: state.distanceM > 0 ? 440 : 300,
+                    child: const _CoachTalkButton(),
                   ),
                 // Topo: voltar (idle) + linha de chips em Wrap.
                 // GPS, COACH, MÚSICA, BPM. Tudo passível de toque (futuro).
