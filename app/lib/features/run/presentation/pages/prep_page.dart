@@ -1106,10 +1106,23 @@ class _AlertToggleRow extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 8),
-            Switch.adaptive(
+            // Cores da skin: LIGADO = trilho ciano + polegar preto; DESLIGADO
+            // = trilho escuro + polegar cinza. Antes o polegar ficava branco
+            // (Switch.adaptive default) e destoava dos cards escuros.
+            Switch(
               value: value,
               onChanged: onChanged,
-              activeTrackColor: palette.primary,
+              thumbColor: WidgetStateProperty.resolveWith(
+                (states) => states.contains(WidgetState.selected)
+                    ? palette.background
+                    : palette.muted,
+              ),
+              trackColor: WidgetStateProperty.resolveWith(
+                (states) => states.contains(WidgetState.selected)
+                    ? palette.primary
+                    : palette.surfaceAlt,
+              ),
+              trackOutlineColor: WidgetStateProperty.all(palette.border),
             ),
           ],
         ),
