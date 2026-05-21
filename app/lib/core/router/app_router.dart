@@ -208,15 +208,21 @@ final appRouter = GoRouter(
             final extra = state.extra;
             String type = 'Free Run';
             String? planSessionId;
+            Map<String, bool>? alertPrefs;
             if (extra is String && extra.isNotEmpty) {
               type = extra;
             } else if (extra is Map<String, dynamic>) {
               type = (extra['type'] as String?) ?? 'Free Run';
               planSessionId = extra['planSessionId'] as String?;
+              final ap = extra['alertPrefs'];
+              if (ap is Map) {
+                alertPrefs = ap.map((k, v) => MapEntry(k.toString(), v == true));
+              }
             }
             return ActiveRunPage(
               initialType: type,
               planSessionId: planSessionId,
+              alertPrefs: alertPrefs,
             );
           },
         ),

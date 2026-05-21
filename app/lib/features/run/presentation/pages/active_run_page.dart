@@ -27,10 +27,14 @@ class ActiveRunPage extends StatelessWidget {
   /// (?planSessionId=...) ou deep link de TREINO. Server marca a sessão
   /// como "feita" ao completar.
   final String? planSessionId;
+  /// Toggles de alerta per-session escolhidos no /prep (passo 3/4). Herdam do
+  /// default global e valem só pra esta corrida.
+  final Map<String, bool>? alertPrefs;
   const ActiveRunPage({
     super.key,
     this.initialType = 'Free Run',
     this.planSessionId,
+    this.alertPrefs,
   });
 
   @override
@@ -46,7 +50,11 @@ class ActiveRunPage extends StatelessWidget {
           context.pushReplacement('/report', extra: runId);
         }
       },
-      child: _ActiveRunView(initialType: initialType, planSessionId: planSessionId),
+      child: _ActiveRunView(
+        initialType: initialType,
+        planSessionId: planSessionId,
+        alertPrefs: alertPrefs,
+      ),
     );
   }
 
@@ -101,7 +109,8 @@ class ActiveRunPage extends StatelessWidget {
 class _ActiveRunView extends StatefulWidget {
   final String initialType;
   final String? planSessionId;
-  const _ActiveRunView({required this.initialType, this.planSessionId});
+  final Map<String, bool>? alertPrefs;
+  const _ActiveRunView({required this.initialType, this.planSessionId, this.alertPrefs});
 
   @override
   State<_ActiveRunView> createState() => _ActiveRunViewState();
@@ -445,6 +454,7 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
                           .add(StartRun(
                             type: widget.initialType,
                             planSessionId: widget.planSessionId,
+                            alertPrefs: widget.alertPrefs,
                           ));
                     },
                   ),

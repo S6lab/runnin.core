@@ -322,9 +322,24 @@ class _PrepViewState extends State<_PrepView> {
         );
   }
 
+  // Toggle PER-SESSION: vale só pra esta corrida (herda do default global
+  // carregado no init). Não grava no perfil — pra virar padrão, o user usa
+  // "Salvar como padrão".
   void _toggleAlert(String key, bool value) {
     setState(() => _alerts[key] = value);
-    _userRemote.patchMe(preRunAlerts: Map<String, bool>.from(_alerts));
+  }
+
+  Future<void> _saveAlertsAsDefault() async {
+    await _userRemote.patchMe(preRunAlerts: Map<String, bool>.from(_alerts));
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Alertas salvos como padrão.'),
+          duration: Duration(seconds: 2),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 
   Future<void> _openMusicApp(_MusicProvider provider) async {
@@ -410,6 +425,11 @@ class _PrepViewState extends State<_PrepView> {
         ),
         const SizedBox(height: 32),
         Text('ALERTAS', style: type.displaySm),
+        const SizedBox(height: 4),
+        Text(
+          'Valem só para esta corrida (herdam do seu padrão).',
+          style: type.bodyXs.copyWith(color: palette.muted),
+        ),
         const SizedBox(height: 14),
         ..._alerts.entries.map(
           (e) => _AlertToggleRow(
@@ -419,7 +439,15 @@ class _PrepViewState extends State<_PrepView> {
             onChanged: (v) => _toggleAlert(e.key, v),
           ),
         ),
-        const SizedBox(height: 32),
+        const SizedBox(height: 8),
+        Align(
+          alignment: Alignment.centerRight,
+          child: TextButton(
+            onPressed: _saveAlertsAsDefault,
+            child: const Text('SALVAR COMO PADRÃO'),
+          ),
+        ),
+        const SizedBox(height: 24),
         Text('MÚSICA', style: type.displaySm),
         const SizedBox(height: 14),
         // Intro card explicativo — coach abaixa o volume automaticamente.
@@ -721,12 +749,12 @@ class _PrepViewState extends State<_PrepView> {
       if (confirmed != true || !context.mounted) return;
     }
 
-    final extra = session != null
-        ? <String, dynamic>{
-            'type': _selectedType,
-            'planSessionId': session.id,
-          }
-        : _selectedType as Object;
+    final extra = <String, dynamic>{
+      'type': _selectedType,
+      if (session != null) 'planSessionId': session.id,
+      // Toggles per-session: o que o user ligou/desligou pra ESTA corrida.
+      'alertPrefs': Map<String, bool>.from(_alerts),
+    };
     if (!context.mounted) return;
     // push() mantém a PrepPage viva sob a /run (dispose não roda), então o
     // cue pre_run (stream + debounce do _selectType) continua tocando por
