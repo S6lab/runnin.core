@@ -496,19 +496,6 @@ class _DataView extends StatelessWidget {
             deltaIsPositive: (aggregate?.deltas.runsCountDelta ?? 0) >= 0,
           )),
         ]),
-        const SizedBox(height: 16),
-
-        // Coach.AI Análise
-        FigmaCoachAIBlock(
-          child: loadingAnalysis
-              ? const Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)))
-              : Text(
-                  periodAnalysis?.status == PeriodAnalysisStatus.pending
-                      ? 'Coach analisando seu período...'
-                      : (periodAnalysis?.summary ?? 'Coach analisando seu período...'),
-                  style: context.runninType.bodyMd.copyWith(height: 1.6),
-                ),
-        ),
       ],
     );
   }
