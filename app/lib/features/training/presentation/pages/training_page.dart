@@ -1363,12 +1363,12 @@ class _MonthlyPlanView extends StatelessWidget {
               ? 'PARCIAL'
               : 'PRÓXIMA';
           final statusColor = allDone
-              ? context.runninPalette.primary
+              ? context.runninPalette.primary // COMPLETA = cyan
               : isCurrent
-              ? context.runninPalette.secondary
+              ? context.runninPalette.text // ATUAL = claro (destaque neutro)
               : isPast
               ? context.runninPalette.warning
-              : context.runninPalette.muted;
+              : context.runninPalette.muted; // PRÓXIMA = apagado
           return _MonthlyWeekCard(
             week: week,
             status: status,
@@ -1750,14 +1750,15 @@ class _MonthlyWeekCard extends StatelessWidget {
         .map((s) => '${_shortDayName(s.dayOfWeek)} ${s.type}')
         .join(' · ');
     final isCompleted = status == 'COMPLETA';
+    final isCurrent = status == 'ATUAL';
 
     return InkWell(
       onTap: onTap,
       child: AppPanel(
         margin: const EdgeInsets.only(bottom: 8),
-        borderColor: status == 'ATUAL'
-            ? palette.primary.withValues(alpha: 0.45)
-            : palette.border,
+        // Semana ATUAL em destaque: borda cyan + fundo levemente tingido.
+        color: isCurrent ? palette.primary.withValues(alpha: 0.06) : null,
+        borderColor: isCurrent ? palette.primary : palette.border,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1807,16 +1808,17 @@ class _MonthlyWeekCard extends StatelessWidget {
                     Text(
                       '${loadKm.toStringAsFixed(0)}K',
                       style: context.runninType.dataMd.copyWith(
-                        fontWeight: FontWeight.w500,
-                        color: palette.secondary,
+                        fontWeight: FontWeight.w600,
+                        // Distância em CYAN na semana atual; laranja nas demais.
+                        color: isCurrent ? palette.primary : palette.secondary,
                       ),
                     ),
                     Text(
                       status,
-                      style: context.runninType.bodyMd.copyWith(
+                      style: context.runninType.labelCaps.copyWith(
                         color: statusColor,
-                        fontWeight: FontWeight.w500,
-                        letterSpacing: 0.08,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 1.0,
                       ),
                     ),
                   ],
