@@ -1890,11 +1890,21 @@ class _MonthlyWeekCard extends StatelessWidget {
         : null;
     final loadKm = week.projectedLoadKm ??
         week.sessions.fold<double>(0, (s, x) => s + x.distanceKm);
-    final ordered = [...week.sessions]
-      ..sort((a, b) => a.dayOfWeek.compareTo(b.dayOfWeek));
-    final sessionsLine = ordered
-        .map((s) => '${_shortDayName(s.dayOfWeek)} ${s.type}')
-        .join(' · ');
+    // Resumo por TIPO (ex.: "3 x EASY RUN") em vez de listar dia a dia.
+    final byType = <String, int>{};
+    for (final s in week.sessions) {
+      final t = s.type.trim().toUpperCase();
+      if (t.isEmpty) continue;
+      byType[t] = (byType[t] ?? 0) + 1;
+    }
+    final restCount =
+        7 - week.sessions.map((s) => s.dayOfWeek).toSet().length;
+    final summaryLines = <String>[
+      for (final e in (byType.entries.toList()
+            ..sort((a, b) => b.value.compareTo(a.value))))
+        '${e.value} x ${e.key}',
+      if (restCount > 0) '$restCount x DESCANSO',
+    ];
     final isCompleted = status == 'COMPLETA';
     final isCurrent = status == 'ATUAL';
 
@@ -1985,11 +1995,17 @@ class _MonthlyWeekCard extends StatelessWidget {
               const SizedBox(height: 8),
               ...week.targets.map((t) => _BulletLine(text: t)),
             ],
-            if (sessionsLine.isNotEmpty) ...[
+            if (summaryLines.isNotEmpty) ...[
               const SizedBox(height: 8),
-              Text(
-                sessionsLine,
-                style: context.runninType.bodyXs.copyWith(color: palette.muted),
+              ...summaryLines.map(
+                (line) => Padding(
+                  padding: const EdgeInsets.only(bottom: 2),
+                  child: Text(
+                    line,
+                    style: context.runninType.bodyXs
+                        .copyWith(color: palette.muted),
+                  ),
+                ),
               ),
             ],
           ],
@@ -2237,11 +2253,6 @@ String _deriveWeekFocus(PlanWeek week) {
     return 'Resistencia';
   }
   return 'Base';
-}
-
-String _shortDayName(int dayOfWeek) {
-  const names = ['', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab', 'Dom'];
-  return names[dayOfWeek];
 }
 
 String _formatDuration(int durationS) {
