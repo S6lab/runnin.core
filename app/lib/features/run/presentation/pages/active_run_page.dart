@@ -285,10 +285,14 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
                 : (state.points.isNotEmpty
                     ? _GpsStatus.ok
                     : _GpsStatus.unknown);
-            return Stack(
+            return Column(
               children: [
-                // Background: hero image quando idle (foto do runner igual
-                // à home), mapa real durante corrida ativa/paused.
+                Expanded(
+                  flex: 5,
+                  child: Stack(
+                    children: [
+                // Mapa em DESTAQUE (flex maior que o painel): ocupa a região
+                // acima do painel de stats (seções fixas, sem sobreposição).
                 if (isIdle)
                   const _IdleHeroBackground()
                 else
@@ -443,23 +447,24 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
                       ),
                     ),
                   ),
-                Positioned(
-                  bottom: 0,
-                  left: 0,
-                  right: 0,
+                    ],
+                  ),
+                ),
+                // PAINEL de stats ABAIXO do mapa (seção fixa): Expanded com
+                // flex menor que o mapa; rola por dentro e os botões ficam
+                // fixos. No fluxo da coluna, nunca sobrepõe chips/banner.
+                Expanded(
+                  flex: 4,
                   child: _StatsOverlay(
                     state: state,
                     initialType: widget.initialType,
                     gpsOk: gpsChipStatus == _GpsStatus.ok,
                     onRetryGps: _openPermissionModal,
                     onStart: () {
-                      // Destrava autoplay dentro do user gesture — sem
-                      // isso a saudação Live falha silenciosamente em
-                      // Chrome/Safari/Firefox.
+                      // Destrava autoplay dentro do user gesture — sem isso a
+                      // saudação Live falha silenciosamente em Chrome/Safari/FF.
                       unlockAudioContext();
-                      context
-                          .read<RunBloc>()
-                          .add(StartRun(
+                      context.read<RunBloc>().add(StartRun(
                             type: widget.initialType,
                             planSessionId: widget.planSessionId,
                             alertPrefs: widget.alertPrefs,
@@ -1184,12 +1189,18 @@ class _ActiveStatsLayout extends StatelessWidget {
           stops: const [0.0, 0.45, 0.80, 1.0],
         ),
       ),
-      padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
+      padding: const EdgeInsets.fromLTRB(24, 16, 24, 20),
       child: SafeArea(
         top: false,
         child: Column(
-          mainAxisSize: MainAxisSize.min,
           children: [
+            // Stats + timer + splits rolam aqui dentro (não estouram a tela);
+            // os botões ficam FIXOS abaixo, sempre visíveis.
+            Expanded(
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
             // Header: brand chip + tipo de corrida (texto limpo, sem decoração).
             Row(
               children: [
@@ -1258,7 +1269,7 @@ class _ActiveStatsLayout extends StatelessWidget {
             // Timer central grande
             Text(
               state.formattedElapsed,
-              style: type.dataXl.copyWith(fontSize: 65, color: palette.text),
+              style: type.dataXl.copyWith(fontSize: 58, color: palette.text),
             ),
             const SizedBox(height: 4),
             Text(
@@ -1318,7 +1329,11 @@ class _ActiveStatsLayout extends StatelessWidget {
               ),
               const SizedBox(height: 18),
             ],
-
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 14),
             // Buttons row: idle → INICIAR; active → PAUSAR + FINALIZAR; paused → RETOMAR + FINALIZAR.
             _ButtonsRow(
               isIdle: state.status == RunStatus.idle ||
@@ -1524,7 +1539,7 @@ class _StatCell extends StatelessWidget {
         const SizedBox(height: 4),
         Text(
           stat.value,
-          style: type.dataMd.copyWith(color: stat.valueColor, fontSize: 31, letterSpacing: -0.4),
+          style: type.dataMd.copyWith(color: stat.valueColor, fontSize: 30, letterSpacing: -0.4),
         ),
         const SizedBox(height: 2),
         Text(
