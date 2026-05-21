@@ -196,6 +196,12 @@ class RunninPalette {
   List<Color> get previewBars => [primary, secondary, tertiary];
 }
 
+// Fundo de card NEUTRO (cinza/preto) — igual em todas as skins, pra não ter
+// "película" tingida. As cores de skin (primary/secondary/text/border) seguem
+// por skin; só o preenchimento de card (surface/surfaceAlt) é padronizado.
+const Color _kCardSurface = Color(0xFF0E0E12);
+const Color _kCardSurfaceAlt = Color(0xFF15151A);
+
 enum RunninSkin {
   artico,
   magenta,
@@ -209,8 +215,8 @@ enum RunninSkin {
           id: 'artico',
           label: 'Artico',
           background: Color(0xFF060814),
-          surface: Color(0xFF0B0E18),
-          surfaceAlt: Color(0xFF10131F),
+          surface: _kCardSurface,
+          surfaceAlt: _kCardSurfaceAlt,
           border: Color(0xFF1A1D28),
           text: Color(0xFFF5F7FB),
           muted: Color(0xFF8C97AD),
@@ -228,8 +234,8 @@ enum RunninSkin {
           id: 'magenta',
           label: 'Magenta',
           background: Color(0xFF080511),
-          surface: Color(0xFF0E0B17),
-          surfaceAlt: Color(0xFF13101D),
+          surface: _kCardSurface,
+          surfaceAlt: _kCardSurfaceAlt,
           border: Color(0xFF1F1A28),
           text: Color(0xFFF8F5FF),
           muted: Color(0xFFA893BF),
@@ -245,8 +251,8 @@ enum RunninSkin {
           id: 'volt',
           label: 'Volt',
           background: Color(0xFF070A10),
-          surface: Color(0xFF0C0F16),
-          surfaceAlt: Color(0xFF11141C),
+          surface: _kCardSurface,
+          surfaceAlt: _kCardSurfaceAlt,
           border: Color(0xFF1B1E26),
           text: Color(0xFFF4F8F2),
           muted: Color(0xFF9DA4AF),
@@ -264,8 +270,8 @@ enum RunninSkin {
           id: 'matrix',
           label: 'Matrix',
           background: Color(0xFF010601),
-          surface: Color(0xFF06110A),
-          surfaceAlt: Color(0xFF0A1810),
+          surface: _kCardSurface,
+          surfaceAlt: _kCardSurfaceAlt,
           border: Color(0xFF193823),
           text: Color(0xFFD2DAD2),
           muted: Color(0xFF6E7A6E),
