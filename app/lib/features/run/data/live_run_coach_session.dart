@@ -41,11 +41,14 @@ class LiveRunCoachSession {
   bool _open = false;
   bool _talking = false;
 
-  // Snapshot da config pra anexar nos beacons de diagnóstico (rastrear 1008).
+  // Snapshot da config pra anexar nos beacons de diagnóstico (rastrear 1008)
+  // e pra reabrir a sessão se o Gemini Live encerrar por limite de duração.
   String? _model;
   int _sysInstrLen = 0;
   bool _outTranscript = false;
   String? _runId;
+  String? _planSessionId;
+  bool _reopening = false;
 
   /// Cada item é o transcript de UMA fala completa do coach (texto == voz).
   Stream<String> get transcripts => _transcriptsCtrl.stream;
@@ -56,6 +59,7 @@ class LiveRunCoachSession {
   Future<bool> open({String? planSessionId, String? runId}) async {
     if (_open) return true;
     _runId = runId;
+    _planSessionId = planSessionId;
     final cfg = await _fetchConfig(planSessionId);
     if (cfg == null) return false;
     _model = cfg.model;
@@ -209,13 +213,32 @@ class LiveRunCoachSession {
   }
 
   /// Envia uma atualização (largada/km/alerta/fim) → provoca uma fala curta.
+  /// Se a sessão tiver caído (limite de duração do Gemini Live), reabre antes
+  /// de mandar — assim a voz não morre depois de alguns minutos de corrida.
   void sendTelemetry(String text) {
-    if (!_open || text.trim().isEmpty) return;
+    if (text.trim().isEmpty) return;
+    if (_open) {
+      try {
+        _session?.sendText(text);
+      } catch (e) {
+        // ignore: avoid_print
+        print('run.coach.live.send_failed: $e');
+      }
+      return;
+    }
+    // ignore: avoid_print
+    print('run.coach.live.reopen_for_send');
+    unawaited(_reopenAndSend(text));
+  }
+
+  Future<void> _reopenAndSend(String text) async {
+    if (_reopening) return;
+    _reopening = true;
     try {
-      _session?.sendText(text);
-    } catch (e) {
-      // ignore: avoid_print
-      print('run.coach.live.send_failed: $e');
+      final ok = await open(planSessionId: _planSessionId, runId: _runId);
+      if (ok) _session?.sendText(text);
+    } finally {
+      _reopening = false;
     }
   }
 

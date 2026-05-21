@@ -448,9 +448,13 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
                   Positioned(
                     left: 24,
                     right: 24,
-                    top: MediaQuery.of(context).size.height * 0.34,
+                    // Sobe quando há splits fechados (painel embaixo cresce);
+                    // mesma altura quando ainda não há.
+                    top: MediaQuery.of(context).size.height *
+                        (state.splits.isNotEmpty ? 0.24 : 0.34),
                     child: Align(
-                      alignment: Alignment.centerLeft,
+                      // Meia-direita da tela (levemente à direita do centro).
+                      alignment: const Alignment(0.45, 0),
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1201,6 +1205,25 @@ class _ActiveStatsLayout extends StatelessWidget {
     final int? bpm = null;
     final kcal = ((state.distanceM / 1000) * 60).round();
 
+    // Pace ACUMULADO por km (tempo total até o km / nº de km), em mm:ss/km.
+    String fmtPaceSec(double secPerKm) {
+      if (secPerKm <= 0) return '--:--';
+      final m = secPerKm ~/ 60;
+      final s = (secPerKm % 60).round();
+      return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
+    }
+
+    final cumPaces = <String>[];
+    var cumS = 0;
+    for (var i = 0; i < state.splits.length; i++) {
+      cumS += state.splits[i].durationS;
+      cumPaces.add(fmtPaceSec(cumS / (i + 1)));
+    }
+    // Pace acumulado geral (pro km em andamento): tempo total / distância.
+    final overallCumPace = state.distanceM > 0
+        ? fmtPaceSec(state.elapsedS / (state.distanceM / 1000))
+        : '--:--';
+
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
@@ -1335,9 +1358,10 @@ class _ActiveStatsLayout extends StatelessWidget {
                   itemBuilder: (_, i) {
                     if (i < state.splits.length) {
                       final s = state.splits[i];
+                      // Label 1-based (kmIndex é 0-based); pace ACUMULADO.
                       return _SplitCard(
-                        kmLabel: 'KM ${s.kmIndex.toString().padLeft(2, '0')}',
-                        paceLabel: s.formattedPace,
+                        kmLabel: 'KM ${(s.kmIndex + 1).toString().padLeft(2, '0')}',
+                        paceLabel: cumPaces[i],
                         speedLabel: '${s.avgSpeedKmh.toStringAsFixed(1)} km/h',
                         done: true,
                       );
@@ -1347,7 +1371,7 @@ class _ActiveStatsLayout extends StatelessWidget {
                     final isCurrent = kmIdx == currentKm;
                     return _SplitCard(
                       kmLabel: 'KM ${kmIdx.toString().padLeft(2, '0')}',
-                      paceLabel: isCurrent ? state.formattedPace : '--:--',
+                      paceLabel: isCurrent ? overallCumPace : '--:--',
                       speedLabel: isCurrent ? 'em andamento' : '--',
                       done: false,
                     );
