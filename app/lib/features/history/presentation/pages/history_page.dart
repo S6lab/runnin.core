@@ -902,21 +902,34 @@ class _RunHistoryCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 12),
-            // Métricas em cyan: pace · FC · ganho de elevação.
+            // Linha de métricas: pace à ESQUERDA em LARANJA; FC e ganho de
+            // elevação ao CENTRO em CYAN (referência: cards canônicos).
             Row(
               children: [
-                _RunMetric(value: pace, color: palette.primary),
-                if (run.avgBpm != null) ...[
-                  const SizedBox(width: 28),
-                  _RunMetric(value: '${run.avgBpm}', color: palette.primary),
-                ],
-                if (run.elevationGain != null) ...[
-                  const SizedBox(width: 28),
-                  _RunMetric(
-                    value: '+${run.elevationGain!.round()}',
-                    color: palette.primary,
+                Expanded(
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: _RunMetric(value: pace, color: palette.secondary),
                   ),
-                ],
+                ),
+                Expanded(
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.max,
+                    children: [
+                      if (run.avgBpm != null)
+                        _RunMetric(value: '${run.avgBpm}', color: palette.primary),
+                      if (run.avgBpm != null && run.elevationGain != null)
+                        const SizedBox(width: 28),
+                      if (run.elevationGain != null)
+                        _RunMetric(
+                          value: '+${run.elevationGain!.round()}',
+                          color: palette.primary,
+                        ),
+                    ],
+                  ),
+                ),
+                const Expanded(child: SizedBox()),
               ],
             ),
           ],
