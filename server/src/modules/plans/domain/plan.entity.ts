@@ -149,6 +149,13 @@ export interface Plan {
    * apagar o histórico — o atleta vê a jornada toda.
    */
   revisions?: PlanRevision[];
+  /**
+   * Id da PlanRevision PENDENTE aguardando aceite/recusa do usuário (criada
+   * pelo cron de domingo). `null`/ausente = sem proposta pendente. O plano só
+   * muda quando o usuário ACEITA a proposta. Ver ProposeCheckpointUseCase /
+   * ResolveProposalUseCase.
+   */
+  pendingRevisionId?: string | null;
   createdAt: string;
   updatedAt: string;
 }

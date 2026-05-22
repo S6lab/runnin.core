@@ -1,3 +1,4 @@
+import { FieldPath } from 'firebase-admin/firestore';
 import { getFirestore } from '@shared/infra/firebase/firebase.client';
 import { UserProfile } from '../domain/user.entity';
 import { UserRepository } from '../domain/user.repository';
@@ -25,8 +26,13 @@ export class FirestoreUserRepository implements UserRepository {
       .set({ ...data, archivedAt });
   }
 
-  async list(limit?: number): Promise<UserProfile[]> {
-    const query = this.col().limit(limit || 100);
+  async list(limit?: number, startAfterId?: string): Promise<UserProfile[]> {
+    let query = this.col()
+      .orderBy(FieldPath.documentId())
+      .limit(limit || 100);
+    if (startAfterId) {
+      query = query.startAfter(startAfterId);
+    }
     const snapshot = await query.get();
     const users: UserProfile[] = [];
     snapshot.forEach(doc => {

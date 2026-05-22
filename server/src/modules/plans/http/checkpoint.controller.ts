@@ -1,32 +1,18 @@
 import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
-import { FirestorePlanRepository } from '../infra/firestore-plan.repository';
 import { FirestorePlanCheckpointRepository } from '../infra/firestore-plan-checkpoint.repository';
 import { FirestorePlanRevisionRepository } from '../infra/firestore-plan-revision.repository';
-import { FirestoreRunRepository } from '@modules/runs/infra/firestore-run.repository';
-import { LlmCheckpointAnalysisStrategy } from '../use-cases/llm-checkpoint-analysis.strategy';
-import {
-  ApplyCheckpointUseCase,
-  CheckpointAlreadyAppliedError,
-} from '../use-cases/apply-checkpoint.use-case';
+import { CheckpointAlreadyAppliedError } from '../use-cases/checkpoint-shared';
+import { container } from '@shared/container';
 import {
   CheckpointInput,
   CheckpointInputType,
 } from '../domain/plan-checkpoint.entity';
 import { NotFoundError } from '@shared/errors/app-error';
 
-const planRepo = new FirestorePlanRepository();
 const checkpointRepo = new FirestorePlanCheckpointRepository();
 const revisionRepo = new FirestorePlanRevisionRepository();
-const runRepo = new FirestoreRunRepository();
-const analysisStrategy = new LlmCheckpointAnalysisStrategy();
-const applyCheckpoint = new ApplyCheckpointUseCase(
-  planRepo,
-  checkpointRepo,
-  revisionRepo,
-  runRepo,
-  analysisStrategy,
-);
+const resolveProposal = container.useCases.resolveProposal;
 
 const INPUT_TYPES: CheckpointInputType[] = [
   'load_up',
@@ -46,10 +32,6 @@ const CheckpointInputSchema = z.object({
 
 const SubmitInputsBody = z.object({
   inputs: z.array(CheckpointInputSchema).max(8),
-});
-
-const ApplyBody = z.object({
-  inputs: z.array(CheckpointInputSchema).max(8).optional(),
 });
 
 function parseWeekNumber(req: Request, res: Response): number | null {
@@ -124,27 +106,53 @@ export async function submitCheckpointInputs(
   }
 }
 
-export async function applyCheckpointHandler(
+/**
+ * Detalhe de UMA revisão (proposta pendente ou aplicada). Usado pela tela de
+ * proposta no app pra renderizar atual × proposto + explicação do coach.
+ */
+export async function getRevisionHandler(
   req: Request,
   res: Response,
   next: NextFunction,
 ): Promise<void> {
   try {
     const planId = req.params['id'] as string;
-    const weekNumber = parseWeekNumber(req, res);
-    if (weekNumber == null) return;
-    const body = ApplyBody.parse(req.body ?? {});
-    const result = await applyCheckpoint.execute(
-      req.uid,
-      planId,
-      weekNumber,
-      body.inputs ?? [],
-    );
-    res.json({
-      checkpoint: result.checkpoint,
-      revision: result.revision,
-      plan: result.plan,
-    });
+    const revisionId = req.params['revisionId'] as string;
+    const rev = await revisionRepo.findById(revisionId, req.uid);
+    if (!rev || rev.planId !== planId) throw new NotFoundError('Revision');
+    res.json(rev);
+  } catch (err) {
+    next(err);
+  }
+}
+
+/** Aceita a proposta pendente: aplica as próximas 2 semanas no plano. */
+export async function acceptProposalHandler(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const planId = req.params['id'] as string;
+    const revisionId = req.params['revisionId'] as string;
+    const result = await resolveProposal.accept(req.uid, planId, revisionId);
+    res.json({ revision: result.revision, plan: result.plan });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/** Recusa a proposta pendente: descarta o ajuste, mantém o plano atual. */
+export async function rejectProposalHandler(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const planId = req.params['id'] as string;
+    const revisionId = req.params['revisionId'] as string;
+    const result = await resolveProposal.reject(req.uid, planId, revisionId);
+    res.json({ revision: result.revision, plan: result.plan });
   } catch (err) {
     next(err);
   }

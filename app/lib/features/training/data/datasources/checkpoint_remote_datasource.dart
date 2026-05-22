@@ -1,6 +1,5 @@
 import 'package:dio/dio.dart';
 import 'package:runnin/core/network/api_client.dart';
-import 'package:runnin/features/training/data/datasources/plan_remote_datasource.dart';
 import 'package:runnin/features/training/domain/entities/plan_checkpoint.dart';
 
 /// Datasource desacoplado: troca via construtor pra testes / mocks.
@@ -44,44 +43,10 @@ class CheckpointRemoteDatasource {
     return PlanCheckpoint.fromJson(res.data as Map<String, dynamic>);
   }
 
-  /// "Depois": adia o checkpoint sem aplicar ajuste (marca skipped). Não
-  /// consome cota; as semanas pendentes são detalhadas no próximo checkpoint.
+  /// "Depois": adia o checkpoint sem ajuste (marca skipped). As semanas
+  /// pendentes são detalhadas na revisão de domingo.
   Future<PlanCheckpoint> skip(String planId, int weekNumber) async {
     final res = await _dio.post('/plans/$planId/checkpoints/$weekNumber/skip');
     return PlanCheckpoint.fromJson(res.data as Map<String, dynamic>);
   }
-
-  /// Aplica o ajuste: roda LLM, gera PlanRevision, ajusta semanas seguintes
-  /// do plano. Cobrado pelo gate premium no server (403 PREMIUM_REQUIRED se
-  /// freemium tentar).
-  Future<CheckpointApplyResult> apply(
-    String planId,
-    int weekNumber,
-    List<CheckpointInput> extraInputs,
-  ) async {
-    final res = await _dio.post(
-      '/plans/$planId/checkpoints/$weekNumber/apply',
-      data: {'inputs': extraInputs.map((e) => e.toJson()).toList()},
-    );
-    // O apply ajusta as semanas seguintes — invalida o cache do plano.
-    PlanRemoteDatasource.clearPlanCache();
-    final body = res.data as Map<String, dynamic>;
-    return CheckpointApplyResult(
-      checkpoint: PlanCheckpoint.fromJson(body['checkpoint'] as Map<String, dynamic>),
-      revisionId: (body['revision'] as Map<String, dynamic>?)?['id'] as String?,
-      coachExplanation:
-          (body['revision'] as Map<String, dynamic>?)?['coachExplanation'] as String?,
-    );
-  }
-}
-
-class CheckpointApplyResult {
-  final PlanCheckpoint checkpoint;
-  final String? revisionId;
-  final String? coachExplanation;
-  const CheckpointApplyResult({
-    required this.checkpoint,
-    this.revisionId,
-    this.coachExplanation,
-  });
 }

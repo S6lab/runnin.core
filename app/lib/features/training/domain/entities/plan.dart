@@ -211,6 +211,10 @@ class Plan {
   /// mesociclo ou se o plano é só a fundação. Renderizado em destaque.
   final String? goalAssessment;
   final List<PlanRevisionLog> revisions;
+  /// Id da revisão PENDENTE aguardando aceite/recusa (proposta gerada pelo
+  /// cron de domingo). Null/vazio = sem proposta pendente. Quando presente,
+  /// o app mostra o banner e a tela de proposta.
+  final String? pendingRevisionId;
 
   const Plan({
     required this.id,
@@ -225,6 +229,7 @@ class Plan {
     this.mesocycleNarrative,
     this.goalAssessment,
     this.revisions = const [],
+    this.pendingRevisionId,
   });
 
   factory Plan.fromJson(Map<String, dynamic> j) => Plan(
@@ -244,7 +249,13 @@ class Plan {
         revisions: ((j['revisions'] as List?) ?? [])
             .map((r) => PlanRevisionLog.fromJson(r as Map<String, dynamic>))
             .toList(),
+        pendingRevisionId: (j['pendingRevisionId'] as String?)?.isNotEmpty == true
+            ? j['pendingRevisionId'] as String
+            : null,
       );
+
+  bool get hasPendingProposal =>
+      pendingRevisionId != null && pendingRevisionId!.isNotEmpty;
 
   bool get isReady => status == 'ready';
   bool get isGenerating => status == 'generating';

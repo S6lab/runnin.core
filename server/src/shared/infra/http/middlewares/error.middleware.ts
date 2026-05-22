@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { ZodError } from 'zod';
 import { AppError, CooldownError } from '@shared/errors/app-error';
-import { CheckpointAlreadyAppliedError } from '@modules/plans/use-cases/apply-checkpoint.use-case';
+import { CheckpointAlreadyAppliedError } from '@modules/plans/use-cases/checkpoint-shared';
 import { logger } from '@shared/logger/logger';
 
 export function errorMiddleware(err: unknown, req: Request, res: Response, _next: NextFunction): void {

@@ -18,6 +18,7 @@ import {
   postDiagnoseRegeneratePlan,
   postDiagnoseResetJourney,
   postDiagnoseWeeklyRevise,
+  postCronWeeklyProposals,
   postUserReset,
 } from './admin.controller';
 
@@ -31,6 +32,7 @@ adminRouter.get('/diagnose/user', cronTokenMiddleware, getDiagnoseUser);
 adminRouter.post('/diagnose/regenerate-plan', cronTokenMiddleware, postDiagnoseRegeneratePlan);
 adminRouter.post('/diagnose/reset-journey', cronTokenMiddleware, postDiagnoseResetJourney);
 adminRouter.post('/diagnose/weekly-revise', cronTokenMiddleware, postDiagnoseWeeklyRevise);
+adminRouter.post('/cron/weekly-proposals', cronTokenMiddleware, postCronWeeklyProposals);
 
 adminRouter.use(authMiddleware);
 adminRouter.use(requireAdmin);

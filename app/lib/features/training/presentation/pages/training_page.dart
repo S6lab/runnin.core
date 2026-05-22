@@ -485,7 +485,7 @@ class _TrainingPageState extends State<TrainingPage> {
       return _PlanFailedState(generating: _generating, onGenerate: _generate);
     }
 
-    return _TrainingWorkspace(
+    final workspace = _TrainingWorkspace(
       plan: _plan!,
       profile: _profile,
       reports: _reports,
@@ -498,6 +498,74 @@ class _TrainingPageState extends State<TrainingPage> {
       onWeekChanged: (week) => setState(() => _selectedWeek = week),
       onTabChanged: (tab) => setState(() => _selectedTab = tab),
       onPlanModeChanged: (mode) => setState(() => _planMode = mode),
+    );
+
+    // Proposta de revisão pendente (cron de domingo) → banner pra revisar.
+    if (_plan!.hasPendingProposal) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _ProposalBanner(
+            onTap: () async {
+              await context.push('/training/plan-proposal');
+              if (mounted) _load();
+            },
+          ),
+          workspace,
+        ],
+      );
+    }
+    return workspace;
+  }
+}
+
+/// Banner no topo do TREINO quando há proposta de revisão pendente.
+class _ProposalBanner extends StatelessWidget {
+  final VoidCallback onTap;
+  const _ProposalBanner({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    final type = context.runninType;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: palette.secondary.withValues(alpha: 0.10),
+            border: Border.all(color: palette.secondary, width: 1.2),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.auto_awesome, size: 18, color: palette.secondary),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'PROPOSTA DE ATUALIZAÇÃO DO PLANO',
+                      style: type.labelCaps.copyWith(
+                        color: palette.secondary,
+                        letterSpacing: 0.8,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'O coach revisou suas próximas 2 semanas. Toque pra revisar e aceitar.',
+                      style: type.bodyXs.copyWith(color: palette.muted, height: 1.4),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right, size: 18, color: palette.secondary),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

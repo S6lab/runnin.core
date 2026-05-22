@@ -32,9 +32,9 @@ class _CheckpointPageState extends State<CheckpointPage> {
   PlanCheckpoint? _checkpoint;
   bool _loading = true;
   bool _applying = false;
+  bool _saved = false;
   String? _error;
   String? _applyError;
-  String? _coachExplanation;
   final Set<CheckpointInputKind> _selectedKinds = {};
   final Map<CheckpointInputKind, String> _kindNotes = {};
 
@@ -103,7 +103,7 @@ class _CheckpointPageState extends State<CheckpointPage> {
     return true;
   }
 
-  Future<void> _apply() async {
+  Future<void> _saveInputs() async {
     if (!_validInputs()) {
       setState(() {
         _applyError = 'Detalhe os itens marcados como "dor" ou "outro".';
@@ -115,15 +115,15 @@ class _CheckpointPageState extends State<CheckpointPage> {
       _applyError = null;
     });
     try {
-      final result = await _ds.apply(
+      final cp = await _ds.submitInputs(
         widget.planId,
         widget.weekNumber,
         _buildInputs(),
       );
       if (!mounted) return;
       setState(() {
-        _checkpoint = result.checkpoint;
-        _coachExplanation = result.coachExplanation;
+        _checkpoint = cp;
+        _saved = true;
         _applying = false;
       });
     } on DioException catch (e) {
@@ -135,16 +135,12 @@ class _CheckpointPageState extends State<CheckpointPage> {
       final serverMsg = err?['message'] as String?;
       final errCode = err?['code'] as String?;
       String msg;
-      if (errCode == 'PREMIUM_REQUIRED' || code == 403) {
-        msg = 'Ajuste do plano via checkpoint é recurso premium. Assine pra desbloquear.';
-      } else if (errCode == 'CHECKPOINT_ALREADY_APPLIED' || code == 409) {
-        msg = 'Esse checkpoint já foi aplicado — só 1 ajuste por semana.';
+      if (errCode == 'CHECKPOINT_ALREADY_APPLIED' || code == 409) {
+        msg = 'Esse checkpoint já foi concluído nesta semana.';
       } else if (errCode == 'PLAN_NOT_READY' || code == 422) {
         msg = 'Plano não está pronto. Aguarde geração concluir.';
-      } else if (errCode == 'LLM_RATE_LIMITED' || code == 503) {
-        msg = serverMsg ?? 'Coach sobrecarregado. Tente em alguns segundos.';
       } else {
-        msg = serverMsg ?? 'Erro ao aplicar checkpoint.';
+        msg = serverMsg ?? 'Erro ao salvar inputs.';
       }
       setState(() {
         _applyError = msg;
@@ -234,20 +230,6 @@ class _CheckpointPageState extends State<CheckpointPage> {
           ],
           if (cp.isCompleted) ...[
             _CompletedBanner(checkpoint: cp),
-            if (_coachExplanation != null) ...[
-              const SizedBox(height: 16),
-              _Section(
-                title: '> RACIONAL DO AJUSTE',
-                child: Text(
-                  _coachExplanation!,
-                  style: context.runninType.bodyMd.copyWith(
-                    color: palette.text.withValues(alpha: 0.86),
-                    fontSize: 13,
-                    height: 1.55,
-                  ),
-                ),
-              ),
-            ],
           ] else ...[
             _Section(
               title: '> COMO VOCÊ TÁ?',
@@ -294,12 +276,29 @@ class _CheckpointPageState extends State<CheckpointPage> {
                 ),
               ),
             ],
+            if (_saved) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: palette.primary.withValues(alpha: 0.08),
+                  border: Border.all(color: palette.primary.withValues(alpha: 0.4)),
+                ),
+                child: Text(
+                  'Inputs salvos. O coach usa eles na revisão de domingo — a proposta de ajuste vai aparecer pra você aceitar.',
+                  style: context.runninType.bodySm.copyWith(
+                    color: palette.text.withValues(alpha: 0.85),
+                    height: 1.5,
+                  ),
+                ),
+              ),
+            ],
             const SizedBox(height: 20),
             SizedBox(
               width: double.infinity,
               height: 48,
               child: ElevatedButton(
-                onPressed: _applying ? null : _apply,
+                onPressed: _applying ? null : _saveInputs,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: palette.primary,
                   foregroundColor: palette.background,
@@ -317,7 +316,7 @@ class _CheckpointPageState extends State<CheckpointPage> {
                         ),
                       )
                     : Text(
-                        'APLICAR AJUSTE',
+                        _saved ? 'ATUALIZAR INPUTS' : 'SALVAR INPUTS DA SEMANA',
                         style: context.runninType.labelMd.copyWith(
                           fontWeight: FontWeight.w500,
                           letterSpacing: 1.2,
@@ -327,7 +326,7 @@ class _CheckpointPageState extends State<CheckpointPage> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Ao aplicar, o coach ajusta as semanas seguintes do plano. Você pode usar 1x por semana.',
+              'Seus inputs ficam registrados na semana. O plano é revisado aos domingos: o coach gera uma proposta de ajuste das próximas 2 semanas pra você aceitar ou recusar.',
               style: context.runninType.bodyXs.copyWith(
                 color: palette.muted,
                 height: 1.45,
@@ -384,7 +383,7 @@ class _DisclaimerCard extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            'Seu plano é ajustável 1x por semana — no checkpoint. O coach lê tudo que você fez (corridas, pace, BPM, aderência) e cruza com o que você marcar aqui. As semanas SEGUINTES são recalculadas; o passado fica como referência.',
+            'Durante a semana você registra como foi (corridas, dor, energia, agenda). Aos DOMINGOS o coach cruza isso com seus números e gera uma PROPOSTA de ajuste das próximas 2 semanas — você decide aceitar ou recusar. O passado fica como referência.',
             style: context.runninType.bodySm.copyWith(
               color: palette.text.withValues(alpha: 0.85),
               fontSize: 12.5,

@@ -63,4 +63,38 @@ class PlanRevisionRemoteDatasource {
         .map((item) => PlanRevision.fromJson(item as Map<String, dynamic>))
         .toList();
   }
+
+  /// Detalhe de uma revisão (proposta pendente) — inclui os snapshots
+  /// old/new das semanas e a explicação do coach.
+  Future<PlanRevision> getRevision(String planId, String revisionId) async {
+    final res = await _dio.get('/plans/$planId/revisions/$revisionId');
+    return PlanRevision.fromJson(res.data as Map<String, dynamic>);
+  }
+
+  /// Aceita a proposta pendente → aplica as próximas 2 semanas no plano.
+  Future<PlanRevisionResponse> acceptProposal(
+    String planId,
+    String revisionId,
+  ) async {
+    final res = await _dio.post('/plans/$planId/revisions/$revisionId/accept');
+    PlanRemoteDatasource.clearPlanCache();
+    return _proposalResponse(res.data as Map<String, dynamic>);
+  }
+
+  /// Recusa a proposta pendente → mantém o plano atual.
+  Future<PlanRevisionResponse> rejectProposal(
+    String planId,
+    String revisionId,
+  ) async {
+    final res = await _dio.post('/plans/$planId/revisions/$revisionId/reject');
+    PlanRemoteDatasource.clearPlanCache();
+    return _proposalResponse(res.data as Map<String, dynamic>);
+  }
+
+  // accept/reject retornam { revision, plan } (chave "plan", não "updatedPlan").
+  PlanRevisionResponse _proposalResponse(Map<String, dynamic> j) =>
+      PlanRevisionResponse(
+        revision: PlanRevision.fromJson(j['revision'] as Map<String, dynamic>),
+        updatedPlan: Plan.fromJson(j['plan'] as Map<String, dynamic>),
+      );
 }

@@ -317,6 +317,21 @@ export async function postDiagnoseWeeklyRevise(req: Request, res: Response, next
 }
 
 /**
+ * POST /admin/cron/weekly-proposals — cron de DOMINGO. Percorre os usuários
+ * ativos premium e gera propostas de revisão pendentes (próximas 2 semanas).
+ * Protegido por X-Cron-Token. Idempotente (não duplica proposta pendente).
+ */
+export async function postCronWeeklyProposals(_req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { container } = await import('@shared/container');
+    const result = await container.useCases.runWeeklyProposals.execute();
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
  * GET /admin/diagnose/user?email=X — devolve profile + último plano + stats
  * pra debug rápido sem precisar de ADC local. Protegido por X-Cron-Token.
  */

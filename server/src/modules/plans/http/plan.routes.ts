@@ -12,8 +12,10 @@ import {
   listCheckpoints,
   getCheckpoint,
   submitCheckpointInputs,
-  applyCheckpointHandler,
   skipCheckpointHandler,
+  getRevisionHandler,
+  acceptProposalHandler,
+  rejectProposalHandler,
 } from './checkpoint.controller';
 
 export const planRouter = Router();
@@ -24,6 +26,7 @@ planRouter.get('/knowledge/corpus', getPlanKnowledge);
 planRouter.get('/current', getCurrentPlan);
 planRouter.get('/:id', getPlanById);
 planRouter.get('/:id/revisions', listRevisionsHandler);
+planRouter.get('/:id/revisions/:revisionId', getRevisionHandler);
 planRouter.get('/:id/weekly-reports', listWeeklyReportsHandler);
 planRouter.get('/:id/weekly-reports/:weekNumber', getWeeklyReportHandler);
 planRouter.get('/:id/checkpoints', listCheckpoints);
@@ -32,9 +35,11 @@ planRouter.get('/:id/checkpoints/:weekNumber', getCheckpoint);
 planRouter.post('/generate', requireFeature('generatePlan'), postGeneratePlan);
 planRouter.post('/:id/request-revision', requireFeature('planRevisions'), requestRevisionHandler);
 planRouter.post('/:id/weekly-reports/:weekNumber/generate', requireFeature('weeklyReports'), generateWeeklyReportHandler);
-// Checkpoint inputs (submeter sem apply) — freemium pode preencher,
-// mas só premium roda apply (gera revision via LLM).
+// Checkpoint inputs — registrados durante a semana (sem mudar o plano).
+// O plano só é revisado aos domingos (cron) e aplicado no aceite da proposta.
 planRouter.post('/:id/checkpoints/:weekNumber/inputs', submitCheckpointInputs);
-planRouter.post('/:id/checkpoints/:weekNumber/apply', requireFeature('planRevisions'), applyCheckpointHandler);
 // "Depois": adia o checkpoint (marca skipped, sem ajuste). Freemium OK.
 planRouter.post('/:id/checkpoints/:weekNumber/skip', skipCheckpointHandler);
+// Proposta de revisão (gerada pelo cron de domingo): aceitar/recusar — premium.
+planRouter.post('/:id/revisions/:revisionId/accept', requireFeature('planRevisions'), acceptProposalHandler);
+planRouter.post('/:id/revisions/:revisionId/reject', requireFeature('planRevisions'), rejectProposalHandler);

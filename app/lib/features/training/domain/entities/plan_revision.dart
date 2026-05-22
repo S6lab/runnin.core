@@ -1,3 +1,5 @@
+import 'package:runnin/features/training/domain/entities/plan.dart';
+
 class PlanRevision {
   final String id;
   final String planId;
@@ -8,6 +10,11 @@ class PlanRevision {
   final String status;
   final int weekIndex;
   final String createdAt;
+  /// Snapshot das semanas ANTES do ajuste (semanas futuras). Presente em
+  /// propostas pendentes (cron de domingo).
+  final List<PlanWeek> oldWeeksSnapshot;
+  /// Snapshot PROPOSTO das semanas seguintes. Renderizado na tela de proposta.
+  final List<PlanWeek> newWeeksSnapshot;
 
   const PlanRevision({
     required this.id,
@@ -19,6 +26,8 @@ class PlanRevision {
     required this.status,
     required this.weekIndex,
     required this.createdAt,
+    this.oldWeeksSnapshot = const [],
+    this.newWeeksSnapshot = const [],
   });
 
   factory PlanRevision.fromJson(Map<String, dynamic> j) => PlanRevision(
@@ -31,7 +40,14 @@ class PlanRevision {
     status: j['status'] as String,
     weekIndex: j['weekIndex'] as int,
     createdAt: j['createdAt'] as String,
+    oldWeeksSnapshot: ((j['oldWeeksSnapshot'] as List?) ?? [])
+        .map((w) => PlanWeek.fromJson(w as Map<String, dynamic>))
+        .toList(),
+    newWeeksSnapshot: ((j['newWeeksSnapshot'] as List?) ?? [])
+        .map((w) => PlanWeek.fromJson(w as Map<String, dynamic>))
+        .toList(),
   );
 
   bool get isApplied => status == 'applied';
+  bool get isPending => status == 'pending';
 }
