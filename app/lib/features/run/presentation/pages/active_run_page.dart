@@ -446,15 +446,14 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
                       ),
                     ),
                   ),
-                // Cronômetro no MEIO da tela, alinhado à ESQUERDA (sobre o mapa).
+                // Cronômetro alinhado à ESQUERDA, na MESMA altura do botão de
+                // microfone (push-to-talk) à direita — acima do título/painel
+                // de telemetria, sem sobrepor "FREE RUN"/"PACE"/"DIST".
                 if (!isIdle)
                   Positioned(
                     left: 24,
                     right: 24,
-                    // Sobe quando há splits fechados (painel embaixo cresce e
-                    // estava encostando no cronômetro); mais alto com splits.
-                    top: MediaQuery.of(context).size.height *
-                        (state.splits.isNotEmpty ? 0.18 : 0.34),
+                    bottom: state.distanceM > 0 ? 440 : 300,
                     child: Align(
                       // Alinhado à esquerda.
                       alignment: Alignment.centerLeft,
