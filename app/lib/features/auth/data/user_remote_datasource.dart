@@ -186,7 +186,10 @@ class UserRemoteDatasource {
         'birthDate': birthDate,
         'weight': weight,
         'height': height,
-        'targetPace': targetPace,
+        // null-aware: targetPace não é mais coletado no onboarding (migrou pra
+        // jornada de plano em TREINO). Omitir quando null — o server rejeita
+        // null explícito mesmo sendo opcional.
+        'targetPace': ?targetPace,
         'hasWearable': hasWearable,
         'medicalConditions': medicalConditions,
         'gender': ?gender,

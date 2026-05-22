@@ -65,14 +65,14 @@ export const CompleteOnboardingSchema = z.object({
   // gender é coletado no onboarding "SEUS DADOS" (dados pessoais).
   gender: z.enum(['male', 'female', 'other', 'na']),
   // Campos de PLANO/rotina não são mais coletados no onboarding — migraram
-  // pra jornada de criação do plano em TREINO. Aceitos como opcionais pra
-  // compat com builds antigos do app que ainda os enviam.
-  runPeriod: z.enum(['manha', 'tarde', 'noite']).optional(),
-  wakeTime: z.string().regex(/^\d{2}:\d{2}$/, 'Hora de acordar inválida (use HH:MM)').optional(),
-  sleepTime: z.string().regex(/^\d{2}:\d{2}$/, 'Hora de dormir inválida (use HH:MM)').optional(),
-  // targetPace é frase descritiva (ex: "Entre 6:00 e 7:00/km"). Opcional —
+  // pra jornada de criação do plano em TREINO. nullish() (= null | undefined)
+  // pra compat com builds do app que ainda mandam esses campos como null.
+  runPeriod: z.enum(['manha', 'tarde', 'noite']).nullish(),
+  wakeTime: z.string().regex(/^\d{2}:\d{2}$/, 'Hora de acordar inválida (use HH:MM)').nullish(),
+  sleepTime: z.string().regex(/^\d{2}:\d{2}$/, 'Hora de dormir inválida (use HH:MM)').nullish(),
+  // targetPace é frase descritiva (ex: "Entre 6:00 e 7:00/km"). nullish —
   // a jornada de criação do plano lida com pace.
-  targetPace: z.string().min(1).max(60).optional(),
+  targetPace: z.string().min(1).max(60).nullish(),
 });
 
 export type CompleteOnboardingInput = z.infer<typeof CompleteOnboardingSchema>;
