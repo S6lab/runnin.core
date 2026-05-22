@@ -36,6 +36,7 @@ class WeekDayCellData {
     this.type,
     this.distance,
     this.paceOrDuration,
+    this.executed = false,
   });
 
   final String label;
@@ -43,6 +44,11 @@ class WeekDayCellData {
   final String? type;
   final String? distance;
   final String? paceOrDuration;
+
+  /// Corrida da sessão já realizada. Controla o ícone (check vs ponto)
+  /// independentemente do [status] (que define a cor do cabeçalho). Assim
+  /// o dia de HOJE já concluído também mostra o check.
+  final bool executed;
 
   bool get isRest => status == WeekDayCellStatus.rest;
   bool get isDone => status == WeekDayCellStatus.done;
@@ -155,10 +161,13 @@ class _BodyCell extends StatelessWidget {
 
     final accentDim = data.status == WeekDayCellStatus.planned;
     final isTodayAccent = data.isToday;
+    // Concluído = corrida realizada (executed) OU dia passado marcado como
+    // done. Independe da cor do cabeçalho → HOJE concluído também vira check.
+    final done = data.executed || data.isDone;
 
-    final iconColor = isTodayAccent
+    final iconColor = done
         ? context.runninPalette.primary
-        : data.isDone
+        : isTodayAccent
             ? context.runninPalette.primary
             : FigmaColors.textDim;
 
@@ -178,8 +187,8 @@ class _BodyCell extends StatelessWidget {
         ? context.runninPalette.secondary
         : FigmaColors.textDim;
 
-    final icon = data.isDone ? Icons.check : Icons.fiber_manual_record;
-    final iconSize = data.isDone ? 12.0 : 6.0;
+    final icon = done ? Icons.check : Icons.fiber_manual_record;
+    final iconSize = done ? 12.0 : 6.0;
 
     return Container(
       height: 110.44,

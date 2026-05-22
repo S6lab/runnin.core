@@ -621,6 +621,8 @@ class _SemanaSection extends StatelessWidget {
                     ? null
                     : '${d.session!.distanceKm.toStringAsFixed(d.session!.distanceKm == d.session!.distanceKm.truncateToDouble() ? 0 : 1)}K',
                 paceOrDuration: d.session?.targetPace,
+                // Corrida realizada → ícone vira check (mesmo no card de HOJE).
+                executed: d.isDone,
               ),
           ],
         ),
