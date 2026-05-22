@@ -1922,8 +1922,6 @@ class _HeroSection extends StatelessWidget {
     // secundária (em vez da primária).
     final sessionDone = session != null && session.isExecuted;
     final sessionType = (session?.type ?? 'LIVRE').toUpperCase();
-    final sessionPillLabel =
-        sessionDone ? '$sessionType · CONCLUÍDA' : sessionType;
     final distanceLabel = session != null
         ? '${session.distanceKm.toStringAsFixed(session.distanceKm % 1 == 0 ? 0 : 1)}K'
         : '—';
@@ -2041,14 +2039,32 @@ class _HeroSection extends StatelessWidget {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                       color: sessionDone ? palette.secondary : palette.primary,
-                      child: Text(
-                        sessionPillLabel,
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                          color: Colors.black,
-                          letterSpacing: 1.2,
-                        ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            sessionType,
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.black,
+                              letterSpacing: 1.2,
+                            ),
+                          ),
+                          // "CONCLUÍDA" embaixo (não na mesma linha) pra não
+                          // empurrar o rótulo de data ao lado.
+                          if (sessionDone)
+                            Text(
+                              'CONCLUÍDA',
+                              style: GoogleFonts.jetBrainsMono(
+                                fontSize: 9,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.black,
+                                letterSpacing: 1.5,
+                              ),
+                            ),
+                        ],
                       ),
                     ),
                     const SizedBox(width: 12),
