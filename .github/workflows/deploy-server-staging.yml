@@ -5,10 +5,6 @@ name: Deploy Server Staging (Cloud Run)
 on:
   push:
     branches: [homologation]
-    paths:
-      - 'server/**'
-      - 'deploy-server-staging.sh'
-      - '.github/workflows/deploy-server-staging.yml'
   workflow_dispatch:
 
 jobs:

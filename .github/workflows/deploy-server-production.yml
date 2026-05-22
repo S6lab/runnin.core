@@ -5,10 +5,6 @@ name: Deploy Server Production (Cloud Run)
 on:
   push:
     branches: [release]
-    paths:
-      - 'server/**'
-      - 'deploy-server.sh'
-      - '.github/workflows/deploy-server-production.yml'
   workflow_dispatch:
 
 jobs:
