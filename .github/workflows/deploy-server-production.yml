@@ -1,0 +1,37 @@
+name: Deploy Server Production (Cloud Run)
+
+# Produção: push na branch `release` faz deploy do server pro Cloud Run de
+# produção (runnin-api) via deploy-server.sh.
+on:
+  push:
+    branches: [release]
+    paths:
+      - 'server/**'
+      - 'deploy-server.sh'
+      - '.github/workflows/deploy-server-production.yml'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      # server/.env.production é gitignored — recriado a partir do secret.
+      # X_CRON_TOKEN não precisa estar aqui (vem do Secret Manager).
+      - name: Materialize server/.env.production
+        run: printf '%s' "$ENV_CONTENT" > server/.env.production
+        env:
+          ENV_CONTENT: ${{ secrets.ENV_PRODUCTION }}
+
+      - name: Deploy to Cloud Run (production)
+        run: bash deploy-server.sh
