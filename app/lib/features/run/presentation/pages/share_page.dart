@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
@@ -15,19 +16,19 @@ import 'package:runnin/features/run/domain/entities/run.dart';
 import 'package:runnin/shared/widgets/figma/figma_chart_line_spark.dart';
 import 'package:runnin/features/run/presentation/widgets/share_map_card.dart';
 
+// Só toggles que de fato desenham algo sobre a foto (revisado): chips de
+// pace/distância/tempo/bpm + traçado da rota + sparkline de splits. Removidos
+// Streak/Plano (sem dado nesta tela) e Coach.
 const _overlayToggleLabels = [
-  'Pace',
-  'Distância',
-  'Tempo',
-  'BPM',
-  'Streak',
-  'Plano',
-  'Trajeto',
-  'Splits',
-  'Coach',
+  'Pace',       // 0 → chip
+  'Distância',  // 1 → chip
+  'Tempo',      // 2 → chip
+  'BPM',        // 3 → chip (se houver)
+  'Trajeto',    // 4 → traçado da rota (igual ao mapa)
+  'Splits',     // 5 → sparkline de pace por km
 ];
 
-const _defaultToggles = {0, 1, 2, 4, 5, 6}; // Pace, Distância, Tempo, Streak, Plano, Trajeto
+const _defaultToggles = {0, 1, 2, 4}; // Pace, Distância, Tempo, Trajeto
 
 class SharePage extends StatefulWidget {
   final String runId;
@@ -423,22 +424,45 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
               ),
             ),
 
-            // Sparkline overlay
-            if (_activeToggles.contains(0) || _activeToggles.contains(1)) // Pace or Distância
-              Positioned(
-                top: 16,
-                right: 16,
-                left: 80,
-                child: Container(
-                  padding: const EdgeInsets.all(8),
-                  color: Colors.black.withValues(alpha: 0.4),
-                  child: FigmaChartLineSpark(
-                    values: _run != null ? _generateSplits() : [1, 1],
-                    height: 40,
-                    lineColor: context.runninPalette.primary,
-                  ),
-                ),
+            // Top-right: traçado da rota (Trajeto) + sparkline (Splits).
+            Positioned(
+              top: 16,
+              right: 16,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Trajeto: MESMO traçado da aba MAPA (polyline dos pontos GPS).
+                  if (_activeToggles.contains(4) && _gpsPoints.length >= 2)
+                    Container(
+                      width: 84,
+                      height: 84,
+                      padding: const EdgeInsets.all(8),
+                      color: Colors.black.withValues(alpha: 0.4),
+                      child: CustomPaint(
+                        painter: _RouteTracePainter(
+                          points: _gpsPoints,
+                          color: context.runninPalette.primary,
+                        ),
+                      ),
+                    ),
+                  // Splits: sparkline de pace por km.
+                  if (_activeToggles.contains(5) && _run != null) ...[
+                    const SizedBox(height: 8),
+                    Container(
+                      width: 140,
+                      padding: const EdgeInsets.all(8),
+                      color: Colors.black.withValues(alpha: 0.4),
+                      child: FigmaChartLineSpark(
+                        values: _generateSplits(),
+                        height: 36,
+                        lineColor: context.runninPalette.primary,
+                      ),
+                    ),
+                  ],
+                ],
               ),
+            ),
 
             // Stat chips bottom-right
             Positioned(
@@ -457,26 +481,6 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
                   if (_activeToggles.contains(3) && _run?.avgBpm != null) // BPM
                     _OverlayChip(label: '${_run!.avgBpm} BPM'),
                 ],
-              ),
-            ),
-
-            // Tagline bottom-left
-            Positioned(
-              bottom: 16,
-              left: 16,
-              right: 100,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.xs),
-                color: Colors.black.withValues(alpha: 0.5),
-                child: Text(
-                  'Corrida ${_run?.type ?? ''} concluída',
-                  style: context.runninType.bodyXs.copyWith(
-                    fontSize: 10,
-                    color: Colors.white.withValues(alpha: 0.9),
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
               ),
             ),
           ],
@@ -509,6 +513,69 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
     }
     return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
   }
+}
+
+/// Desenha o traçado da rota (polyline dos pontos GPS) normalizado pra caber
+/// no box, preservando o formato — mesma silhueta que aparece no mapa.
+/// Aplica correção de longitude por cos(lat) (Web Mercator local) pra o
+/// formato bater com o da aba MAPA.
+class _RouteTracePainter extends CustomPainter {
+  final List<GpsPoint> points;
+  final Color color;
+  const _RouteTracePainter({required this.points, required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (points.length < 2) return;
+    final lats = points.map((p) => p.lat).toList();
+    final lngs = points.map((p) => p.lng).toList();
+    final minLat = lats.reduce(math.min);
+    final maxLat = lats.reduce(math.max);
+    final minLng = lngs.reduce(math.min);
+    final maxLng = lngs.reduce(math.max);
+    final meanLatRad = ((minLat + maxLat) / 2) * math.pi / 180;
+    final kx = math.cos(meanLatRad); // correção de longitude
+
+    final spanX = (maxLng - minLng) * kx;
+    final spanY = (maxLat - minLat);
+    final span = math.max(spanX, spanY);
+    if (span <= 0) return;
+
+    const pad = 2.0;
+    final w = size.width - pad * 2;
+    final h = size.height - pad * 2;
+    final scale = math.min(w, h) / span; // uniforme → preserva formato
+    final drawnW = spanX * scale;
+    final drawnH = spanY * scale;
+    final offX = pad + (w - drawnW) / 2;
+    final offY = pad + (h - drawnH) / 2;
+
+    final path = Path();
+    for (var i = 0; i < points.length; i++) {
+      final x = offX + ((points[i].lng - minLng) * kx) * scale;
+      // y invertido: latitude maior (norte) fica em cima.
+      final y = offY + (maxLat - points[i].lat) * scale;
+      if (i == 0) {
+        path.moveTo(x, y);
+      } else {
+        path.lineTo(x, y);
+      }
+    }
+
+    canvas.drawPath(
+      path,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..color = color
+        ..strokeWidth = 2.5
+        ..strokeJoin = StrokeJoin.round
+        ..strokeCap = StrokeCap.round,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_RouteTracePainter old) =>
+      old.points != points || old.color != color;
 }
 
 // ─── Shared widgets ─────────────────────────────────────────────────────────────
