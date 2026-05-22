@@ -262,6 +262,16 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
             key: _overlayBoundaryKey,
             child: _buildOverlayPreview(),
           ),
+          if (_photoBytes != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Arraste pra posicionar · pinça/scroll pra ajustar o tamanho',
+              style: context.runninType.bodyXs.copyWith(
+                fontSize: 10,
+                color: FigmaColors.textMuted,
+              ),
+            ),
+          ],
           const SizedBox(height: 16),
 
           // Take another photo button
@@ -378,9 +388,24 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
           fit: StackFit.expand,
           children: [
             // Photo base or placeholder (placeholder é tappável → abre o
-            // seletor de foto, como diz o texto).
+            // seletor de foto, como diz o texto). Com foto, o usuário pode
+            // ARRASTAR (posição) e PINÇAR/scroll (tamanho) — só a foto
+            // transforma; os textos dos cantos ficam fixos por cima.
             if (_photoBytes != null)
-              Image.memory(_photoBytes!, fit: BoxFit.cover)
+              Positioned.fill(
+                child: InteractiveViewer(
+                  // ValueKey pela identidade dos bytes → ao trocar de foto,
+                  // o transform reseta (volta ao enquadramento inicial).
+                  key: ValueKey(_photoBytes),
+                  panEnabled: true,
+                  scaleEnabled: true,
+                  minScale: 1.0,
+                  maxScale: 5.0,
+                  boundaryMargin: const EdgeInsets.all(double.infinity),
+                  clipBehavior: Clip.none,
+                  child: Image.memory(_photoBytes!, fit: BoxFit.cover),
+                ),
+              )
             else
               GestureDetector(
                 onTap: _pickPhoto,
