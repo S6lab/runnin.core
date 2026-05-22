@@ -7,6 +7,7 @@ import { PlanCheckpointRepository } from '../domain/plan-checkpoint.repository';
 import { RunRepository } from '@modules/runs/domain/run.repository';
 import { CheckpointAnalysisStrategy } from './checkpoint-analysis.strategy';
 import { CreateNotificationUseCase } from '@modules/notifications/domain/use-cases/create-notification.use-case';
+import { SendUserPushUseCase } from '@modules/notifications/domain/use-cases/send-user-push.use-case';
 import {
   buildCheckpointProposal,
   deriveRequestType,
@@ -33,6 +34,7 @@ export class ProposeCheckpointUseCase {
     private readonly runRepo: RunRepository,
     private readonly strategy: CheckpointAnalysisStrategy,
     private readonly createNotification: CreateNotificationUseCase,
+    private readonly sendPush: SendUserPushUseCase,
   ) {}
 
   async execute(
@@ -115,6 +117,22 @@ export class ProposeCheckpointUseCase {
       });
     } catch (err) {
       logger.warn('checkpoint.propose.notify_failed', { planId, userId, err: String(err) });
+    }
+
+    // Push (FCM) além da notificação in-app — alerta o usuário no device.
+    try {
+      await this.sendPush.execute(userId, {
+        title: 'Plano da semana revisado',
+        body: 'Sua proposta de ajuste das próximas 2 semanas está pronta. Toque pra revisar e aceitar.',
+        data: {
+          kind: 'plan_proposal',
+          route: '/training/plan-proposal',
+          planId,
+          revisionId: revision.id,
+        },
+      });
+    } catch (err) {
+      logger.warn('checkpoint.propose.push_failed', { planId, userId, err: String(err) });
     }
 
     logger.info('checkpoint.propose.created', {

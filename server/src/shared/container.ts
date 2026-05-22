@@ -22,6 +22,7 @@ import { FirestorePlanCheckpointRepository } from '@modules/plans/infra/firestor
 import { FirestoreRunRepository } from '@modules/runs/infra/firestore-run.repository';
 import { FirestoreNotificationRepository } from '@modules/notifications/infra/firestore-notification.repository';
 import { CreateNotificationUseCase } from '@modules/notifications/domain/use-cases/create-notification.use-case';
+import { SendUserPushUseCase } from '@modules/notifications/domain/use-cases/send-user-push.use-case';
 import { RequestRevisionUseCase } from '@modules/plans/use-cases/request-revision.use-case';
 import { AdaptPlanUseCase } from '@modules/plans/use-cases/adapt-plan.use-case';
 import { LlmCheckpointAnalysisStrategy } from '@modules/plans/use-cases/llm-checkpoint-analysis.strategy';
@@ -41,6 +42,7 @@ const planCheckpointRepo = new FirestorePlanCheckpointRepository();
 const runRepo = new FirestoreRunRepository();
 const notificationRepo = new FirestoreNotificationRepository();
 const createNotification = new CreateNotificationUseCase(notificationRepo);
+const sendUserPush = new SendUserPushUseCase(userRepo);
 const requestRevision = new RequestRevisionUseCase(planRepo, planRevisionRepo, userRepo);
 const adaptPlan = new AdaptPlanUseCase(planRepo, runRepo, requestRevision, userRepo, planRevisionRepo);
 const checkpointAnalysisStrategy = new LlmCheckpointAnalysisStrategy();
@@ -51,6 +53,7 @@ const proposeCheckpoint = new ProposeCheckpointUseCase(
   runRepo,
   checkpointAnalysisStrategy,
   createNotification,
+  sendUserPush,
 );
 const resolveProposal = new ResolveProposalUseCase(planRepo, planCheckpointRepo, planRevisionRepo);
 const processUserProposal = new ProcessUserProposalUseCase(planRepo, runRepo, proposeCheckpoint);
@@ -83,6 +86,7 @@ export const container = {
     requestRevision,
     adaptPlan,
     createNotification,
+    sendUserPush,
     proposeCheckpoint,
     resolveProposal,
     processUserProposal,
