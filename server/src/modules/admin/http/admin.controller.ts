@@ -332,6 +332,26 @@ export async function postCronWeeklyProposals(_req: Request, res: Response, next
 }
 
 /**
+ * POST /admin/cron/weekly-proposals/user — WORKER do fan-out. Chamado por cada
+ * Cloud Task (1 usuário). Gera a proposta pendente desse usuário. Protegido
+ * por X-Cron-Token. Body: { userId }.
+ */
+export async function postCronWeeklyProposalUser(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const userId = (req.body?.userId as string | undefined)?.trim();
+    if (!userId) {
+      res.status(400).json({ error: 'userId required' });
+      return;
+    }
+    const { container } = await import('@shared/container');
+    const result = await container.useCases.processUserProposal.execute(userId);
+    res.json({ ok: true, userId, ...result });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
  * GET /admin/diagnose/user?email=X — devolve profile + último plano + stats
  * pra debug rápido sem precisar de ADC local. Protegido por X-Cron-Token.
  */

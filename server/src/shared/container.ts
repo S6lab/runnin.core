@@ -27,7 +27,9 @@ import { AdaptPlanUseCase } from '@modules/plans/use-cases/adapt-plan.use-case';
 import { LlmCheckpointAnalysisStrategy } from '@modules/plans/use-cases/llm-checkpoint-analysis.strategy';
 import { ProposeCheckpointUseCase } from '@modules/plans/use-cases/propose-checkpoint.use-case';
 import { ResolveProposalUseCase } from '@modules/plans/use-cases/resolve-proposal.use-case';
+import { ProcessUserProposalUseCase } from '@modules/plans/use-cases/process-user-proposal.use-case';
 import { RunWeeklyProposalsUseCase } from '@modules/plans/use-cases/run-weekly-proposals.use-case';
+import { CloudTasksProposalDispatcher } from '@shared/infra/tasks/proposal-task.dispatcher';
 
 const userRepo = new FirestoreUserRepository();
 const subscriptionPlanRepo = new FirestoreSubscriptionPlanRepository();
@@ -51,11 +53,12 @@ const proposeCheckpoint = new ProposeCheckpointUseCase(
   createNotification,
 );
 const resolveProposal = new ResolveProposalUseCase(planRepo, planCheckpointRepo, planRevisionRepo);
+const processUserProposal = new ProcessUserProposalUseCase(planRepo, runRepo, proposeCheckpoint);
+const proposalTaskDispatcher = new CloudTasksProposalDispatcher();
 const runWeeklyProposals = new RunWeeklyProposalsUseCase(
   userRepo,
-  planRepo,
-  runRepo,
-  proposeCheckpoint,
+  proposalTaskDispatcher,
+  processUserProposal,
 );
 
 export const container = {
@@ -82,6 +85,7 @@ export const container = {
     createNotification,
     proposeCheckpoint,
     resolveProposal,
+    processUserProposal,
     runWeeklyProposals,
   },
 };
