@@ -571,13 +571,13 @@
     "secao": "Q",
     "tema": "calcados_superficie_cross",
     "title": "Calçados, superfície e cross-training",
-    "summary": "O Coach não recomenda marca; orienta análise de pisada em loja especializada. Rotação de calçados reduz lesão (~39%). Variar superfície distribui carga. Cross-training (bike, natação, elíptico) mantém base aeróbia com menos impacto.",
+    "summary": "O Coach não recomenda marca; orienta análise de pisada em loja especializada. Rotação de calçados reduz lesão (~39%). Variar superfície distribui carga. Como o runnin é app de corrida, a única sessão de baixo impacto AGENDADA é a Caminhada; bike/natação/elíptico ficam como sugestão complementar (não viram sessão do plano).",
     "guidance": [
       "Não recomendar marca de calçado; orientar análise de pisada em loja especializada.",
       "Rotacionar calçados (reduz lesão ~39%) e variar superfície para distribuir carga.",
-      "Usar cross-training de baixo impacto em retorno de lesão, sobrepeso e volume extra de baixo risco."
+      "Para volume de baixo impacto AGENDADO no plano, usar Caminhada (não corrida). Bike/natação/elíptico só como sugestão complementar fora do app — nunca como sessão (type) do plano."
     ],
-    "content": "Calçados: o Coach não recomenda marca; orienta análise de pisada em loja especializada; rotação de calçados reduz lesão (~39%, Malisoux 2015). Superfície: asfalto (impacto maior, previsível), esteira (menor impacto, pace por sensação), trilha (variação, risco de torção, fortalece estabilizadores) — variar distribui carga. Cross-training: bike, natação, elíptico mantêm base aeróbia com menos impacto, úteis em retorno de lesão, sobrepeso e como volume extra de baixo risco.",
+    "content": "Calçados: o Coach não recomenda marca; orienta análise de pisada em loja especializada; rotação de calçados reduz lesão (~39%, Malisoux 2015). Superfície: asfalto (impacto maior, previsível), esteira (menor impacto, pace por sensação), trilha (variação, risco de torção, fortalece estabilizadores) — variar distribui carga. Cross-training de baixo impacto: o runnin é app de CORRIDA, então a única modalidade não-corrida AGENDADA como sessão é a Caminhada (útil em retorno de lesão, sobrepeso e volume extra de baixo risco). Bike, natação e elíptico mantêm base aeróbia com menos impacto, mas entram apenas como SUGESTÃO complementar no notes (atividade que o atleta faz por conta própria) — nunca como uma sessão do plano.",
     "tags": ["calcados", "superficie", "cross-training", "pisada", "rotacao"],
     "categoria": ["equipamento", "prevencao"],
     "nivel": "qualquer",
@@ -808,7 +808,7 @@
       "Volume 50-60% do anterior; sem pace alvo nas 3-4 primeiras semanas (sensação manda).",
       "Reintroduzir qualidade só quando a base e a ausência de dor permitirem."
     ],
-    "content": "Arquétipo: retorno de lesão. Estrutura: modificador sobre o caso-base do nível; volume 50-60% do antigo, progressão conservadora (5-8%), cross-training de baixo impacto. Tipos: easy curto, recovery, cross; qualidade só depois. Tom: cuidadoso, sem pressa, valida cada passo. Pace: sem alvo 3-4 sem. Alerta: tentar pace antigo, dor recorrente — reduzir e encaminhar fisioterapeuta se persistir.",
+    "content": "Arquétipo: retorno de lesão. Estrutura: modificador sobre o caso-base do nível; volume 50-60% do antigo, progressão conservadora (5-8%), trabalho de baixo impacto. Tipos de SESSÃO agendada: easy curto, recovery, caminhada (baixo impacto); qualidade só depois. Bike/natação/elíptico podem ser sugeridos no notes como complemento que o atleta faz por conta própria — nunca como sessão (type) do plano. Tom: cuidadoso, sem pressa, valida cada passo. Pace: sem alvo 3-4 sem. Alerta: tentar pace antigo, dor recorrente — reduzir e encaminhar fisioterapeuta se persistir.",
     "tags": ["caso-modelo", "retorno-lesao", "conservador", "cross-training"],
     "categoria": ["caso-modelo", "prevencao"],
     "nivel": "qualquer",
@@ -844,13 +844,13 @@
     "secao": "V.8",
     "tema": "caso_sobrepeso_saude",
     "title": "Caso-modelo: sobrepeso → saúde",
-    "summary": "Iniciante com sobrepeso, meta saúde. Caminhada 2-4 semanas antes de correr; 4-5x/semana com cross-training de baixo impacto. Nunca focar peso. Duração aberta.",
+    "summary": "Iniciante com sobrepeso, meta saúde. Caminhada 2-4 semanas antes de correr; 4-5x/semana com sessões de baixo impacto (Caminhada/walk-run). Nunca focar peso. Duração aberta.",
     "guidance": [
-      "Caminhada 2-4 semanas antes de introduzir corrida; cross-training de baixo impacto.",
+      "Caminhada 2-4 semanas antes de introduzir corrida; sessão de baixo impacto agendada = Caminhada (bike/natação só como complemento opcional fora do plano).",
       "Nunca focar em peso/calorias — foco em hábito, energia e saúde.",
       "Alerta: articular, cardiovascular, relação com comida — encaminhar se necessário."
     ],
-    "content": "Arquétipo: sobrepeso, meta saúde. Estrutura: base muito gradual, caminhada → walk-run, cross-training (bike/elíptico/natação) pra volume de baixo impacto. Tipos: caminhada, walk-run, easy curto, cross, recovery. Tom: acolhedor, sem julgamento, nunca discute peso/calorias. Pace: sem alvo. Alerta: impacto articular, sinais cardiovasculares, relação com comida.",
+    "content": "Arquétipo: sobrepeso, meta saúde. Estrutura: base muito gradual, caminhada → walk-run. Tipos de SESSÃO agendada: caminhada, walk-run, easy curto, recovery. Para volume de baixo impacto a sessão agendada é a Caminhada; bike/elíptico/natação só como sugestão complementar no notes (atividade que o atleta faz por conta própria), nunca como sessão (type) do plano. Tom: acolhedor, sem julgamento, nunca discute peso/calorias. Pace: sem alvo. Alerta: impacto articular, sinais cardiovasculares, relação com comida.",
     "tags": ["caso-modelo", "sobrepeso", "saude", "cross-training", "baixo-impacto"],
     "categoria": ["caso-modelo"],
     "nivel": "iniciante",
@@ -865,13 +865,13 @@
     "secao": "V.9",
     "tema": "caso_manutencao_forma",
     "title": "Caso-modelo: manutenção / forma física",
-    "summary": "Atleta que quer manter forma sem prova-alvo. Easy + 1 long + cross-training é suficiente. Sem necessidade de periodização agressiva; consistência sustentável.",
+    "summary": "Atleta que quer manter forma sem prova-alvo. Easy + 1 long + Caminhada opcional é suficiente. Sem necessidade de periodização agressiva; consistência sustentável.",
     "guidance": [
-      "Estrutura simples: easy na maioria, 1 long run, cross-training opcional.",
+      "Estrutura simples: easy na maioria, 1 long run, Caminhada opcional (bike/natação só como complemento fora do plano).",
       "Sem pico agressivo; foco em manter o hábito e a base aeróbia.",
       "Pode incluir variação leve (fartlek, strides) pra prazer e estímulo."
     ],
-    "content": "Arquétipo: manutenção/saúde sem prova. Estrutura: sem periodização agressiva; volume estável, 1 long run, easy predominante, cross opcional, strides/fartlek pra variar. Tipos: easy, long run, fartlek leve, recovery. Tom: leve, sustentável, prazer no processo. Pace: confortável. Alerta: monotonia/abandono — variar pra manter engajamento.",
+    "content": "Arquétipo: manutenção/saúde sem prova. Estrutura: sem periodização agressiva; volume estável, 1 long run, easy predominante, caminhada opcional, strides/fartlek pra variar. Tipos de SESSÃO agendada: easy, long run, fartlek leve, recovery, caminhada. Bike/natação só como sugestão complementar no notes — nunca como sessão (type). Tom: leve, sustentável, prazer no processo. Pace: confortável. Alerta: monotonia/abandono — variar pra manter engajamento.",
     "tags": ["caso-modelo", "manutencao", "saude", "easy", "long-run"],
     "categoria": ["caso-modelo"],
     "nivel": "qualquer",
