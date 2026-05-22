@@ -13,7 +13,6 @@ import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/features/run/data/datasources/run_remote_datasource.dart';
 import 'package:runnin/features/run/domain/entities/run.dart';
 import 'package:runnin/shared/widgets/figma/figma_chart_line_spark.dart';
-import 'package:runnin/shared/widgets/figma/figma_share_card_preview.dart';
 import 'package:runnin/features/run/presentation/widgets/share_map_card.dart';
 
 const _overlayToggleLabels = [
@@ -40,7 +39,6 @@ class SharePage extends StatefulWidget {
 
 class _SharePageState extends State<SharePage> with SingleTickerProviderStateMixin {
   late final TabController _tabController;
-  final _cardBoundaryKey = GlobalKey();
   final _overlayBoundaryKey = GlobalKey();
   final _mapBoundaryKey = GlobalKey();
 
@@ -49,14 +47,14 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
   List<GpsPoint> _gpsPoints = const [];
   bool _loading = true;
 
-  ShareTheme _selectedTheme = ShareTheme.dark;
   final Set<int> _activeToggles = Set.from(_defaultToggles);
   Uint8List? _photoBytes;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    // Apenas 2 opções: MAPA e FOTO.
+    _tabController = TabController(length: 2, vsync: this);
     _loadRun();
   }
 
@@ -165,7 +163,6 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
                       child: TabBarView(
                         controller: _tabController,
                         children: [
-                          _buildCardTab(),
                           _buildMapTab(),
                           _buildOverlayTab(),
                         ],
@@ -198,98 +195,10 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
         ),
         dividerHeight: 0,
         tabs: const [
-          Tab(height: 44, text: 'CARD'),
           Tab(height: 44, text: 'MAPA'),
-          Tab(height: 44, text: 'CÂMERA'),
+          Tab(height: 44, text: 'FOTO'),
         ],
       ),
-    );
-  }
-
-  // ─── TAB 1: CARD ──────────────────────────────────────────────────────────────
-
-  Widget _buildCardTab() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const SizedBox(height: 12),
-          // Preview
-          RepaintBoundary(
-            key: _cardBoundaryKey,
-            child: FigmaShareCardPreview(
-              run: _run!,
-              theme: _selectedTheme,
-              gpsPoints: _gpsPoints,
-            ),
-          ),
-          const SizedBox(height: 20),
-
-          // Theme switcher
-          _buildThemeSwitcher(),
-          const SizedBox(height: 24),
-
-          // Share targets
-          _ShareTarget(
-            icon: Icons.camera_alt_outlined,
-            label: 'Instagram Stories',
-            onTap: () => _shareImage(_cardBoundaryKey),
-          ),
-          _ShareTarget(
-            icon: Icons.chat_bubble_outline,
-            label: 'WhatsApp',
-            onTap: () => _shareImage(_cardBoundaryKey),
-          ),
-          _ShareTarget(
-            icon: Icons.alternate_email,
-            label: 'Twitter / X',
-            onTap: () => _shareImage(_cardBoundaryKey),
-          ),
-          _ShareTarget(
-            icon: Icons.save_alt,
-            label: 'Salvar imagem',
-            onTap: () => _saveImage(_cardBoundaryKey),
-          ),
-          const SizedBox(height: 32),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildThemeSwitcher() {
-    return Row(
-      children: ShareTheme.values.map((t) {
-        final active = t == _selectedTheme;
-        final label = switch (t) {
-          ShareTheme.dark => 'DARK',
-          ShareTheme.color => 'COLOR',
-          ShareTheme.minimal => 'MINIMAL',
-        };
-        return Expanded(
-          child: GestureDetector(
-            onTap: () => setState(() => _selectedTheme = t),
-            child: Container(
-              height: 38,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: active ? context.runninPalette.primary : Colors.transparent,
-                border: Border.all(
-                  color: active ? context.runninPalette.primary : FigmaColors.borderDefault,
-                  width: 1.041,
-                ),
-              ),
-              child: Text(
-                label,
-                style: context.runninType.labelCaps.copyWith(
-                  letterSpacing: 1.1,
-                  color: active ? FigmaColors.bgBase : FigmaColors.textSecondary,
-                ),
-              ),
-            ),
-          ),
-        );
-      }).toList(),
     );
   }
 
@@ -467,26 +376,31 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
         child: Stack(
           fit: StackFit.expand,
           children: [
-            // Photo base or placeholder
+            // Photo base or placeholder (placeholder é tappável → abre o
+            // seletor de foto, como diz o texto).
             if (_photoBytes != null)
               Image.memory(_photoBytes!, fit: BoxFit.cover)
             else
-              Container(
-                color: const Color(0xFF1A1A2E),
-                child: Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.camera_alt, size: 48, color: FigmaColors.textMuted),
-                      const SizedBox(height: 12),
-                      Text(
-                        'TOQUE PARA ADICIONAR FOTO',
-                        style: context.runninType.labelCaps.copyWith(
-                          color: FigmaColors.textMuted,
-                          letterSpacing: 1,
+              GestureDetector(
+                onTap: _pickPhoto,
+                behavior: HitTestBehavior.opaque,
+                child: Container(
+                  color: const Color(0xFF1A1A2E),
+                  child: Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.camera_alt, size: 48, color: FigmaColors.textMuted),
+                        const SizedBox(height: 12),
+                        Text(
+                          'TOQUE PARA ADICIONAR FOTO',
+                          style: context.runninType.labelCaps.copyWith(
+                            color: FigmaColors.textMuted,
+                            letterSpacing: 1,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),
