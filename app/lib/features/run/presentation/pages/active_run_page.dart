@@ -649,6 +649,11 @@ class _RouteMapBodyState extends State<_RouteMapBody> {
   /// os chips e o título).
   static const _mapCenterLatOffset = 0.002;
 
+  /// Deslocamento de longitude — centra o mapa a OESTE do marker, então o
+  /// marker (e o trajeto) aparece à DIREITA do centro da tela (meia-direita).
+  /// ~0.0018° em zoom 16 ≈ marker em ~70% da largura.
+  static const _mapCenterLngOffset = 0.0018;
+
   @override
   void didUpdateWidget(covariant _RouteMapBody oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -673,7 +678,10 @@ class _RouteMapBodyState extends State<_RouteMapBody> {
       if (!mounted) return;
       try {
         _mapController.move(
-          LatLng(lastPoint.lat - _mapCenterLatOffset, lastPoint.lng),
+          LatLng(
+            lastPoint.lat - _mapCenterLatOffset,
+            lastPoint.lng - _mapCenterLngOffset,
+          ),
           16,
         );
       } catch (_) {
@@ -695,7 +703,10 @@ class _RouteMapBodyState extends State<_RouteMapBody> {
     // re-centraliza via postFrameCallback.
     final hasFix = latLngs.isNotEmpty;
     final center = hasFix
-        ? LatLng(latLngs.last.latitude - _mapCenterLatOffset, latLngs.last.longitude)
+        ? LatLng(
+            latLngs.last.latitude - _mapCenterLatOffset,
+            latLngs.last.longitude - _mapCenterLngOffset,
+          )
         : const LatLng(0, 0);
 
     return Stack(
@@ -1400,6 +1411,116 @@ class _ActiveStatsLayout extends StatelessWidget {
   }
 }
 
+/// Botão INICIAR que carrega como uma barra de status por 10s (janela pra
+/// colocar os fones). Durante o carregamento o texto é "COLOQUE SEUS FONES
+/// DE OUVIDO" e o preenchimento cresce da esquerda pra direita. Ao terminar,
+/// vira "INICIAR CORRIDA" e o toque inicia a corrida. Tocar antes do fim
+/// PULA o carregamento (deixa pronto na hora, sem iniciar).
+class _StartButton extends StatefulWidget {
+  final bool isStarting;
+  final VoidCallback onStart;
+  const _StartButton({required this.isStarting, required this.onStart});
+
+  @override
+  State<_StartButton> createState() => _StartButtonState();
+}
+
+class _StartButtonState extends State<_StartButton>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  bool _ready = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 10),
+    )
+      ..addListener(() => setState(() {}))
+      ..addStatusListener((s) {
+        if (s == AnimationStatus.completed && !_ready) {
+          setState(() => _ready = true);
+        }
+      });
+    _ctrl.forward();
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  void _onTap() {
+    if (widget.isStarting) return;
+    if (!_ready) {
+      // Pula o carregamento → fica pronto na hora (não inicia ainda).
+      _ctrl.stop();
+      setState(() => _ready = true);
+      return;
+    }
+    widget.onStart();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    final type = context.runninType;
+    final progress = _ready ? 1.0 : _ctrl.value;
+    // Texto claro durante o carregamento (lê bem sobre o trilho escuro);
+    // texto na cor base (escuro) quando pronto, sobre o primário cheio.
+    final textColor = _ready ? palette.background : palette.text;
+
+    return SizedBox(
+      width: double.infinity,
+      height: 52,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: widget.isStarting ? null : _onTap,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              // Trilho (parte ainda não carregada): primário esmaecido.
+              ColoredBox(color: palette.primary.withValues(alpha: 0.22)),
+              // Preenchimento (barra de status): primário cheio crescendo.
+              Align(
+                alignment: Alignment.centerLeft,
+                child: FractionallySizedBox(
+                  widthFactor: progress.clamp(0.0, 1.0),
+                  child: ColoredBox(color: palette.primary),
+                ),
+              ),
+              Center(
+                child: widget.isStarting
+                    ? SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          color: palette.background,
+                          strokeWidth: 2,
+                        ),
+                      )
+                    : Text(
+                        _ready
+                            ? 'INICIAR CORRIDA  ↗'
+                            : 'COLOQUE SEUS FONES DE OUVIDO',
+                        textAlign: TextAlign.center,
+                        style: type.labelMd.copyWith(
+                          color: textColor,
+                          letterSpacing: 1.2,
+                        ),
+                      ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _ButtonsRow extends StatelessWidget {
   final bool isIdle;
   final bool isStarting;
@@ -1430,28 +1551,7 @@ class _ButtonsRow extends StatelessWidget {
     if (isIdle) {
       return Column(
         children: [
-          SizedBox(
-            width: double.infinity,
-            height: 52,
-            child: ElevatedButton(
-              onPressed: isStarting ? null : onStart,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: palette.primary,
-                foregroundColor: palette.background,
-                disabledBackgroundColor: palette.primary.withValues(alpha: 0.4),
-                shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-              ),
-              child: isStarting
-                  ? CircularProgressIndicator(color: palette.background, strokeWidth: 2)
-                  : Text(
-                      'INICIAR CORRIDA  ↗',
-                      style: type.labelMd.copyWith(
-                        color: palette.background,
-                        letterSpacing: 1.2,
-                      ),
-                    ),
-            ),
-          ),
+          _StartButton(isStarting: isStarting, onStart: onStart),
           if (!gpsOk) ...[
             const SizedBox(height: 10),
             SizedBox(
