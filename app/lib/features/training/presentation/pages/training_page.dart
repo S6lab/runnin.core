@@ -15,6 +15,7 @@ import 'package:runnin/features/subscriptions/presentation/subscription_controll
 import 'package:runnin/features/training/data/datasources/plan_remote_datasource.dart';
 import 'package:runnin/features/training/data/weekly_report_remote_datasource.dart';
 import 'package:runnin/features/training/domain/entities/plan.dart';
+import 'package:runnin/features/training/domain/week_phase_label.dart';
 import 'package:runnin/features/training/domain/entities/weekly_report.dart';
 import 'package:runnin/shared/widgets/figma/figma_top_nav.dart';
 import 'package:runnin/shared/widgets/figma/figma_coach_ai_block.dart';
@@ -1892,10 +1893,8 @@ class _MonthlyWeekCard extends StatelessWidget {
     final palette = context.runninPalette;
 
     // Conteúdo didático vem do BE (blockName/objective/projectedLoadKm/targets).
-    // Fallback pros planos legados que não têm os campos novos.
-    final blockName = (week.blockName?.trim().isNotEmpty ?? false)
-        ? week.blockName!.trim().toUpperCase()
-        : _phaseFromFocus(week.focus ?? _deriveWeekFocus(week));
+    // Nome da semana: usa o MESMO label canônico do Plano Base.
+    final blockName = planWeekLabel(week);
     final objective = (week.objective?.trim().isNotEmpty ?? false)
         ? week.objective!.trim()
         : null;
@@ -2025,18 +2024,6 @@ class _MonthlyWeekCard extends StatelessWidget {
     );
   }
 
-  /// Mapeia o focus livre em um nome de FASE canônico mostrado em CAIXA ALTA.
-  String _phaseFromFocus(String f) {
-    final low = f.toLowerCase();
-    if (low.contains('recup') || low.contains('deload')) return 'DELOAD';
-    if (low.contains('taper')) return 'TAPER';
-    if (low.contains('peak') || low.contains('pico')) return 'PEAK';
-    if (low.contains('build') || low.contains('intervalad') || low.contains('tempo')) {
-      return 'BUILD';
-    }
-    if (low.contains('long')) return 'SPECIFIC';
-    return 'BASE';
-  }
 }
 
 /// Bullet "▸ texto" pros objetivos da semana na periodização.

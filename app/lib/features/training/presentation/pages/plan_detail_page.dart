@@ -5,6 +5,7 @@ import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 import 'package:runnin/features/training/data/datasources/plan_remote_datasource.dart';
 import 'package:runnin/features/training/domain/entities/plan.dart';
+import 'package:runnin/features/training/domain/week_phase_label.dart';
 import 'package:runnin/shared/widgets/app_panel.dart';
 import 'package:runnin/shared/widgets/runnin_app_bar.dart';
 
@@ -852,14 +853,8 @@ class _WeekTile extends StatelessWidget {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      // Mesma nomenclatura do mensal: prefere o blockName do BE;
-                      // com focus, usa o label de fase; sem focus, deriva das
-                      // sessões (nunca cai em "PROGRESSÃO").
-                      (week.blockName?.trim().isNotEmpty ?? false)
-                          ? week.blockName!.trim().toUpperCase()
-                          : (week.focus?.trim().isNotEmpty ?? false)
-                              ? _phaseLabelFromFocus(week.focus, week.narrative)
-                              : _phaseFromSessions(week),
+                      // Nome canônico compartilhado (mesmo do mensal/detalhe).
+                      planWeekLabel(week),
                       overflow: TextOverflow.ellipsis,
                       style: context.runninType.labelMd.copyWith(color: palette.text, letterSpacing: 0.8),
                     ),
@@ -913,62 +908,6 @@ class _WeekTile extends StatelessWidget {
       ),
     );
   }
-}
-
-/// Deriva o label de FASE pra mostrar no header colapsado da semana.
-/// Prioriza week.focus; se vazio, tenta extrair [FASE] do narrative;
-/// fallback genérico por palavras-chave.
-String _phaseLabelFromFocus(String? focus, String? narrative) {
-  final f = (focus ?? '').trim();
-  if (f.isNotEmpty) {
-    final phase = _normalizePhase(f);
-    return '$phase · ${_focusSubtitle(f)}';
-  }
-  final n = (narrative ?? '').trim();
-  final phaseTag = RegExp(r'\[([A-Z\+]+)\]').firstMatch(n);
-  final phase = phaseTag?.group(1) ?? 'PROGRESSÃO';
-  // Pega 1ª frase do narrative pra subtitle
-  final firstSentence = n.split(RegExp(r'[.!]')).first.trim();
-  final cleanSub = firstSentence.replaceAll(RegExp(r'\[[A-Z\+]+\]\s*'), '');
-  return cleanSub.length > 50
-      ? '$phase · ${cleanSub.substring(0, 50)}…'
-      : (cleanSub.isEmpty ? phase : '$phase · $cleanSub');
-}
-
-/// Fase derivada das sessões da semana (fallback quando não há blockName nem
-/// focus). Mesma lógica de fase do mensal — evita o label genérico "PROGRESSÃO".
-String _phaseFromSessions(PlanWeek week) {
-  final types = week.sessions.map((s) => s.type.toLowerCase()).toList();
-  if (types.any((t) =>
-      t.contains('interval') || t.contains('tiro') || t.contains('tempo'))) {
-    return 'BUILD';
-  }
-  if (types.any((t) => t.contains('long') || t.contains('longã') || t.contains('longao'))) {
-    return 'SPECIFIC';
-  }
-  return 'BASE';
-}
-
-String _normalizePhase(String f) {
-  final low = f.toLowerCase();
-  if (low.contains('recup') || low.contains('deload')) return 'DELOAD';
-  if (low.contains('taper')) return 'TAPER';
-  if (low.contains('peak') || low.contains('pico')) return 'PEAK';
-  if (low.contains('intervalad') || low.contains('tempo') || low.contains('build')) {
-    return 'BUILD';
-  }
-  if (low.contains('long') || low.contains('specific')) return 'SPECIFIC';
-  return 'BASE';
-}
-
-String _focusSubtitle(String f) {
-  // Tira tags em colchetes e palavras de fase pra deixar só o "foco" útil
-  final stripped = f
-      .replaceAll(RegExp(r'\[[A-Z\+]+\]\s*'), '')
-      .replaceAll(RegExp(r'^(BUILD|PEAK|TAPER|DELOAD|BASE|SPECIFIC)\s*[·-]?\s*',
-          caseSensitive: false), '')
-      .trim();
-  return stripped.isEmpty ? f : stripped;
 }
 
 class _SessionRow extends StatelessWidget {
