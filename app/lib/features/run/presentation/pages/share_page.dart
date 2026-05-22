@@ -13,7 +13,6 @@ import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/features/run/data/datasources/run_remote_datasource.dart';
 import 'package:runnin/features/run/domain/entities/run.dart';
-import 'package:runnin/shared/widgets/figma/figma_chart_line_spark.dart';
 import 'package:runnin/features/run/presentation/widgets/share_map_card.dart';
 
 // Só toggles que de fato desenham algo sobre a foto (revisado): chips de
@@ -365,6 +364,7 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
     final distKm = ((_run?.distanceM ?? 0) / 1000).toStringAsFixed(1);
     final pace = _run?.avgPace ?? '--:--';
     final duration = _fmtDuration(_run?.durationS ?? 0);
+    final splitLabels = _splitLabels();
 
     return AspectRatio(
       aspectRatio: 4 / 5,
@@ -406,70 +406,13 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
                 ),
               ),
 
-            // Branding top-left
+            // CANTO SUPERIOR ESQUERDO: pace / distância / tempo / BPM
+            // (um abaixo do outro).
             Positioned(
               top: 16,
               left: 16,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.xs),
-                color: Colors.black.withValues(alpha: 0.5),
-                child: Text(
-                  'RUNNIN.AI',
-                  style: context.runninType.labelCaps.copyWith(
-                    fontSize: 9,
-                    letterSpacing: 2,
-                    color: context.runninPalette.primary,
-                  ),
-                ),
-              ),
-            ),
-
-            // Top-right: traçado da rota (Trajeto) + sparkline (Splits).
-            Positioned(
-              top: 16,
-              right: 16,
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Trajeto: MESMO traçado da aba MAPA (polyline dos pontos GPS).
-                  if (_activeToggles.contains(4) && _gpsPoints.length >= 2)
-                    Container(
-                      width: 84,
-                      height: 84,
-                      padding: const EdgeInsets.all(8),
-                      color: Colors.black.withValues(alpha: 0.4),
-                      child: CustomPaint(
-                        painter: _RouteTracePainter(
-                          points: _gpsPoints,
-                          color: context.runninPalette.primary,
-                        ),
-                      ),
-                    ),
-                  // Splits: sparkline de pace por km.
-                  if (_activeToggles.contains(5) && _run != null) ...[
-                    const SizedBox(height: 8),
-                    Container(
-                      width: 140,
-                      padding: const EdgeInsets.all(8),
-                      color: Colors.black.withValues(alpha: 0.4),
-                      child: FigmaChartLineSpark(
-                        values: _generateSplits(),
-                        height: 36,
-                        lineColor: context.runninPalette.primary,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-
-            // Stat chips bottom-right
-            Positioned(
-              bottom: 16,
-              right: 16,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   if (_activeToggles.contains(0)) // Pace
@@ -483,25 +426,91 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
                 ],
               ),
             ),
+
+            // CANTO SUPERIOR DIREITO: splits por km (KM1 - mm:ss, um abaixo
+            // do outro).
+            if (_activeToggles.contains(5) && splitLabels.isNotEmpty)
+              Positioned(
+                top: 16,
+                right: 16,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                  color: Colors.black.withValues(alpha: 0.45),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      for (final l in splitLabels)
+                        Text(
+                          l,
+                          style: context.runninType.labelCaps.copyWith(
+                            fontSize: 9,
+                            height: 1.55,
+                            letterSpacing: 0.5,
+                            color: Colors.white,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+
+            // CANTO INFERIOR ESQUERDO: traçado da rota (igual ao mapa).
+            if (_activeToggles.contains(4) && _gpsPoints.length >= 2)
+              Positioned(
+                bottom: 16,
+                left: 16,
+                child: Container(
+                  width: 84,
+                  height: 84,
+                  padding: const EdgeInsets.all(8),
+                  color: Colors.black.withValues(alpha: 0.4),
+                  child: CustomPaint(
+                    painter: _RouteTracePainter(
+                      points: _gpsPoints,
+                      color: context.runninPalette.primary,
+                    ),
+                  ),
+                ),
+              ),
+
+            // CANTO INFERIOR DIREITO: logo RUNNIN.AI.
+            Positioned(
+              bottom: 16,
+              right: 16,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.xs),
+                color: Colors.black.withValues(alpha: 0.5),
+                child: Text(
+                  'RUNNIN.AI',
+                  style: context.runninType.labelCaps.copyWith(
+                    fontSize: 9,
+                    letterSpacing: 2,
+                    color: context.runninPalette.primary,
+                  ),
+                ),
+              ),
+            ),
           ],
         ),
       ),
     );
   }
 
-  List<double> _generateSplits() {
-    // Splits reais a partir do GPS. Fallback determinístico quando
-    // pontos insuficientes (run legacy / GPS pobre).
-    final real = computeKmSplitsSeconds(_gpsPoints);
-    if (real.length >= 2) return real;
-    final km = (_run?.distanceM ?? 0) / 1000;
-    if (km < 2) return const [1, 1];
-    final splits = km.floor().clamp(2, 10);
-    final basePace = (_run?.durationS ?? 0) / km;
-    return List.generate(splits, (i) {
-      final variation = (i.isEven ? 1.02 : 0.98) + (i * 0.005);
-      return basePace * variation;
-    });
+  /// Splits por km como "KM1  mm:ss". Prefere os splits reais da corrida
+  /// (run.splits); fallback no cálculo a partir do GPS. Vazio quando não há
+  /// dado suficiente (não inventa).
+  List<String> _splitLabels() {
+    String fmt(int s) => '${s ~/ 60}:${(s % 60).toString().padLeft(2, '0')}';
+    final rs = _run?.splits ?? const [];
+    if (rs.isNotEmpty) {
+      return rs
+          .map((s) => 'KM${s.kmIndex + 1}  ${s.avgPaceMinKm ?? fmt(s.durationS)}')
+          .toList();
+    }
+    final secs = computeKmSplitsSeconds(_gpsPoints);
+    if (secs.length < 2) return const [];
+    return List.generate(secs.length, (i) => 'KM${i + 1}  ${fmt(secs[i].round())}');
   }
 
   static String _fmtDuration(int seconds) {
