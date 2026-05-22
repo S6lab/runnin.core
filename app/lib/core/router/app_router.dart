@@ -28,6 +28,7 @@ import 'package:runnin/features/training/presentation/pages/day_detail_page.dart
 import 'package:runnin/features/training/presentation/pages/revision_flow_page.dart';
 import 'package:runnin/features/training/presentation/pages/checkpoint_page.dart';
 import 'package:runnin/features/training/presentation/pages/plan_proposal_page.dart';
+import 'package:runnin/features/training/presentation/pages/plan_setup_page.dart';
 import 'package:runnin/features/history/presentation/pages/history_page.dart';
 import 'package:runnin/features/history/presentation/pages/run_detail_page.dart';
 import 'package:runnin/features/history/presentation/pages/coach_conversation_replay_page.dart';
@@ -243,6 +244,10 @@ final appRouter = GoRouter(
       routes: [
         GoRoute(path: '/home', builder: (_, _) => const HomePage()),
         GoRoute(path: '/training', builder: (_, _) => const TrainingPage()),
+        GoRoute(
+          path: '/training/criar-plano',
+          builder: (_, _) => const PlanSetupPage(),
+        ),
         GoRoute(
           path: '/training/plan-detail',
           builder: (_, state) => PlanDetailPage(

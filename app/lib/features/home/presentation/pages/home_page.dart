@@ -247,7 +247,7 @@ class _IniciarSessaoButton extends StatelessWidget {
         message:
             'Seu app esta pronto para gerar o primeiro bloco de treino. Complete o setup no modulo de treino para liberar a sessao do dia.',
         ctaLabel: 'GERAR MEU PLANO ↗',
-        onCta: () => context.push('/training'),
+        onCta: () => context.push('/training/criar-plano'),
       );
     }
 

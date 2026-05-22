@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:dio/dio.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
@@ -11,7 +10,6 @@ import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 import 'package:runnin/features/run/data/datasources/run_remote_datasource.dart';
 import 'package:runnin/features/run/domain/entities/run.dart';
-import 'package:runnin/features/subscriptions/presentation/subscription_controller.dart';
 import 'package:runnin/features/training/data/datasources/plan_remote_datasource.dart';
 import 'package:runnin/features/training/data/weekly_report_remote_datasource.dart';
 import 'package:runnin/features/training/domain/entities/plan.dart';
@@ -156,10 +154,6 @@ class _TrainingPageState extends State<TrainingPage> {
     }
   }
 
-  Future<void> _savePendingPlanId(String planId) async {
-    await (await _settingsBox()).put(_pendingPlanIdKey, planId);
-  }
-
   Future<void> _clearPendingPlanId() async {
     await (await _settingsBox()).delete(_pendingPlanIdKey);
   }
@@ -253,172 +247,11 @@ class _TrainingPageState extends State<TrainingPage> {
     }
   }
 
-  Future<void> _generate() async {
-    setState(() {
-      _generating = true;
-      _error = null;
-      _planCheckError = null;
-    });
-    try {
-      final profile = await _userDs.getMe();
-      final goal = profile?.goal.trim();
-      final level = profile?.level.trim();
-
-      if (profile == null ||
-          goal == null ||
-          goal.isEmpty ||
-          level == null ||
-          level.isEmpty) {
-        throw Exception('Perfil incompleto');
-      }
-
-      // Gate centralizado no billing plan: gerar plano é feature `generatePlan`
-      // (Pro). Freemium vai pro paywall.
-      await subscriptionController.refresh();
-      if (!subscriptionController.has('generatePlan')) {
-        if (mounted) {
-          setState(() => _generating = false);
-          context.push('/paywall?next=/training');
-        }
-        return;
-      }
-
-      String planId;
-      try {
-        planId = await _ds.generatePlan(
-          goal: goal,
-          level: level,
-          frequency: profile.frequency,
-        );
-      } on DioException catch (e) {
-        // Backend pode rejeitar com 403 (premium_required) se UI gate falhar
-        // por algum motivo (cache profile, race condition). Redireciona pro paywall.
-        if (e.response?.statusCode == 403) {
-          if (mounted) {
-            setState(() => _generating = false);
-            context.push('/paywall?next=/training');
-          }
-          return;
-        }
-        // Server rejeita se já existe plano ativo. Pergunta antes de overwrite.
-        if (e.response?.statusCode == 409) {
-          if (!mounted) return;
-          final confirmed = await showDialog<bool>(
-            context: context,
-            builder: (ctx) => AlertDialog(
-              title: const Text('Substituir plano atual?'),
-              content: const Text(
-                'Você já tem um plano ativo. Gerar um novo apaga o atual e o histórico de revisões. '
-                'Para ajustes pontuais, prefira a "Revisão semanal" do plano.',
-              ),
-              actions: [
-                TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('CANCELAR')),
-                TextButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('SUBSTITUIR')),
-              ],
-            ),
-          );
-          if (confirmed != true) {
-            if (mounted) setState(() => _generating = false);
-            return;
-          }
-          try {
-            planId = await _ds.generatePlan(
-              goal: goal,
-              level: level,
-              frequency: profile.frequency,
-              confirmOverwrite: true,
-            );
-          } on DioException catch (e2) {
-            // Server enforça 1 substituição/semana. Mensagem amigável com
-            // data de quando libera novamente.
-            // Error middleware embrulha em { error: { code, message, availableAt } }
-            final body = e2.response?.data;
-            final errMap = body is Map ? body['error'] : null;
-            final code = errMap is Map ? errMap['code'] as String? : null;
-            if (e2.response?.statusCode == 403 && code == 'COOLDOWN_ACTIVE') {
-              if (!mounted) return;
-              final availableAt = (errMap as Map)['availableAt'] as String?;
-              await _showCooldownDialog(availableAt);
-              if (mounted) setState(() => _generating = false);
-              return;
-            }
-            rethrow;
-          }
-        } else {
-          rethrow;
-        }
-      }
-      await _savePendingPlanId(planId);
-      if (!mounted) return;
-      setState(() {
-        _pendingPlanId = planId;
-        _lastPlanCheckAt = null;
-        _plan = Plan(
-          id: planId,
-          goal: goal,
-          level: level,
-          weeksCount: _estimatePlanWeeks(
-            goal: goal,
-            level: level,
-            frequency: profile.frequency,
-          ),
-          status: 'generating',
-          weeks: const [],
-          createdAt: DateTime.now().toIso8601String(),
-        );
-      });
-      _startPlanPolling(planId);
-    } catch (_) {
-      if (mounted) {
-        setState(() {
-          _generating = false;
-          _pendingPlanId = null;
-          _error =
-              'Nao foi possivel gerar seu plano agora. Confira se seu perfil e objetivo estao preenchidos.';
-        });
-      }
-    }
-  }
-
-  Future<void> _showCooldownDialog(String? availableAtIso) async {
-    final palette = context.runninPalette;
-    String availableLine;
-    if (availableAtIso != null) {
-      try {
-        final dt = DateTime.parse(availableAtIso).toLocal();
-        final dd = dt.day.toString().padLeft(2, '0');
-        final mm = dt.month.toString().padLeft(2, '0');
-        final hh = dt.hour.toString().padLeft(2, '0');
-        final mi = dt.minute.toString().padLeft(2, '0');
-        final daysLeft = dt.difference(DateTime.now()).inDays;
-        availableLine = daysLeft > 0
-            ? 'Próximo plano disponível em $daysLeft dia${daysLeft == 1 ? '' : 's'} ($dd/$mm às $hh:$mi).'
-            : 'Próximo plano disponível em $dd/$mm às $hh:$mi.';
-      } catch (_) {
-        availableLine = 'Aguarde até a próxima semana pra gerar outro plano.';
-      }
-    } else {
-      availableLine = 'Aguarde até a próxima semana pra gerar outro plano.';
-    }
-    await showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: palette.surface,
-        title: const Text('Limite de geração atingido'),
-        content: Text(
-          'Na primeira semana você pode gerar 2 planos (caso queira refazer). '
-          'Depois, é 1 novo plano por semana. Pra ajustes pontuais (mais carga, '
-          'troca de dias, etc.), use a "Revisão semanal" ou o checkpoint do plano '
-          'atual.\n\n$availableLine',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('ENTENDI'),
-          ),
-        ],
-      ),
-    );
+  /// Plano agora é criado na jornada /training/criar-plano (nível→meta→dias→
+  /// pace→início), que faz o gate premium, a geração e a confirmação de
+  /// substituição. Aqui só navegamos pra lá.
+  void _openPlanSetup() {
+    context.push('/training/criar-plano');
   }
 
   @override
@@ -468,7 +301,7 @@ class _TrainingPageState extends State<TrainingPage> {
     }
 
     if (_plan == null) {
-      return _EmptyState(generating: _generating, onGenerate: _generate);
+      return _EmptyState(generating: _generating, onGenerate: _openPlanSetup);
     }
 
     if (_plan!.isGenerating) {
@@ -482,7 +315,7 @@ class _TrainingPageState extends State<TrainingPage> {
     }
 
     if (_plan!.status == 'failed') {
-      return _PlanFailedState(generating: _generating, onGenerate: _generate);
+      return _PlanFailedState(generating: _generating, onGenerate: _openPlanSetup);
     }
 
     final workspace = _TrainingWorkspace(
@@ -491,7 +324,7 @@ class _TrainingPageState extends State<TrainingPage> {
       reports: _reports,
       weeklyReports: _weeklyReports,
       generating: _generating,
-      onRegenerate: _generate,
+      onRegenerate: _openPlanSetup,
       selectedWeek: _selectedWeek,
       selectedTab: _selectedTab,
       planMode: _planMode,
@@ -568,52 +401,6 @@ class _ProposalBanner extends StatelessWidget {
       ),
     );
   }
-}
-
-int _estimatePlanWeeks({
-  required String goal,
-  required String level,
-  int? frequency,
-}) {
-  final normalizedGoal = goal
-      .toLowerCase()
-      .replaceAll(RegExp(r'[áàãâä]'), 'a')
-      .replaceAll(RegExp(r'[éèêë]'), 'e')
-      .replaceAll(RegExp(r'[íìîï]'), 'i')
-      .replaceAll(RegExp(r'[óòõôö]'), 'o')
-      .replaceAll(RegExp(r'[úùûü]'), 'u')
-      .replaceAll('ç', 'c');
-  final freq = (frequency ?? 3).clamp(1, 7);
-  final isBeginner = level == 'iniciante';
-  final isAdvanced = level == 'avancado';
-
-  var weeks = switch (normalizedGoal) {
-    final value when value.contains('maratona') || value.contains('42') =>
-      isAdvanced ? 14 : 16,
-    final value
-        when value.contains('meia') ||
-            value.contains('21') ||
-            value.contains('half') =>
-      isBeginner ? 14 : (isAdvanced ? 10 : 12),
-    final value when value.contains('10k') || value.contains('10 km') =>
-      isBeginner ? 10 : 8,
-    final value when value.contains('5k') || value.contains('5 km') =>
-      isBeginner ? 8 : 6,
-    final value
-        when value.contains('emagrec') ||
-            value.contains('saude') ||
-            value.contains('condicion') =>
-      isAdvanced ? 6 : 8,
-    _ => isBeginner ? 8 : (isAdvanced ? 10 : 8),
-  };
-
-  if (freq <= 2) {
-    weeks += 2;
-  } else if (freq >= 5 && !isBeginner && weeks > 8) {
-    weeks -= 2;
-  }
-
-  return weeks.clamp(4, 16);
 }
 
 class _EmptyState extends StatelessWidget {

@@ -1,10 +1,7 @@
 import { z } from 'zod';
 import { UserRepository } from '../user.repository';
 import { UserProfile, isPremium } from '../user.entity';
-import { FirestorePlanRepository } from '@modules/plans/infra/firestore-plan.repository';
-import { GeneratePlanUseCase } from '@modules/plans/use-cases/generate-plan.use-case';
 import { CooldownError, PremiumRequiredError } from '@shared/errors/app-error';
-import { container } from '@shared/container';
 import { logger } from '@shared/logger/logger';
 
 // Ranges sensatos pra rejeitar dados nonsense (ex: peso 10kg, idade 200).
@@ -65,17 +62,17 @@ export const CompleteOnboardingSchema = z.object({
   // medicalConditions pode ser array vazio (user clica "nenhuma"), mas
   // o array em si DEVE estar presente (forçar passagem pelo step médico).
   medicalConditions: z.array(z.string().max(200)).max(20, 'Máximo de 20 condições'),
-  // Tudo abaixo é obrigatório — força user a passar por cada step do
-  // onboarding. Sem isso, app permitia pular (mandando null) e plano
-  // gerado ficava com dados faltando = personalização ruim.
+  // gender é coletado no onboarding "SEUS DADOS" (dados pessoais).
   gender: z.enum(['male', 'female', 'other', 'na']),
-  runPeriod: z.enum(['manha', 'tarde', 'noite']),
-  wakeTime: z.string().regex(/^\d{2}:\d{2}$/, 'Hora de acordar inválida (use HH:MM)'),
-  sleepTime: z.string().regex(/^\d{2}:\d{2}$/, 'Hora de dormir inválida (use HH:MM)'),
-  // targetPace é frase descritiva (ex: "Entre 6:00 e 7:00/km", "Deixa
-  // o Coach decidir"). Forçar opção selecionada (inclusive "Deixa o
-  // Coach decidir" pra user que não sabe).
-  targetPace: z.string().min(1, 'Selecione uma opção de pace').max(60),
+  // Campos de PLANO/rotina não são mais coletados no onboarding — migraram
+  // pra jornada de criação do plano em TREINO. Aceitos como opcionais pra
+  // compat com builds antigos do app que ainda os enviam.
+  runPeriod: z.enum(['manha', 'tarde', 'noite']).optional(),
+  wakeTime: z.string().regex(/^\d{2}:\d{2}$/, 'Hora de acordar inválida (use HH:MM)').optional(),
+  sleepTime: z.string().regex(/^\d{2}:\d{2}$/, 'Hora de dormir inválida (use HH:MM)').optional(),
+  // targetPace é frase descritiva (ex: "Entre 6:00 e 7:00/km"). Opcional —
+  // a jornada de criação do plano lida com pace.
+  targetPace: z.string().min(1).max(60).optional(),
 });
 
 export type CompleteOnboardingInput = z.infer<typeof CompleteOnboardingSchema>;
@@ -90,9 +87,6 @@ function isProOnly(): boolean {
 }
 
 export class CompleteOnboardingUseCase {
-  private planRepo = new FirestorePlanRepository();
-  private generatePlan = new GeneratePlanUseCase(this.planRepo);
-
   constructor(private readonly userRepo: UserRepository) {}
 
   async execute(userId: string, input: CompleteOnboardingInput): Promise<{ user: UserProfile; planId: string | null }> {
@@ -150,24 +144,11 @@ export class CompleteOnboardingUseCase {
 
     await this.userRepo.upsert(profile);
 
-    // Geração de plano é feature do billing plan (Pro). Free conclui o
-    // onboarding SEM plano e SEM coach — o app oferece o upgrade. A permissão
-    // é centralizada no billing plan (getUserFeatures), não em flags soltas.
-    const canGeneratePlan = await container.useCases.getUserFeatures.hasFeature(
-      userId,
-      'generatePlan',
-    );
-    if (!canGeneratePlan) {
-      logger.info('onboarding.plan.skipped_free_tier', { userId });
-      return { user: profile, planId: null };
-    }
-
-    const plan = await this.generatePlan.execute(userId, {
-      goal: input.goal,
-      level: input.level,
-      frequency: input.frequency,
-    });
-
-    return { user: profile, planId: plan.id };
+    // Onboarding "SEUS DADOS" só salva o perfil e cai na Home. A geração de
+    // plano (e o gate premium) acontece na jornada de criação do plano em
+    // TREINO — não aqui — pra não gerar plano com goal/level default antes do
+    // user escolher.
+    logger.info('onboarding.completed', { userId });
+    return { user: profile, planId: null };
   }
 }

@@ -4,18 +4,11 @@ import 'package:go_router/go_router.dart';
 import 'package:runnin/core/router/app_router.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
-import 'package:runnin/features/subscriptions/presentation/subscription_controller.dart';
-import 'package:runnin/features/subscriptions/presentation/benefit_controller.dart';
 import 'package:runnin/features/onboarding/presentation/steps/onboarding_step_body.dart';
-import 'package:runnin/features/onboarding/presentation/steps/onboarding_step_frequency.dart';
 import 'package:runnin/features/onboarding/presentation/steps/onboarding_step_gender.dart';
-import 'package:runnin/features/onboarding/presentation/steps/onboarding_step_goal.dart';
 import 'package:runnin/features/onboarding/presentation/steps/onboarding_step_identity.dart';
 import 'package:runnin/features/onboarding/presentation/steps/onboarding_step_intro.dart';
-import 'package:runnin/features/onboarding/presentation/steps/onboarding_step_level.dart';
 import 'package:runnin/features/onboarding/presentation/steps/onboarding_step_medical.dart';
-import 'package:runnin/features/onboarding/presentation/steps/onboarding_step_pace.dart';
-import 'package:runnin/features/onboarding/presentation/steps/onboarding_step_routine.dart';
 import 'package:runnin/features/onboarding/presentation/steps/onboarding_step_wearable.dart';
 import 'package:runnin/shared/widgets/figma/export.dart';
 
@@ -35,37 +28,23 @@ class _OnboardingPageState extends State<OnboardingPage> {
   final _medicalOtherCtrl = TextEditingController();
   final Set<String> _medicalConditions = {};
 
-  // 3 intro + 1 prep + 10 assessment + 1 start-date = 15 steps.
-  static const _totalSteps = 15;
-  static const _prepStep = 3;
-  static const _firstAssessmentStep = 4;
-  static const _startDateStep = 14;
+  // SEUS DADOS: 3 intro + 5 passos (identity, gender, body, medical, wearable).
+  // As telas de plano (nível/meta/dias/pace/início) migraram pra jornada de
+  // criação do plano em TREINO (/training/criar-plano).
+  static const _totalSteps = 8;
+  static const _firstAssessmentStep = 3;
 
   int _step = 0;
-  String _level = 'iniciante';
-  String _goal = 'Completar 10K';
-  int _frequency = 4;
-  String? _pace;
-  String? _runPeriod;
-  String? _wakeTime;
-  String? _sleepTime;
+  // Defaults de plano enviados no onboarding pra satisfazer o contrato do
+  // /users/onboarding e a validação do server; a jornada de criação do plano
+  // sobrescreve depois.
+  static const _defaultLevel = 'iniciante';
+  static const _defaultGoal = 'Completar 10K';
+  static const _defaultFrequency = 4;
   String? _gender; // 'male' | 'female' | 'other' | 'na'
   bool _hasWearable = false;
   bool _submitting = false;
   String? _error;
-  // D0 escolhida no último step do onboarding. Default = hoje.
-  late DateTime _startDate = _todayMidnight();
-  String _startDateChoice = 'today'; // 'today' | 'tomorrow' | 'next_monday' | 'custom'
-
-  static DateTime _todayMidnight() {
-    final n = DateTime.now();
-    return DateTime(n.year, n.month, n.day);
-  }
-
-  String _startDateIso() {
-    final d = _startDate;
-    return '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
-  }
 
   @override
   void initState() {
@@ -108,31 +87,19 @@ class _OnboardingPageState extends State<OnboardingPage> {
       setState(() => _submitting = false);
       return;
     }
-    // Gate centralizado no billing plan: só quem tem a feature `generatePlan`
-    // (Pro) gera o plano. Freemium vai pro paywall (sem plano, sem coach).
-    await subscriptionController.refresh();
-    if (!mounted) return;
-    final startIso = _startDateIso();
-    if (subscriptionController.has('generatePlan')) {
-      context.push('/plan-loading?startDate=$startIso');
-    } else if (benefitController.hasPending) {
-      // Benefício de parceiro encontrado (lookup silencioso no login) → ativa
-      // o benefício em vez de oferecer o Pro pago.
-      // PENDÊNCIA: caso o user já seja Pro (tratado acima por generatePlan).
-      context.go('/benefit-activation?startDate=$startIso');
-    } else {
-      // Freemium: mantém startDate como query pra paywall gerar se ele assinar.
-      context.go('/paywall?next=/home&startDate=$startIso');
-    }
+    // SEUS DADOS só salva o perfil → vai pra Home. A criação do plano (e o
+    // gate premium/paywall) acontece na jornada dentro de TREINO.
+    context.go('/home');
   }
 
   Future<bool> _doSubmit() async {
     try {
       await _ds.completeOnboarding(
         name: _nameCtrl.text.trim(),
-        level: _level,
-        goal: _goal,
-        frequency: _frequency,
+        // Defaults de plano (a jornada de criação do plano sobrescreve depois).
+        level: _defaultLevel,
+        goal: _defaultGoal,
+        frequency: _defaultFrequency,
         birthDate: _birthDateCtrl.text.trim().isEmpty
             ? null
             : _birthDateCtrl.text.trim(),
@@ -142,13 +109,9 @@ class _OnboardingPageState extends State<OnboardingPage> {
         height: _heightCtrl.text.trim().isEmpty
             ? null
             : _heightCtrl.text.trim(),
-        targetPace: _pace,
         hasWearable: _hasWearable,
         medicalConditions: _medicalConditions.toList()..sort(),
         gender: _gender,
-        runPeriod: _runPeriod,
-        wakeTime: _wakeTime,
-        sleepTime: _sleepTime,
       );
       markOnboardingDone();
       return true;
@@ -254,72 +217,32 @@ class _OnboardingPageState extends State<OnboardingPage> {
       case 1:
       case 2:
         return OnboardingStepIntro(slide: kOnboardingIntroSlides[_step]);
-      case _prepStep:
-        return const _OnboardingPrepStep();
-      case 4:
-        return OnboardingStepLevel(
-          selected: _level,
-          onSelect: (value) => setState(() => _level = value),
-        );
-      case 5:
+      case 3:
         return OnboardingStepIdentity(
           nameController: _nameCtrl,
           birthDateController: _birthDateCtrl,
         );
-      case 6:
+      case 4:
         return OnboardingStepGender(
           selected: _gender,
           onSelect: (value) => setState(() => _gender = value),
         );
-      case 7:
+      case 5:
         return OnboardingStepBody(
           weightController: _weightCtrl,
           heightController: _heightCtrl,
         );
-      case 8:
+      case 6:
         return OnboardingStepMedical(
           selected: _medicalConditions,
           otherController: _medicalOtherCtrl,
           onToggle: _toggleMedicalCondition,
           onAddOther: _addOtherMedicalCondition,
         );
-      case 9:
-        return OnboardingStepGoal(
-          selectedGoal: _goal,
-          onGoalSelect: (value) => setState(() => _goal = value),
-        );
-      case 10:
-        return OnboardingStepFrequency(
-          frequency: _frequency,
-          onFreqChange: (value) => setState(() => _frequency = value),
-        );
-      case 11:
-        return OnboardingStepPace(
-          selected: _pace,
-          onSelect: (value) => setState(() => _pace = value),
-        );
-      case 12:
-        return OnboardingStepRoutine(
-          selectedPeriod: _runPeriod,
-          selectedWakeTime: _wakeTime,
-          selectedSleepTime: _sleepTime,
-          onPeriodSelect: (v) => setState(() => _runPeriod = v),
-          onWakeTimeSelect: (v) => setState(() => _wakeTime = v),
-          onSleepTimeSelect: (v) => setState(() => _sleepTime = v),
-        );
-      case 13:
+      case 7:
         return OnboardingStepWearable(
           selected: _hasWearable,
           onSelect: (value) => setState(() => _hasWearable = value),
-        );
-      case _startDateStep:
-        return _OnboardingStartDateStep(
-          selected: _startDateChoice,
-          customDate: _startDate,
-          onSelect: (choice, date) => setState(() {
-            _startDateChoice = choice;
-            _startDate = date;
-          }),
         );
       default:
         return const SizedBox.shrink();
@@ -329,7 +252,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
   Widget _buildNav(BuildContext context) {
     final palette = context.runninPalette;
     final isLastDataStep = _step == _totalSteps - 1;
-    final label = isLastDataStep ? 'CRIAR MEU PLANO' : 'CONTINUAR';
+    final label = isLastDataStep ? 'CONCLUIR' : 'CONTINUAR';
 
     return Column(
       children: [
@@ -352,7 +275,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
                 : Text('$label /'),
           ),
         ),
-        if (_step == 8)
+        if (_step == 6)
           Padding(
             padding: const EdgeInsets.only(top: 8),
             child: Text(
@@ -378,32 +301,19 @@ class _OnboardingPageState extends State<OnboardingPage> {
     if (_submitting) return false;
 
     switch (_step) {
-      case 4: // level
-        return _level.isNotEmpty;
-      case 5: // identity (name + birthDate)
+      case 3: // identity (name + birthDate)
         return _nameCtrl.text.trim().length >= 2 &&
             _isValidBirthDate(_birthDateCtrl.text.trim());
-      case 6: // gender
+      case 4: // gender
         return _gender != null;
-      case 7: // body — alinhado com server (peso 25-300kg, altura 80-250cm).
+      case 5: // body — alinhado com server (peso 25-300kg, altura 80-250cm).
         final w = double.tryParse(_weightCtrl.text.trim().replaceAll(',', '.'));
         final h = int.tryParse(_heightCtrl.text.trim());
         return w != null && w >= 25 && w <= 300 &&
             h != null && h >= 80 && h <= 250;
-      case 8: // medical — user pode legitimamente não ter condição.
-        // Array vazio é válido. Só passar pelo step já conta.
+      case 6: // medical — array vazio é válido.
         return true;
-      case 9: // goal
-        return _goal.isNotEmpty;
-      case 10: // frequency
-        return _frequency >= 1 && _frequency <= 7;
-      case 11: // pace — uma das opções deve estar selecionada
-        return _pace != null && _pace!.isNotEmpty;
-      case 12: // routine: período + hora acordar + hora dormir
-        return _runPeriod != null &&
-            _wakeTime != null && _wakeTime!.isNotEmpty &&
-            _sleepTime != null && _sleepTime!.isNotEmpty;
-      case 13: // wearable — bool já default false; sempre pode avançar
+      case 7: // wearable — bool já default false; sempre pode avançar
         return true;
       default:
         return true;
@@ -475,227 +385,4 @@ class _OnboardingPageState extends State<OnboardingPage> {
   }
 
   void _nextStep() => setState(() => _step++);
-}
-
-// ───────────────────────── novos steps ──────────────────────────────
-
-/// Tela de preparação ANTES do assessment. Avisa que o que vem agora
-/// é o que vai personalizar o plano — pede atenção e honestidade.
-class _OnboardingPrepStep extends StatelessWidget {
-  const _OnboardingPrepStep();
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.runninPalette;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SizedBox(height: 12),
-        const FigmaAssessmentLabel(text: '// ASSESSMENT'),
-        const SizedBox(height: 14),
-        const FigmaAssessmentHeading(text: 'Vamos montar SEU plano.'),
-        const SizedBox(height: 18),
-        Text(
-          'Pra ter o melhor resultado, preciso da sua atenção total e honestidade nas próximas perguntas.',
-          style: context.runninType.bodyMd.copyWith(color: palette.text, height: 1.55),
-        ),
-        const SizedBox(height: 14),
-        Text(
-          'Essas informações são a BASE do seu plano individualizado — peso, altura, idade, condições médicas, frequência, objetivo e horários moldam cada sessão.',
-          style: context.runninType.bodyMd.copyWith(color: palette.muted, height: 1.55),
-        ),
-        const SizedBox(height: 18),
-        Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: palette.primary.withValues(alpha: 0.08),
-            border: Border.all(color: palette.primary.withValues(alpha: 0.4), width: 1),
-          ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(Icons.info_outline, size: 18, color: palette.primary),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  'Sem dados precisos, o coach gera um plano genérico. Com eles, monta um treino feito pra você.',
-                  style: context.runninType.bodySm.copyWith(
-                    color: palette.text,
-                    height: 1.45,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 18),
-        Text(
-          'Bora? Toque CONTINUAR pra começar.',
-          style: context.runninType.bodyMd.copyWith(
-            color: palette.primary,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-/// Último step do onboarding: D0 do plano. User escolhe entre HOJE,
-/// AMANHÃ, PRÓXIMA SEGUNDA ou data CUSTOM. Toda periodização (semana 1
-/// dia 1, mesociclo end) é calculada a partir daqui.
-class _OnboardingStartDateStep extends StatelessWidget {
-  final String selected;
-  final DateTime customDate;
-  final void Function(String choice, DateTime date) onSelect;
-
-  const _OnboardingStartDateStep({
-    required this.selected,
-    required this.customDate,
-    required this.onSelect,
-  });
-
-  static DateTime _today() {
-    final n = DateTime.now();
-    return DateTime(n.year, n.month, n.day);
-  }
-
-  static DateTime _tomorrow() => _today().add(const Duration(days: 1));
-
-  static DateTime _nextMonday() {
-    final t = _today();
-    final dow = t.weekday; // Mon=1...Sun=7
-    final daysAhead = dow == 1 ? 7 : (8 - dow);
-    return t.add(Duration(days: daysAhead));
-  }
-
-  String _fmt(DateTime d) {
-    const names = ['', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado', 'domingo'];
-    return '${names[d.weekday]} · ${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.runninPalette;
-    final today = _today();
-    final tomorrow = _tomorrow();
-    final nextMonday = _nextMonday();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SizedBox(height: 12),
-        const FigmaAssessmentHeading(text: 'Quando você quer começar?'),
-        const SizedBox(height: 10),
-        FigmaAssessmentDescription(
-          text:
-              'A semana 1 e a periodização toda começam nessa data. O coach respeita o D0 que você escolher.',
-        ),
-        const SizedBox(height: 24),
-        _DateChoice(
-          label: 'COMEÇAR HOJE',
-          subtitle: _fmt(today),
-          selected: selected == 'today',
-          onTap: () => onSelect('today', today),
-        ),
-        const SizedBox(height: 8),
-        _DateChoice(
-          label: 'AMANHÃ',
-          subtitle: _fmt(tomorrow),
-          selected: selected == 'tomorrow',
-          onTap: () => onSelect('tomorrow', tomorrow),
-        ),
-        const SizedBox(height: 8),
-        _DateChoice(
-          label: 'PRÓXIMA SEGUNDA',
-          subtitle: _fmt(nextMonday),
-          selected: selected == 'next_monday',
-          onTap: () => onSelect('next_monday', nextMonday),
-        ),
-        const SizedBox(height: 8),
-        _DateChoice(
-          label: 'ESCOLHER DATA',
-          subtitle: selected == 'custom'
-              ? _fmt(customDate)
-              : 'toque pra abrir o calendário',
-          selected: selected == 'custom',
-          onTap: () async {
-            final picked = await showDatePicker(
-              context: context,
-              initialDate: customDate,
-              firstDate: today,
-              lastDate: today.add(const Duration(days: 60)),
-            );
-            if (picked != null) onSelect('custom', picked);
-          },
-        ),
-        const SizedBox(height: 18),
-        Padding(
-          padding: const EdgeInsets.all(12),
-          child: Text(
-            'Dica: começar amanhã ou próxima segunda dá tempo de ajustar a rotina e separar o material (tênis, garrafa, etc).',
-            style: context.runninType.bodySm.copyWith(
-              color: palette.muted,
-              height: 1.5,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _DateChoice extends StatelessWidget {
-  final String label;
-  final String subtitle;
-  final bool selected;
-  final VoidCallback onTap;
-
-  const _DateChoice({
-    required this.label,
-    required this.subtitle,
-    required this.selected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.runninPalette;
-    return InkWell(
-      onTap: onTap,
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        decoration: BoxDecoration(
-          color: selected
-              ? palette.primary.withValues(alpha: 0.12)
-              : palette.surface,
-          border: Border.all(
-            color: selected ? palette.primary : palette.border,
-            width: 1.041,
-          ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              label,
-              style: context.runninType.labelMd.copyWith(
-                color: selected ? palette.primary : palette.text,
-                fontWeight: FontWeight.w500,
-                letterSpacing: 1.2,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              subtitle,
-              style: context.runninType.bodySm.copyWith(
-                color: palette.muted,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 }
