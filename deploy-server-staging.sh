@@ -14,12 +14,15 @@ fi
 
 echo "→ Lendo variáveis de $ENV_FILE..."
 # PORT é reservado no Cloud Run; variáveis vazias são ignoradas.
+# X_CRON_TOKEN é injetado via Secret Manager (--set-secrets abaixo), então é
+# excluído daqui pra não conflitar (mesma var não pode vir de env + secret).
 # Stripa comentários inline (`# ...`) e trailing whitespace
 ENV_VARS=$(grep -v '^#' "$ENV_FILE" \
   | sed -E 's/[[:space:]]*#.*$//' \
   | sed -E 's/[[:space:]]+$//' \
   | grep -v '^$' \
   | grep -v '^PORT=' \
+  | grep -v '^X_CRON_TOKEN=' \
   | grep -v '=$' \
   | tr '\n' ',' \
   | sed 's/,$//')
@@ -38,13 +41,14 @@ gcloud run deploy "$SERVICE_NAME" \
   --project="$PROJECT_ID" \
   --service-account="$SA" \
   --set-env-vars="$ENV_VARS" \
+  --set-secrets="X_CRON_TOKEN=cron-token:latest" \
   --allow-unauthenticated \
   --port=8080 \
   --memory=512Mi \
   --cpu=1 \
   --min-instances=0 \
   --max-instances=5 \
-  --timeout=60 \
+  --timeout=300 \
   --quiet
 
 echo "✓ Deploy STAGING concluído!"
