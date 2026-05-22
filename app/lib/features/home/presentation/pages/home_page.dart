@@ -1918,7 +1918,12 @@ class _HeroSection extends StatelessWidget {
     // Semana do PLANO em curso (não a semana ISO do ano). Fallback p/ ISO só
     // quando não há plano ativo.
     final weekNumber = data.currentPlanWeekNumber ?? _isoWeekNumber(now);
+    // Sessão de hoje já executada → pill vira "<tipo> · CONCLUÍDA" na cor
+    // secundária (em vez da primária).
+    final sessionDone = session != null && session.isExecuted;
     final sessionType = (session?.type ?? 'LIVRE').toUpperCase();
+    final sessionPillLabel =
+        sessionDone ? '$sessionType · CONCLUÍDA' : sessionType;
     final distanceLabel = session != null
         ? '${session.distanceKm.toStringAsFixed(session.distanceKm % 1 == 0 ? 0 : 1)}K'
         : '—';
@@ -2035,9 +2040,9 @@ class _HeroSection extends StatelessWidget {
                   children: [
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                      color: palette.primary,
+                      color: sessionDone ? palette.secondary : palette.primary,
                       child: Text(
-                        sessionType,
+                        sessionPillLabel,
                         style: GoogleFonts.jetBrainsMono(
                           fontSize: 13,
                           fontWeight: FontWeight.w500,
@@ -2047,13 +2052,17 @@ class _HeroSection extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 12),
-                    Text(
-                      '$weekdayLabel · SEM $weekNumber',
-                      style: GoogleFonts.jetBrainsMono(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w400,
-                        color: Colors.white.withValues(alpha: 0.75),
-                        letterSpacing: 1.0,
+                    Flexible(
+                      child: Text(
+                        '$weekdayLabel · SEM $weekNumber',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w400,
+                          color: Colors.white.withValues(alpha: 0.75),
+                          letterSpacing: 1.0,
+                        ),
                       ),
                     ),
                   ],

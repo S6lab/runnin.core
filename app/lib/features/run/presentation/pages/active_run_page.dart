@@ -451,10 +451,10 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
                   Positioned(
                     left: 24,
                     right: 24,
-                    // Sobe quando há splits fechados (painel embaixo cresce);
-                    // mesma altura quando ainda não há.
+                    // Sobe quando há splits fechados (painel embaixo cresce e
+                    // estava encostando no cronômetro); mais alto com splits.
                     top: MediaQuery.of(context).size.height *
-                        (state.splits.isNotEmpty ? 0.24 : 0.34),
+                        (state.splits.isNotEmpty ? 0.18 : 0.34),
                     child: Align(
                       // Alinhado à esquerda.
                       alignment: Alignment.centerLeft,

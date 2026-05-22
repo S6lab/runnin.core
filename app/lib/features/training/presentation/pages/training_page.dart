@@ -1823,10 +1823,14 @@ class _WeeklySessionRow extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 // Só o tipo da sessão (sem hidratação/nutrição/duração — vide PNG).
+                // Sessão já executada → tipo aparece SOBRETACHADO (riscado).
                 Text(
                   isRest ? 'Descanso' : session!.type,
                   style: context.runninType.bodyMd.copyWith(
                     color: palette.muted,
+                    decoration:
+                        isExecuted ? TextDecoration.lineThrough : null,
+                    decorationColor: palette.muted,
                   ),
                 ),
               ],
