@@ -20,6 +20,52 @@ import {
   CheckpointWeekRun,
 } from './checkpoint-analysis.strategy';
 import { AppError } from '@shared/errors/app-error';
+import { logger } from '@shared/logger/logger';
+
+/**
+ * Rede de proteção: o runnin é app de CORRIDA — só corrida (suas variações)
+ * + Caminhada podem virar sessão do plano. Mesmo com a regra dura nos prompts
+ * (plan-init, plan-revision, checkpoint), o LLM ocasionalmente devolve type
+ * proibido (Ciclismo, Natação, Elíptico, Musculação). Esta função normaliza
+ * antes de salvar: type proibido vira "Caminhada" e a distância é clamp em
+ * 5km (caminhada longa razoável). Loga toda conversão pra rastrear regressão
+ * no prompt.
+ *
+ * Lista de termos proibidos é case/diacritic-insensitive.
+ */
+const _forbiddenSessionTypeTerms = [
+  'ciclism', 'biciclet', 'bike', 'cycling', 'cycle', 'pedal',
+  'natac', 'swim', 'piscina',
+  'eliptic', 'elliptic',
+  'remo', 'rowing',
+  'musculac', 'strength', 'forca', 'weight',
+  'crossfit', 'yoga', 'pilates',
+];
+
+function _normalizeText(s: string): string {
+  // Strip combining diacriticals (U+0300..U+036F) — usar \u escape em vez
+  // de caracteres literais pra não depender de bytes invisíveis no source.
+  return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
+
+export function sanitizeSessionType(
+  rawType: string,
+  distanceKm: number,
+  ctx: { planId?: string; weekNumber?: number; dayOfWeek?: number } = {},
+): { type: string; distanceKm: number; wasNormalized: boolean } {
+  const norm = _normalizeText(rawType);
+  const hit = _forbiddenSessionTypeTerms.find((t) => norm.includes(t));
+  if (!hit) return { type: rawType, distanceKm, wasNormalized: false };
+  const clampedDistance = Math.min(distanceKm, 5);
+  logger.warn('plan.session.type.normalized', {
+    rawType,
+    hit,
+    distanceKm,
+    clampedDistance,
+    ...ctx,
+  });
+  return { type: 'Caminhada', distanceKm: clampedDistance, wasNormalized: true };
+}
 
 /**
  * Lógica compartilhada do fluxo de checkpoint, dividida em "propor" (gera a
@@ -211,12 +257,18 @@ export function enrichTwoTier(
     const isFull = detailNums.includes(w.weekNumber);
     const sessions: PlanSession[] = (w.sessions ?? []).map((s) => {
       const id = s.id && s.id.length > 0 ? s.id : uuid();
-      const distanceKm = Number(Number(s.distanceKm).toFixed(1));
+      const rawDistance = Number(Number(s.distanceKm).toFixed(1));
+      const sanitized = sanitizeSessionType(s.type, rawDistance, {
+        weekNumber: w.weekNumber,
+        dayOfWeek: s.dayOfWeek,
+      });
+      const type = sanitized.type;
+      const distanceKm = sanitized.distanceKm;
       if (isFull) {
         const base = {
           id,
           dayOfWeek: s.dayOfWeek,
-          type: s.type,
+          type,
           distanceKm,
           targetPace: s.targetPace,
           durationMin: s.durationMin,
@@ -234,7 +286,7 @@ export function enrichTwoTier(
       return {
         id,
         dayOfWeek: s.dayOfWeek,
-        type: s.type,
+        type,
         distanceKm,
         targetPace: s.targetPace,
         notes: s.notes ?? '',

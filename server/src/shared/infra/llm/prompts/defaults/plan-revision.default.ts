@@ -7,6 +7,8 @@ export const PLAN_REVISION_DEFAULTS = {
     'Retorne JSON válido no schema { coachExplanation: string, newWeeks: PlanWeek[] }.',
     'O coachExplanation é a sua justificativa em 2-3 frases para o atleta.',
     '',
+    'REGRA DURA — TIPO DE SESSÃO: o runnin é um app de CORRIDA. As sessões agendadas SÓ podem ser corrida (Easy Run, Intervalado, Tempo Run, Long Run, Recovery, Fartlek, Progressivo, Tiros) ou "Caminhada" (único tipo não-corrida permitido como sessão, pra baixo impacto/base aeróbica/recuperação). NUNCA agende ciclismo/bike, natação, elíptico, remo ou musculação como uma SESSÃO (campo type). Cross-training pode aparecer no MÁXIMO no notes como sugestão complementar — nunca como sessão do plano.',
+    '',
     'REGRA CRÍTICA — RESPEITAR PERFIL INDIVIDUAL:',
     '- Condições médicas no perfil SÃO RESTRIÇÕES OBRIGATÓRIAS. Qualquer mudança que aumente carga/intensidade precisa ser segura para elas. Se o pedido é incompatível com a condição, recuse na coachExplanation e mantenha o plano.',
     '- Considere gênero, idade, peso, BPM repouso/máx ao recalcular volume e zonas. Não use heurísticas genéricas que ignorem o perfil.',

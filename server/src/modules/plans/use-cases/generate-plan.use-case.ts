@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { getPlanLLM } from '@shared/infra/llm/llm.factory';
 import { PlanRepository } from '../domain/plan.repository';
 import { Plan, PlanSegment, PlanSession, PlanWeek } from '../domain/plan.entity';
+import { sanitizeSessionType } from './checkpoint-shared';
 import { buildExecutionSegments } from './build-execution-segments';
 import {
   getRoteiroTemplates,
@@ -810,12 +811,23 @@ ${repaired}`,
       // tipo/distância/pace), enriquecidas depois no checkpoint.
       const isFull = weekIndex < 2;
       const allSessions = week.sessions.map(session => {
+        // Defesa contra LLM disobediente: type proibido (Ciclismo, Natação,
+        // Elíptico, Musculação, etc) é normalizado pra "Caminhada" com
+        // distance clamp em 5km. O prompt já proíbe, mas isso garante na
+        // borda de saída. Logado em plan.session.type.normalized.
+        const sanitized = sanitizeSessionType(
+          session.type,
+          Number(session.distanceKm.toFixed(1)),
+          { weekNumber: week.weekNumber, dayOfWeek: session.dayOfWeek },
+        );
+        const sessionType = sanitized.type;
+        const sessionDistance = sanitized.distanceKm;
         if (isFull) {
           const base = {
             id: uuid(),
             dayOfWeek: session.dayOfWeek,
-            type: session.type,
-            distanceKm: Number(session.distanceKm.toFixed(1)),
+            type: sessionType,
+            distanceKm: sessionDistance,
             targetPace: session.targetPace,
             durationMin: session.durationMin,
             hydrationLiters: session.hydrationLiters,
@@ -837,8 +849,8 @@ ${repaired}`,
         return {
           id: uuid(),
           dayOfWeek: session.dayOfWeek,
-          type: session.type,
-          distanceKm: Number(session.distanceKm.toFixed(1)),
+          type: sessionType,
+          distanceKm: sessionDistance,
           targetPace: session.targetPace,
           notes: session.notes ?? '',
         } satisfies PlanSession;

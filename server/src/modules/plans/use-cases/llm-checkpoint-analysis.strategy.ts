@@ -91,6 +91,8 @@ ${followingDigest}
 
 Sua tarefa: avaliar a semana, considerar inputs do usuário e ajustar as semanas SEGUINTES (NÃO mexa em semanas anteriores nem na semana ${weekNumber}). Mantenha estrutura/ID das sessions onde possível; ajuste distanceKm, targetPace, durationMin, type, notes conforme necessário.
 
+REGRA DURA — TIPO DE SESSÃO (igual à criação do plano): o runnin é um app de CORRIDA. As sessões agendadas SÓ podem ser corrida (Easy Run, Intervalado, Tempo Run, Long Run, Recovery, Fartlek, Progressivo, Tiros) ou "Caminhada" (único tipo não-corrida permitido como sessão, pra baixo impacto/base aeróbica/recuperação). NUNCA agende ciclismo/bike, natação, elíptico, remo ou musculação como uma SESSÃO (campo type). Esses cross-trainings podem, no MÁXIMO, ser SUGERIDOS no campo notes como atividade complementar opcional — jamais viram uma sessão do plano.
+
 GERAÇÃO EM DOIS NÍVEIS (CRÍTICO):
 - As 2 PRÓXIMAS semanas (${detailWeekNums || 'as imediatamente seguintes'}) devem vir com DETALHE COMPLETO: cada sessão com targetPace, durationMin, hydrationLiters, nutritionPre, nutritionPost e notes ricas (2-4 frases com fase + foco + cuidado). É AGORA que essas semanas ganham detalhe — antes estavam em esqueleto.${skeletonWeekNums ? `\n- As demais semanas (${skeletonWeekNums}) seguem em ESQUELETO: só type, distanceKm, targetPace e notes curta (1 frase). NÃO preencha hydration/nutrition nessas — serão detalhadas no próximo checkpoint.` : ''}
 - Seja CRIATIVO e técnico nos tipos de sessão das 2 semanas detalhadas (Fartlek, Progressivo, Tiros, Tempo em blocos) — evite repetir "Easy Run" demais. Toda variação tecnicamente verdadeira.
