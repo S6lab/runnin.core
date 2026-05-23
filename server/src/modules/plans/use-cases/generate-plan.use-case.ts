@@ -428,15 +428,34 @@ REGRAS GERAIS:
 
       const raw = await this.llm.generate(userPrompt, {
         systemPrompt: 'Você é o Coach AI do runnin. Tom: técnico, direto, sem prolixidade. Cada parágrafo pesa. Sem emojis. PT-BR.',
-        maxTokens: 3000,
+        // 6000 (era 3000) — o prompt pede 1000-1400 palavras em 6 seções de
+        // markdown PT-BR, ~4500-5500 tokens de saída na prática. Antes
+        // estava no limite quando o LLM era verboso. Combinado com
+        // safetySettings: BLOCK_NONE no adapter (rationale vinha truncado
+        // por filtro de "dangerous content" em palavras médicas).
+        maxTokens: 6000,
         temperature: 0.35,
       });
 
+      const trimmed = raw.trim();
       await this.repo.update(plan.id, plan.userId, {
-        coachRationale: raw.trim(),
+        coachRationale: trimmed,
         updatedAt: new Date().toISOString(),
       });
-      logger.info('plan.rationale.generated', { planId: plan.id, chars: raw.length });
+      // Heurística: rationale de menos de 2500 chars OU sem 4+ headings
+      // provavelmente foi truncado (esperamos 6 ##). Log dedicado pra
+      // rastrear regressão sem precisar abrir cada plano no Firestore.
+      const headingCount = (trimmed.match(/^##\s/gm) ?? []).length;
+      if (trimmed.length < 2500 || headingCount < 4) {
+        logger.warn('plan.rationale.suspiciously_short', {
+          planId: plan.id,
+          chars: trimmed.length,
+          headings: headingCount,
+          endsWithPunct: /[.!?]$/.test(trimmed),
+        });
+      } else {
+        logger.info('plan.rationale.generated', { planId: plan.id, chars: trimmed.length, headings: headingCount });
+      }
     } catch (err) {
       logger.warn('plan.rationale.failed', {
         planId: plan.id,

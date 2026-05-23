@@ -13,9 +13,19 @@ type GeminiGenerateResponse = {
         text?: string;
       }>;
     };
+    /** STOP=ok, MAX_TOKENS=hit limit, SAFETY=blocked by safety filter,
+     *  RECITATION=blocked, OTHER=internal */
+    finishReason?: string;
+    safetyRatings?: Array<{ category?: string; probability?: string; blocked?: boolean }>;
   }>;
+  promptFeedback?: {
+    blockReason?: string;
+    safetyRatings?: Array<{ category?: string; probability?: string; blocked?: boolean }>;
+  };
   usageMetadata?: {
     totalTokenCount?: number;
+    promptTokenCount?: number;
+    candidatesTokenCount?: number;
   };
 };
 
@@ -45,11 +55,25 @@ export class GeminiAdapter implements LLMProvider {
 
     const data = (await res.json()) as GeminiGenerateResponse;
     const text = this.extractText(data);
-    logger.info('llm.gemini.generate', {
+    const finishReason = data.candidates?.[0]?.finishReason;
+    // Loga finishReason sempre — antes não capturávamos, então um SAFETY
+    // ou MAX_TOKENS silenciava e salvávamos texto truncado sem aviso.
+    const meta: Record<string, unknown> = {
       latencyMs: Date.now() - start,
       model,
       tokens: data.usageMetadata?.totalTokenCount,
-    });
+      promptTokens: data.usageMetadata?.promptTokenCount,
+      outputTokens: data.usageMetadata?.candidatesTokenCount,
+      finishReason,
+    };
+    if (data.promptFeedback?.blockReason) {
+      meta['promptBlockReason'] = data.promptFeedback.blockReason;
+    }
+    if (finishReason && finishReason !== 'STOP' && finishReason !== 'MAX_TOKENS') {
+      logger.warn('llm.gemini.generate.non_stop', { ...meta, chars: text.length });
+    } else {
+      logger.info('llm.gemini.generate', meta);
+    }
     return text;
   }
 
@@ -121,6 +145,17 @@ export class GeminiAdapter implements LLMProvider {
           role: 'user',
           parts: [{ text: prompt }],
         },
+      ],
+      // Safety filters relaxados pra BLOCK_NONE: o runnin é app de coach de
+      // CORRIDA, conteúdo médico (condições, medicações, lesões) é parte
+      // central do contexto que o LLM precisa raciocinar. Default BLOCK_MEDIUM
+      // estava truncando rationale silenciosamente em planos com perfil
+      // médico (diverticulite, betabloqueador, tendão rompido etc).
+      safetySettings: [
+        { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
+        { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
+        { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
+        { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
       ],
       generationConfig: {
         maxOutputTokens: options.maxTokens ?? 1024,
