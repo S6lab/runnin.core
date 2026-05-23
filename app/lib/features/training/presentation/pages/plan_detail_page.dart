@@ -145,9 +145,6 @@ class _PlanDetailPageState extends State<PlanDetailPage> {
     return Scaffold(
       backgroundColor: palette.background,
       appBar: const RunninAppBar(title: 'PLANO BASE', fallbackRoute: '/training'),
-      bottomNavigationBar: _plan == null || _loading
-          ? null
-          : _RegenerateFooter(onRegenerate: () => context.push('/training/criar-plano')),
       body: _loading
           ? Center(child: CircularProgressIndicator(color: palette.primary, strokeWidth: 2))
           : _error != null
@@ -215,6 +212,14 @@ class _PlanDetailPageState extends State<PlanDetailPage> {
                             const SizedBox(height: 10),
                             _RevisionsSection(revisions: _plan!.revisions),
                           ],
+                          // Rodapé: CTA pra regerar plano + copy "plano vivo".
+                          // Antes era bottomNavigationBar fixo — ficava sempre
+                          // por cima do conteúdo. Agora rola junto com o resto.
+                          const SizedBox(height: 24),
+                          _RegenerateFooter(
+                            onRegenerate: () =>
+                                context.push('/training/criar-plano'),
+                          ),
                         ],
                       ),
                     ),
@@ -222,7 +227,8 @@ class _PlanDetailPageState extends State<PlanDetailPage> {
   }
 }
 
-/// Rodapé fixo do plan-detail: CTA pra regerar o plano + texto reforçando
+/// Rodapé do plan-detail (renderizado no final do scroll, NÃO como
+/// bottomNavigationBar): CTA pra regerar o plano + texto reforçando
 /// "plano vivo / 1 por semana". O cooldown propriamente é tratado na
 /// PlanSetupPage (server retorna 403 COOLDOWN_ACTIVE com availableAt).
 class _RegenerateFooter extends StatelessWidget {
@@ -232,48 +238,38 @@ class _RegenerateFooter extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final palette = context.runninPalette;
-    return Container(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
-      decoration: BoxDecoration(
-        color: palette.background,
-        border: Border(top: BorderSide(color: palette.border, width: 1.041)),
-      ),
-      child: SafeArea(
-        top: false,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SizedBox(
-              width: double.infinity,
-              height: 46,
-              child: OutlinedButton(
-                onPressed: onRegenerate,
-                style: OutlinedButton.styleFrom(
-                  side: BorderSide(color: palette.primary, width: 1.041),
-                  shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-                ),
-                child: Text(
-                  'GERAR PLANO NOVAMENTE',
-                  style: context.runninType.labelMd.copyWith(
-                    color: palette.primary,
-                    letterSpacing: 1.1,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: double.infinity,
+          height: 46,
+          child: OutlinedButton(
+            onPressed: onRegenerate,
+            style: OutlinedButton.styleFrom(
+              side: BorderSide(color: palette.primary, width: 1.041),
+              shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+            ),
+            child: Text(
+              'GERAR PLANO NOVAMENTE',
+              style: context.runninType.labelMd.copyWith(
+                color: palette.primary,
+                letterSpacing: 1.1,
+                fontWeight: FontWeight.w500,
               ),
             ),
-            const SizedBox(height: 8),
-            Text(
-              'Você pode gerar 1 plano novo por semana se quiser recomeçar. Pra ajustes pontuais, deixa o checkpoint semanal trabalhar — ele ajusta as 2 próximas semanas sem zerar seu histórico.',
-              style: context.runninType.bodySm.copyWith(
-                color: palette.muted,
-                height: 1.4,
-              ),
-            ),
-          ],
+          ),
         ),
-      ),
+        const SizedBox(height: 8),
+        Text(
+          'Você pode gerar 1 plano novo por semana se quiser recomeçar. Pra ajustes pontuais, deixa o checkpoint semanal trabalhar — ele ajusta as 2 próximas semanas sem zerar seu histórico.',
+          style: context.runninType.bodySm.copyWith(
+            color: palette.muted,
+            height: 1.4,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -363,14 +359,24 @@ class _CollapsibleSection extends StatelessWidget {
 
 /// Splita o coach rationale por seções `## ` e renderiza cada uma como
 /// um ExpansionTile separado. Primeira seção começa aberta.
-class _RationaleAccordion extends StatelessWidget {
+class _RationaleAccordion extends StatefulWidget {
   final Plan plan;
   const _RationaleAccordion({required this.plan});
 
   @override
+  State<_RationaleAccordion> createState() => _RationaleAccordionState();
+}
+
+class _RationaleAccordionState extends State<_RationaleAccordion> {
+  /// false por default: só a 1ª seção é renderizada + botão "VER MAIS".
+  /// O racional é longo (1000-1400 palavras em 5-6 seções) — abrir tudo de
+  /// cara empurra o resto da página pra baixo demais. true mostra tudo.
+  bool _expanded = false;
+
+  @override
   Widget build(BuildContext context) {
     final palette = context.runninPalette;
-    final rationale = plan.coachRationale?.trim();
+    final rationale = widget.plan.coachRationale?.trim();
     if (rationale == null || rationale.isEmpty) {
       return _CollapsibleSection(
         icon: Icons.psychology_outlined,
@@ -408,6 +414,11 @@ class _RationaleAccordion extends StatelessWidget {
         if (title.isNotEmpty) sections.add((title, body));
       }
     }
+
+    // Quando colapsado, mostra só a primeira seção. Quando expandido, todas.
+    final visibleCount = _expanded ? sections.length : 1;
+    final hasMore = sections.length > 1;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -424,18 +435,51 @@ class _RationaleAccordion extends StatelessWidget {
             ],
           ),
         ),
-        for (var i = 0; i < sections.length; i++) ...[
+        for (var i = 0; i < visibleCount; i++) ...[
           _CollapsibleSection(
             icon: Icons.chevron_right,
             title: sections[i].$1.toUpperCase(),
-            // Todas as seções abertas por padrão. Antes só a primeira ficava
-            // expandida, e o user lia 1/6 do racional pensando que o texto
-            // não tinha carregado completo. User pode colapsar individualmente
-            // se quiser navegar.
             initiallyExpanded: true,
             child: _MarkdownText(sections[i].$2),
           ),
-          if (i < sections.length - 1) const SizedBox(height: 6),
+          if (i < visibleCount - 1) const SizedBox(height: 6),
+        ],
+        if (hasMore) ...[
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            height: 40,
+            child: OutlinedButton(
+              onPressed: () => setState(() => _expanded = !_expanded),
+              style: OutlinedButton.styleFrom(
+                side: BorderSide(color: palette.primary, width: 1.041),
+                shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+                padding: EdgeInsets.zero,
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    _expanded
+                        ? 'VER MENOS'
+                        : 'VER MAIS (${sections.length - 1} seções)',
+                    style: context.runninType.labelMd.copyWith(
+                      color: palette.primary,
+                      letterSpacing: 1.1,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Icon(
+                    _expanded ? Icons.expand_less : Icons.expand_more,
+                    size: 18,
+                    color: palette.primary,
+                  ),
+                ],
+              ),
+            ),
+          ),
         ],
       ],
     );
