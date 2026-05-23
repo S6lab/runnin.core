@@ -64,7 +64,9 @@ class PlanStepDays extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 28),
-        // Linha 2: stepper de frequência (≤ qtd de dias marcados).
+        // Linha 2: chips de frequência (1-7) — mesma linguagem visual dos
+        // chips de dias acima. Desabilita chips > maxFreq (qtd de dias
+        // marcados) pra evitar estado inválido.
         Text(
           'QUANTOS TREINOS POR SEMANA?',
           style: context.runninType.labelMd.copyWith(
@@ -73,37 +75,17 @@ class PlanStepDays extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 8),
-        Row(
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
           children: [
-            _StepBtn(
-              icon: Icons.remove,
-              enabled: freqClamped > 1,
-              onTap: () => onFreqChange((freqClamped - 1).clamp(1, maxFreq)),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Container(
-                height: 56,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: palette.surface,
-                  border: Border.all(color: palette.border, width: 1.041),
-                ),
-                child: Text(
-                  '$freqClamped × por semana',
-                  style: context.runninType.dataMd.copyWith(
-                    color: palette.text,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
+            for (var n = 1; n <= 7; n++)
+              _FreqChip(
+                label: '$n',
+                selected: freqClamped == n,
+                enabled: n <= maxFreq,
+                onTap: () => onFreqChange(n),
               ),
-            ),
-            const SizedBox(width: 16),
-            _StepBtn(
-              icon: Icons.add,
-              enabled: freqClamped < maxFreq,
-              onTap: () => onFreqChange((freqClamped + 1).clamp(1, maxFreq)),
-            ),
           ],
         ),
         if (daysCount > 0 && frequency < daysCount) ...[
@@ -156,32 +138,55 @@ class _DayChip extends StatelessWidget {
   }
 }
 
-class _StepBtn extends StatelessWidget {
-  final IconData icon;
+/// Chip de frequência (1-7). Mesma linguagem do _DayChip, com estado
+/// disabled (muted + sem tap) quando a opção excede a qtd de dias marcados.
+class _FreqChip extends StatelessWidget {
+  final String label;
+  final bool selected;
   final bool enabled;
   final VoidCallback onTap;
-  const _StepBtn({required this.icon, required this.enabled, required this.onTap});
+  const _FreqChip({
+    required this.label,
+    required this.selected,
+    required this.enabled,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
     final palette = context.runninPalette;
+    final fg = !enabled
+        ? palette.muted.withValues(alpha: 0.4)
+        : selected
+            ? palette.primary
+            : palette.muted;
+    final bg = !enabled
+        ? palette.surface
+        : selected
+            ? palette.primary.withValues(alpha: 0.16)
+            : palette.surface;
+    final border = !enabled
+        ? palette.border.withValues(alpha: 0.5)
+        : selected
+            ? palette.primary
+            : palette.border;
     return InkWell(
       onTap: enabled ? onTap : null,
       child: Container(
-        width: 56,
-        height: 56,
+        width: 48,
+        height: 48,
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: enabled ? palette.primary.withValues(alpha: 0.10) : palette.surface,
-          border: Border.all(
-            color: enabled ? palette.primary.withValues(alpha: 0.5) : palette.border,
-            width: 1.041,
-          ),
+          color: bg,
+          border: Border.all(color: border, width: 1.041),
         ),
-        child: Icon(
-          icon,
-          color: enabled ? palette.primary : palette.muted,
-          size: 22,
+        child: Text(
+          label,
+          style: context.runninType.labelMd.copyWith(
+            color: fg,
+            fontWeight: FontWeight.w500,
+            letterSpacing: 0.8,
+          ),
         ),
       ),
     );
