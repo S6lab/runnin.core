@@ -158,7 +158,10 @@ String _fmtDate(String? iso) {
   if (iso == null || iso.isEmpty) return '—';
   final d = DateTime.tryParse(iso);
   if (d == null) return iso;
-  return DateFormat('dd/MM/yyyy', 'pt_BR').format(d);
+  // Sem locale custom: initializeDateFormatting('pt_BR') não é chamado no
+  // boot, e DateFormat com 'pt_BR' lança LocaleDataException → tela branca.
+  // 'dd/MM/yyyy' não precisa de locale (só dígitos).
+  return DateFormat('dd/MM/yyyy').format(d);
 }
 
 class _HeaderCard extends StatelessWidget {

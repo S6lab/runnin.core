@@ -2328,8 +2328,13 @@ class _PlanCompletedBanner extends StatelessWidget {
 /// Regra: cada checkpoint enriquece as 2 próximas semanas (ver
 /// server/checkpoint-shared.ts:enrichTwoTier), então a semana M só é
 /// detalhada no final da semana M-1.
-/// Retorna label em pt_BR tipo "domingo, 12/07". Se já passou, retorna
+/// Retorna label tipo "segunda, 12/07". Se já passou, retorna
 /// "no próximo checkpoint" (raro — server propaga rápido).
+///
+/// NOTA: weekday em PT-BR é computado manualmente em vez de via
+/// DateFormat('EEEE', 'pt_BR'), porque `initializeDateFormatting('pt_BR')`
+/// não é chamado no boot — usar locale custom no DateFormat lança
+/// LocaleDataException e quebra o dialog (tela branca).
 String _checkpointUnlockLabel(Plan plan, int weekNumber) {
   final startDate = plan.effectiveStartDate;
   // M=1: nunca skeleton, mas tratamos como "hoje" se chegar aqui.
@@ -2339,10 +2344,13 @@ String _checkpointUnlockLabel(Plan plan, int weekNumber) {
   final today = DateTime.now();
   final todayDateOnly = DateTime(today.year, today.month, today.day);
   if (unlockDate.isBefore(todayDateOnly)) return 'no próximo checkpoint';
-  final fmt = DateFormat('EEEE, dd/MM', 'pt_BR').format(unlockDate);
-  // DateFormat retorna "Domingo, 12/07" — minúscula no weekday combina mais
-  // com o restante da copy do app ("seu plano é vivo", etc).
-  return 'em ${fmt[0].toLowerCase()}${fmt.substring(1)}';
+  const weekdays = <String>[
+    '', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado', 'domingo',
+  ];
+  final wd = weekdays[unlockDate.weekday];
+  final dd = unlockDate.day.toString().padLeft(2, '0');
+  final mm = unlockDate.month.toString().padLeft(2, '0');
+  return 'em $wd, $dd/$mm';
 }
 
 /// Diálogo único compartilhado por MENSAL e SEMANAL quando o user toca numa
