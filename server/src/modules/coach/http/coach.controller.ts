@@ -1,25 +1,30 @@
 import { Request, Response, NextFunction } from 'express';
+import { z } from 'zod';
 import { CoachMessageUseCase, CoachContextSchema, isCueSkipped } from '../use-cases/coach-message.use-case';
 import { CoachChatSchema, CoachChatUseCase } from '../use-cases/coach-chat.use-case';
 import { GetCoachReportUseCase } from '../use-cases/get-coach-report.use-case';
 import { GenerateReportUseCase } from '../use-cases/generate-report.use-case';
 import { GeneratePeriodAnalysisUseCase } from '../use-cases/generate-period-analysis.use-case';
 import { CreateLiveEphemeralTokenUseCase } from '../use-cases/create-live-ephemeral-token.use-case';
+import { LogLiveTurnUseCase } from '../use-cases/log-live-turn.use-case';
 import { CoachRuntimeContextService } from '../use-cases/coach-runtime-context.service';
 import { buildRunCoachInstruction } from '../use-cases/build-run-coach-instruction';
 import { FirestoreCoachReportRepository } from '../infra/firestore-coach-report.repository';
+import { FirestoreCoachMessageLogRepository } from '../infra/firestore-coach-message-log.repository';
 import { FirestoreRunRepository } from '@modules/runs/infra/firestore-run.repository';
 import { NotFoundError } from '@shared/errors/app-error';
 import { logger } from '@shared/logger/logger';
 
 const reportRepo = new FirestoreCoachReportRepository();
 const runRepoForReports = new FirestoreRunRepository();
+const coachMessageLogRepo = new FirestoreCoachMessageLogRepository();
 const coachMessage = new CoachMessageUseCase();
 const coachChat = new CoachChatUseCase();
 const getReport = new GetCoachReportUseCase(reportRepo);
 const generateReport = new GenerateReportUseCase(reportRepo, runRepoForReports);
 const generatePeriodAnalysis = new GeneratePeriodAnalysisUseCase(runRepoForReports);
 const createLiveToken = new CreateLiveEphemeralTokenUseCase();
+const logLiveTurn = new LogLiveTurnUseCase(coachMessageLogRepo);
 const liveRuntimeContext = new CoachRuntimeContextService();
 
 export async function postCoachLiveToken(req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -44,6 +49,50 @@ export async function postCoachLiveToken(req: Request, res: Response, next: Next
   }
 }
 
+const LiveTurnSchema = z.object({
+  runId: z.string().min(1),
+  author: z.enum(['coach', 'user']),
+  text: z.string().min(1),
+  event: z
+    .enum([
+      'pre_run',
+      'start',
+      'km_reached',
+      'km_split',
+      'pace_alert',
+      'bpm_alert',
+      'motivation',
+      'finish',
+      'question',
+      'preview',
+      'segment_start',
+      'segment_pace_off',
+      'segment_end',
+      'push_to_talk',
+    ])
+    .optional(),
+  kmAtTime: z.number().optional(),
+  paceAtTime: z.string().optional(),
+  bpmAtTime: z.number().optional(),
+  sessionGeneration: z.number().int().nonnegative().optional(),
+});
+
+/**
+ * Persiste um turno da sessão Gemini Live nativa (cliente conecta direto no
+ * Google via token efêmero, então o conteúdo do turno só chega aqui via
+ * beacon). Fire-and-forget client-side: 4xx/5xx aqui não afeta UX.
+ */
+export async function postCoachLiveTurn(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const input = LiveTurnSchema.parse(req.body);
+    await logLiveTurn.execute({ ...input, userId: req.uid });
+    res.json({ ok: true });
+  } catch (err) {
+    logger.warn('coach.live_turn.failed', { uid: req.uid, err: String(err) });
+    next(err);
+  }
+}
+
 /**
  * Beacon de diagnóstico da sessão Gemini Live da run (que conecta direto no
  * Google via token efêmero — o close 1008 não passa pelo nosso server). O
@@ -55,7 +104,11 @@ export function postCoachLiveDiag(req: Request, res: Response): void {
   const code = typeof b['code'] === 'number' ? (b['code'] as number) : undefined;
   logger.warn('coach.live.client_diag', {
     uid: req.uid,
-    phase: b['phase'],            // 'open_ok' | 'open_failed' | 'ws_close' | 'ws_error'
+    // phase: 'open_ok' | 'open_failed' | 'ws_close' | 'ws_error'
+    //      | 'rotate_ok' | 'rotate_failed'
+    //      | 'reconnect_attempt' | 'reconnect_ok' | 'reconnect_failed'
+    //      | 'token_refresh_required' | 'talk_no_permission' | 'talk_error'
+    phase: b['phase'],
     code,                         // close code (1008 = safety/size excedido)
     is1008: code === 1008,
     reason: b['reason'],
@@ -64,6 +117,10 @@ export function postCoachLiveDiag(req: Request, res: Response): void {
     outputTranscription: b['outputTranscription'],
     model: b['model'],
     runId: b['runId'],
+    generation: b['generation'],  // sessionGeneration corrente (0 = primeira)
+    turns: b['turns'],            // turns acumulados na sessão Live atual
+    ageMs: b['ageMs'],            // idade da sessão Live atual em ms
+    attempt: b['attempt'],        // nº tentativa de reconexão (1,2,3...)
   });
   res.json({ ok: true });
 }

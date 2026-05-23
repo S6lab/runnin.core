@@ -18,7 +18,8 @@ export type CoachMessageEvent =
   | 'preview'
   | 'segment_start'
   | 'segment_pace_off'
-  | 'segment_end';
+  | 'segment_end'
+  | 'push_to_talk';
 
 export type CoachMessageAuthor = 'coach' | 'user';
 
@@ -37,4 +38,6 @@ export interface CoachMessageLog {
   promptVersion?: string;     // ex: 'live-coach.v1.2026-05' ou '...+admin-override'
   promptSource?: 'firestore' | 'env' | 'default';
   createdAt: string;
+  liveTurn?: boolean;         // true when emitido pela sessão Gemini Live nativa
+  sessionGeneration?: number; // contador de rotações da sessão Live dentro da mesma run
 }

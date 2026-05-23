@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { authMiddleware } from '@shared/infra/http/middlewares/auth.middleware';
 import { requireFeature } from '@shared/infra/http/middlewares/require-feature.middleware';
-import { postCoachMessage, postCoachChat, getCoachReport, postGenerateReport, getCoachMessagesByRun, getPeriodAnalysis, postCoachLiveToken, postCoachLiveDiag } from './coach.controller';
+import { postCoachMessage, postCoachChat, getCoachReport, postGenerateReport, getCoachMessagesByRun, getPeriodAnalysis, postCoachLiveToken, postCoachLiveDiag, postCoachLiveTurn } from './coach.controller';
 
 export const coachRouter = Router();
 
@@ -12,6 +12,10 @@ coachRouter.use(authMiddleware);
 coachRouter.post('/live-token', requireFeature('coachVoiceDuringRun'), postCoachLiveToken);
 // Beacon de diagnóstico da sessão Live (open/close/error) — pra rastrear 1008.
 coachRouter.post('/live-diag', postCoachLiveDiag);
+// Persistência de cada turno da sessão Live (coach/user) pra replay e
+// auditoria — cliente conecta direto no Google, então o conteúdo só
+// chega aqui via beacon.
+coachRouter.post('/live-turn', requireFeature('coachVoiceDuringRun'), postCoachLiveTurn);
 // Coach durante corrida (voz/cues)
 coachRouter.post('/message', requireFeature('coachVoiceDuringRun'), postCoachMessage);
 // Chat texto

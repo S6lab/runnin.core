@@ -8,6 +8,7 @@ import 'package:runnin/features/run/data/datasources/run_local_datasource.dart';
 import 'package:runnin/features/run/data/datasources/run_remote_datasource.dart';
 import 'package:runnin/features/run/data/datasources/run_coach_remote_datasource.dart';
 import 'package:runnin/features/run/data/live_run_coach_session.dart';
+import 'package:runnin/features/coach_live/data/coach_context_manager.dart';
 import 'package:runnin/features/run/domain/entities/run.dart';
 import 'package:runnin/features/training/data/datasources/plan_remote_datasource.dart';
 import 'package:runnin/features/training/domain/entities/plan.dart';
@@ -172,10 +173,19 @@ class RunState {
 class RunBloc extends Bloc<RunEvent, RunState> {
   final _remote = RunRemoteDatasource();
   final _userRemote = UserRemoteDatasource();
-  // Sessão Gemini Live nativa ÚNICA da corrida (cérebro do coach). Aberta no
-  // start, recebe telemetria por momento e narra; transcript == voz no banner.
-  final _coachSession = LiveRunCoachSession();
+  // Contexto do coach sobrevive à rotação/queda da sessão Live (source-of-truth
+  // do histórico curto pra reinjetar como preamble quando a sessão é reciclada).
+  final _coachCtx = CoachContextManager();
+  // Sessão Gemini Live efêmera/rotacional: rotaciona em transições naturais
+  // pra evitar acúmulo de áudio no histórico interno do socket (que degradava
+  // a voz por volta do km 3 no modelo native-audio).
+  late final LiveRunCoachSession _coachSession = LiveRunCoachSession(
+    contextManager: _coachCtx,
+  );
   StreamSubscription<String>? _coachTranscriptSub;
+  // Quando trigger natural cai durante push-to-talk, marca pra rotacionar
+  // assim que o user soltar o botão (evita cortar a fala do user).
+  String? _pendingRotationTrigger;
   final _local = RunLocalDatasource();
   final _planRemote = PlanRemoteDatasource();
 
@@ -258,7 +268,14 @@ class RunBloc extends Bloc<RunEvent, RunState> {
       (e, emit) => emit(state.copyWith(noMovementPrompt: false)),
     );
     on<CoachTalkStart>((e, emit) => unawaited(_coachSession.startTalk()));
-    on<CoachTalkStop>((e, emit) => unawaited(_coachSession.stopTalk()));
+    on<CoachTalkStop>((e, emit) async {
+      await _coachSession.stopTalk();
+      final pending = _pendingRotationTrigger;
+      if (pending != null) {
+        _pendingRotationTrigger = null;
+        unawaited(_coachSession.rotateSession(reason: 'deferred_$pending'));
+      }
+    });
     _local.init();
   }
 
@@ -361,6 +378,12 @@ class RunBloc extends Bloc<RunEvent, RunState> {
 
       _lastCoachKm = 0;
       _lastKmStartElapsedS = 0;
+      // Contexto do coach (vive durante a corrida, sobrevive a rotações da
+      // sessão Live). Setado ANTES da open() pra que turns recebidos durante
+      // a saudação já alimentem o snapshot.
+      _coachCtx.init(runId);
+      _coachSession.setMetricsProvider(_buildMetricsSnapshot);
+      _pendingRotationTrigger = null;
       // Abre a sessão Live e saúda AGORA — ao iniciar, quando a tela passa a
       // exibir o mapa (corrida ativa). Suprime cues por 12s pra a saudação
       // falar sozinha. A transcrição alimenta o banner; o áudio toca na sessão.
@@ -378,6 +401,7 @@ class RunBloc extends Bloc<RunEvent, RunState> {
             runId: startRunId,
           );
           if (ok && !isClosed) {
+            _coachSession.markTrigger('start');
             _coachSession.sendTelemetry(_telemetryText('start', runType: startType));
           }
         }());
@@ -636,6 +660,7 @@ class RunBloc extends Bloc<RunEvent, RunState> {
               updatedSplits.isNotEmpty ? updatedSplits.last.elevationGain : null,
         ));
         _lastCueAt['km_reached'] = DateTime.now().millisecondsSinceEpoch;
+        _maybeRotateLiveSession(trigger: 'km_reached');
       }
       // kmSplits: ao fechar um km, manda delta de pace vs km anterior.
       // Só dispara do 2º km em diante (precisa ter referência).
@@ -686,6 +711,7 @@ class RunBloc extends Bloc<RunEvent, RunState> {
           currentSegmentIndex: activeSegmentIdx,
         );
         _lastCueAt['segment_start'] = DateTime.now().millisecondsSinceEpoch;
+        _maybeRotateLiveSession(trigger: 'segment_start');
         // ignore: avoid_print
         print('coach.segment.transition prev=$previousIdx now=$activeSegmentIdx phase=${activeSegment?.phase}');
       }
@@ -702,6 +728,7 @@ class RunBloc extends Bloc<RunEvent, RunState> {
           currentSegmentIndex: _currentSegmentIdx,
         );
         _lastCueAt['segment_end'] = DateTime.now().millisecondsSinceEpoch;
+        _maybeRotateLiveSession(trigger: 'segment_end');
       }
 
       // segment_pace_off: substitui pace_alert genérico quando segment
@@ -784,13 +811,18 @@ class RunBloc extends Bloc<RunEvent, RunState> {
 
   Future<void> _onComplete(CompleteRun event, Emitter<RunState> emit) async {
     if (state.runId == null) return;
+    _pendingRotationTrigger = null;
     if (state.distanceM >= stationaryDistanceThresholdM) {
       _requestCoachCue(event: 'finish');
       // Mantém a sessão aberta até o resumo terminar de tocar, depois fecha
       // (não cortar o fechamento). Fallback de 15s se o turno não completar.
-      Timer(const Duration(seconds: 15), () => unawaited(_coachSession.close()));
+      Timer(const Duration(seconds: 15), () {
+        unawaited(_coachSession.close());
+        _coachCtx.dispose();
+      });
     } else {
       unawaited(_coachSession.close());
+      _coachCtx.dispose();
     }
     emit(state.copyWith(status: RunStatus.completing));
     _stop();
@@ -838,7 +870,9 @@ class RunBloc extends Bloc<RunEvent, RunState> {
 
   void _onAbandon(AbandonRun event, Emitter<RunState> emit) {
     _stop();
+    _pendingRotationTrigger = null;
     unawaited(_coachSession.close());
+    _coachCtx.dispose();
     emit(const RunState());
   }
 
@@ -931,6 +965,7 @@ class RunBloc extends Bloc<RunEvent, RunState> {
     _stop();
     _coachTranscriptSub?.cancel();
     unawaited(_coachSession.close());
+    _coachCtx.dispose();
     return super.close();
   }
 
@@ -1043,6 +1078,9 @@ class RunBloc extends Bloc<RunEvent, RunState> {
         DateTime.now().millisecondsSinceEpoch < _suppressCuesUntilMs) {
       return;
     }
+    // Marca o trigger pra o turn que vai chegar — o session usa pra alimentar
+    // o ctxMgr e o beacon /coach/live-turn com o evento que provocou a fala.
+    _coachSession.markTrigger(event);
     _coachSession.sendTelemetry(_telemetryText(
       event,
       runType: state.runType,
@@ -1053,6 +1091,36 @@ class RunBloc extends Bloc<RunEvent, RunState> {
       elevationGainM: elevationGainM,
       kmAvgBpm: kmAvgBpm,
     ));
+  }
+
+  /// Em transições naturais (km_reached, segment_start, segment_end) avalia
+  /// se vale rotacionar a sessão Live agora pra evitar acúmulo de contexto
+  /// interno do socket (causa raiz da degradação de voz observada ~km 3).
+  /// Se o user está em push-to-talk, marca pra rotacionar quando soltar.
+  void _maybeRotateLiveSession({required String trigger}) {
+    if (!_coachSession.isOpen) return;
+    if (!_coachSession.shouldRotateNow()) return;
+    if (_coachSession.isTalking) {
+      _pendingRotationTrigger = trigger;
+      // ignore: avoid_print
+      print('run.coach.live.rotate.deferred trigger=$trigger reason=push_to_talk_active');
+      return;
+    }
+    unawaited(_coachSession.rotateSession(reason: trigger));
+  }
+
+  RunMetricsSnapshot _buildMetricsSnapshot() {
+    String? phase;
+    if (_currentSegmentIdx >= 0 && _currentSegmentIdx < _segments.length) {
+      phase = _segments[_currentSegmentIdx].phase;
+    }
+    return RunMetricsSnapshot(
+      distanceKm: state.distanceM / 1000.0,
+      elapsedS: state.elapsedS,
+      avgPaceMinKm: _computePaceMinKm(),
+      currentPaceMinKm: state.currentPaceMinKm,
+      currentPhase: phase,
+    );
   }
 
   /// Formata o turn de telemetria por momento. Frases instrucionais curtas —
