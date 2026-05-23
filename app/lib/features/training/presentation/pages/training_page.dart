@@ -1123,6 +1123,11 @@ class _WeeklyPlanView extends StatelessWidget {
         _CheckpointEntry(
           planId: plan.id,
           weekNumber: selectedWeek + 1,
+          plan: plan,
+          // Checkpoint só faz sentido pra semana atual ou passada (precisa de
+          // dados pra avaliar). Pra semanas estritamente futuras (M > current),
+          // vira locked com cadeado + dialog explicando a regra.
+          isLocked: selectedWeek > _currentPlanWeekIndex(plan),
         ),
         const SizedBox(height: 16),
         // Volume da semana em barras (km por dia), similar ao mensal.
@@ -1226,41 +1231,72 @@ class _WeeklyVolumeBars extends StatelessWidget {
 class _CheckpointEntry extends StatelessWidget {
   final String planId;
   final int weekNumber;
-  const _CheckpointEntry({required this.planId, required this.weekNumber});
+  /// true quando a semana é estritamente futura — checkpoint só faz sentido
+  /// pra semana atual ou passada (precisa ter dados pra avaliar). Renderiza
+  /// cadeado + tap abre dialog com a data prevista.
+  final bool isLocked;
+  final Plan plan;
+  const _CheckpointEntry({
+    required this.planId,
+    required this.weekNumber,
+    required this.plan,
+    this.isLocked = false,
+  });
 
   @override
   Widget build(BuildContext context) {
     final palette = context.runninPalette;
+    final borderAlpha = isLocked ? 0.25 : 0.55;
     return InkWell(
-      onTap: () => context.push('/training/checkpoint/$planId/$weekNumber'),
+      onTap: isLocked
+          ? () => _showCheckpointLockDialog(context, plan, weekNumber)
+          : () => context.push('/training/checkpoint/$planId/$weekNumber'),
       child: AppPanel(
-        borderColor: palette.primary.withValues(alpha: 0.55),
+        borderColor: palette.primary.withValues(alpha: borderAlpha),
         padding: const EdgeInsets.all(AppSpacing.xl),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.xs),
-              color: palette.primary.withValues(alpha: 0.18),
-              child: Text(
-                'CHECKPOINT',
-                style: context.runninType.labelCaps.copyWith(
-                  color: palette.primary,
-                  letterSpacing: 1.0,
+        child: Opacity(
+          opacity: isLocked ? 0.55 : 1.0,
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.xs),
+                color: palette.primary.withValues(alpha: 0.18),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (isLocked) ...[
+                      Icon(Icons.lock_outline, size: 11, color: palette.primary),
+                      const SizedBox(width: 4),
+                    ],
+                    Text(
+                      'CHECKPOINT',
+                      style: context.runninType.labelCaps.copyWith(
+                        color: palette.primary,
+                        letterSpacing: 1.0,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                'Fim de SEM $weekNumber · ajustar plano com base na sua semana',
-                style: context.runninType.bodySm.copyWith(
-                  color: palette.text,
-                  fontSize: 12.5,
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  isLocked
+                      ? 'SEM $weekNumber · disponível quando você chegar nessa semana'
+                      : 'Fim de SEM $weekNumber · ajustar plano com base na sua semana',
+                  style: context.runninType.bodySm.copyWith(
+                    color: palette.text,
+                    fontSize: 12.5,
+                  ),
                 ),
               ),
-            ),
-            Icon(Icons.chevron_right, color: palette.muted, size: 18),
-          ],
+              Icon(
+                isLocked ? Icons.lock_outline : Icons.chevron_right,
+                color: palette.muted,
+                size: 18,
+              ),
+            ],
+          ),
         ),
       ),
     );
