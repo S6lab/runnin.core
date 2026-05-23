@@ -1098,6 +1098,7 @@ class _WeeklyPlanView extends StatelessWidget {
             week1Monday.month,
             week1Monday.day,
           ).add(Duration(days: selectedWeek * 7));
+          final weekIsLocked = week?.isSkeleton ?? false;
           return List.generate(7, (index) {
             final day = index + 1;
             final dayDate = weekStartMonday.add(Duration(days: index));
@@ -1113,6 +1114,8 @@ class _WeeklyPlanView extends StatelessWidget {
               session: sessionForDay,
               isToday: isToday,
               isPast: isPast,
+              isLocked: weekIsLocked,
+              plan: plan,
             );
           });
         }(),
@@ -1319,8 +1322,11 @@ class _MonthlyPlanView extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 12),
-        // Mostra só as 4 PRIMEIRAS semanas do plano (o resto se ajusta).
-        ...plan.weeks.take(4).toList().asMap().entries.map((entry) {
+        // Mostra TODAS as semanas do mesociclo. As que ainda não foram
+        // detalhadas (skeleton) aparecem com cadeado e dialog ao tocar; a
+        // regra D+15 é entregue pelo server via detailLevel + enrichTwoTier
+        // a cada checkpoint aceito.
+        ...plan.weeks.asMap().entries.map((entry) {
           final weekIndex = entry.key;
           final week = entry.value;
           final currentWeekIndex = _currentPlanWeekIndex(plan);
@@ -1345,6 +1351,7 @@ class _MonthlyPlanView extends StatelessWidget {
               ? context.runninPalette.warning
               : context.runninPalette.muted; // PRÓXIMA = apagado
           return _MonthlyWeekCard(
+            plan: plan,
             week: week,
             status: status,
             statusColor: statusColor,
@@ -1353,12 +1360,14 @@ class _MonthlyPlanView extends StatelessWidget {
         }),
         const SizedBox(height: 8),
         // Resumo de carga (km projetados) das 4 primeiras semanas, em barras.
+        // Limitamos a 4 aqui pra o gráfico não virar uma fileira ilegível em
+        // planos longos — a leitura semana-a-semana acontece nos cards acima.
         _CargaBars(
           weeks: plan.weeks.take(4).toList(),
           currentWeekIndex: _currentPlanWeekIndex(plan),
         ),
         const SizedBox(height: 16),
-        // Box estática do coach explicando o recorte das 4 semanas.
+        // Box estática explicando a regra do detalhe progressivo (D+15).
         FigmaCoachAIBlock(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1366,10 +1375,10 @@ class _MonthlyPlanView extends StatelessWidget {
               const FigmaCoachAIBreadcrumb(action: 'PERIODIZAÇÃO'),
               const SizedBox(height: 10),
               Text(
-                'Aqui aparecem só as 4 primeiras semanas do plano. O plano vai '
-                'se ajustando conforme o seu andamento e a sua performance — por '
-                'isso as semanas seguintes não são fixas. O resumo detalhado, '
-                'semana a semana, está no Plano Base.',
+                'O coach detalha sempre as duas próximas semanas (≈ 15 dias). '
+                'As demais aparecem com cadeado — ele evolui a partir dos seus '
+                'números reais, então o detalhe é liberado a cada checkpoint '
+                'semanal, sem prometer o que ainda vai depender da sua semana.',
                 style: context.runninType.bodySm.copyWith(
                   color: context.runninPalette.text.withValues(alpha: 0.85),
                   height: 1.5,
@@ -1518,6 +1527,10 @@ class _WeeklySessionRow extends StatelessWidget {
   final PlanSession? session;
   final bool isToday;
   final bool isPast;
+  /// true quando a semana selecionada está em skeleton (detailLevel != 'full').
+  /// Renderiza cadeado + tap abre dialog em vez de navegar pro day_detail.
+  final bool isLocked;
+  final Plan plan;
 
   const _WeeklySessionRow({
     required this.weekNumber,
@@ -1526,6 +1539,8 @@ class _WeeklySessionRow extends StatelessWidget {
     required this.session,
     required this.isToday,
     required this.isPast,
+    required this.plan,
+    this.isLocked = false,
   });
 
   static const _dayNames = [
@@ -1620,7 +1635,9 @@ class _WeeklySessionRow extends StatelessWidget {
     }
 
     return InkWell(
-      onTap: () => context.push('/training/day/$weekNumber/$dayOfWeek'),
+      onTap: isLocked
+          ? () => _showCheckpointLockDialog(context, plan, weekNumber)
+          : () => context.push('/training/day/$weekNumber/$dayOfWeek'),
       child: Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
@@ -1711,24 +1728,39 @@ class _WeeklySessionRow extends StatelessWidget {
             ),
           ),
           if (!isRest)
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
+            // Quando a semana é skeleton (locked), o bloco distância/pace
+            // fica esmaecido e ganha um cadeado discreto à direita. Comunica
+            // visualmente que esses valores ainda são "esqueleto" e abrem o
+            // dialog ao invés do day_detail.
+            Row(
               children: [
-                Text(
-                  _distanceLabel(session!),
-                  style: context.runninType.dataXs.copyWith(
-                    fontSize: 26,
-                    fontWeight: FontWeight.w600,
-                    color: palette.secondary,
+                Opacity(
+                  opacity: isLocked ? 0.45 : 1.0,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        _distanceLabel(session!),
+                        style: context.runninType.dataXs.copyWith(
+                          fontSize: 26,
+                          fontWeight: FontWeight.w600,
+                          color: palette.secondary,
+                        ),
+                      ),
+                      if (session!.targetPace != null)
+                        Text(
+                          '${session!.targetPace!}/km',
+                          style: context.runninType.bodySm.copyWith(
+                            color: palette.muted,
+                          ),
+                        ),
+                    ],
                   ),
                 ),
-                if (session!.targetPace != null)
-                  Text(
-                    '${session!.targetPace!}/km',
-                    style: context.runninType.bodySm.copyWith(
-                      color: palette.muted,
-                    ),
-                  ),
+                if (isLocked) ...[
+                  const SizedBox(width: 8),
+                  Icon(Icons.lock_outline, size: 16, color: palette.muted),
+                ],
               ],
             ),
         ],
@@ -1749,12 +1781,16 @@ class _WeeklySessionRow extends StatelessWidget {
 }
 
 class _MonthlyWeekCard extends StatelessWidget {
+  final Plan plan;
   final PlanWeek week;
   final String status; // COMPLETA | PARCIAL | ATUAL | PRÓXIMA
   final Color statusColor;
+  /// Disparado quando o user clica num card NÃO bloqueado (skeleton trata
+  /// tap internamente com dialog de checkpoint).
   final VoidCallback onTap;
 
   const _MonthlyWeekCard({
+    required this.plan,
     required this.week,
     required this.status,
     required this.statusColor,
@@ -1790,9 +1826,47 @@ class _MonthlyWeekCard extends StatelessWidget {
     ];
     final isCompleted = status == 'COMPLETA';
     final isCurrent = status == 'ATUAL';
+    final isLocked = week.isSkeleton;
+
+    // O bloco de conteúdo didático (objetivo + targets + resumo por tipo)
+    // fica esmaecido quando o card está locked — comunica visualmente que
+    // não tem informação real ali ainda.
+    final detailedContent = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (objective != null) ...[
+          const SizedBox(height: 8),
+          Text(
+            objective,
+            style: context.runninType.bodySm.copyWith(
+              color: palette.text.withValues(alpha: 0.85),
+              fontSize: 12.5,
+            ),
+          ),
+        ],
+        if (week.targets.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          ...week.targets.map((t) => _BulletLine(text: t)),
+        ],
+        if (summaryLines.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          ...summaryLines.map(
+            (line) => Padding(
+              padding: const EdgeInsets.only(bottom: 2),
+              child: Text(
+                line,
+                style: context.runninType.bodyXs.copyWith(color: palette.muted),
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
 
     return InkWell(
-      onTap: onTap,
+      onTap: isLocked
+          ? () => _showCheckpointLockDialog(context, plan, week.weekNumber)
+          : onTap,
       child: AppPanel(
         margin: const EdgeInsets.only(bottom: 8),
         // Semana ATUAL em destaque: borda cyan + fundo levemente tingido.
@@ -1832,8 +1906,7 @@ class _MonthlyWeekCard extends StatelessWidget {
                           letterSpacing: 0.5,
                         ),
                       ),
-                      if (week.isSkeleton)
-                        _SkeletonBadge(),
+                      if (isLocked) _LockedChip(),
                       if (isCompleted)
                         Icon(Icons.check_circle,
                             size: 15, color: palette.primary),
@@ -1864,39 +1937,50 @@ class _MonthlyWeekCard extends StatelessWidget {
                 ),
               ],
             ),
-            if (objective != null) ...[
-              const SizedBox(height: 8),
-              Text(
-                objective,
-                style: context.runninType.bodySm.copyWith(
-                  color: palette.text.withValues(alpha: 0.85),
-                  fontSize: 12.5,
-                ),
-              ),
-            ],
-            if (week.targets.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              ...week.targets.map((t) => _BulletLine(text: t)),
-            ],
-            if (summaryLines.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              ...summaryLines.map(
-                (line) => Padding(
-                  padding: const EdgeInsets.only(bottom: 2),
-                  child: Text(
-                    line,
-                    style: context.runninType.bodyXs
-                        .copyWith(color: palette.muted),
-                  ),
-                ),
-              ),
-            ],
+            // No locked, o bloco de detalhe vira fantasma (opacity 0.4) — não
+            // engana o user achando que aquilo é o conteúdo final, mas mantém
+            // a estrutura da grade.
+            isLocked
+                ? Opacity(opacity: 0.4, child: detailedContent)
+                : detailedContent,
           ],
         ),
       ),
     );
   }
 
+}
+
+/// Chip "BLOQUEADA" com ícone de cadeado — usado no header do
+/// _MonthlyWeekCard quando week.isSkeleton (substitui o badge discreto
+/// anterior por uma sinalização visual mais forte).
+class _LockedChip extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(
+        color: palette.primary.withValues(alpha: 0.16),
+        border: Border.all(color: palette.primary.withValues(alpha: 0.45)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.lock_outline, size: 11, color: palette.primary),
+          const SizedBox(width: 4),
+          Text(
+            'BLOQUEADA',
+            style: context.runninType.labelCaps.copyWith(
+              color: palette.primary,
+              letterSpacing: 1.0,
+              fontSize: 9.5,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 /// Bullet "▸ texto" pros objetivos da semana na periodização.
@@ -1932,27 +2016,6 @@ class _BulletLine extends StatelessWidget {
 
 /// Badge "ESQUELETO" pras semanas ainda não detalhadas (liberadas no
 /// checkpoint da semana anterior).
-class _SkeletonBadge extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.runninPalette;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        border: Border.all(color: palette.muted.withValues(alpha: 0.5)),
-      ),
-      child: Text(
-        'DETALHE NO CHECKPOINT',
-        style: context.runninType.labelCaps.copyWith(
-          fontSize: 8.5,
-          color: palette.muted,
-          letterSpacing: 0.5,
-        ),
-      ),
-    );
-  }
-}
-
 /// Aviso na visão semanal quando a semana ainda é esqueleto: volume e pace
 /// já estão definidos; nutrição, hidratação e roteiro km-a-km são liberados
 /// no checkpoint da semana anterior.
@@ -2222,4 +2285,57 @@ class _PlanCompletedBanner extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Data em que o checkpoint da semana M-1 deve rodar (Sunday cron + user
+/// aceitar a proposta) e promover a semana [weekNumber] de skeleton pra full.
+/// Regra: cada checkpoint enriquece as 2 próximas semanas (ver
+/// server/checkpoint-shared.ts:enrichTwoTier), então a semana M só é
+/// detalhada no final da semana M-1.
+/// Retorna label em pt_BR tipo "domingo, 12/07". Se já passou, retorna
+/// "no próximo checkpoint" (raro — server propaga rápido).
+String _checkpointUnlockLabel(Plan plan, int weekNumber) {
+  final startDate = plan.effectiveStartDate;
+  // M=1: nunca skeleton, mas tratamos como "hoje" se chegar aqui.
+  // M=2: nunca skeleton (criado full), idem.
+  // M>=3: liberado em startDate + (M-1)*7 - 1 dias = último dia da semana M-1.
+  final unlockDate = startDate.add(Duration(days: (weekNumber - 1) * 7 - 1));
+  final today = DateTime.now();
+  final todayDateOnly = DateTime(today.year, today.month, today.day);
+  if (unlockDate.isBefore(todayDateOnly)) return 'no próximo checkpoint';
+  final fmt = DateFormat('EEEE, dd/MM', 'pt_BR').format(unlockDate);
+  // DateFormat retorna "Domingo, 12/07" — minúscula no weekday combina mais
+  // com o restante da copy do app ("seu plano é vivo", etc).
+  return 'em ${fmt[0].toLowerCase()}${fmt.substring(1)}';
+}
+
+/// Diálogo único compartilhado por MENSAL e SEMANAL quando o user toca numa
+/// semana / dia skeleton. Explica a regra D+15 e mostra a data prevista de
+/// liberação do detalhe.
+Future<void> _showCheckpointLockDialog(
+  BuildContext context,
+  Plan plan,
+  int weekNumber,
+) {
+  final palette = context.runninPalette;
+  return showDialog<void>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      backgroundColor: palette.surface,
+      title: Text('Semana $weekNumber · bloqueada'),
+      content: Text(
+        'O coach detalha as duas próximas semanas a cada checkpoint, usando '
+        'seus números reais.\n\n'
+        'O detalhe completo desta semana é liberado '
+        '${_checkpointUnlockLabel(plan, weekNumber)} — antes disso, ele só '
+        'conhece o esqueleto (tipo de sessão, distância e pace alvo).',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(ctx).pop(),
+          child: const Text('ENTENDI'),
+        ),
+      ],
+    ),
+  );
 }
