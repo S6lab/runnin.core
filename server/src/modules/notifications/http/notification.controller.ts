@@ -31,14 +31,21 @@ const dailyPush = new SendDailyPushUseCase(userRepo, planRepo);
 
 export async function listNotifications(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    // Garante insights do dia antes de listar; falha aqui não derruba a leitura.
-    try {
-      await ensureDaily.execute(req.uid);
-    } catch (err) {
-      logger.warn('notifications.ensure_daily_failed', { uid: req.uid, err: String(err) });
+    const cursor = typeof req.query['cursor'] === 'string' ? req.query['cursor'] : undefined;
+    const limitRaw = typeof req.query['limit'] === 'string' ? Number(req.query['limit']) : undefined;
+    const limit = Number.isFinite(limitRaw) && limitRaw! > 0 ? limitRaw : undefined;
+
+    // ensureDaily só na primeira página — em loadMore não faz sentido
+    // recriar os insights diários (e atrasaria a paginação).
+    if (!cursor) {
+      try {
+        await ensureDaily.execute(req.uid);
+      } catch (err) {
+        logger.warn('notifications.ensure_daily_failed', { uid: req.uid, err: String(err) });
+      }
     }
-    const items = await listUseCase.execute(req.uid);
-    res.json({ items });
+    const result = await listUseCase.execute(req.uid, { before: cursor, limit });
+    res.json({ items: result.items, nextCursor: result.nextCursor });
   } catch (err) {
     next(err);
   }

@@ -1,6 +1,13 @@
 import { getFirestore } from '@shared/infra/firebase/firebase.client';
 import { Notification } from '../domain/notification.entity';
-import { NotificationRepository } from '../domain/notification.repository';
+import {
+  ListActiveOptions,
+  ListActiveResult,
+  NotificationRepository,
+} from '../domain/notification.repository';
+
+const DEFAULT_PAGE_SIZE = 30;
+const MAX_PAGE_SIZE = 100;
 
 function stripUndefined<T extends object>(data: T): Partial<T> {
   return Object.fromEntries(
@@ -18,14 +25,37 @@ export class FirestoreNotificationRepository implements NotificationRepository {
     return { id: doc.id, userId, ...doc.data() } as Notification;
   }
 
-  async listActive(userId: string): Promise<Notification[]> {
-    const snap = await this.col(userId)
+  async listActive(
+    userId: string,
+    opts: ListActiveOptions = {},
+  ): Promise<ListActiveResult> {
+    const limit = Math.min(
+      Math.max(opts.limit ?? DEFAULT_PAGE_SIZE, 1),
+      MAX_PAGE_SIZE,
+    );
+    // Página > limit pra detectar hasMore sem 2ª query: pedimos limit+1,
+    // se vier a mais sabemos que tem próxima página.
+    let query = this.col(userId)
       .orderBy('createdAt', 'desc')
-      .limit(50)
-      .get();
-    return snap.docs
-      .map(d => ({ id: d.id, userId, ...d.data() }) as Notification)
-      .filter(n => !n.dismissedAt);
+      .limit(limit + 1);
+    if (opts.before) {
+      query = query.startAfter(opts.before);
+    }
+    const snap = await query.get();
+    const allDocs = snap.docs.map(
+      d => ({ id: d.id, userId, ...d.data() }) as Notification,
+    );
+    const hasMore = allDocs.length > limit;
+    const pageDocs = hasMore ? allDocs.slice(0, limit) : allDocs;
+    // Filtragem de dispensadas é client-side pra manter cursor estável.
+    // Cursor usa o `createdAt` do último doc da página (mesmo dispensado),
+    // senão duas chamadas iguais com dispensas no meio pulam itens.
+    const items = pageDocs.filter(n => !n.dismissedAt);
+    const lastDoc = pageDocs[pageDocs.length - 1];
+    return {
+      items,
+      nextCursor: hasMore && lastDoc ? lastDoc.createdAt : null,
+    };
   }
 
   async createIfAbsent(notification: Notification): Promise<Notification> {

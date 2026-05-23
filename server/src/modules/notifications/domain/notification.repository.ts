@@ -1,8 +1,21 @@
 import { Notification } from './notification.entity';
 
+export interface ListActiveOptions {
+  /** Quantos itens trazer. Default 30. */
+  limit?: number;
+  /** Cursor opaco: ISO timestamp do `createdAt` do último item da página anterior. */
+  before?: string;
+}
+
+export interface ListActiveResult {
+  items: Notification[];
+  /** ISO timestamp pra próxima página. Null = última página. */
+  nextCursor: string | null;
+}
+
 export interface NotificationRepository {
   findById(userId: string, id: string): Promise<Notification | null>;
-  listActive(userId: string): Promise<Notification[]>;
+  listActive(userId: string, opts?: ListActiveOptions): Promise<ListActiveResult>;
   createIfAbsent(notification: Notification): Promise<Notification>;
   /**
    * Sobrescreve `title/body/icon/timeLabel/cta*` e `data` mas preserva

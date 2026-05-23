@@ -311,6 +311,14 @@ export class GeneratePlanUseCase {
         weeks,
         updatedAt: new Date().toISOString(),
       });
+      // Notifica user que o plano está pronto (in-app + push). Dynamic
+      // import pra evitar circular dep com @shared/container.
+      void this._notifyPlanReady(plan.userId, plan.id).catch((err: unknown) =>
+        logger.warn('plan.notify_ready_failed', {
+          planId: plan.id,
+          err: err instanceof Error ? err.message : String(err),
+        }),
+      );
       // Cria 1 checkpoint por semana (fire-and-forget). Idempotente.
       void this.scheduleCheckpoints
         .execute({ ...plan, weeks, status: 'ready' })
@@ -340,6 +348,32 @@ export class GeneratePlanUseCase {
       });
       throw err;
     }
+  }
+
+  /**
+   * Notifica usuário (in-app + push) que o plano terminou de ser gerado.
+   * Dynamic import do container pra evitar circular dependency
+   * (`@shared/container` importa use-cases de plans).
+   * Idempotência: id `plan_ready_${planId}` — se já notificou, no-op.
+   */
+  private async _notifyPlanReady(userId: string, planId: string): Promise<void> {
+    const { container } = await import('@shared/container');
+    const route = '/training';
+    await container.useCases.createNotification.execute({
+      userId,
+      type: 'plan_ready',
+      dedupeKey: planId,
+      title: 'PLANO PRONTO',
+      icon: 'auto_awesome_outlined',
+      body: 'Seu plano novo terminou de ser gerado pelo coach. Abra para revisar antes da primeira sessão.',
+      ctaLabel: 'VER PLANO',
+      ctaRoute: route,
+    });
+    await container.useCases.sendUserPush.execute(userId, {
+      title: 'Seu plano está pronto',
+      body: 'O coach acabou de finalizar sua programação. Toque para revisar.',
+      data: { kind: 'plan_ready', route, planId },
+    });
   }
 
   private async _generateCoachRationale(

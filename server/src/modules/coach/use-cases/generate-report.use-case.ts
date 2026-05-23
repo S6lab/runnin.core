@@ -214,9 +214,44 @@ export class GenerateReportUseCase {
           recommendations: sections.recommendations.length,
         },
       });
+
+      // Notifica user (in-app + push) que o relatório completo está
+      // pronto. Summary já está visível direto na tela; a push aqui é
+      // pra trazer o user de volta quando o coach termina as 4 seções.
+      // Dynamic import pra evitar circular dep com container.
+      void this._notifyReportEnriched(userId, run.id).catch((err: unknown) =>
+        logger.warn('coach.report.notify_failed', {
+          runId: run.id,
+          err: err instanceof Error ? err.message : String(err),
+        }),
+      );
     } catch (err) {
       logger.warn('coach.report.enrich_inner_failed', { runId: run.id, err: String(err) });
     }
+  }
+
+  /**
+   * Notifica usuário (in-app + push) que o relatório enriquecido está
+   * pronto pra leitura. Idempotente via dedupeKey=runId.
+   */
+  private async _notifyReportEnriched(userId: string, runId: string): Promise<void> {
+    const { container } = await import('@shared/container');
+    const route = `/history/run/${runId}`;
+    await container.useCases.createNotification.execute({
+      userId,
+      type: 'coach_message',
+      dedupeKey: `report_enriched_${runId}`,
+      title: 'COACH FECHOU SUA CORRIDA',
+      icon: 'chat_bubble_outline',
+      body: 'Relatório completo da última corrida pronto: análise, próximas sessões e recomendações.',
+      ctaLabel: 'VER RELATORIO',
+      ctaRoute: route,
+    });
+    await container.useCases.sendUserPush.execute(userId, {
+      title: 'Coach terminou sua análise',
+      body: 'Toque pra ver o relatório completo da última corrida.',
+      data: { kind: 'coach_report_ready', route, runId },
+    });
   }
 
   private async _fetchCurrentPlan(userId: string): Promise<Plan | null> {
