@@ -359,6 +359,14 @@ class _CollapsibleSection extends StatelessWidget {
 
 /// Splita o coach rationale por seções `## ` e renderiza cada uma como
 /// um ExpansionTile separado. Primeira seção começa aberta.
+/// Bloco do racional do coach. Renderiza o texto INTEIRO em markdown,
+/// truncado por padrão a [_collapsedLineLimit] linhas (com fade no fim) +
+/// botão VER MAIS. Tap expande pra texto completo + botão VER MENOS.
+///
+/// Substitui o accordion anterior (que splitava por `## `): o LLM nem sempre
+/// devolvia headers no formato esperado, então sections.length acabava igual
+/// a 1, o botão "VER MAIS" sumia e o user via texto parcial sem escape.
+/// Render contínuo é simples e funciona pra qualquer formato de markdown.
 class _RationaleAccordion extends StatefulWidget {
   final Plan plan;
   const _RationaleAccordion({required this.plan});
@@ -368,121 +376,156 @@ class _RationaleAccordion extends StatefulWidget {
 }
 
 class _RationaleAccordionState extends State<_RationaleAccordion> {
-  /// false por default: só a 1ª seção é renderizada + botão "VER MAIS".
-  /// O racional é longo (1000-1400 palavras em 5-6 seções) — abrir tudo de
-  /// cara empurra o resto da página pra baixo demais. true mostra tudo.
+  /// Quando colapsado, mostra esse número de linhas e um fade no fim.
+  /// 14 linhas ~ 1 seção curta — o user vê o "Avaliação do objetivo" inteira
+  /// na maior parte dos casos sem precisar clicar.
+  static const _collapsedLineLimit = 14;
+
   bool _expanded = false;
 
   @override
   Widget build(BuildContext context) {
     final palette = context.runninPalette;
     final rationale = widget.plan.coachRationale?.trim();
+
+    Widget header = Padding(
+      padding: const EdgeInsets.only(left: 4, bottom: 6),
+      child: Row(
+        children: [
+          Icon(Icons.psychology_outlined, size: 18, color: palette.primary),
+          const SizedBox(width: 8),
+          Text(
+            'RACIONAL DO COACH',
+            style: context.runninType.labelCaps.copyWith(
+              fontSize: 11,
+              color: palette.primary,
+              letterSpacing: 1.2,
+            ),
+          ),
+        ],
+      ),
+    );
+
     if (rationale == null || rationale.isEmpty) {
-      return _CollapsibleSection(
-        icon: Icons.psychology_outlined,
-        title: 'RACIONAL DO COACH',
-        initiallyExpanded: true,
-        child: Text(
-          'O coach está escrevendo a análise detalhada do seu plano. Volte em alguns minutos.',
-          style: context.runninType.bodyMd.copyWith(color: palette.muted),
-        ),
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          header,
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: palette.surface,
+              border: Border.all(color: palette.border, width: 1.041),
+            ),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(
+                    color: palette.primary,
+                    strokeWidth: 1.5,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'O coach está escrevendo a análise detalhada do seu plano. Volte em alguns minutos.',
+                    style: context.runninType.bodyMd.copyWith(color: palette.muted),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       );
     }
-    // Split por `## ` (header de seção). Cada seção: title=heading, body=resto.
-    final sections = <(String, String)>[];
-    final pattern = RegExp(r'^##\s+', multiLine: true);
-    final matches = pattern.allMatches(rationale).toList();
-    if (matches.isEmpty) {
-      sections.add(('Racional', rationale));
-    } else {
-      // Prefácio antes do primeiro ## (se houver)
-      if (matches.first.start > 0) {
-        final pre = rationale.substring(0, matches.first.start).trim();
-        if (pre.isNotEmpty) sections.add(('Resumo', pre));
-      }
-      for (var i = 0; i < matches.length; i++) {
-        final start = matches[i].end;
-        final endLine = rationale.indexOf('\n', start);
-        final title = (endLine < 0
-                ? rationale.substring(start)
-                : rationale.substring(start, endLine))
-            .trim();
-        final bodyStart = endLine < 0 ? start : endLine + 1;
-        final bodyEnd =
-            (i + 1 < matches.length) ? matches[i + 1].start : rationale.length;
-        final body = rationale.substring(bodyStart, bodyEnd).trim();
-        if (title.isNotEmpty) sections.add((title, body));
-      }
-    }
 
-    // Quando colapsado, mostra só a primeira seção. Quando expandido, todas.
-    final visibleCount = _expanded ? sections.length : 1;
-    final hasMore = sections.length > 1;
+    // Decide se cabe limitar — texto curto não precisa de toggle.
+    final lineCount = rationale.split('\n').length;
+    final needsToggle = lineCount > _collapsedLineLimit + 2;
+    final bodyText = (!_expanded && needsToggle)
+        ? _firstNLines(rationale, _collapsedLineLimit)
+        : rationale;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Padding(
-          padding: const EdgeInsets.only(left: 4, bottom: 6),
-          child: Row(
+        header,
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: palette.surface,
+            border: Border.all(color: palette.border, width: 1.041),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(Icons.psychology_outlined, size: 18, color: palette.primary),
-              const SizedBox(width: 8),
-              Text(
-                'RACIONAL DO COACH',
-                style: context.runninType.labelCaps.copyWith(fontSize: 11, color: palette.primary, letterSpacing: 1.2),
-              ),
+              // Render markdown inteiro. Stack + fade só quando colapsado pra
+              // sinalizar visualmente que tem mais conteúdo abaixo.
+              if (!_expanded && needsToggle)
+                ShaderMask(
+                  shaderCallback: (rect) => LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    stops: const [0.75, 1.0],
+                    colors: [palette.text, palette.text.withValues(alpha: 0)],
+                  ).createShader(rect),
+                  blendMode: BlendMode.dstIn,
+                  child: _MarkdownText(bodyText),
+                )
+              else
+                _MarkdownText(bodyText),
+              if (needsToggle) ...[
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  height: 40,
+                  child: OutlinedButton(
+                    onPressed: () => setState(() => _expanded = !_expanded),
+                    style: OutlinedButton.styleFrom(
+                      side: BorderSide(color: palette.primary, width: 1.041),
+                      shape: const RoundedRectangleBorder(
+                        borderRadius: BorderRadius.zero,
+                      ),
+                      padding: EdgeInsets.zero,
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          _expanded ? 'VER MENOS' : 'VER MAIS',
+                          style: context.runninType.labelMd.copyWith(
+                            color: palette.primary,
+                            letterSpacing: 1.1,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Icon(
+                          _expanded ? Icons.expand_less : Icons.expand_more,
+                          size: 18,
+                          color: palette.primary,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ],
           ),
         ),
-        for (var i = 0; i < visibleCount; i++) ...[
-          _CollapsibleSection(
-            icon: Icons.chevron_right,
-            title: sections[i].$1.toUpperCase(),
-            initiallyExpanded: true,
-            child: _MarkdownText(sections[i].$2),
-          ),
-          if (i < visibleCount - 1) const SizedBox(height: 6),
-        ],
-        if (hasMore) ...[
-          const SizedBox(height: 10),
-          SizedBox(
-            width: double.infinity,
-            height: 40,
-            child: OutlinedButton(
-              onPressed: () => setState(() => _expanded = !_expanded),
-              style: OutlinedButton.styleFrom(
-                side: BorderSide(color: palette.primary, width: 1.041),
-                shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-                padding: EdgeInsets.zero,
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    _expanded
-                        ? 'VER MENOS'
-                        : 'VER MAIS (${sections.length - 1} seções)',
-                    style: context.runninType.labelMd.copyWith(
-                      color: palette.primary,
-                      letterSpacing: 1.1,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  Icon(
-                    _expanded ? Icons.expand_less : Icons.expand_more,
-                    size: 18,
-                    color: palette.primary,
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
       ],
     );
+  }
+
+  /// Retorna as primeiras N linhas do texto, preservando quebras (mantém o
+  /// markdown válido pro _MarkdownText interpretar).
+  static String _firstNLines(String text, int n) {
+    final lines = text.split('\n');
+    if (lines.length <= n) return text;
+    return lines.take(n).join('\n');
   }
 }
 
