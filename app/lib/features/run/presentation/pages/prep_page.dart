@@ -48,8 +48,6 @@ class _PrepViewState extends State<_PrepView> {
   // bloqueia qualquer cue pre_run tardio de tocar por cima da saudação.
   bool _navigatedToRun = false;
   Timer? _coachDebounce;
-  String? _coachCue;
-  bool _coachLoading = false;
   final bool _coachMuted = false;
   bool? _isPro;
 
@@ -286,10 +284,6 @@ class _PrepViewState extends State<_PrepView> {
   void _requestPreRunCue() {
     if (_navigatedToRun) return;
     _coachSub?.cancel();
-    setState(() {
-      _coachLoading = true;
-      _coachCue = null;
-    });
 
     _coachSub = _coachRemote
         .streamCoachCue(
@@ -302,10 +296,6 @@ class _PrepViewState extends State<_PrepView> {
         .listen(
           (cue) {
             if (!mounted) return;
-            setState(() {
-              _coachCue = cue.text;
-              _coachLoading = false;
-            });
             final audio = cue.audioBase64;
             if (!_navigatedToRun && !_coachMuted && audio != null && audio.isNotEmpty) {
               playCoachAudio(
@@ -314,12 +304,6 @@ class _PrepViewState extends State<_PrepView> {
                 volume: 1.0,
               );
             }
-          },
-          onError: (_) {
-            if (mounted) setState(() => _coachLoading = false);
-          },
-          onDone: () {
-            if (mounted) setState(() => _coachLoading = false);
           },
         );
   }
