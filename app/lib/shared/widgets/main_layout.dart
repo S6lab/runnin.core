@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:runnin/features/notifications/presentation/cubit/notifications_cubit.dart';
 import 'figma/export.dart';
 
 class MainLayout extends StatelessWidget {
@@ -11,9 +13,15 @@ class MainLayout extends StatelessWidget {
   Widget build(BuildContext context) {
     final location = GoRouterState.of(context).matchedLocation;
 
-    return Scaffold(
-      body: child,
-      bottomNavigationBar: _BottomNav(currentLocation: location),
+    // NotificationsCubit é provido no shell pra home (badge) e
+    // /notifications (lista) compartilharem a mesma instância. Sem isso,
+    // dismiss/markRead na lista não refletia no badge da home até remount.
+    return BlocProvider(
+      create: (_) => NotificationsCubit()..load(),
+      child: Scaffold(
+        body: child,
+        bottomNavigationBar: _BottomNav(currentLocation: location),
+      ),
     );
   }
 }

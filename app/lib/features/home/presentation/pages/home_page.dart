@@ -54,11 +54,10 @@ class HomePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MultiBlocProvider(
-      providers: [
-        BlocProvider(create: (_) => HomeCubit()..load()),
-        BlocProvider(create: (_) => NotificationsCubit()..load()),
-      ],
+    // NotificationsCubit vem do MainLayout (shell) — compartilhado com
+    // /notifications pra badge e lista ficarem sincronizados.
+    return BlocProvider(
+      create: (_) => HomeCubit()..load(),
       child: const _HomeView(),
     );
   }

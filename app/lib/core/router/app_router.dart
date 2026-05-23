@@ -51,7 +51,10 @@ import 'package:runnin/features/splash/presentation/pages/splash_page.dart';
 import 'package:runnin/shared/widgets/main_layout.dart';
 import 'package:runnin/features/training/presentation/pages/weekly_report_detail_page.dart';
 
-final _rootNavigatorKey = GlobalKey<NavigatorState>();
+/// Exposto pra que push handlers (FCM) consigam navegar via
+/// `rootNavigatorKey.currentState?.context` quando o tap acontece fora do
+/// widget tree (background/cold start).
+final rootNavigatorKey = GlobalKey<NavigatorState>();
 final _shellNavigatorKey = GlobalKey<NavigatorState>();
 final _runFlowNavigatorKey = GlobalKey<NavigatorState>();
 
@@ -94,7 +97,7 @@ void clearOnboardingCache() {
 }
 
 final appRouter = GoRouter(
-  navigatorKey: _rootNavigatorKey,
+  navigatorKey: rootNavigatorKey,
   initialLocation: _initialLocation(),
   redirect: (context, state) {
     final user = FirebaseAuth.instance.currentUser;
@@ -186,7 +189,7 @@ final appRouter = GoRouter(
     GoRoute(path: '/coach-intro', builder: (_, _) => const CoachIntroPage()),
     GoRoute(
       path: '/share',
-      parentNavigatorKey: _rootNavigatorKey,
+      parentNavigatorKey: rootNavigatorKey,
       builder: (_, state) {
         final extra = state.extra as Map<String, dynamic>? ?? {};
         return SharePage(runId: extra['runId'] as String? ?? '');
@@ -195,7 +198,7 @@ final appRouter = GoRouter(
 
     // Fluxo de corrida — RunBloc compartilhado entre prep → run → report
     ShellRoute(
-      parentNavigatorKey: _rootNavigatorKey,
+      parentNavigatorKey: rootNavigatorKey,
       navigatorKey: _runFlowNavigatorKey,
       builder: (context, state, child) =>
           BlocProvider(create: (_) => RunBloc(), child: child),
