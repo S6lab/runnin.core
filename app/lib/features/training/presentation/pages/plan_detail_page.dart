@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:runnin/core/theme/app_palette.dart';
@@ -34,6 +36,10 @@ class _PlanDetailPageState extends State<PlanDetailPage> {
   UserProfile? _profile;
   bool _loading = true;
   String? _error;
+  /// Poll que re-puxa o plano enquanto coachRationale ainda não veio (ele é
+  /// gerado em background no server, ~30-60s depois do plano ficar ready).
+  /// Antes a página carregava 1x e mostrava placeholder pra sempre.
+  Timer? _rationalePoll;
   // GlobalKey por weekNumber — usado pra Scrollable.ensureVisible quando
   // user clica numa semana na periodização.
   final Map<int, GlobalKey> _weekKeys = {};
@@ -58,6 +64,12 @@ class _PlanDetailPageState extends State<PlanDetailPage> {
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void dispose() {
+    _rationalePoll?.cancel();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -90,9 +102,41 @@ class _PlanDetailPageState extends State<PlanDetailPage> {
           _jumpToWeek(fw);
         });
       }
+      // Poll curto enquanto o racional ainda não chegou (server gera em
+      // background ~30-60s depois do plano ficar ready). Sem isso, user via
+      // o placeholder "está escrevendo" pra sempre até refresh manual.
+      _maybeStartRationalePoll();
     } catch (e) {
       if (mounted) setState(() { _error = '$e'; _loading = false; });
     }
+  }
+
+  void _maybeStartRationalePoll() {
+    _rationalePoll?.cancel();
+    final needsRationale =
+        _plan != null && (_plan!.coachRationale?.trim().isEmpty ?? true);
+    if (!needsRationale) return;
+    // Polling a cada 4s, máximo ~2min. Quando o racional aparece (ou o user
+    // sai da tela), o timer para. Sem backoff fancy — janela curta o suficiente
+    // pra não consumir bateria mesmo no pior caso.
+    var ticks = 0;
+    _rationalePoll = Timer.periodic(const Duration(seconds: 4), (t) async {
+      ticks++;
+      if (!mounted || ticks > 30) {
+        t.cancel();
+        return;
+      }
+      try {
+        final fresh = await _planDs.getCurrentPlan();
+        if (!mounted) return;
+        if (fresh != null && (fresh.coachRationale?.trim().isNotEmpty ?? false)) {
+          setState(() => _plan = fresh);
+          t.cancel();
+        }
+      } catch (_) {
+        // erro de rede silencioso — próximo tick tenta de novo.
+      }
+    });
   }
 
   @override
@@ -384,7 +428,11 @@ class _RationaleAccordion extends StatelessWidget {
           _CollapsibleSection(
             icon: Icons.chevron_right,
             title: sections[i].$1.toUpperCase(),
-            initiallyExpanded: i == 0,
+            // Todas as seções abertas por padrão. Antes só a primeira ficava
+            // expandida, e o user lia 1/6 do racional pensando que o texto
+            // não tinha carregado completo. User pode colapsar individualmente
+            // se quiser navegar.
+            initiallyExpanded: true,
             child: _MarkdownText(sections[i].$2),
           ),
           if (i < sections.length - 1) const SizedBox(height: 6),
