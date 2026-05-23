@@ -109,30 +109,38 @@ class StagingFirebaseOptions {
     }
   }
 
+  // Consolidado em 1 projeto Firebase: usa o mesmo `runnin-494520`
+  // do DefaultFirebaseOptions. Não existe projeto Firebase staging
+  // separado — `runnin-staging-494520` era placeholder herdado de
+  // setup nunca finalizado (appIds eram literais 'STAGING_APP_ID').
+  // A separação staging vs prod fica só no backend (Cloud Run URL via
+  // --dart-define=API_BASE_URL) e no site Firebase Hosting
+  // (`runnin-staging.web.app` vs `runnin-494520.web.app`).
   static const FirebaseOptions android = FirebaseOptions(
     apiKey: 'AIzaSyDnJ9D5glmXQ29o4gwiUF5MBhelgalLw4I',
-    appId: '1:STAGING_APP_ID:android:STAGING_ANDROID_APP_ID',
+    appId: '1:506126899076:android:9bbb474eb65e655c4b6fd1',
     messagingSenderId: '506126899076',
-    projectId: 'runnin-staging-494520',
-    storageBucket: 'runnin-staging-494520.firebasestorage.app',
+    projectId: 'runnin-494520',
+    storageBucket: 'runnin-494520.firebasestorage.app',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'AIzaSyDyYL_V3a-BMckWDXDasYmhWJqqaJGogz4',
-    appId: '1:STAGING_APP_ID:ios:STAGING_IOS_APP_ID',
+    appId: '1:506126899076:ios:968144101ba52a864b6fd1',
     messagingSenderId: '506126899076',
-    projectId: 'runnin-staging-494520',
-    storageBucket: 'runnin-staging-494520.firebasestorage.app',
-    iosBundleId: 'com.s6lab.runnin.staging',
+    projectId: 'runnin-494520',
+    storageBucket: 'runnin-494520.firebasestorage.app',
+    iosClientId: '506126899076-vrt53k0kh9us2rq193jvspac0hhjnl44.apps.googleusercontent.com',
+    iosBundleId: 'com.s6lab.runnin',
   );
 
   static const FirebaseOptions web = FirebaseOptions(
     apiKey: 'AIzaSyBK8Cpb9qnW__VhzqkCqi9wf-rcIYj3a9o',
-    appId: '1:STAGING_APP_ID:web:STAGING_WEB_APP_ID',
+    appId: '1:506126899076:web:d4fd630dc0d2b9364b6fd1',
     messagingSenderId: '506126899076',
-    projectId: 'runnin-staging-494520',
-    authDomain: 'runnin-staging-494520.firebaseapp.com',
-    storageBucket: 'runnin-staging-494520.firebasestorage.app',
-    measurementId: 'G-STAGING_ID',
+    projectId: 'runnin-494520',
+    authDomain: 'runnin-494520.firebaseapp.com',
+    storageBucket: 'runnin-494520.firebasestorage.app',
+    measurementId: 'G-D0CG03CYC9',
   );
 }
