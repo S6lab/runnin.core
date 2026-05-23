@@ -84,10 +84,14 @@ export class GeminiLiveTtsService {
       await session.open();
       session.sendText(text);
 
+      // 15s timeout: 8s era apertado pra textos >300 chars (já vimos cue
+      // pre_run de 334 chars timeoutando, entregue sem áudio). Gemini Live
+      // tipicamente responde em 2-5s; 15s cobre o caso de texto longo
+      // sem deixar o request pendurado.
       await Promise.race([
         done,
         new Promise<void>((_, rej) =>
-          setTimeout(() => rej(new Error('gemini_live_tts_timeout_8s')), 8000),
+          setTimeout(() => rej(new Error('gemini_live_tts_timeout_15s')), 15000),
         ),
       ]);
 
