@@ -1,5 +1,10 @@
 name: Deploy Production (Flutter Web)
 
+# Web prod dispara em push pra `main` (mesmo trigger do APK Android via
+# codemagic, mas independente — APK roda lá, web roda aqui). Site
+# Firebase: runnin-494520.web.app (target `production` no .firebaserc).
+# API_BASE_URL aponta pro Cloud Run prod — sem isso o web batia em
+# uma URL default que pode divergir do que o server prod expõe.
 on:
   push:
     branches:
@@ -26,13 +31,18 @@ jobs:
         run: flutter pub get
 
       - name: Build Flutter web (production)
-        run: flutter build web --release --dart-define=FLAVOR=prod -t lib/main.dart --no-tree-shake-icons
+        run: |
+          flutter build web --release \
+            --dart-define=FLAVOR=prod \
+            --dart-define=API_BASE_URL=https://runnin-api-rogiz7losq-rj.a.run.app \
+            -t lib/main.dart \
+            --no-tree-shake-icons
 
       - name: Deploy to Firebase Hosting (production)
         uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
-          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_PROD }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           projectId: runnin-494520
           target: production
           channelId: live
