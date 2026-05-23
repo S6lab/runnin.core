@@ -195,6 +195,12 @@ class RunBloc extends Bloc<RunEvent, RunState> {
   Timer? _gpsPollTimer;
   Timer? _timer;
   Timer? _flushTimer;
+  /// Safety: a cada 30s checa se a sessão Live atingiu o threshold de
+  /// idade pra rotação. Sem isso a rotação só acontece em km_reached/
+  /// segment_start/segment_end — e em runs lentas (ou pace estável sem
+  /// transição de segmento) a sessão estoura o cap implícito de ~10min
+  /// do Gemini Live API e cai com code 1011. Já vimos esse padrão em prod.
+  Timer? _coachRotationSafetyTimer;
   int _pendingFlushCount = 0;
   int _lastCoachKm = 0;
   /// Timestamp (s desde start da run) em que o último km foi cruzado.
@@ -416,6 +422,11 @@ class RunBloc extends Bloc<RunEvent, RunState> {
       // Motivação: dispara cue a cada 5min se não houver outro cue ativo.
       // Respeita _alertPrefs['motivation'] (no-op se false).
       _startMotivationTimer();
+
+      // Safety pra rotação Live: garante que a sessão não estoure o cap
+      // do Gemini (~10min) mesmo em runs lentas ou sem transições de
+      // segmento. Roda a cada 30s e tenta rotacionar se shouldRotateNow.
+      _startCoachRotationSafetyTimer();
 
       // Stall check: 30s após START, se distância < 5m E houve fix GPS,
       // pede ao coach um disclaimer gentil ("tudo bem? começa quando puder").
@@ -885,12 +896,14 @@ class RunBloc extends Bloc<RunEvent, RunState> {
     _motivationTimer?.cancel();
     _scheduledAnalysis?.cancel();
     _stallCheckTimer?.cancel();
+    _coachRotationSafetyTimer?.cancel();
     _timer = null;
     _gpsPollTimer = null;
     _gpsSub = null;
     _motivationTimer = null;
     _scheduledAnalysis = null;
     _stallCheckTimer = null;
+    _coachRotationSafetyTimer = null;
     emit(state.copyWith(status: RunStatus.paused));
   }
 
@@ -904,12 +917,14 @@ class RunBloc extends Bloc<RunEvent, RunState> {
     _motivationTimer?.cancel();
     _scheduledAnalysis?.cancel();
     _stallCheckTimer?.cancel();
+    _coachRotationSafetyTimer?.cancel();
     _timer = null;
     _gpsPollTimer = null;
     _gpsSub = null;
     _motivationTimer = null;
     _scheduledAnalysis = null;
     _stallCheckTimer = null;
+    _coachRotationSafetyTimer = null;
     emit(state.copyWith(status: RunStatus.paused, noMovementPrompt: true));
   }
 
@@ -923,6 +938,7 @@ class RunBloc extends Bloc<RunEvent, RunState> {
       (_) => add(_TimerTick()),
     );
     _startMotivationTimer();
+    _startCoachRotationSafetyTimer();
     if (kIsWeb) {
       const webSettings = LocationSettings(
         accuracy: LocationAccuracy.medium,
@@ -951,6 +967,7 @@ class RunBloc extends Bloc<RunEvent, RunState> {
     _motivationTimer?.cancel();
     _scheduledAnalysis?.cancel();
     _stallCheckTimer?.cancel();
+    _coachRotationSafetyTimer?.cancel();
     _gpsSub = null;
     _gpsPollTimer = null;
     _timer = null;
@@ -958,6 +975,7 @@ class RunBloc extends Bloc<RunEvent, RunState> {
     _motivationTimer = null;
     _scheduledAnalysis = null;
     _stallCheckTimer = null;
+    _coachRotationSafetyTimer = null;
   }
 
   @override
@@ -1033,6 +1051,23 @@ class RunBloc extends Bloc<RunEvent, RunState> {
       if (elapsedSinceLastCue < cooldownMs) return;
       unawaited(_requestCoachCue(event: 'motivation'));
       _lastCueAt['motivation'] = now;
+    });
+  }
+
+  /// Safety pra rotação da sessão Live. A rotação normal é disparada
+  /// por triggers naturais (km_reached/segment_start/segment_end), mas
+  /// runs lentas ou em pace estável podem ficar minutos sem nenhum
+  /// trigger — e o Gemini Live tem cap implícito de ~10min por sessão.
+  /// Este timer tick a cada 30s e chama `_maybeRotateLiveSession` com
+  /// trigger sintético; o gate `shouldRotateNow` (turns≥6 OR age≥6min)
+  /// decide se de fato rotaciona. Evita silêncio pós-cap em qualquer
+  /// pace de corrida.
+  void _startCoachRotationSafetyTimer() {
+    _coachRotationSafetyTimer?.cancel();
+    _coachRotationSafetyTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (isClosed) return;
+      if (state.status != RunStatus.active) return;
+      _maybeRotateLiveSession(trigger: 'safety_age_check');
     });
   }
 

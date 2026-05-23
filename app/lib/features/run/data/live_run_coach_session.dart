@@ -49,9 +49,11 @@ class LiveRunCoachSession {
 
   static const _voiceDefault = 'Charon';
 
-  // Rotação adaptativa.
+  // Rotação adaptativa. Threshold de age reduzido pra 6min depois de
+  // observar Gemini Live caindo com code 1011 em sessões de exatos
+  // ~10min — 6min dá ~4min de folga pra rotação completar antes do cap.
   static const int rotationTurnThreshold = 6;
-  static const Duration rotationAgeThreshold = Duration(minutes: 8);
+  static const Duration rotationAgeThreshold = Duration(minutes: 6);
   // Token efêmero dura 30min — refetch quando faltam <5min pra evitar
   // que o token vire pumpkin no meio de uma rotação.
   static const Duration _tokenStaleThreshold = Duration(minutes: 5);
@@ -280,19 +282,48 @@ class LiveRunCoachSession {
   }
 
   void _maybeScheduleReconnect({int? code, String? reason, Object? err}) {
-    if (_disposed || _intentionalClose || _rotating || _talking) return;
-    if (_runId == null) return;
-    // close 1000 = clean close (geralmente nosso lado fechou). Não reconecta.
-    if (code == 1000) return;
-    // Se já tem reconnect agendado, deixa rodar.
-    if (_reconnectTimer != null) return;
+    // Cada guard emite um beacon `reconnect_skipped` com o motivo —
+    // sem isso ficamos cegos quando 1011 não recupera (já caímos uma vez:
+    // sessão de 10min do Gemini Live fechou e reconnect não disparou,
+    // sem beacon explicando qual guard barrou).
+    String? skipReason;
+    if (_disposed) {
+      skipReason = 'disposed';
+    } else if (_intentionalClose) {
+      skipReason = 'intentional_close';
+    } else if (_rotating) {
+      skipReason = 'rotating';
+    } else if (_talking) {
+      skipReason = 'talking';
+    } else if (_runId == null) {
+      skipReason = 'no_run_id';
+    } else if (code == 1000) {
+      skipReason = 'clean_close_1000';
+    } else if (_reconnectTimer != null) {
+      skipReason = 'already_scheduled';
+    }
+    if (skipReason != null) {
+      unawaited(_beacon(
+        'reconnect_skipped',
+        reason: skipReason,
+        code: code,
+      ));
+      return;
+    }
     final isNetwork = err is SocketException ||
         code == 1001 ||
         code == 1006 ||
         code == 1011 ||
         code == 1012 ||
         code == 1013;
-    if (!isNetwork && code != null) return; // ex: 1008 (constraint) não recupera com retry
+    if (!isNetwork && code != null) {
+      unawaited(_beacon(
+        'reconnect_skipped',
+        reason: 'non_recoverable_code',
+        code: code,
+      ));
+      return; // ex: 1008 (constraint) não recupera com retry
+    }
     final attempt = _reconnectAttempt;
     final delay = _reconnectBackoff[
         attempt.clamp(0, _reconnectBackoff.length - 1)];
