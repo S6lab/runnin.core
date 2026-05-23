@@ -6,6 +6,7 @@ import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 import 'package:runnin/features/history/data/stats_remote_datasource.dart';
 import 'package:runnin/features/onboarding/presentation/steps/onboarding_step_start_date.dart';
 import 'package:runnin/features/subscriptions/presentation/subscription_controller.dart';
+import 'package:runnin/features/subscriptions/presentation/widgets/premium_locked_card.dart';
 import 'package:runnin/features/training/data/datasources/plan_remote_datasource.dart';
 import 'package:runnin/features/training/presentation/steps/step_current_load.dart';
 import 'package:runnin/features/training/presentation/steps/step_days.dart';
@@ -110,7 +111,47 @@ class _PlanSetupPageState extends State<PlanSetupPage> {
     final palette = context.runninPalette;
     return Scaffold(
       backgroundColor: palette.background,
-      body: Column(
+      body: ListenableBuilder(
+        listenable: subscriptionController,
+        builder: (context, _) {
+          // Gate freemium: geração de plano é Premium. Mostra paywall
+          // card no lugar do form pra evitar o user preencher 5 steps
+          // e bater no gate só no submit.
+          if (!subscriptionController.has('generatePlan')) {
+            return SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    OutlinedButton(
+                      onPressed: () => context.pop(),
+                      child: const Text('VOLTAR'),
+                    ),
+                    const SizedBox(height: 24),
+                    PremiumLockedCard(
+                      title: 'GERAR PLANO COM IA',
+                      description:
+                          'A geração de plano com coach AI personalizado '
+                          '(nível, meta, frequência, carga e calendário) '
+                          'é exclusiva do Premium. Após assinar, você volta '
+                          'pra esta tela pra continuar a configuração.',
+                      icon: Icons.auto_awesome_outlined,
+                      next: '/training/criar-plano',
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }
+          return _buildSetupBody(context);
+        },
+      ),
+    );
+  }
+
+  Widget _buildSetupBody(BuildContext context) {
+    return Column(
         children: [
           FigmaOnboardingTopProgressBar(total: _totalSteps, currentIndex: _step),
           Expanded(
@@ -146,7 +187,6 @@ class _PlanSetupPageState extends State<PlanSetupPage> {
             ),
           ),
         ],
-      ),
     );
   }
 

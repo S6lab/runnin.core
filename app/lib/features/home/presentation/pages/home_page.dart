@@ -11,6 +11,7 @@ import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 import 'package:runnin/features/home/domain/use_cases/get_home_data_use_case.dart';
 import 'package:runnin/features/home/presentation/cubit/home_cubit.dart';
 import 'package:runnin/features/notifications/presentation/cubit/notifications_cubit.dart';
+import 'package:runnin/features/subscriptions/presentation/widgets/premium_locked_card.dart';
 import 'package:runnin/features/run/domain/entities/run.dart';
 import 'package:runnin/shared/widgets/app_panel.dart';
 import 'package:runnin/shared/widgets/app_tag.dart';
@@ -143,15 +144,33 @@ class _HomeViewState extends State<_HomeView> {
                     const SizedBox(height: 20),
                     // Notificações migraram pro ícone (sino) no cabeçalho da
                     // Home → tela /notifications. Dropdown antigo removido.
-                    // B4 SUP-408 Section 3 — Semana
-                    _SemanaSection(data: state.data),
-                    const SizedBox(height: 20),
-                    // B5 SUP-409 Section 4 — Performance
-                    _PerformanceSection(data: state.data),
-                    const SizedBox(height: 20),
-                    // B6 SUP-410 Section 5 — Coach Resumo Semanal
-                     _CoachAiWeeklySummary(data: state.data),
-                     const SizedBox(height: 20),
+                    // B4-B6: SEMANA / PERFORMANCE / COACH RESUMO são
+                    // detalhes do plano + curadoria do coach AI → Premium.
+                    // Freemium vê 1 card de paywall agrupado no lugar das
+                    // 3 seções pra não poluir o feed com 3 banners iguais.
+                    if (state.data.profile?.premium ?? false) ...[
+                      // B4 SUP-408 Section 3 — Semana
+                      _SemanaSection(data: state.data),
+                      const SizedBox(height: 20),
+                      // B5 SUP-409 Section 4 — Performance
+                      _PerformanceSection(data: state.data),
+                      const SizedBox(height: 20),
+                      // B6 SUP-410 Section 5 — Coach Resumo Semanal
+                      _CoachAiWeeklySummary(data: state.data),
+                      const SizedBox(height: 20),
+                    ] else ...[
+                      const PremiumLockedCard(
+                        title: 'PLANO • PERFORMANCE • COACH AI',
+                        description:
+                            'Distribuição semanal, métricas de pace/BPM '
+                            'e resumo do coach AI são Premium. Sua '
+                            'corrida livre e os dados pessoais seguem '
+                            'liberados abaixo.',
+                        icon: Icons.lock_outline,
+                        next: '/home',
+                      ),
+                      const SizedBox(height: 20),
+                    ],
                      // B7 SUP-411 Section 6 — Status Corporal (REAL)
                      ///status corporal implements all 4 metrics with real data: Prontidão, Sono, Carga Muscular, Hidratação
                      _StatusCorporalSection(

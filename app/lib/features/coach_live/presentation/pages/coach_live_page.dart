@@ -7,6 +7,8 @@ import 'package:flutter/material.dart';
 import 'package:runnin/core/network/api_client.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/features/coach_live/data/live_audio_service.dart';
+import 'package:runnin/features/subscriptions/presentation/subscription_controller.dart';
+import 'package:runnin/features/subscriptions/presentation/widgets/premium_locked_card.dart';
 import 'package:runnin/shared/widgets/runnin_app_bar.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
@@ -46,6 +48,13 @@ class _CoachLivePageState extends State<CoachLivePage> {
   @override
   void initState() {
     super.initState();
+    // Gate freemium: não abre WS pra Gemini Live se user não tem
+    // coachLive feature. Build mostra paywall card no lugar.
+    if (!subscriptionController.has('coachLive')) {
+      _connecting = false;
+      _connected = false;
+      return;
+    }
     _connect();
   }
 
@@ -197,6 +206,26 @@ class _CoachLivePageState extends State<CoachLivePage> {
   @override
   Widget build(BuildContext context) {
     final palette = context.runninPalette;
+    if (!subscriptionController.has('coachLive')) {
+      return Scaffold(
+        backgroundColor: palette.background,
+        appBar: const RunninAppBar(title: 'COACH AO VIVO'),
+        body: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: PremiumLockedCard(
+              title: 'COACH AO VIVO',
+              description:
+                  'Conversa em tempo real com o coach AI via voz '
+                  '(Gemini Live) durante e fora da corrida — feature '
+                  'exclusiva do Premium.',
+              icon: Icons.headset_mic_outlined,
+              next: '/coach-live',
+            ),
+          ),
+        ),
+      );
+    }
     return Scaffold(
       backgroundColor: palette.background,
       appBar: const RunninAppBar(title: 'COACH AO VIVO'),

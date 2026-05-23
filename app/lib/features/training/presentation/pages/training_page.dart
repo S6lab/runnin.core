@@ -15,6 +15,8 @@ import 'package:runnin/features/training/data/weekly_report_remote_datasource.da
 import 'package:runnin/features/training/domain/entities/plan.dart';
 import 'package:runnin/features/training/domain/week_phase_label.dart';
 import 'package:runnin/features/training/domain/entities/weekly_report.dart';
+import 'package:runnin/features/subscriptions/presentation/subscription_controller.dart';
+import 'package:runnin/features/subscriptions/presentation/widgets/premium_locked_card.dart';
 import 'package:runnin/shared/widgets/figma/figma_top_nav.dart';
 import 'package:runnin/shared/widgets/figma/figma_coach_ai_block.dart';
 import 'package:runnin/shared/widgets/app_panel.dart';
@@ -278,6 +280,34 @@ class _TrainingPageState extends State<TrainingPage> {
   Widget _buildBody(BuildContext context) {
     final palette = context.runninPalette;
 
+    // Gate freemium: plano + treino guiado são features Premium.
+    // Em vez de carregar plano e mostrar empty state genérico, mostra
+    // o card de paywall logo no topo da tela. Listenable rebuild quando
+    // o user volta do paywall (subscriptionController.notifyListeners).
+    return ListenableBuilder(
+      listenable: subscriptionController,
+      builder: (context, _) {
+        if (!subscriptionController.isPro) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+            child: PremiumLockedCard(
+              title: 'TREINO PERSONALIZADO',
+              description:
+                  'O módulo de treino com plano gerado pelo coach AI, '
+                  'distribuição semanal, ajustes automáticos e relatórios '
+                  'é exclusivo do Premium. Suas corridas livres seguem '
+                  'liberadas na home.',
+              icon: Icons.fitness_center_outlined,
+              next: '/training',
+            ),
+          );
+        }
+        return _buildAuthenticatedBody(context, palette);
+      },
+    );
+  }
+
+  Widget _buildAuthenticatedBody(BuildContext context, RunninPalette palette) {
     if (_loading) {
       return Center(
         child: CircularProgressIndicator(
