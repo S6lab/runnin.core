@@ -569,9 +569,14 @@ class _SemanaSection extends StatelessWidget {
     // Semana do plano em curso (não a semana ISO do ano).
     final weekNum = data.currentPlanWeekNumber ?? _isoWeekNumber(now);
     final monthAbbr = _monthAbbr(monday.month);
-    final volumePct = data.plannedSessions == 0
+    // Volume = km executados / km planejados (somando as sessões da semana
+    // pelo plano vigente). Antes a barra usava sessions count e o
+    // denominador era plannedSessions × 5km — não batia com o label nem com
+    // os km reais. Agora é km-vs-km, coerente com a copy "X / Y km".
+    final plannedKm = _plannedWeeklyDistance(data);
+    final volumePct = plannedKm <= 0
         ? 0.0
-        : (data.completedSessions / data.plannedSessions).clamp(0.0, 1.0);
+        : (data.weeklyDistanceKm / plannedKm).clamp(0.0, 1.0);
 
     // SUP-408 (HOME-B4): SEMANA heading with cyan superscript "02"
     // per HOME.md §03 + existing subtitle and weekly grid.
@@ -640,7 +645,7 @@ class _SemanaSection extends StatelessWidget {
             ),
             const Spacer(),
             Text(
-              '${data.weeklyDistanceKm.toStringAsFixed(1)} / ${(data.plannedSessions * 5.0).toStringAsFixed(0)} km',
+              '${data.weeklyDistanceKm.toStringAsFixed(1)} / ${plannedKm.toStringAsFixed(1)} km',
               style: TextStyle(
                 color: palette.text,
                 fontSize: 11,
