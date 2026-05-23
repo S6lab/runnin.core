@@ -7,6 +7,9 @@ export const UpsertProfileSchema = z.object({
   level: z.enum(['iniciante', 'intermediario', 'avancado']).optional(),
   goal: z.string().optional(),
   frequency: z.number().int().min(1).max(7).optional(),
+  // Dias da semana disponíveis pra treinar (1=seg…7=dom). Coletado na jornada
+  // de criação do plano. Aceita array vazio (= "sem restrição").
+  availableDays: z.array(z.number().int().min(1).max(7)).max(7).optional(),
   birthDate: z.string().optional(),
   weight: z.string().optional(),
   height: z.string().optional(),
@@ -78,6 +81,7 @@ export class UpsertProfileUseCase {
       level: input.level ?? existing?.level ?? 'iniciante',
       goal: input.goal ?? existing?.goal ?? '',
       frequency: input.frequency ?? existing?.frequency ?? 3,
+      availableDays: input.availableDays ?? existing?.availableDays,
       birthDate: input.birthDate ?? existing?.birthDate,
       weight: input.weight ?? existing?.weight,
       height: input.height ?? existing?.height,

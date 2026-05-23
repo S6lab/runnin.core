@@ -68,6 +68,25 @@ export const GeneratePlanSchema = z.object({
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, 'startDate deve ser YYYY-MM-DD')
     .optional(),
+  /**
+   * Matiz fino do nível dentro de `iniciante` (o enum tem só 3 bins, mas a
+   * jornada de criação tem 5 UI options). Server usa como contexto extra pro
+   * prompt LLM; não muda a estrutura do plano. a/b/c colapsam em 'iniciante'.
+   *  - 'nunca_corri' = nunca correu antes
+   *  - 'esporadico' = corre 1-2x/sem sem regularidade
+   *  - 'iniciante_freq' = já corre com alguma frequência
+   */
+  levelHint: z.enum(['nunca_corri', 'esporadico', 'iniciante_freq']).nullish(),
+  /** Volume atual do atleta em km/sem (média últimas 4 sem). Vem da tela 05
+   *  da jornada (prefill via /stats/breakdown). Usa no prompt LLM pra calibrar
+   *  carga inicial; null = "não sei". */
+  currentWeeklyKm: z.number().positive().max(300).nullish(),
+  /** Pace atual confortável (M:SS/km). Vem da tela 05. null = "não sei". */
+  currentPaceMinKm: z.string().regex(/^\d{1,2}:\d{2}$/).nullish(),
+  /** Dias da semana em que o atleta pode treinar (1=seg…7=dom). A IA escolhe
+   *  os melhores dias se `frequency < availableDays.length`. Array vazio ou
+   *  ausente = sem restrição (IA escolhe livremente). */
+  availableDays: z.array(z.number().int().min(1).max(7)).max(7).nullish(),
 });
 
 export type GeneratePlanInput = z.infer<typeof GeneratePlanSchema>;
@@ -188,6 +207,14 @@ export class GeneratePlanUseCase {
     // qualquer data futura (ou hoje). Sem ela, default = hoje.
     const startDate = input.startDate ?? new Date().toISOString().slice(0, 10);
 
+    // Prazo INICIAL (data prevista de conclusão na criação do plano). Fica
+    // imutável pro relatório final. Mesociclo dura weeksCount × 7d.
+    const initialDeadlineAt = (() => {
+      const d = new Date(`${startDate}T00:00:00Z`);
+      d.setUTCDate(d.getUTCDate() + weeksCount * 7 - 1);
+      return d.toISOString().slice(0, 10);
+    })();
+
     // Cria o plano como "generating" imediatamente
     const plan: Plan = {
       id: planId,
@@ -198,6 +225,7 @@ export class GeneratePlanUseCase {
       status: 'generating',
       weeks: [],
       startDate,
+      initialDeadlineAt,
       createdAt: now,
       updatedAt: now,
     };
@@ -231,7 +259,20 @@ export class GeneratePlanUseCase {
 
     const built = await buildPlanInitPrompt({
       profile: runtime.profile,
-      input: { goal: input.goal, level: input.level, frequency: freq, weeksCount: input.weeksCount, startDate: input.startDate },
+      input: {
+        goal: input.goal,
+        level: input.level,
+        frequency: freq,
+        weeksCount: input.weeksCount,
+        startDate: input.startDate,
+        // Contexto da jornada nova (5 níveis + Flow + dias + pace/volume atuais):
+        // o builder injeta `journey` no userTemplate; campos null/undefined
+        // são tratados pelo template via condicionais.
+        levelHint: input.levelHint ?? null,
+        currentWeeklyKm: input.currentWeeklyKm ?? null,
+        currentPaceMinKm: input.currentPaceMinKm ?? null,
+        availableDays: input.availableDays ?? null,
+      },
       ragContext: knowledgeContext,
     });
 
@@ -1369,6 +1410,11 @@ export function resolvePlanWeeksCount(input: Pick<GeneratePlanInput, 'goal' | 'l
     weeks = isBeginner ? 10 : 8;
   } else if (goal.includes('5k') || goal.includes('5 km')) {
     weeks = isBeginner ? 8 : 6;
+  } else if (goal === 'flow' || goal.includes('flow')) {
+    // Flow: "você contra você mesmo" — sem meta de distância/pace. Bloco curto
+    // de melhoria contínua; checkpoints semanais propõem incrementos. 10 sem
+    // base + 2 extras se freq baixa pra dar tempo de adaptar.
+    weeks = isAdvanced ? 8 : 10;
   } else if (goal.includes('emagrec') || goal.includes('saude') || goal.includes('condicion')) {
     weeks = isAdvanced ? 6 : 8;
   } else {

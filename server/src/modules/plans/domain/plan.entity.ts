@@ -1,4 +1,14 @@
-export type PlanStatus = 'generating' | 'ready' | 'failed';
+/**
+ * Estados do plano:
+ *  - 'generating': LLM gerando (assíncrono); UI mostra countdown.
+ *  - 'ready': plano vivo, em uso. Cron de domingo gera checkpoints.
+ *  - 'failed': IA falhou; user tem que regerar.
+ *  - 'completed': mesociclo terminou (mesocycleEndDate < hoje). Plano fica
+ *    arquivado e abre a tela de relatório final (/training/plan-report/:id).
+ *    User volta pra estado "sem plano" no TREINO e refaz a jornada se quiser
+ *    outro plano. Detecção lazy no GetCurrentPlanUseCase (não tem cron).
+ */
+export type PlanStatus = 'generating' | 'ready' | 'failed' | 'completed';
 
 /**
  * Segmento de execução da sessão — uma fase específica da corrida
@@ -156,6 +166,19 @@ export interface Plan {
    * ResolveProposalUseCase.
    */
   pendingRevisionId?: string | null;
+  /**
+   * Prazo inicial (ISO YYYY-MM-DD) pra atingir o objetivo, gravado na criação
+   * do plano (= startDate + weeksCount × 7d). Imutável após criado — o coach
+   * pode ajustar weeksCount via checkpoint, mas o prazo INICIAL fica registrado
+   * pro relatório final ("prazo inicial × prazo real").
+   */
+  initialDeadlineAt?: string;
+  /**
+   * Data em que o plano foi marcado como completed. Setado pela detecção lazy
+   * no GetCurrentPlanUseCase quando mesocycleEndDate < hoje. Usado no relatório
+   * final pra comparar com initialDeadlineAt.
+   */
+  completedAt?: string;
   createdAt: string;
   updatedAt: string;
 }

@@ -3,25 +3,21 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
-import 'package:runnin/features/onboarding/presentation/steps/onboarding_step_frequency.dart';
-import 'package:runnin/features/onboarding/presentation/steps/onboarding_step_goal.dart';
-import 'package:runnin/features/onboarding/presentation/steps/onboarding_step_level.dart';
-import 'package:runnin/features/onboarding/presentation/steps/onboarding_step_pace.dart';
+import 'package:runnin/features/history/data/stats_remote_datasource.dart';
 import 'package:runnin/features/onboarding/presentation/steps/onboarding_step_start_date.dart';
 import 'package:runnin/features/subscriptions/presentation/subscription_controller.dart';
 import 'package:runnin/features/training/data/datasources/plan_remote_datasource.dart';
+import 'package:runnin/features/training/presentation/steps/step_current_load.dart';
+import 'package:runnin/features/training/presentation/steps/step_days.dart';
+import 'package:runnin/features/training/presentation/steps/step_goal_v2.dart';
+import 'package:runnin/features/training/presentation/steps/step_level_v2.dart';
 import 'package:runnin/shared/widgets/figma/export.dart';
 
-/// Jornada de criação do plano dentro de TREINO (/training/criar-plano).
-///
-/// Reúne as telas que antes ficavam no onboarding (nível, meta, dias/semana,
-/// pace, quando começar) e dispara a geração no fim, com gate premium e
-/// confirmação de substituição quando já existe plano ativo. O onboarding
-/// agora só coleta dados pessoais (SEUS DADOS) e cai na Home.
-///
-/// Esta jornada será redesenhada depois; por ora ela MOVE as telas atuais pra
-/// cá, funcionando. Ao concluir: patchMe(level/goal/frequency) → generatePlan →
-/// /plan-loading (countdown visual; o plano já está sendo gerado no server).
+/// Jornada redesenhada de criação do plano (/training/criar-plano). 6 telas:
+/// intro "plano vivo" → 5 níveis (com smart pre-fill) → 5 metas (com prazo
+/// médio) → dias + freq → pace + carga → quando começar. Submit faz gate
+/// premium, patchMe(level/goal/freq/availableDays), gera o plano e cai em
+/// /plan-loading. 409 (overwrite) e cooldown são tratados com diálogos.
 class PlanSetupPage extends StatefulWidget {
   const PlanSetupPage({super.key});
 
@@ -32,15 +28,21 @@ class PlanSetupPage extends StatefulWidget {
 class _PlanSetupPageState extends State<PlanSetupPage> {
   final _userDs = UserRemoteDatasource();
   final _planDs = PlanRemoteDatasource();
+  final _statsDs = StatsRemoteDatasource();
 
-  // 0 intro · 1 nível · 2 meta · 3 dias · 4 pace · 5 quando começar
   static const _totalSteps = 6;
   int _step = 0;
 
-  String _level = 'iniciante';
-  String _goal = 'Completar 10K';
+  // Estado da jornada
+  PlanLevelChoice? _level;
+  PlanLevelChoice? _suggestedLevel;
+  PlanGoalChoice? _goal;
+  Set<int> _availableDays = {1, 3, 5, 6}; // seg, qua, sex, sab (default razoável)
   int _frequency = 4;
-  String? _pace;
+  final _paceCtrl = TextEditingController();
+  final _weeklyKmCtrl = TextEditingController();
+  String? _historyHint;
+  bool _skipCurrentLoad = false;
   String _startChoice = 'today';
   DateTime _customDate = OnboardingStartDateStep.today();
 
@@ -48,9 +50,64 @@ class _PlanSetupPageState extends State<PlanSetupPage> {
   String? _error;
 
   @override
+  void initState() {
+    super.initState();
+    _loadHistoryAndSuggest();
+  }
+
+  @override
+  void dispose() {
+    _paceCtrl.dispose();
+    _weeklyKmCtrl.dispose();
+    super.dispose();
+  }
+
+  /// Lê /stats/breakdown do último mês pra (1) sugerir nível na tela 02 e
+  /// (2) prefill pace/carga atual na tela 05. Falha silenciosa — sem histórico
+  /// a jornada segue funcionando com campos vazios.
+  Future<void> _loadHistoryAndSuggest() async {
+    try {
+      final breakdown = await _statsDs.getBreakdown('month');
+      final stats = breakdown.stats;
+      final paceSec = _paceLabelToSec(stats.avgPace);
+      final suggestion = suggestLevelFromStats(LevelSuggestionInput(
+        runsLast30d: stats.runs,
+        totalKmLast30d: stats.totalDistanceKm,
+        avgPaceSec: paceSec,
+      ));
+      if (!mounted) return;
+      setState(() {
+        _suggestedLevel = suggestion;
+        _level ??= suggestion;
+        if (stats.runs > 0) {
+          final weeklyKm = stats.totalDistanceKm / 4.345;
+          _historyHint =
+              'Últimas 4 semanas: ${weeklyKm.toStringAsFixed(1)} km/sem · pace ${stats.avgPace ?? '—'}';
+          if (_paceCtrl.text.isEmpty && stats.avgPace != null) {
+            _paceCtrl.text = stats.avgPace!;
+          }
+          if (_weeklyKmCtrl.text.isEmpty) {
+            _weeklyKmCtrl.text = weeklyKm.toStringAsFixed(0);
+          }
+        }
+      });
+    } catch (_) {
+      // Sem histórico ou erro — segue silencioso.
+    }
+  }
+
+  static int? _paceLabelToSec(String? label) {
+    if (label == null || label.isEmpty) return null;
+    final m = RegExp(r'^(\d{1,2}):(\d{2})$').firstMatch(label);
+    if (m == null) return null;
+    final mm = int.tryParse(m.group(1)!) ?? 0;
+    final ss = int.tryParse(m.group(2)!) ?? 0;
+    return mm * 60 + ss;
+  }
+
+  @override
   Widget build(BuildContext context) {
     final palette = context.runninPalette;
-
     return Scaffold(
       backgroundColor: palette.background,
       body: Column(
@@ -96,7 +153,6 @@ class _PlanSetupPageState extends State<PlanSetupPage> {
   Widget _buildHeader(BuildContext context) {
     final palette = context.runninPalette;
     final canGoBack = _step > 0;
-
     return Row(
       children: [
         OutlinedButton(
@@ -140,24 +196,35 @@ class _PlanSetupPageState extends State<PlanSetupPage> {
       case 0:
         return const OnboardingPrepStep();
       case 1:
-        return OnboardingStepLevel(
+        return PlanStepLevelV2(
           selected: _level,
-          onSelect: (value) => setState(() => _level = value),
+          suggested: _suggestedLevel,
+          onSelect: (v) => setState(() => _level = v),
         );
       case 2:
-        return OnboardingStepGoal(
-          selectedGoal: _goal,
-          onGoalSelect: (value) => setState(() => _goal = value),
+        return PlanStepGoalV2(
+          selected: _goal,
+          onSelect: (v) => setState(() => _goal = v),
         );
       case 3:
-        return OnboardingStepFrequency(
+        return PlanStepDays(
+          availableDays: _availableDays,
           frequency: _frequency,
-          onFreqChange: (value) => setState(() => _frequency = value),
+          onDaysChange: (days) => setState(() {
+            _availableDays = days;
+            if (days.isNotEmpty && _frequency > days.length) {
+              _frequency = days.length;
+            }
+          }),
+          onFreqChange: (f) => setState(() => _frequency = f),
         );
       case 4:
-        return OnboardingStepPace(
-          selected: _pace,
-          onSelect: (value) => setState(() => _pace = value),
+        return PlanStepCurrentLoad(
+          paceController: _paceCtrl,
+          weeklyKmController: _weeklyKmCtrl,
+          hintFromHistory: _historyHint,
+          skipped: _skipCurrentLoad,
+          onSkip: () => setState(() => _skipCurrentLoad = !_skipCurrentLoad),
         );
       case 5:
         return OnboardingStartDateStep(
@@ -177,7 +244,6 @@ class _PlanSetupPageState extends State<PlanSetupPage> {
     final palette = context.runninPalette;
     final isLast = _step == _totalSteps - 1;
     final label = isLast ? 'CRIAR PLANO' : 'CONTINUAR';
-
     return Column(
       children: [
         SizedBox(
@@ -216,13 +282,21 @@ class _PlanSetupPageState extends State<PlanSetupPage> {
     if (_submitting) return false;
     switch (_step) {
       case 1:
-        return _level.isNotEmpty;
+        return _level != null;
       case 2:
-        return _goal.isNotEmpty;
+        return _goal != null;
       case 3:
-        return _frequency >= 1 && _frequency <= 7;
+        if (_availableDays.isEmpty) return false;
+        return _frequency >= 1 && _frequency <= _availableDays.length;
       case 4:
-        return _pace != null;
+        // Pace/carga é opcional via skip. Sem skip, exige pace válido OU vazio.
+        if (_skipCurrentLoad) return true;
+        if (_paceCtrl.text.isEmpty && _weeklyKmCtrl.text.isEmpty) return true;
+        final paceOk =
+            _paceCtrl.text.isEmpty || RegExp(r'^\d{1,2}:\d{2}$').hasMatch(_paceCtrl.text.trim());
+        final kmOk =
+            _weeklyKmCtrl.text.isEmpty || double.tryParse(_weeklyKmCtrl.text.trim()) != null;
+        return paceOk && kmOk;
       default:
         return true;
     }
@@ -233,9 +307,7 @@ class _PlanSetupPageState extends State<PlanSetupPage> {
     final velocity = details.primaryVelocity ?? 0;
     if (velocity > 300 && _step > 0) {
       setState(() => _step--);
-    } else if (velocity < -300 &&
-        _step < _totalSteps - 1 &&
-        _canProceed()) {
+    } else if (velocity < -300 && _step < _totalSteps - 1 && _canProceed()) {
       setState(() => _step++);
     }
   }
@@ -254,8 +326,7 @@ class _PlanSetupPageState extends State<PlanSetupPage> {
       _submitting = true;
     });
 
-    // Gate premium centralizado no billing plan (feature `generatePlan`).
-    // Freemium cai no paywall e volta pra cá depois de assinar.
+    // Gate premium: free cai no paywall e volta pra cá depois de assinar.
     await subscriptionController.refresh();
     if (!subscriptionController.has('generatePlan')) {
       if (!mounted) return;
@@ -264,20 +335,31 @@ class _PlanSetupPageState extends State<PlanSetupPage> {
       return;
     }
 
+    final level = _level!;
+    final goal = _goal!;
+    final availableDays = (_availableDays.toList()..sort());
+    final pace = _skipCurrentLoad ? null : _paceCtrl.text.trim();
+    final weeklyKm = _skipCurrentLoad ? null : double.tryParse(_weeklyKmCtrl.text.trim());
+
     try {
       await _userDs.patchMe(
-        level: _level,
-        goal: _goal,
+        level: level.backendLevel,
+        goal: goal.backendValue,
         frequency: _frequency,
+        availableDays: availableDays,
       );
 
       final startDate = _startChoice == 'today' ? null : _startDateIso();
       try {
         await _planDs.generatePlan(
-          goal: _goal,
-          level: _level,
+          goal: goal.backendValue,
+          level: level.backendLevel,
           frequency: _frequency,
           startDate: startDate,
+          levelHint: level.levelHint,
+          currentPaceMinKm: pace?.isEmpty == true ? null : pace,
+          currentWeeklyKm: weeklyKm,
+          availableDays: availableDays.isEmpty ? null : availableDays,
         );
       } on DioException catch (e) {
         if (e.response?.statusCode == 403) {
@@ -286,7 +368,6 @@ class _PlanSetupPageState extends State<PlanSetupPage> {
           context.push('/paywall?next=/training/criar-plano');
           return;
         }
-        // Já existe plano ativo: confirma a substituição antes de sobrescrever.
         if (e.response?.statusCode == 409) {
           final confirmed = await _confirmOverwrite();
           if (confirmed != true) {
@@ -295,11 +376,15 @@ class _PlanSetupPageState extends State<PlanSetupPage> {
           }
           try {
             await _planDs.generatePlan(
-              goal: _goal,
-              level: _level,
+              goal: goal.backendValue,
+              level: level.backendLevel,
               frequency: _frequency,
               startDate: startDate,
               confirmOverwrite: true,
+              levelHint: level.levelHint,
+              currentPaceMinKm: pace?.isEmpty == true ? null : pace,
+              currentWeeklyKm: weeklyKm,
+              availableDays: availableDays.isEmpty ? null : availableDays,
             );
           } on DioException catch (e2) {
             final body = e2.response?.data;
@@ -319,8 +404,6 @@ class _PlanSetupPageState extends State<PlanSetupPage> {
       }
 
       if (!mounted) return;
-      // Plano já está sendo gerado no server. /plan-loading mostra o countdown
-      // (vê o plano `generating` e não dispara outra geração).
       final qp = startDate == null ? '' : '?startDate=$startDate';
       context.go('/plan-loading$qp');
     } catch (_) {
@@ -341,7 +424,7 @@ class _PlanSetupPageState extends State<PlanSetupPage> {
         title: const Text('Substituir plano atual?'),
         content: const Text(
           'Você já tem um plano ativo. Gerar um novo apaga o atual e o histórico de revisões. '
-          'Para ajustes pontuais, prefira a "Revisão semanal" do plano.',
+          'Lembre: seu plano já é vivo — toda semana o coach faz checkpoint e ajusta o caminho.',
         ),
         actions: [
           TextButton(
@@ -383,10 +466,9 @@ class _PlanSetupPageState extends State<PlanSetupPage> {
         backgroundColor: palette.surface,
         title: const Text('Limite de geração atingido'),
         content: Text(
-          'Na primeira semana você pode gerar 2 planos (caso queira refazer). '
-          'Depois, é 1 novo plano por semana. Pra ajustes pontuais (mais carga, '
-          'troca de dias, etc.), use a "Revisão semanal" ou o checkpoint do plano '
-          'atual.\n\n$availableLine',
+          'Você pode gerar 1 plano novo por semana (caso queira recomeçar). '
+          'Pra ajustes pontuais, use o checkpoint semanal do plano atual — '
+          'o coach ajusta as 2 próximas semanas baseado no seu desempenho.\n\n$availableLine',
         ),
         actions: [
           TextButton(

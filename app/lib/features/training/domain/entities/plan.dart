@@ -215,6 +215,13 @@ class Plan {
   /// cron de domingo). Null/vazio = sem proposta pendente. Quando presente,
   /// o app mostra o banner e a tela de proposta.
   final String? pendingRevisionId;
+  /// Prazo INICIAL pra atingir o objetivo (ISO YYYY-MM-DD), gravado na
+  /// criação do plano. Imutável — checkpoints podem ajustar weeksCount, mas
+  /// este campo serve de baseline pro relatório final ("prazo inicial × real").
+  final String? initialDeadlineAt;
+  /// Data em que o plano foi marcado como completed (detecção lazy no
+  /// server quando mesocycleEndDate < hoje). Null = ainda em curso.
+  final String? completedAt;
 
   const Plan({
     required this.id,
@@ -230,6 +237,8 @@ class Plan {
     this.goalAssessment,
     this.revisions = const [],
     this.pendingRevisionId,
+    this.initialDeadlineAt,
+    this.completedAt,
   });
 
   factory Plan.fromJson(Map<String, dynamic> j) => Plan(
@@ -252,6 +261,8 @@ class Plan {
         pendingRevisionId: (j['pendingRevisionId'] as String?)?.isNotEmpty == true
             ? j['pendingRevisionId'] as String
             : null,
+        initialDeadlineAt: j['initialDeadlineAt'] as String?,
+        completedAt: j['completedAt'] as String?,
       );
 
   bool get hasPendingProposal =>
@@ -259,6 +270,7 @@ class Plan {
 
   bool get isReady => status == 'ready';
   bool get isGenerating => status == 'generating';
+  bool get isCompleted => status == 'completed';
 
   /// D0 efetiva: startDate (escolhida no onboarding) ou createdAt como
   /// fallback pra planos legados.

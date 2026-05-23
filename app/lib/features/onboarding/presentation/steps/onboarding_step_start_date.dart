@@ -20,12 +20,12 @@ class OnboardingPrepStep extends StatelessWidget {
         const FigmaAssessmentHeading(text: 'Vamos montar SEU plano.'),
         const SizedBox(height: 18),
         Text(
-          'Pra ter o melhor resultado, preciso da sua atenção total e honestidade nas próximas perguntas.',
+          'Seu plano é vivo. Toda semana o coach faz um checkpoint, lê suas corridas e ajusta as 2 próximas semanas — você não fica preso a um cronograma engessado.',
           style: context.runninType.bodyMd.copyWith(color: palette.text, height: 1.55),
         ),
         const SizedBox(height: 14),
         Text(
-          'Nível, objetivo, frequência, pace e data de início moldam cada sessão do seu plano.',
+          'Vou te perguntar nível, objetivo, dias disponíveis, pace e data de início. Quanto mais honesto, melhor o coach calibra a primeira semana.',
           style: context.runninType.bodyMd.copyWith(color: palette.muted, height: 1.55),
         ),
         const SizedBox(height: 18),
@@ -42,7 +42,7 @@ class OnboardingPrepStep extends StatelessWidget {
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  'Quanto mais preciso, mais o coach acerta a carga e a progressão do seu plano.',
+                  'Pode gerar 1 plano novo por semana se quiser recomeçar. Mas pra ajustes pontuais, deixa o checkpoint semanal trabalhar — ele faz isso sem zerar seu histórico.',
                   style: context.runninType.bodySm.copyWith(
                     color: palette.text,
                     height: 1.45,

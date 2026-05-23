@@ -100,6 +100,15 @@ class PlanRemoteDatasource {
     int? weeksCount,
     String? startDate, // ISO YYYY-MM-DD; D0 escolhida no onboarding
     bool confirmOverwrite = false,
+    /// Matiz fino do nível dentro de 'iniciante' (jornada nova de criação:
+    /// 'nunca_corri' | 'esporadico' | 'iniciante_freq'). Server usa no prompt.
+    String? levelHint,
+    /// Volume atual em km/sem (vem da tela 05, prefill via /stats/breakdown).
+    double? currentWeeklyKm,
+    /// Pace atual confortável (M:SS/km), tela 05.
+    String? currentPaceMinKm,
+    /// Dias da semana disponíveis pra treinar (1=seg…7=dom).
+    List<int>? availableDays,
   }) async {
     if (_generateInFlight) {
       // ignore: avoid_print
@@ -121,6 +130,10 @@ class PlanRemoteDatasource {
           'weeksCount': ?weeksCount,
           'frequency': ?frequency,
           'startDate': ?startDate,
+          'levelHint': ?levelHint,
+          'currentWeeklyKm': ?currentWeeklyKm,
+          'currentPaceMinKm': ?currentPaceMinKm,
+          'availableDays': ?availableDays,
         },
       );
       // Plano novo no servidor — invalida o cache pra forçar refetch.

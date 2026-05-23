@@ -83,6 +83,8 @@ export const PLAN_INIT_DEFAULTS = {
     'PERFIL COMPLETO DO ATLETA (LEIA TODOS OS CAMPOS — cada um afeta as decisões):',
     '{{profile.context}}',
     '',
+    '{{journey.context}}',
+    '',
     'ANÁLISE PRÉ-GERAÇÃO obrigatória (faça mentalmente antes de produzir o JSON):',
     '1. GAP nível-vs-objetivo: o objetivo declarado é alcançável nesse mesociclo? Se NÃO (ex: iniciante quer ultra), o plano de {{input.weeksCount}} semanas é a FASE DE FUNDAÇÃO. Não tente entregar o objetivo.',
     '2. Calibração da semana 1: qual volume sustentável dado o nível e perfil? Use as faixas das regras do system prompt.',

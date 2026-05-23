@@ -74,6 +74,15 @@ class _PlanDetailPageState extends State<PlanDetailPage> {
         _loading = false;
       });
       }
+      // Plano completed → redireciona pra o relatório final. PlanDetail só
+      // faz sentido pra plano em curso (ready/generating). Se ainda mostrasse
+      // semanas detalhadas pra plano completed, ficaria conflituoso.
+      if (_plan?.isCompleted == true) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) context.go('/training/plan-report/${_plan!.id}');
+        });
+        return;
+      }
       // Se navegou com ?focusWeek=N, scroll após primeiro paint.
       final fw = widget.focusWeek;
       if (fw != null && _plan != null) {
@@ -92,6 +101,9 @@ class _PlanDetailPageState extends State<PlanDetailPage> {
     return Scaffold(
       backgroundColor: palette.background,
       appBar: const RunninAppBar(title: 'PLANO BASE', fallbackRoute: '/training'),
+      bottomNavigationBar: _plan == null || _loading
+          ? null
+          : _RegenerateFooter(onRegenerate: () => context.push('/training/criar-plano')),
       body: _loading
           ? Center(child: CircularProgressIndicator(color: palette.primary, strokeWidth: 2))
           : _error != null
@@ -162,6 +174,62 @@ class _PlanDetailPageState extends State<PlanDetailPage> {
                         ],
                       ),
                     ),
+    );
+  }
+}
+
+/// Rodapé fixo do plan-detail: CTA pra regerar o plano + texto reforçando
+/// "plano vivo / 1 por semana". O cooldown propriamente é tratado na
+/// PlanSetupPage (server retorna 403 COOLDOWN_ACTIVE com availableAt).
+class _RegenerateFooter extends StatelessWidget {
+  final VoidCallback onRegenerate;
+  const _RegenerateFooter({required this.onRegenerate});
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+      decoration: BoxDecoration(
+        color: palette.background,
+        border: Border(top: BorderSide(color: palette.border, width: 1.041)),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: double.infinity,
+              height: 46,
+              child: OutlinedButton(
+                onPressed: onRegenerate,
+                style: OutlinedButton.styleFrom(
+                  side: BorderSide(color: palette.primary, width: 1.041),
+                  shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+                ),
+                child: Text(
+                  'GERAR PLANO NOVAMENTE',
+                  style: context.runninType.labelMd.copyWith(
+                    color: palette.primary,
+                    letterSpacing: 1.1,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Você pode gerar 1 plano novo por semana se quiser recomeçar. Pra ajustes pontuais, deixa o checkpoint semanal trabalhar — ele ajusta as 2 próximas semanas sem zerar seu histórico.',
+              style: context.runninType.bodySm.copyWith(
+                color: palette.muted,
+                height: 1.4,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

@@ -15,6 +15,13 @@ export interface UserProfile {
   level: RunnerLevel;
   goal: string;
   frequency: number;
+  /**
+   * Dias da semana em que o atleta pode treinar (1=seg…7=dom). Preenchido na
+   * jornada de criação do plano (tela "dias + frequência"). A IA escolhe os
+   * melhores dias se `frequency < availableDays.length`. Array vazio/ausente
+   * = sem restrição (IA escolhe livremente).
+   */
+  availableDays?: number[];
   birthDate?: string;
   weight?: string;
   height?: string;

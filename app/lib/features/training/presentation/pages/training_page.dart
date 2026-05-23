@@ -304,6 +304,24 @@ class _TrainingPageState extends State<TrainingPage> {
       return _EmptyState(generating: _generating, onGenerate: _openPlanSetup);
     }
 
+    // Plano concluído → banner com 2 CTAs (relatório + novo plano) seguido
+    // do estado "sem plano" (reusa _EmptyState). Aparece quando o server
+    // detecta mesocycleEndDate < hoje (status lazy = completed).
+    if (_plan!.isCompleted) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _PlanCompletedBanner(
+            planId: _plan!.id,
+            onSeeReport: () =>
+                context.push('/training/plan-report/${_plan!.id}'),
+            onNewPlan: _openPlanSetup,
+          ),
+          _EmptyState(generating: _generating, onGenerate: _openPlanSetup),
+        ],
+      );
+    }
+
     if (_plan!.isGenerating) {
       return _PlanGeneratingState(
         planId: _pendingPlanId ?? _plan!.id,
@@ -2112,4 +2130,96 @@ String _formatDuration(int durationS) {
   final minutes = durationS ~/ 60;
   final seconds = durationS % 60;
   return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+}
+
+/// Banner mostrado quando o plano ativo foi marcado como completed pelo
+/// server (mesocycleEndDate passou). Convida o user a ver o relatório
+/// final E/OU gerar um novo plano. O resto da tela cai em _EmptyState.
+class _PlanCompletedBanner extends StatelessWidget {
+  final String planId;
+  final VoidCallback onSeeReport;
+  final VoidCallback onNewPlan;
+  const _PlanCompletedBanner({
+    required this.planId,
+    required this.onSeeReport,
+    required this.onNewPlan,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    return Container(
+      margin: const EdgeInsets.fromLTRB(20, 6, 20, 14),
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+      decoration: BoxDecoration(
+        color: palette.primary.withValues(alpha: 0.10),
+        border: Border.all(color: palette.primary.withValues(alpha: 0.45)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.flag, color: palette.primary, size: 18),
+              const SizedBox(width: 8),
+              Text(
+                'PLANO CONCLUÍDO!',
+                style: context.runninType.labelMd.copyWith(
+                  color: palette.primary,
+                  fontWeight: FontWeight.w500,
+                  letterSpacing: 1.2,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Seu mesociclo terminou. Veja o relatório com o resumo (prazo inicial × real, ajustes feitos no caminho) ou gere um novo plano.',
+            style: context.runninType.bodySm.copyWith(
+              color: palette.text,
+              height: 1.45,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: onSeeReport,
+                  style: OutlinedButton.styleFrom(
+                    side: BorderSide(color: palette.primary, width: 1.041),
+                    shape: const RoundedRectangleBorder(
+                      borderRadius: BorderRadius.zero,
+                    ),
+                    minimumSize: const Size(0, 42),
+                  ),
+                  child: Text(
+                    'VER RELATÓRIO',
+                    style: context.runninType.labelMd.copyWith(
+                      color: palette.primary,
+                      letterSpacing: 1.0,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: onNewPlan,
+                  style: ElevatedButton.styleFrom(
+                    minimumSize: const Size(0, 42),
+                    shape: const RoundedRectangleBorder(
+                      borderRadius: BorderRadius.zero,
+                    ),
+                  ),
+                  child: const Text('GERAR NOVO PLANO'),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 }

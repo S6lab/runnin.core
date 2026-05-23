@@ -11,6 +11,40 @@ const repo = new FirestorePlanRepository();
 const generatePlan = new GeneratePlanUseCase(repo);
 
 /**
+ * Calcula a data final do mesociclo (ISO YYYY-MM-DD) baseada em startDate +
+ * weeksCount × 7 - 1 dias. Usado pra detecção lazy de plano concluído.
+ * Retorna null se faltar startDate.
+ */
+function mesocycleEndDate(plan: Plan): string | null {
+  if (!plan.startDate) return null;
+  const d = new Date(`${plan.startDate}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + plan.weeksCount * 7 - 1);
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * Detecção LAZY de plano concluído. Quando o plano está 'ready' e o
+ * mesocycleEndDate já passou, marca como 'completed' (com completedAt =
+ * endDate) e persiste. Evita criar cron dedicado: a próxima leitura faz a
+ * transição. Retorna o plano (possivelmente atualizado).
+ */
+async function detectCompletion(plan: Plan): Promise<Plan> {
+  if (plan.status !== 'ready') return plan;
+  const endDate = mesocycleEndDate(plan);
+  if (!endDate) return plan;
+  const today = new Date().toISOString().slice(0, 10);
+  if (endDate >= today) return plan; // ainda em curso
+  const now = new Date().toISOString();
+  const completed: Plan = { ...plan, status: 'completed', completedAt: endDate, updatedAt: now };
+  await repo.update(plan.id, plan.userId, {
+    status: 'completed',
+    completedAt: endDate,
+    updatedAt: now,
+  });
+  return completed;
+}
+
+/**
  * Garante que cada sessão tem executionSegments populados. Planos antigos
  * (gerados antes do builder determinístico) podem ter [] ou 1 segment
  * solto vindo do LLM. Regenera in-memory na leitura sem mutar Firestore
@@ -32,8 +66,9 @@ async function ensureSessionSegments(plan: Plan): Promise<Plan> {
 
 export async function getCurrentPlan(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const plan = await repo.findCurrent(req.uid);
-    if (!plan) { res.status(404).json({ error: 'No active plan' }); return; }
+    const raw = await repo.findCurrent(req.uid);
+    if (!raw) { res.status(404).json({ error: 'No active plan' }); return; }
+    const plan = await detectCompletion(raw);
     res.json(await ensureSessionSegments(plan));
   } catch (err) { next(err); }
 }
@@ -71,8 +106,9 @@ export async function postGeneratePlan(req: Request, res: Response, next: NextFu
 
 export async function getPlanById(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const plan = await repo.findById(req.params['id'] as string, req.uid);
-    if (!plan) throw new NotFoundError('Plan');
+    const raw = await repo.findById(req.params['id'] as string, req.uid);
+    if (!raw) throw new NotFoundError('Plan');
+    const plan = await detectCompletion(raw);
     res.json(await ensureSessionSegments(plan));
   } catch (err) { next(err); }
 }
