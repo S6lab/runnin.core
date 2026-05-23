@@ -216,6 +216,7 @@ final appRouter = GoRouter(
             String type = 'Free Run';
             String? planSessionId;
             Map<String, bool>? alertPrefs;
+            bool? isPremium;
             if (extra is String && extra.isNotEmpty) {
               type = extra;
             } else if (extra is Map<String, dynamic>) {
@@ -225,11 +226,13 @@ final appRouter = GoRouter(
               if (ap is Map) {
                 alertPrefs = ap.map((k, v) => MapEntry(k.toString(), v == true));
               }
+              isPremium = extra['isPremium'] as bool?;
             }
             return ActiveRunPage(
               initialType: type,
               planSessionId: planSessionId,
               alertPrefs: alertPrefs,
+              isPremium: isPremium,
             );
           },
         ),

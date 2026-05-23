@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:runnin/core/audio/telemetry_tts.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 import 'package:runnin/features/run/data/datasources/run_local_datasource.dart';
 import 'package:runnin/features/run/data/datasources/run_remote_datasource.dart';
@@ -29,12 +30,18 @@ class StartRun extends RunEvent {
   /// server marca a sessão como "feita" ao completar a run. Null = corrida
   /// livre não vinculada a sessão planejada.
   final String? planSessionId;
+  /// True = abre LiveRunCoachSession (Gemini Live, voz natural).
+  /// False = pula a sessão Live e usa TelemetryTts on-device pra falar
+  /// pace/tempo a cada km (modo FREEMIUM). Null = fallback pra true
+  /// (mantém comportamento anterior caso caller esqueça de passar).
+  final bool? isPremium;
   StartRun({
     required this.type,
     this.targetPace,
     this.targetDistance,
     this.alertPrefs,
     this.planSessionId,
+    this.isPremium,
   });
 }
 
@@ -224,6 +231,11 @@ class RunBloc extends Bloc<RunEvent, RunState> {
   /// (Live) — evita "dois coaches" no início. A saudação já anuncia a sessão.
   int _suppressCuesUntilMs = 0;
 
+  /// True = abre Gemini Live (premium). False = só TTS on-device a cada km
+  /// (freemium). Setado em [_onStart] a partir de [StartRun.isPremium];
+  /// default true mantém comportamento anterior pra qualquer caller antigo.
+  bool _isPremium = true;
+
   // Preferências de alerta do user (set em _onStart via StartRun.alertPrefs).
   // Defaults conservadores: tudo on exceto kmSplits (mais ruidoso).
   Map<String, bool> _alertPrefs = const {
@@ -315,6 +327,12 @@ class RunBloc extends Bloc<RunEvent, RunState> {
     _planSessionId = event.planSessionId;
     _segments = const [];
     _currentSegmentIdx = -1;
+    // Premium: usa LiveRunCoachSession (Gemini Live). Freemium: TTS local
+    // de telemetria a cada km. Default true mantém retro-compat se um
+    // caller antigo não passar o flag.
+    _isPremium = event.isPremium ?? true;
+    // ignore: avoid_print
+    print('run.mode.resolved isPremium=$_isPremium type=${event.type}');
 
     // Resolve a sessão planejada já no start. Saudação inicial e cues
     // segment_* leem daqui — sem isso, primeiro segment_start poderia
@@ -384,33 +402,40 @@ class RunBloc extends Bloc<RunEvent, RunState> {
 
       _lastCoachKm = 0;
       _lastKmStartElapsedS = 0;
-      // Contexto do coach (vive durante a corrida, sobrevive a rotações da
-      // sessão Live). Setado ANTES da open() pra que turns recebidos durante
-      // a saudação já alimentem o snapshot.
-      _coachCtx.init(runId);
-      _coachSession.setMetricsProvider(_buildMetricsSnapshot);
       _pendingRotationTrigger = null;
-      // Abre a sessão Live e saúda AGORA — ao iniciar, quando a tela passa a
-      // exibir o mapa (corrida ativa). Suprime cues por 12s pra a saudação
-      // falar sozinha. A transcrição alimenta o banner; o áudio toca na sessão.
-      if (!_coachSession.isOpen) {
-        _suppressCuesUntilMs = DateTime.now().millisecondsSinceEpoch + 12000;
-        _coachTranscriptSub?.cancel();
-        _coachTranscriptSub = _coachSession.transcripts.listen((t) {
-          if (!isClosed) add(_CoachChunk(CoachCue(text: t)));
-        });
-        final startType = event.type;
-        final startRunId = runId;
-        unawaited(() async {
-          final ok = await _coachSession.open(
-            planSessionId: _planSessionId,
-            runId: startRunId,
-          );
-          if (ok && !isClosed) {
-            _coachSession.markTrigger('start');
-            _coachSession.sendTelemetry(_telemetryText('start', runType: startType));
-          }
-        }());
+      if (_isPremium) {
+        // Premium: contexto + Live session + saudação (mesmo fluxo de sempre).
+        _coachCtx.init(runId);
+        _coachSession.setMetricsProvider(_buildMetricsSnapshot);
+        // Abre a sessão Live e saúda AGORA — ao iniciar, quando a tela passa a
+        // exibir o mapa (corrida ativa). Suprime cues por 12s pra a saudação
+        // falar sozinha. A transcrição alimenta o banner; o áudio toca na sessão.
+        if (!_coachSession.isOpen) {
+          _suppressCuesUntilMs = DateTime.now().millisecondsSinceEpoch + 12000;
+          _coachTranscriptSub?.cancel();
+          _coachTranscriptSub = _coachSession.transcripts.listen((t) {
+            if (!isClosed) add(_CoachChunk(CoachCue(text: t)));
+          });
+          final startType = event.type;
+          final startRunId = runId;
+          unawaited(() async {
+            final ok = await _coachSession.open(
+              planSessionId: _planSessionId,
+              runId: startRunId,
+            );
+            if (ok && !isClosed) {
+              _coachSession.markTrigger('start');
+              _coachSession.sendTelemetry(_telemetryText('start', runType: startType));
+            }
+          }());
+        }
+      } else {
+        // Freemium: pula a sessão Live e fala localmente. Banner mostra a
+        // saudação; TTS on-device toca em paralelo (best-effort, falha
+        // silenciosa se engine indisponível).
+        final greeting = TelemetryTts.formatStart(event.type);
+        emit(state.copyWith(coachLiveMessage: greeting));
+        unawaited(TelemetryTts.instance.speak(greeting));
       }
 
       // Timer de tempo decorrido
@@ -825,13 +850,15 @@ class RunBloc extends Bloc<RunEvent, RunState> {
     _pendingRotationTrigger = null;
     if (state.distanceM >= stationaryDistanceThresholdM) {
       _requestCoachCue(event: 'finish');
-      // Mantém a sessão aberta até o resumo terminar de tocar, depois fecha
-      // (não cortar o fechamento). Fallback de 15s se o turno não completar.
-      Timer(const Duration(seconds: 15), () {
-        unawaited(_coachSession.close());
-        _coachCtx.dispose();
-      });
-    } else {
+      // Mantém a sessão Live aberta até o resumo terminar de tocar (premium).
+      // Freemium: a fala 'finish' já saiu pelo TTS local — não precisa esperar.
+      if (_isPremium) {
+        Timer(const Duration(seconds: 15), () {
+          unawaited(_coachSession.close());
+          _coachCtx.dispose();
+        });
+      }
+    } else if (_isPremium) {
       unawaited(_coachSession.close());
       _coachCtx.dispose();
     }
@@ -882,8 +909,14 @@ class RunBloc extends Bloc<RunEvent, RunState> {
   void _onAbandon(AbandonRun event, Emitter<RunState> emit) {
     _stop();
     _pendingRotationTrigger = null;
-    unawaited(_coachSession.close());
-    _coachCtx.dispose();
+    if (_isPremium) {
+      unawaited(_coachSession.close());
+      _coachCtx.dispose();
+    } else {
+      // Freemium: corta qualquer fala em andamento (ex: km telemetria
+      // disparada logo antes do abandono).
+      unawaited(TelemetryTts.instance.stop());
+    }
     emit(const RunState());
   }
 
@@ -982,8 +1015,12 @@ class RunBloc extends Bloc<RunEvent, RunState> {
   Future<void> close() {
     _stop();
     _coachTranscriptSub?.cancel();
-    unawaited(_coachSession.close());
-    _coachCtx.dispose();
+    if (_isPremium) {
+      unawaited(_coachSession.close());
+      _coachCtx.dispose();
+    } else {
+      unawaited(TelemetryTts.instance.stop());
+    }
     return super.close();
   }
 
@@ -1064,6 +1101,8 @@ class RunBloc extends Bloc<RunEvent, RunState> {
   /// pace de corrida.
   void _startCoachRotationSafetyTimer() {
     _coachRotationSafetyTimer?.cancel();
+    // Freemium não abre LiveRunCoachSession, então não há sessão pra rotacionar.
+    if (!_isPremium) return;
     _coachRotationSafetyTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       if (isClosed) return;
       if (state.status != RunStatus.active) return;
@@ -1107,7 +1146,33 @@ class RunBloc extends Bloc<RunEvent, RunState> {
     int? kmAvgBpm,
     double? elevationGainM,
   }) async {
-    if (state.runId == null || !_coachSession.isOpen) return;
+    if (state.runId == null) return;
+    // Freemium: pula o backend e a sessão Live. Só `km_reached` e `finish`
+    // viram telemetria falada localmente (TTS on-device) + banner. Outros
+    // eventos (motivation, pace_alert, segment_*) ficam silenciosos —
+    // freemium é "métrica simples", sem coach AI conversando.
+    if (!_isPremium) {
+      String? msg;
+      if (event == 'km_reached' && kmReached != null) {
+        msg = TelemetryTts.formatKmTelemetry(
+          kmReached: kmReached,
+          kmDurationS: kmDurationS,
+          currentPaceMinKm: currentPaceMinKm,
+          elapsedS: elapsedS,
+        );
+      } else if (event == 'finish') {
+        msg = TelemetryTts.formatFinish(
+          distanceM: state.distanceM,
+          elapsedS: state.elapsedS,
+        );
+      }
+      if (msg != null) {
+        if (!isClosed) add(_CoachChunk(CoachCue(text: msg)));
+        unawaited(TelemetryTts.instance.speak(msg));
+      }
+      return;
+    }
+    if (!_coachSession.isOpen) return;
     // Janela da saudação: não provoca falas por cima da largada.
     if (event != 'finish' &&
         DateTime.now().millisecondsSinceEpoch < _suppressCuesUntilMs) {

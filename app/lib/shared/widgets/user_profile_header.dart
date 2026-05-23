@@ -33,22 +33,14 @@ class UserProfileHeader extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  children: [
-                    Text(
-                      userName.toUpperCase(),
-                      style: GoogleFonts.jetBrainsMono(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w500,
-                        letterSpacing: 0.48,
-                        color: palette.text,
-                      ),
-                    ),
-                    if (isPremium) ...[
-                      const SizedBox(width: 8),
-                      _PremiumBadge(palette: palette),
-                    ],
-                  ],
+                Text(
+                  userName.toUpperCase(),
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w500,
+                    letterSpacing: 0.48,
+                    color: palette.text,
+                  ),
                 ),
                 const SizedBox(height: 4),
                 Text(
@@ -70,6 +62,8 @@ class UserProfileHeader extends StatelessWidget {
                     color: palette.muted,
                   ),
                 ),
+                const SizedBox(height: 8),
+                _PlanTag(isPremium: isPremium, palette: palette),
               ],
             ),
           ),
@@ -109,28 +103,42 @@ class _Avatar extends StatelessWidget {
   }
 }
 
-class _PremiumBadge extends StatelessWidget {
+class _PlanTag extends StatelessWidget {
+  final bool isPremium;
   final RunninPalette palette;
 
-  const _PremiumBadge({required this.palette});
+  const _PlanTag({required this.isPremium, required this.palette});
 
   @override
   Widget build(BuildContext context) {
+    final accent = isPremium ? palette.primary : palette.muted;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: palette.surface,
-        borderRadius: BorderRadius.zero,
-        border: Border.all(color: palette.primary.withValues(alpha: 0.4)),
+        color: isPremium
+            ? palette.primary.withValues(alpha: 0.08)
+            : palette.surface,
+        border: Border.all(color: accent.withValues(alpha: 0.55), width: 1),
       ),
-      child: Text(
-        'PREMIUM',
-        style: GoogleFonts.jetBrainsMono(
-          fontSize: 8,
-          fontWeight: FontWeight.w500,
-          color: palette.primary,
-          letterSpacing: 0.5,
-        ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 6,
+            height: 6,
+            color: accent,
+          ),
+          const SizedBox(width: 6),
+          Text(
+            isPremium ? 'PLANO · PREMIUM' : 'PLANO · FREEMIUM',
+            style: GoogleFonts.jetBrainsMono(
+              fontSize: 10,
+              fontWeight: FontWeight.w500,
+              color: accent,
+              letterSpacing: 1.0,
+            ),
+          ),
+        ],
       ),
     );
   }

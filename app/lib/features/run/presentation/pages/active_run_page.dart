@@ -12,6 +12,7 @@ import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/features/run/domain/entities/run.dart' show GpsPoint;
 import 'package:runnin/features/run/presentation/bloc/run_bloc.dart';
 import 'package:runnin/features/run/presentation/widgets/gps_permission_modal.dart';
+import 'package:runnin/features/subscriptions/presentation/subscription_controller.dart';
 import 'package:runnin/shared/widgets/figma/export.dart' show FigmaBadgeUnlockModal;
 
 /// Página da corrida ativa. Aceita `initialType` que vem da última tela
@@ -30,11 +31,17 @@ class ActiveRunPage extends StatelessWidget {
   /// Toggles de alerta per-session escolhidos no /prep (passo 3/4). Herdam do
   /// default global e valem só pra esta corrida.
   final Map<String, bool>? alertPrefs;
+  /// Plano resolvido no /prep — null = fallback pro [subscriptionController]
+  /// no momento do INICIAR (refletido em [_resolveIsPremium]). Determina
+  /// se a run abre coach AI ao vivo (premium) ou usa TTS de telemetria
+  /// on-device a cada km (freemium).
+  final bool? isPremium;
   const ActiveRunPage({
     super.key,
     this.initialType = 'Free Run',
     this.planSessionId,
     this.alertPrefs,
+    this.isPremium,
   });
 
   @override
@@ -54,6 +61,7 @@ class ActiveRunPage extends StatelessWidget {
         initialType: initialType,
         planSessionId: planSessionId,
         alertPrefs: alertPrefs,
+        isPremium: isPremium,
       ),
     );
   }
@@ -110,7 +118,13 @@ class _ActiveRunView extends StatefulWidget {
   final String initialType;
   final String? planSessionId;
   final Map<String, bool>? alertPrefs;
-  const _ActiveRunView({required this.initialType, this.planSessionId, this.alertPrefs});
+  final bool? isPremium;
+  const _ActiveRunView({
+    required this.initialType,
+    this.planSessionId,
+    this.alertPrefs,
+    this.isPremium,
+  });
 
   @override
   State<_ActiveRunView> createState() => _ActiveRunViewState();
@@ -119,6 +133,9 @@ class _ActiveRunView extends StatefulWidget {
 class _ActiveRunViewState extends State<_ActiveRunView> {
   bool _coachMuted = false;
   bool _coachAudioPlaying = false;
+  // Resolução de plano: prefere o que veio do prep. Fallback pro
+  // subscriptionController em runtime se o prep não passou (deep link).
+  bool get _isPremium => widget.isPremium ?? subscriptionController.isPro;
   // Coach banner auto-fade. Mostra mensagem por 10s e depois esconde
   // (mas o áudio continua tocando se ainda não terminou).
   String? _lastBannerMessageShown;
@@ -306,7 +323,8 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
                   ),
                 // Push-to-talk: segure o botão "Coach" pra falar com o coach
                 // (canal bidirecional sob demanda). Solta → o coach responde.
-                if (state.status == RunStatus.active)
+                // Freemium não tem sessão Live aberta — botão é hidden.
+                if (state.status == RunStatus.active && _isPremium)
                   Positioned(
                     right: 16,
                     // Sobe acima do painel quando os splits aparecem (painel
@@ -384,11 +402,16 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
                                   : _coachMuted
                                       ? Icons.volume_off_outlined
                                       : Icons.headphones_outlined,
-                              label: _coachAudioPlaying
-                                  ? 'COACH · FALANDO'
-                                  : _coachMuted
-                                      ? 'COACH · MUTE'
-                                      : 'COACH · PRONTO',
+                              // Freemium: chip vira "TELEMETRIA" (TTS on-device
+                              // a cada km, sem coach AI). Premium mantém "COACH".
+                              label: () {
+                                final name = _isPremium ? 'COACH' : 'TELEMETRIA';
+                                if (_coachAudioPlaying) return '$name · FALANDO';
+                                if (_coachMuted) return '$name · MUTE';
+                                return _isPremium
+                                    ? '$name · PRONTO'
+                                    : '$name · A CADA KM';
+                              }(),
                               color: _coachAudioPlaying
                                   ? palette.primary
                                   : _coachMuted
@@ -496,10 +519,16 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
                       // Destrava autoplay dentro do user gesture — sem isso a
                       // saudação Live falha silenciosamente em Chrome/Safari/FF.
                       unlockAudioContext();
+                      // Plano final: prefere o que veio do prep; fallback pro
+                      // subscriptionController quando prep não setou (deep
+                      // link direto pra /run sem passar pelo wizard).
+                      final isPremium =
+                          widget.isPremium ?? subscriptionController.isPro;
                       context.read<RunBloc>().add(StartRun(
                             type: widget.initialType,
                             planSessionId: widget.planSessionId,
                             alertPrefs: widget.alertPrefs,
+                            isPremium: isPremium,
                           ));
                     },
                   ),

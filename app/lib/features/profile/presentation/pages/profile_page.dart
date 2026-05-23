@@ -7,6 +7,7 @@ import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 import 'package:runnin/features/biometrics/data/health_sync_service.dart';
 import 'package:runnin/features/run/data/datasources/run_remote_datasource.dart';
 import 'package:runnin/features/run/domain/entities/run.dart';
+import 'package:runnin/features/subscriptions/presentation/subscription_controller.dart';
 import 'package:runnin/shared/widgets/app_panel.dart';
 import 'package:runnin/shared/widgets/figma/figma_coach_ai_block.dart';
 import 'package:runnin/shared/widgets/figma/figma_form_field_label.dart';
@@ -388,14 +389,21 @@ class _ProfilePageState extends State<ProfilePage> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          UserProfileHeader(
-                            userName: _profile?.name.isNotEmpty == true
-                                ? _profile!.name
-                                : (firebaseUser?.displayName ?? 'Corredor'),
-                            levelNumber: levelNumber,
-                            isPremium: !(firebaseUser?.isAnonymous ?? true),
-                            totalRuns: totalRuns,
-                            totalDistanceKm: totalDistKm,
+                          // isPremium vem do subscriptionController (canônico
+                          // pra todo o app). profile.isPro também é fonte
+                          // válida; o controller é cached e listenado em
+                          // outros lugares — single source of truth.
+                          ListenableBuilder(
+                            listenable: subscriptionController,
+                            builder: (context, _) => UserProfileHeader(
+                              userName: _profile?.name.isNotEmpty == true
+                                  ? _profile!.name
+                                  : (firebaseUser?.displayName ?? 'Corredor'),
+                              levelNumber: levelNumber,
+                              isPremium: subscriptionController.isPro,
+                              totalRuns: totalRuns,
+                              totalDistanceKm: totalDistKm,
+                            ),
                           ),
                           if (firebaseUser?.isAnonymous ?? false) ...[
                             const SizedBox(height: 12),

@@ -13,6 +13,7 @@ import 'package:runnin/features/run/data/datasources/run_coach_remote_datasource
 import 'package:runnin/features/run/presentation/bloc/run_bloc.dart';
 import 'package:runnin/features/training/data/datasources/plan_remote_datasource.dart';
 import 'package:runnin/features/training/domain/entities/plan.dart';
+import 'package:runnin/features/subscriptions/presentation/subscription_controller.dart';
 import 'package:runnin/features/training/presentation/widgets/execution_timeline.dart';
 import 'package:runnin/features/run/presentation/widgets/gps_permission_modal.dart';
 import 'package:runnin/shared/widgets/runnin_app_bar.dart';
@@ -219,7 +220,8 @@ class _PrepViewState extends State<_PrepView> {
   /// Se profile.coachIntroSeen != true, manda o user pro briefing inicial
   /// e SAI desse prep (redirect imediato). Best-effort: se fetch falhar
   /// (offline, etc), segue sem redirect — user pode acessar o briefing
-  /// depois pelo menu de PERFIL.
+  /// depois pelo menu de PERFIL. Freemium NÃO é redirecionado — o coach
+  /// AI ao vivo é premium, então o intro do coach não se aplica.
   Future<void> _redirectToCoachIntroIfFirstTime() async {
     try {
       final profile = await _userRemote.getMe().timeout(
@@ -227,6 +229,7 @@ class _PrepViewState extends State<_PrepView> {
             onTimeout: () => null,
           );
       if (!mounted) return;
+      if (!(profile?.isPro ?? false)) return;
       final seen = profile?.coachIntroSeen ?? false;
       if (!seen) {
         // Pequena espera pra evitar race com transitions do GoRouter.
@@ -275,6 +278,9 @@ class _PrepViewState extends State<_PrepView> {
     setState(() => _selectedType = type);
     _loadExercises();
     _coachDebounce?.cancel();
+    // Freemium não tem coach AI — não dispara cue de pre_run no backend.
+    // Premium mantém debounce pra re-pedir cue quando o tipo muda no prep.
+    if (_isPro != true) return;
     _coachDebounce = Timer(
       const Duration(milliseconds: 350),
       _requestPreRunCue,
@@ -283,6 +289,9 @@ class _PrepViewState extends State<_PrepView> {
 
   void _requestPreRunCue() {
     if (_navigatedToRun) return;
+    // Hard gate: freemium não consome /coach/cue. Defensivo — call sites já
+    // bloqueiam, mas evita regressão se alguém esquecer.
+    if (_isPro != true) return;
     _coachSub?.cancel();
 
     _coachSub = _coachRemote
@@ -398,6 +407,7 @@ class _PrepViewState extends State<_PrepView> {
   // via saudação disparada no INICIAR. Evita áudio inesperado no prep.
   Widget _buildConfigStep(BuildContext context, RunninTypography type) {
     final palette = context.runninPalette;
+    final isPro = _isPro == true;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -415,7 +425,9 @@ class _PrepViewState extends State<_PrepView> {
         Text('ALERTAS', style: type.displaySm),
         const SizedBox(height: 4),
         Text(
-          'Valem só para esta corrida (herdam do seu padrão).',
+          isPro
+              ? 'Valem só para esta corrida (herdam do seu padrão).'
+              : 'Na versão grátis, a telemetria fala automática a cada km com pace e tempo. Os toggles abaixo ainda valem para esta corrida.',
           style: type.bodyXs.copyWith(color: palette.muted),
         ),
         const SizedBox(height: 14),
@@ -438,7 +450,7 @@ class _PrepViewState extends State<_PrepView> {
         const SizedBox(height: 24),
         Text('MÚSICA', style: type.displaySm),
         const SizedBox(height: 14),
-        // Intro card explicativo — coach abaixa o volume automaticamente.
+        // Intro card explicativo — fala (coach ou telemetria) abaixa o volume.
         Container(
           width: double.infinity,
           padding: const EdgeInsets.all(14),
@@ -452,7 +464,9 @@ class _PrepViewState extends State<_PrepView> {
               Text('Abra seu app de música', style: type.labelMd),
               const SizedBox(height: 6),
               Text(
-                'O Coach fala por cima — volume abaixa automaticamente.',
+                isPro
+                    ? 'O Coach fala por cima — volume abaixa automaticamente.'
+                    : 'A telemetria fala por cima a cada km — volume abaixa automaticamente.',
                 style: type.bodySm.copyWith(color: palette.muted),
               ),
               const SizedBox(height: 14),
@@ -482,6 +496,7 @@ class _PrepViewState extends State<_PrepView> {
   Widget _buildTypeStep(BuildContext context, RunninTypography type) {
     final session = _planTodaySession;
     final hasPlanned = session != null && _isPro == true;
+    final isPro = _isPro == true;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -513,14 +528,26 @@ class _PrepViewState extends State<_PrepView> {
             footerLabel: 'Integrado ao relatório semanal',
             onTap: () => _selectType('Free Run'),
           ),
-        ] else
+        ] else ...[
           _PlanSessionHeroCard(
             session: null,
             isFreeOnly: true,
-            isPro: _isPro == true,
+            isPro: isPro,
             selected: true,
             onTap: () => _selectType('Free Run'),
           ),
+          // Freemium-only: CTA pro paywall logo abaixo do hero. Deixa
+          // explícito que a corrida grátis só registra histórico +
+          // telemetria — sem coach ao vivo, sem análise, sem planejamento.
+          if (!isPro) ...[
+            const SizedBox(height: 12),
+            const _FreemiumUpgradeCard(
+              title: 'COACH AI AO VIVO É PREMIUM',
+              description:
+                  'Sua corrida livre salva histórico e fala a telemetria (pace, tempo, distância) a cada km. Não rola coach analisando ou ajustando a próxima sessão. Pra isso, assine o premium.',
+            ),
+          ],
+        ],
       ],
     );
   }
@@ -540,14 +567,17 @@ class _PrepViewState extends State<_PrepView> {
       _checkedItems.clear();
       _checkedItemsLen = items.length;
     }
+    final isPro = _isPro == true;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text('CHECKLIST DA SESSÃO', style: type.displaySm),
         const SizedBox(height: 14),
         // Coach card de contexto: o que/quanto/por quê dessa sessão.
+        // Freemium: vira card de telemetria sem o "Coach.AI" namespace.
         _CoachAccentCard(
           topic: 'PREPARO',
+          isPro: isPro,
           body: isPlanned
               ? '${session!.type} · ${session.distanceKm.toStringAsFixed(session.distanceKm % 1 == 0 ? 0 : 1)}km. '
                   'Revise os itens abaixo antes de sair — economia de fôlego no quilômetro 1.'
@@ -661,6 +691,7 @@ class _PrepViewState extends State<_PrepView> {
     final palette = context.runninPalette;
     final session = _planTodaySession;
     final hasPlanned = session != null;
+    final isPro = _isPro == true;
 
     final tipText = !hasPlanned
         ? 'Faça 5min de trote leve antes de começar — articulações soltas + frequência cardíaca elevada gradualmente reduzem chance de lesão e melhoram o desempenho.'
@@ -676,6 +707,7 @@ class _PrepViewState extends State<_PrepView> {
         const SizedBox(height: 14),
         _CoachAccentCard(
           topic: 'MOBILIDADE PRÉ-CORRIDA',
+          isPro: isPro,
           body:
               'Prepare articulações e ative cadeias musculares antes de correr. 5-8 minutos reduzem risco de lesão e melhoram economia de corrida.',
           accent: context.runninPalette.primary,
@@ -694,6 +726,7 @@ class _PrepViewState extends State<_PrepView> {
         const SizedBox(height: 8),
         _CoachAccentCard(
           topic: 'DICA',
+          isPro: isPro,
           body: tipText,
           accent: context.runninPalette.secondary,
         ),
@@ -709,11 +742,15 @@ class _PrepViewState extends State<_PrepView> {
     final session = _planTodaySession;
     final hasPlanned = session != null &&
         _selectedType == session.type;
+    final isPro = _isPro == true;
 
     // Briefing dinâmico: usa notes da sessão se houver, senão monta linha
-    // genérica com tipo + km + pace.
+    // genérica com tipo + km + pace. Freemium é explícito: só histórico +
+    // telemetria, sem coach analisando a corrida nem planejando a próxima.
     final briefingText = !hasPlanned
-        ? 'Corrida livre. Sem distância pré-definida — coach observa e adapta a próxima sessão do plano com base nesses dados.'
+        ? (isPro
+            ? 'Corrida livre. Sem distância pré-definida — coach observa e adapta a próxima sessão do plano com base nesses dados.'
+            : 'Corrida livre. Salvamos o histórico desta corrida e a telemetria km a km. Não há coach analisando a sessão nem planejando a próxima — isso é premium.')
         : (session.notes.trim().isNotEmpty
             ? session.notes.trim()
             : '${session.type} hoje — '
@@ -730,9 +767,18 @@ class _PrepViewState extends State<_PrepView> {
         const SizedBox(height: 14),
         _CoachAccentCard(
           topic: 'BRIEFING',
+          isPro: isPro,
           body: briefingText,
           accent: context.runninPalette.secondary,
         ),
+        if (!isPro) ...[
+          const SizedBox(height: 12),
+          const _FreemiumUpgradeCard(
+            title: 'COACH ANALISA E PLANEJA — PREMIUM',
+            description:
+                'Premium: coach AI ao vivo durante a corrida, análise pós-sessão e ajuste automático da próxima. Freemium: só histórico + telemetria falada a cada km, sem análise nem planejamento.',
+          ),
+        ],
         if (segments.isNotEmpty) ...[
           const SizedBox(height: 28),
           ExecutionTimeline(segments: segments),
@@ -784,6 +830,13 @@ class _PrepViewState extends State<_PrepView> {
       if (session != null) 'planSessionId': session.id,
       // Toggles per-session: o que o user ligou/desligou pra ESTA corrida.
       'alertPrefs': Map<String, bool>.from(_alerts),
+      // Plano resolvido aqui: freemium → TTS de telemetria a cada km;
+      // premium → Coach AI ao vivo (LiveRunCoachSession). Server checa
+      // de novo, mas o client decide qual sessão abrir já no INICIAR
+      // pra evitar montar o socket Live pro freemium em vão. Fallback
+      // pro subscriptionController quando _isPro ainda não resolveu
+      // (network lenta no prep).
+      'isPremium': _isPro ?? subscriptionController.isPro,
     };
     if (!context.mounted) return;
     // push() mantém a PrepPage viva sob a /run (dispose não roda), então o
@@ -989,16 +1042,21 @@ class _WarmupExerciseTile extends StatelessWidget {
 }
 
 /// Card de contexto do coach (BRIEFING / MOBILIDADE / DICA). Borda
-/// esquerda colorida + "COACH.AI > TOPIC" header em mono + corpo em
-/// aspas. Cor configurável (cyan, orange, vermelho/orange forte).
+/// esquerda colorida + "COACH.AI > TOPIC" (premium) ou "TELEMETRIA >
+/// TOPIC" (freemium) header em mono + corpo em aspas. Cor configurável.
 class _CoachAccentCard extends StatelessWidget {
   final String topic;
   final String body;
   final Color accent;
+  // Freemium: troca prefix "COACH.AI" por "TELEMETRIA" pra não prometer
+  // coach AI ao vivo. Default true pra manter retro-compat das call sites
+  // que ainda não passam o flag.
+  final bool isPro;
   const _CoachAccentCard({
     required this.topic,
     required this.body,
     required this.accent,
+    this.isPro = true,
   });
 
   @override
@@ -1021,7 +1079,7 @@ class _CoachAccentCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'COACH.AI > $topic',
+            '${isPro ? "COACH.AI" : "TELEMETRIA"} > $topic',
             style: type.labelMd.copyWith(color: accent),
           ),
           const SizedBox(height: 10),
@@ -1029,6 +1087,69 @@ class _CoachAccentCard extends StatelessWidget {
             '"$body"',
             style: type.bodySm.copyWith(
               color: palette.text.withValues(alpha: 0.78),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Banner inline com CTA pra paywall — usado em telas do prep quando o
+/// user é freemium pra explicar diferença entre TTS de telemetria e o
+/// Coach AI ao vivo + empurrar pra assinatura.
+class _FreemiumUpgradeCard extends StatelessWidget {
+  final String title;
+  final String description;
+  const _FreemiumUpgradeCard({required this.title, required this.description});
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    final type = context.runninType;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+      decoration: BoxDecoration(
+        color: palette.primary.withValues(alpha: 0.08),
+        border: Border.all(color: palette.primary, width: 1.041),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.lock_outline, size: 16, color: palette.primary),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  title,
+                  style: type.labelMd.copyWith(
+                    color: palette.primary,
+                    letterSpacing: 1.2,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            description,
+            style: type.bodySm.copyWith(
+              color: palette.text.withValues(alpha: 0.75),
+              height: 1.5,
+            ),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            height: 40,
+            child: ElevatedButton(
+              onPressed: () {
+                final encoded = Uri.encodeQueryComponent('/run/prep');
+                context.push('/paywall?next=$encoded');
+              },
+              child: const Text('ASSINAR PREMIUM'),
             ),
           ),
         ],
