@@ -11,7 +11,7 @@ export interface WeeklyProposalsResult {
   mode: 'queued' | 'inline';
   premium: number;
   enqueued: number;
-  proposedInline: number;
+  appliedInline: number;
   errors: number;
 }
 
@@ -37,7 +37,7 @@ export class RunWeeklyProposalsUseCase {
       mode: queued ? 'queued' : 'inline',
       premium: 0,
       enqueued: 0,
-      proposedInline: 0,
+      appliedInline: 0,
       errors: 0,
     };
     let cursor: string | undefined;
@@ -56,7 +56,7 @@ export class RunWeeklyProposalsUseCase {
             result.enqueued++;
           } else {
             const out = await this.processUser.execute(profile.id);
-            if (out.proposed) result.proposedInline++;
+            if (out.applied) result.appliedInline++;
           }
         } catch (err) {
           result.errors++;

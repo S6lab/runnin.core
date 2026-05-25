@@ -3,6 +3,10 @@ import { FirestoreRunRepository } from '../infra/firestore-run.repository';
 import { CreateRunUseCase, CreateRunSchema } from '../domain/use-cases/create-run.use-case';
 import { AddGpsBatchUseCase, AddGpsBatchSchema } from '../domain/use-cases/add-gps-batch.use-case';
 import { CompleteRunUseCase, CompleteRunSchema } from '../domain/use-cases/complete-run.use-case';
+import {
+  SubmitRunFeedbackUseCase,
+  SubmitRunFeedbackSchema,
+} from '../domain/use-cases/submit-run-feedback.use-case';
 import { NotFoundError } from '@shared/errors/app-error';
 import { triggerReportGeneration } from '@modules/coach/http/coach.controller';
 import { FirestoreCoachReportRepository } from '@modules/coach/infra/firestore-coach-report.repository';
@@ -12,6 +16,7 @@ const repo = new FirestoreRunRepository();
 const createRun = new CreateRunUseCase(repo);
 const addGpsBatch = new AddGpsBatchUseCase(repo);
 const completeRun = new CompleteRunUseCase(repo);
+const submitRunFeedback = new SubmitRunFeedbackUseCase(repo);
 const reportRepo = new FirestoreCoachReportRepository();
 
 export async function postRun(req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -38,6 +43,14 @@ export async function patchComplete(req: Request, res: Response, next: NextFunct
     // Adapta plano em background com base na corrida concluída (sem consumir
     // cota manual do usuário). Não bloqueia a resposta.
     void container.useCases.adaptPlan.executeAfterRun(req.uid, run.id);
+    res.json(run);
+  } catch (err) { next(err); }
+}
+
+export async function patchFeedback(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const input = SubmitRunFeedbackSchema.parse(req.body);
+    const run = await submitRunFeedback.execute(req.params['id'] as string, req.uid, input);
     res.json(run);
   } catch (err) { next(err); }
 }

@@ -26,8 +26,7 @@ import { SendUserPushUseCase } from '@modules/notifications/domain/use-cases/sen
 import { RequestRevisionUseCase } from '@modules/plans/use-cases/request-revision.use-case';
 import { AdaptPlanUseCase } from '@modules/plans/use-cases/adapt-plan.use-case';
 import { LlmCheckpointAnalysisStrategy } from '@modules/plans/use-cases/llm-checkpoint-analysis.strategy';
-import { ProposeCheckpointUseCase } from '@modules/plans/use-cases/propose-checkpoint.use-case';
-import { ResolveProposalUseCase } from '@modules/plans/use-cases/resolve-proposal.use-case';
+import { ApplyWeeklyRevisionUseCase } from '@modules/plans/use-cases/apply-weekly-revision.use-case';
 import { ProcessUserProposalUseCase } from '@modules/plans/use-cases/process-user-proposal.use-case';
 import { RunWeeklyProposalsUseCase } from '@modules/plans/use-cases/run-weekly-proposals.use-case';
 import { CloudTasksProposalDispatcher } from '@shared/infra/tasks/proposal-task.dispatcher';
@@ -46,7 +45,7 @@ const sendUserPush = new SendUserPushUseCase(userRepo);
 const requestRevision = new RequestRevisionUseCase(planRepo, planRevisionRepo, userRepo);
 const adaptPlan = new AdaptPlanUseCase(planRepo, runRepo, requestRevision, userRepo, planRevisionRepo);
 const checkpointAnalysisStrategy = new LlmCheckpointAnalysisStrategy();
-const proposeCheckpoint = new ProposeCheckpointUseCase(
+const applyWeeklyRevision = new ApplyWeeklyRevisionUseCase(
   planRepo,
   planCheckpointRepo,
   planRevisionRepo,
@@ -55,8 +54,7 @@ const proposeCheckpoint = new ProposeCheckpointUseCase(
   createNotification,
   sendUserPush,
 );
-const resolveProposal = new ResolveProposalUseCase(planRepo, planCheckpointRepo, planRevisionRepo);
-const processUserProposal = new ProcessUserProposalUseCase(planRepo, runRepo, proposeCheckpoint);
+const processUserProposal = new ProcessUserProposalUseCase(planRepo, runRepo, applyWeeklyRevision);
 const proposalTaskDispatcher = new CloudTasksProposalDispatcher();
 const runWeeklyProposals = new RunWeeklyProposalsUseCase(
   userRepo,
@@ -87,8 +85,7 @@ export const container = {
     adaptPlan,
     createNotification,
     sendUserPush,
-    proposeCheckpoint,
-    resolveProposal,
+    applyWeeklyRevision,
     processUserProposal,
     runWeeklyProposals,
   },

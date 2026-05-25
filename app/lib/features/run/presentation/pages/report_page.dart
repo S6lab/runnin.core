@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:runnin/core/network/api_client.dart';
@@ -7,6 +8,7 @@ import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/features/run/data/datasources/run_remote_datasource.dart';
 import 'package:runnin/features/run/domain/entities/run.dart';
 import 'package:runnin/features/subscriptions/presentation/subscription_controller.dart';
+import 'package:runnin/features/training/domain/entities/plan_checkpoint.dart';
 
 class ReportPage extends StatefulWidget {
   final String runId;
@@ -28,6 +30,14 @@ class _ReportPageState extends State<ReportPage> {
   String? _reportError;
   Timer? _pollTimer;
 
+  // Feedback subjetivo do user — substitui o fluxo de checkpoint solto.
+  // Server agrega o feedback das runs da semana no cron de domingo.
+  final Set<CheckpointInputKind> _selectedKinds = {};
+  final Map<CheckpointInputKind, String> _kindNotes = {};
+  bool _savingFeedback = false;
+  bool _feedbackSaved = false;
+  String? _feedbackError;
+
   @override
   void initState() {
     super.initState();
@@ -42,9 +52,81 @@ class _ReportPageState extends State<ReportPage> {
   Future<void> _loadRun() async {
     try {
       final run = await _remote.getRun(widget.runId);
-      if (mounted) setState(() { _run = run; _loadingRun = false; });
+      if (mounted) {
+        setState(() {
+          _run = run;
+          _loadingRun = false;
+          // Se o user já submeteu feedback antes (re-entrou na página),
+          // rehidrata seleção pra mostrar o estado atual em vez de vazio.
+          if (run.userFeedback.isNotEmpty) {
+            _selectedKinds
+              ..clear()
+              ..addAll(run.userFeedback.map((i) => i.kind));
+            _kindNotes.clear();
+            for (final i in run.userFeedback) {
+              if (i.note != null) _kindNotes[i.kind] = i.note!;
+            }
+            _feedbackSaved = true;
+          }
+        });
+      }
     } catch (_) {
       if (mounted) setState(() => _loadingRun = false);
+    }
+  }
+
+  bool _feedbackValid() {
+    for (final k in _selectedKinds) {
+      if (k.requiresNote) {
+        final note = _kindNotes[k]?.trim();
+        if (note == null || note.isEmpty) return false;
+      }
+    }
+    return true;
+  }
+
+  Future<void> _submitFeedback() async {
+    if (_selectedKinds.isEmpty) {
+      setState(() => _feedbackError = 'Escolha pelo menos uma opção pra registrar como foi.');
+      return;
+    }
+    if (!_feedbackValid()) {
+      setState(() => _feedbackError = 'Detalhe os itens marcados como "dor" ou "outro".');
+      return;
+    }
+    setState(() {
+      _savingFeedback = true;
+      _feedbackError = null;
+    });
+    final inputs = _selectedKinds.map((k) {
+      final note = _kindNotes[k]?.trim();
+      return CheckpointInput(
+        kind: k,
+        note: note != null && note.isNotEmpty ? note : null,
+      );
+    }).toList();
+    try {
+      final updated = await _remote.submitFeedback(widget.runId, inputs);
+      if (!mounted) return;
+      setState(() {
+        _run = updated;
+        _feedbackSaved = true;
+        _savingFeedback = false;
+      });
+    } on DioException catch (e) {
+      if (!mounted) return;
+      final raw = e.response?.data is Map ? e.response!.data as Map : null;
+      final err = raw?['error'] is Map ? raw!['error'] as Map : null;
+      setState(() {
+        _feedbackError = (err?['message'] as String?) ?? 'Erro ao salvar feedback.';
+        _savingFeedback = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _feedbackError = 'Erro inesperado salvando feedback.';
+        _savingFeedback = false;
+      });
     }
   }
 
@@ -147,6 +229,35 @@ class _ReportPageState extends State<ReportPage> {
               ),
               const SizedBox(height: 24),
             ],
+
+            // Feedback do user sobre ESTA corrida. Substitui o checkpoint
+            // solto: o cron de domingo agrega o feedback das runs da
+            // semana pra propor revisão do plano. Aparece pra todo mundo
+            // (freemium + premium) — sem feedback, cron não tem leitura
+            // subjetiva pra correlacionar com os números.
+            if (_run != null) ...[
+              _FeedbackBlock(
+                palette: palette,
+                selected: _selectedKinds,
+                notes: _kindNotes,
+                saved: _feedbackSaved,
+                saving: _savingFeedback,
+                error: _feedbackError,
+                onToggle: (k) => setState(() {
+                  if (_selectedKinds.contains(k)) {
+                    _selectedKinds.remove(k);
+                    _kindNotes.remove(k);
+                  } else {
+                    _selectedKinds.add(k);
+                  }
+                  _feedbackError = null;
+                }),
+                onNoteChanged: (k, v) => _kindNotes[k] = v,
+                onSubmit: _submitFeedback,
+              ),
+              const SizedBox(height: 24),
+            ],
+
             if (_run != null)
               SizedBox(
                 width: double.infinity,
@@ -394,6 +505,246 @@ class _MarkdownReport extends StatelessWidget {
     }
 
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: widgets);
+  }
+}
+
+/// Bloco de feedback subjetivo do user (chips + note opcional). Mesmo set
+/// de chips que vinha da página de checkpoint solto — agora vinculado à
+/// corrida. Server agrega o feedback das runs da semana no cron de domingo
+/// pra propor revisão das próximas 2 semanas.
+class _FeedbackBlock extends StatelessWidget {
+  final dynamic palette;
+  final Set<CheckpointInputKind> selected;
+  final Map<CheckpointInputKind, String> notes;
+  final bool saved;
+  final bool saving;
+  final String? error;
+  final void Function(CheckpointInputKind) onToggle;
+  final void Function(CheckpointInputKind, String) onNoteChanged;
+  final VoidCallback onSubmit;
+
+  const _FeedbackBlock({
+    required this.palette,
+    required this.selected,
+    required this.notes,
+    required this.saved,
+    required this.saving,
+    required this.error,
+    required this.onToggle,
+    required this.onNoteChanged,
+    required this.onSubmit,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final type = context.runninType;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        border: Border.all(color: palette.primary.withValues(alpha: 0.45)),
+        color: palette.primary.withValues(alpha: 0.04),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '> COMO FOI ESSA CORRIDA?',
+            style: type.labelCaps.copyWith(color: palette.primary, letterSpacing: 1.1),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Sua leitura subjetiva entra no ajuste do plano que o coach faz aos domingos — '
+            'serve pras próximas 2 semanas.',
+            style: type.bodySm.copyWith(
+              color: palette.text.withValues(alpha: 0.8),
+              fontSize: 12.5,
+              height: 1.5,
+            ),
+          ),
+          const SizedBox(height: 14),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: CheckpointInputKind.values
+                .map((k) => _FeedbackChip(
+                      kind: k,
+                      selected: selected.contains(k),
+                      onTap: () => onToggle(k),
+                      palette: palette,
+                    ))
+                .toList(),
+          ),
+          const SizedBox(height: 12),
+          ...selected
+              .where((k) => k.requiresNote)
+              .map((k) => Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: _FeedbackNoteField(
+                      label: k.label,
+                      hint: k.hint,
+                      initialValue: notes[k] ?? '',
+                      palette: palette,
+                      onChanged: (v) => onNoteChanged(k, v),
+                    ),
+                  )),
+          if (error != null) ...[
+            const SizedBox(height: 4),
+            Text(
+              error!,
+              style: type.bodySm.copyWith(
+                color: const Color(0xFFFF6B35),
+                fontSize: 12.5,
+                height: 1.5,
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
+          if (saved) ...[
+            const SizedBox(height: 4),
+            Text(
+              'Feedback salvo. Você pode atualizar enquanto a tela estiver aberta.',
+              style: type.bodySm.copyWith(
+                color: palette.primary.withValues(alpha: 0.85),
+                fontSize: 12.5,
+                height: 1.5,
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
+          SizedBox(
+            width: double.infinity,
+            height: 44,
+            child: OutlinedButton(
+              onPressed: saving ? null : onSubmit,
+              style: OutlinedButton.styleFrom(
+                side: BorderSide(color: palette.primary),
+                foregroundColor: palette.primary,
+                shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+              ),
+              child: saving
+                  ? SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 1.8,
+                        color: palette.primary,
+                      ),
+                    )
+                  : Text(
+                      saved ? 'ATUALIZAR FEEDBACK' : 'ENVIAR FEEDBACK',
+                      style: type.labelMd.copyWith(
+                        color: palette.primary,
+                        fontWeight: FontWeight.w500,
+                        letterSpacing: 1.1,
+                      ),
+                    ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FeedbackChip extends StatelessWidget {
+  final CheckpointInputKind kind;
+  final bool selected;
+  final VoidCallback onTap;
+  final dynamic palette;
+
+  const _FeedbackChip({
+    required this.kind,
+    required this.selected,
+    required this.onTap,
+    required this.palette,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = selected ? palette.primary : palette.muted;
+    final bg = selected
+        ? palette.primary.withValues(alpha: 0.14)
+        : Colors.transparent;
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: bg,
+          border: Border.all(color: color.withValues(alpha: 0.55)),
+        ),
+        child: Text(
+          kind.label,
+          style: context.runninType.bodySm.copyWith(
+            color: selected ? palette.text : palette.muted,
+            fontWeight: selected ? FontWeight.w500 : FontWeight.w400,
+            letterSpacing: 0.3,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _FeedbackNoteField extends StatelessWidget {
+  final String label;
+  final String hint;
+  final String initialValue;
+  final dynamic palette;
+  final ValueChanged<String> onChanged;
+
+  const _FeedbackNoteField({
+    required this.label,
+    required this.hint,
+    required this.initialValue,
+    required this.palette,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final type = context.runninType;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '> ${label.toUpperCase()}',
+          style: type.labelCaps.copyWith(
+            color: palette.secondary,
+            letterSpacing: 1.0,
+          ),
+        ),
+        const SizedBox(height: 6),
+        TextFormField(
+          initialValue: initialValue,
+          maxLength: 280,
+          minLines: 1,
+          maxLines: 3,
+          onChanged: onChanged,
+          style: type.bodyMd.copyWith(color: palette.text, fontSize: 13),
+          decoration: InputDecoration(
+            counterText: '',
+            hintText: hint,
+            hintStyle: type.bodySm.copyWith(color: palette.muted, fontSize: 12.5),
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.zero,
+              borderSide: BorderSide(color: palette.border),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.zero,
+              borderSide: BorderSide(color: palette.border),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.zero,
+              borderSide: BorderSide(color: palette.primary, width: 1.2),
+            ),
+          ),
+        ),
+      ],
+    );
   }
 }
 

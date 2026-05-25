@@ -165,13 +165,6 @@ export interface Plan {
    */
   revisions?: PlanRevision[];
   /**
-   * Id da PlanRevision PENDENTE aguardando aceite/recusa do usuário (criada
-   * pelo cron de domingo). `null`/ausente = sem proposta pendente. O plano só
-   * muda quando o usuário ACEITA a proposta. Ver ProposeCheckpointUseCase /
-   * ResolveProposalUseCase.
-   */
-  pendingRevisionId?: string | null;
-  /**
    * Prazo inicial (ISO YYYY-MM-DD) pra atingir o objetivo, gravado na criação
    * do plano (= startDate + weeksCount × 7d). Imutável após criado — o coach
    * pode ajustar weeksCount via checkpoint, mas o prazo INICIAL fica registrado

@@ -31,11 +31,10 @@ String routeForNotification(AppNotification n) {
     // Eventos de plano
     case 'plan_ready':
       return '/training';
-    case 'plan_proposal':
-      final planId = n.data?['planId'] as String?;
-      return planId != null && planId.isNotEmpty
-          ? '/training/revise?planId=$planId'
-          : '/training';
+    case 'plan_updated':
+      // Cron de domingo aplicou revisão automática nas próximas 2 semanas
+      // — manda o user direto pro detalhe do plano pra ver o que mudou.
+      return '/training/plan-detail';
 
     // Coach async
     case 'coach_message':

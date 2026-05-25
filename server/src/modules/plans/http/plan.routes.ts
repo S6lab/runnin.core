@@ -11,11 +11,7 @@ import {
 import {
   listCheckpoints,
   getCheckpoint,
-  submitCheckpointInputs,
-  skipCheckpointHandler,
   getRevisionHandler,
-  acceptProposalHandler,
-  rejectProposalHandler,
 } from './checkpoint.controller';
 
 export const planRouter = Router();
@@ -35,11 +31,8 @@ planRouter.get('/:id/checkpoints/:weekNumber', getCheckpoint);
 planRouter.post('/generate', requireFeature('generatePlan'), postGeneratePlan);
 planRouter.post('/:id/request-revision', requireFeature('planRevisions'), requestRevisionHandler);
 planRouter.post('/:id/weekly-reports/:weekNumber/generate', requireFeature('weeklyReports'), generateWeeklyReportHandler);
-// Checkpoint inputs — registrados durante a semana (sem mudar o plano).
-// O plano só é revisado aos domingos (cron) e aplicado no aceite da proposta.
-planRouter.post('/:id/checkpoints/:weekNumber/inputs', submitCheckpointInputs);
-// "Depois": adia o checkpoint (marca skipped, sem ajuste). Freemium OK.
-planRouter.post('/:id/checkpoints/:weekNumber/skip', skipCheckpointHandler);
-// Proposta de revisão (gerada pelo cron de domingo): aceitar/recusar — premium.
-planRouter.post('/:id/revisions/:revisionId/accept', requireFeature('planRevisions'), acceptProposalHandler);
-planRouter.post('/:id/revisions/:revisionId/reject', requireFeature('planRevisions'), rejectProposalHandler);
+// Checkpoint deixou de ter fluxo "solto" pelo app: o feedback agora é
+// coletado na ReportPage (PATCH /runs/:id/feedback) e o cron de domingo
+// agrega das corridas da semana. Endpoints de submit/skip foram removidos.
+// Revisão semanal também é AUTOMÁTICA: o cron aplica direto, sem passo de
+// aprovação. Por isso accept/reject também sumiram.

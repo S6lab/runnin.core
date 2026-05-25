@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'package:runnin/features/training/domain/entities/plan_checkpoint.dart';
 
 class GpsPoint {
   final double lat;
@@ -235,6 +236,12 @@ class Run {
   final String? planSessionId;
   final String? coachQuote;
   final List<KmSplit> splits;
+  /// Feedback subjetivo submetido pelo user na ReportPage (chips + note).
+  /// Substitui o fluxo de checkpoint "solto" — agora a leitura do user
+  /// fica vinculada à corrida específica e o cron de domingo agrega da
+  /// semana toda. `feedbackAt` indica quando foi enviado.
+  final List<CheckpointInput> userFeedback;
+  final String? feedbackAt;
 
   const Run({
     required this.id,
@@ -258,6 +265,8 @@ class Run {
     this.planSessionId,
     this.coachQuote,
     this.splits = const [],
+    this.userFeedback = const [],
+    this.feedbackAt,
   });
 
   factory Run.fromJson(Map<String, dynamic> j) => Run(
@@ -288,5 +297,11 @@ class Run {
             .map((e) => KmSplit.fromJson(e as Map<String, dynamic>))
             .toList()
         : const [],
+    userFeedback: j['userFeedback'] != null
+        ? (j['userFeedback'] as List)
+            .map((e) => CheckpointInput.fromJson(e as Map<String, dynamic>))
+            .toList()
+        : const [],
+    feedbackAt: j['feedbackAt'] as String?,
   );
 }

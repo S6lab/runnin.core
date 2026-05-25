@@ -45,12 +45,17 @@ export class LlmCheckpointAnalysisStrategy
 
     const runsDigest = weekRuns.length
       ? weekRuns
-          .map(
-            (r) =>
-              `- ${r.date}: ${r.distanceKm.toFixed(1)}km em ${Math.round(r.durationS / 60)}min${
-                r.avgPace ? `, pace ${r.avgPace}` : ''
-              }${r.avgBpm ? `, BPM méd ${r.avgBpm}` : ''}`,
-          )
+          .map((r) => {
+            const head =
+              `- ${r.date}: ${r.distanceKm.toFixed(1)}km em ${Math.round(r.durationS / 60)}min` +
+              `${r.avgPace ? `, pace ${r.avgPace}` : ''}` +
+              `${r.avgBpm ? `, BPM méd ${r.avgBpm}` : ''}`;
+            if (!r.userFeedback || r.userFeedback.length === 0) return head;
+            const fb = r.userFeedback
+              .map((i) => `${i.type}${i.note ? ` (${i.note})` : ''}`)
+              .join(', ');
+            return `${head}\n  feedback do user: ${fb}`;
+          })
           .join('\n')
       : '(nenhuma corrida concluída na semana)';
 
@@ -80,10 +85,10 @@ CONTEXTO DA SEMANA ${weekNumber}:
 ${weekMetrics.avgBpm ? `- BPM médio: ${weekMetrics.avgBpm}` : ''}
 ${weekMetrics.avgPaceMinPerKm ? `- Pace médio: ${weekMetrics.avgPaceMinPerKm.toFixed(2)}min/km` : ''}
 
-CORRIDAS DA SEMANA:
+CORRIDAS DA SEMANA (cada item pode trazer feedback subjetivo enviado pelo user logo após a corrida — use pra correlacionar chips com a corrida específica):
 ${runsDigest}
 
-INPUTS DO USUÁRIO NO CHECKPOINT:
+FEEDBACK AGREGADO DA SEMANA (união deduplicada dos chips submetidos em todas as corridas — use como leitura macro):
 ${inputsDigest}
 
 SEMANAS RESTANTES NO PLANO (você vai ajustar essas):

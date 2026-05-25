@@ -205,6 +205,7 @@ export async function computeWeekData(
     avgPace: r.avgPace ?? undefined,
     avgBpm: r.avgBpm ?? undefined,
     maxBpm: r.maxBpm ?? undefined,
+    userFeedback: r.userFeedback?.length ? r.userFeedback : undefined,
   }));
 
   const week = plan.weeks.find((w) => w.weekNumber === weekNumber);

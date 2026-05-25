@@ -1,3 +1,5 @@
+import { CheckpointInput } from '@modules/plans/domain/plan-checkpoint.entity';
+
 export type RunStatus = 'active' | 'completed' | 'abandoned';
 
 export interface KmSplit {
@@ -45,6 +47,14 @@ export interface Run {
   xpEarned?: number;
   coachReportId?: string;
   splits?: KmSplit[];
+  /** Feedback subjetivo do user submetido na ReportPage logo após a corrida.
+   *  Reusa o shape do CheckpointInput (8 chips + note opcional) — os mesmos
+   *  inputs que antes vinham da página de checkpoint solto, agora vinculados
+   *  à corrida específica. O cron de domingo agrega o feedback de todas as
+   *  runs da semana pra alimentar a análise de revisão do plano. */
+  userFeedback?: CheckpointInput[];
+  /** Quando o feedback foi submetido. Ausente = user não preencheu (ainda). */
+  feedbackAt?: string;
   createdAt: string;
   completedAt?: string;
 }

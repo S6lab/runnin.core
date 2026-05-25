@@ -32,6 +32,10 @@ export interface CheckpointWeekRun {
   avgBpm?: number;
   maxBpm?: number;
   notes?: string;
+  /** Feedback subjetivo que o user submeteu na ReportPage da corrida.
+   *  Permite ao LLM correlacionar chips ("pain", "great_week") com a run
+   *  específica em vez de tratar como soup agregada. */
+  userFeedback?: CheckpointInput[];
 }
 
 export interface CheckpointWeekMetrics {

@@ -382,73 +382,7 @@ class _TrainingPageState extends State<TrainingPage> {
       onPlanModeChanged: (mode) => setState(() => _planMode = mode),
     );
 
-    // Proposta de revisão pendente (cron de domingo) → banner pra revisar.
-    if (_plan!.hasPendingProposal) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _ProposalBanner(
-            onTap: () async {
-              await context.push('/training/plan-proposal');
-              if (mounted) _load();
-            },
-          ),
-          workspace,
-        ],
-      );
-    }
     return workspace;
-  }
-}
-
-/// Banner no topo do TREINO quando há proposta de revisão pendente.
-class _ProposalBanner extends StatelessWidget {
-  final VoidCallback onTap;
-  const _ProposalBanner({required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.runninPalette;
-    final type = context.runninType;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-      child: InkWell(
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: palette.secondary.withValues(alpha: 0.10),
-            border: Border.all(color: palette.secondary, width: 1.2),
-          ),
-          child: Row(
-            children: [
-              Icon(Icons.auto_awesome, size: 18, color: palette.secondary),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'PROPOSTA DE ATUALIZAÇÃO DO PLANO',
-                      style: type.labelCaps.copyWith(
-                        color: palette.secondary,
-                        letterSpacing: 0.8,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      'O coach revisou suas próximas 2 semanas. Toque pra revisar e aceitar.',
-                      style: type.bodyXs.copyWith(color: palette.muted, height: 1.4),
-                    ),
-                  ],
-                ),
-              ),
-              Icon(Icons.chevron_right, size: 18, color: palette.secondary),
-            ],
-          ),
-        ),
-      ),
-    );
   }
 }
 
@@ -1163,16 +1097,6 @@ class _WeeklyPlanView extends StatelessWidget {
           const SizedBox(height: 12),
           PlanClosingCard(plan: plan, lastWeek: week),
         ],
-        const SizedBox(height: 12),
-        _CheckpointEntry(
-          planId: plan.id,
-          weekNumber: selectedWeek + 1,
-          plan: plan,
-          // Checkpoint só faz sentido pra semana atual ou passada (precisa de
-          // dados pra avaliar). Pra semanas estritamente futuras (M > current),
-          // vira locked com cadeado + dialog explicando a regra.
-          isLocked: selectedWeek > _currentPlanWeekIndex(plan),
-        ),
         const SizedBox(height: 16),
         // Volume da semana em barras (km por dia), similar ao mensal.
         _WeeklyVolumeBars(
@@ -1266,83 +1190,6 @@ class _WeeklyVolumeBars extends StatelessWidget {
           }),
         ),
       ],
-    );
-  }
-}
-
-/// Entry compacta pro checkpoint semanal. Tap → /training/checkpoint/:planId/:weekNumber.
-/// Não bloqueia a UI se falhar — apenas omite o card.
-class _CheckpointEntry extends StatelessWidget {
-  final String planId;
-  final int weekNumber;
-  /// true quando a semana é estritamente futura — checkpoint só faz sentido
-  /// pra semana atual ou passada (precisa ter dados pra avaliar). Renderiza
-  /// cadeado + tap abre dialog com a data prevista.
-  final bool isLocked;
-  final Plan plan;
-  const _CheckpointEntry({
-    required this.planId,
-    required this.weekNumber,
-    required this.plan,
-    this.isLocked = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.runninPalette;
-    final borderAlpha = isLocked ? 0.25 : 0.55;
-    return InkWell(
-      onTap: isLocked
-          ? () => _showCheckpointLockDialog(context, plan, weekNumber)
-          : () => context.push('/training/checkpoint/$planId/$weekNumber'),
-      child: AppPanel(
-        borderColor: palette.primary.withValues(alpha: borderAlpha),
-        padding: const EdgeInsets.all(AppSpacing.xl),
-        child: Opacity(
-          opacity: isLocked ? 0.55 : 1.0,
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.xs),
-                color: palette.primary.withValues(alpha: 0.18),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (isLocked) ...[
-                      Icon(Icons.lock_outline, size: 11, color: palette.primary),
-                      const SizedBox(width: 4),
-                    ],
-                    Text(
-                      'CHECKPOINT',
-                      style: context.runninType.labelCaps.copyWith(
-                        color: palette.primary,
-                        letterSpacing: 1.0,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  isLocked
-                      ? 'SEM $weekNumber · disponível quando você chegar nessa semana'
-                      : 'Fim de SEM $weekNumber · ajustar plano com base na sua semana',
-                  style: context.runninType.bodySm.copyWith(
-                    color: palette.text,
-                    fontSize: 12.5,
-                  ),
-                ),
-              ),
-              Icon(
-                isLocked ? Icons.lock_outline : Icons.chevron_right,
-                color: palette.muted,
-                size: 18,
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }
