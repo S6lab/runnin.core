@@ -10,6 +10,7 @@ import 'package:runnin/core/audio/coach_audio_player.dart';
 import 'package:runnin/core/network/api_client.dart';
 import 'package:runnin/features/coach_live/data/coach_context_manager.dart';
 import 'package:runnin/features/coach_live/data/coach_live_beacon_remote_datasource.dart';
+import 'package:runnin/features/location_weather/data/location_weather_controller.dart';
 import 'package:runnin/features/coach_live/data/live_audio_service.dart';
 
 /// Sessão Gemini Live nativa **efêmera/rotacional** que acompanha a corrida.
@@ -580,9 +581,21 @@ class LiveRunCoachSession {
 
   Future<_LiveCoachConfig?> _fetchConfig(String? planSessionId) async {
     try {
+      // Snapshot de clima (se disponível) entra no systemInstruction da
+      // sessão Live pro coach considerar calor/umidade/vento na fala —
+      // sem impacto na UI da corrida ativa.
+      final weather = locationWeatherController.weather;
+      final body = <String, dynamic>{
+        'planSessionId': ?planSessionId,
+        if (weather != null) ...{
+          'temperatureC': weather.temperatureC,
+          'humidityPercent': weather.humidityPercent,
+          'windKmh': weather.windKmh,
+        },
+      };
       final res = await _dio.post<Map<String, dynamic>>(
         '/coach/live-token',
-        data: planSessionId != null ? {'planSessionId': planSessionId} : null,
+        data: body.isEmpty ? null : body,
         options: Options(receiveTimeout: const Duration(seconds: 6)),
       );
       final data = res.data;

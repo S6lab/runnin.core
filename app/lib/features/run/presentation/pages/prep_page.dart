@@ -9,6 +9,7 @@ import 'package:runnin/core/audio/coach_audio_player.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/warmup/warmup_exercises.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
+import 'package:runnin/features/location_weather/data/location_weather_controller.dart';
 import 'package:runnin/features/run/data/datasources/run_coach_remote_datasource.dart';
 import 'package:runnin/features/run/presentation/bloc/run_bloc.dart';
 import 'package:runnin/features/training/data/datasources/plan_remote_datasource.dart';
@@ -17,7 +18,6 @@ import 'package:runnin/features/subscriptions/presentation/subscription_controll
 import 'package:runnin/features/training/presentation/widgets/execution_timeline.dart';
 import 'package:runnin/features/run/presentation/widgets/gps_permission_modal.dart';
 import 'package:runnin/shared/widgets/runnin_app_bar.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 class PrepPage extends StatelessWidget {
   const PrepPage({super.key});
@@ -294,6 +294,7 @@ class _PrepViewState extends State<_PrepView> {
     if (_isPro != true) return;
     _coachSub?.cancel();
 
+    final weather = locationWeatherController.weather;
     _coachSub = _coachRemote
         .streamCoachCue(
           event: 'pre_run',
@@ -301,6 +302,9 @@ class _PrepViewState extends State<_PrepView> {
           currentPaceMinKm: 0,
           distanceM: 0,
           elapsedS: 0,
+          temperatureC: weather?.temperatureC,
+          humidityPercent: weather?.humidityPercent,
+          windKmh: weather?.windKmh,
         )
         .listen(
           (cue) {
@@ -337,18 +341,6 @@ class _PrepViewState extends State<_PrepView> {
     }
   }
 
-  Future<void> _openMusicApp(_MusicProvider provider) async {
-    final nativeUri = Uri.parse(provider.scheme);
-    if (await canLaunchUrl(nativeUri)) {
-      await launchUrl(nativeUri, mode: LaunchMode.externalApplication);
-    } else {
-      await launchUrl(
-        Uri.parse(provider.webUrl),
-        mode: LaunchMode.externalApplication,
-      );
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final palette = context.runninPalette;
@@ -381,7 +373,7 @@ class _PrepViewState extends State<_PrepView> {
               const SizedBox(height: 16),
               Expanded(
                 child: SingleChildScrollView(
-                  // Ordem: 0 TIPO → 1 CHECKLIST → 2 ALERTAS+MÚSICA →
+                  // Ordem: 0 TIPO → 1 CHECKLIST → 2 ALERTAS →
                   // 3 AQUECIMENTO → 4 BRIEFING DA SESSÃO
                   child: switch (_step) {
                     0 => _buildTypeStep(context, type),
@@ -447,47 +439,6 @@ class _PrepViewState extends State<_PrepView> {
             child: const Text('SALVAR COMO PADRÃO'),
           ),
         ),
-        const SizedBox(height: 24),
-        Text('MÚSICA', style: type.displaySm),
-        const SizedBox(height: 14),
-        // Intro card explicativo — fala (coach ou telemetria) abaixa o volume.
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: palette.surface,
-            border: Border.all(color: palette.border),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Abra seu app de música', style: type.labelMd),
-              const SizedBox(height: 6),
-              Text(
-                isPro
-                    ? 'O Coach fala por cima — volume abaixa automaticamente.'
-                    : 'A telemetria fala por cima a cada km — volume abaixa automaticamente.',
-                style: type.bodySm.copyWith(color: palette.muted),
-              ),
-              const SizedBox(height: 14),
-              Row(
-                children: _MusicProvider.values.map((p) {
-                  return Expanded(
-                    child: Padding(
-                      padding: EdgeInsets.only(
-                        right: p != _MusicProvider.values.last ? 8 : 0,
-                      ),
-                      child: _MusicProviderButton(
-                        provider: p,
-                        onTap: () => _openMusicApp(p),
-                      ),
-                    ),
-                  );
-                }).toList(),
-              ),
-            ],
-          ),
-        ),
       ],
     );
   }
@@ -523,7 +474,7 @@ class _PrepViewState extends State<_PrepView> {
           _SecondaryModeCard(
             label: 'CORRIDA LIVRE',
             description:
-                'Sai sem protocolo. Coach observa e ajusta a próxima sessão do plano.',
+                'Sai sem protocolo. Coach observa e usa esses dados no próximo checkpoint semanal pra ajustar as 2 próximas semanas do plano.',
             selected: _selectedType == 'Free Run',
             footerLabel: 'Integrado ao relatório semanal',
             onTap: () => _selectType('Free Run'),
@@ -544,7 +495,7 @@ class _PrepViewState extends State<_PrepView> {
             const _FreemiumUpgradeCard(
               title: 'COACH AI AO VIVO É PREMIUM',
               description:
-                  'Sua corrida livre salva histórico e fala a telemetria (pace, tempo, distância) a cada km. Não rola coach analisando ou ajustando a próxima sessão. Pra isso, assine o premium.',
+                  'Sua corrida livre salva histórico e fala a telemetria (pace, tempo, distância) a cada km. Não rola coach analisando ou ajustando o plano pelo checkpoint semanal. Pra isso, assine o premium.',
             ),
           ],
         ],
@@ -749,7 +700,7 @@ class _PrepViewState extends State<_PrepView> {
     // telemetria, sem coach analisando a corrida nem planejando a próxima.
     final briefingText = !hasPlanned
         ? (isPro
-            ? 'Corrida livre. Sem distância pré-definida — coach observa e adapta a próxima sessão do plano com base nesses dados.'
+            ? 'Corrida livre. Sem distância pré-definida — coach observa e usa esses dados no checkpoint semanal pra ajustar as 2 próximas semanas do plano.'
             : 'Corrida livre. Salvamos o histórico desta corrida e a telemetria km a km. Não há coach analisando a sessão nem planejando a próxima — isso é premium.')
         : (session.notes.trim().isNotEmpty
             ? session.notes.trim()
@@ -776,7 +727,7 @@ class _PrepViewState extends State<_PrepView> {
           const _FreemiumUpgradeCard(
             title: 'COACH ANALISA E PLANEJA — PREMIUM',
             description:
-                'Premium: coach AI ao vivo durante a corrida, análise pós-sessão e ajuste automático da próxima. Freemium: só histórico + telemetria falada a cada km, sem análise nem planejamento.',
+                'Premium: coach AI ao vivo durante a corrida, análise pós-sessão e ajuste automático das 2 próximas semanas via checkpoint semanal. Freemium: só histórico + telemetria falada a cada km, sem análise nem planejamento.',
           ),
         ],
         if (segments.isNotEmpty) ...[
@@ -1228,79 +1179,6 @@ class _AlertToggleRow extends StatelessWidget {
                     : palette.surfaceAlt,
               ),
               trackOutlineColor: WidgetStateProperty.all(palette.border),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// --- Music Provider ---
-
-enum _MusicProvider {
-  spotify(
-    label: 'Spotify',
-    icon: Icons.music_note,
-    scheme: 'spotify://',
-    webUrl: 'https://open.spotify.com',
-  ),
-  youtubeMusic(
-    label: 'YT Music',
-    icon: Icons.play_circle_outline,
-    scheme: 'vnd.youtube.music://',
-    webUrl: 'https://music.youtube.com',
-  ),
-  appleMusic(
-    label: 'Apple Music',
-    icon: Icons.library_music,
-    scheme: 'music://',
-    webUrl: 'https://music.apple.com',
-  );
-
-  final String label;
-  final IconData icon;
-  final String scheme;
-  final String webUrl;
-
-  const _MusicProvider({
-    required this.label,
-    required this.icon,
-    required this.scheme,
-    required this.webUrl,
-  });
-}
-
-class _MusicProviderButton extends StatelessWidget {
-  final _MusicProvider provider;
-  final VoidCallback onTap;
-
-  const _MusicProviderButton({
-    required this.provider,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.runninPalette;
-    final type = context.runninType;
-
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 14),
-        decoration: BoxDecoration(
-          color: palette.surface,
-          border: Border.all(color: palette.border),
-        ),
-        child: Column(
-          children: [
-            Icon(provider.icon, color: palette.primary, size: 24),
-            const SizedBox(height: 6),
-            Text(
-              provider.label,
-              style: type.labelCaps.copyWith(fontSize: 10),
-              textAlign: TextAlign.center,
             ),
           ],
         ),

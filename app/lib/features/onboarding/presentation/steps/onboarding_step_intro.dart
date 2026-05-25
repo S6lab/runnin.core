@@ -36,8 +36,8 @@ const kOnboardingIntroSlides = [
     features: [
       OnboardingIntroFeature(
         Icons.psychology_alt_outlined,
-        'Inteligencia adaptativa',
-        'O plano evolui com voce a cada corrida',
+        'Plano vivo, checkpoint semanal',
+        'Toda semana o coach revisa seu desempenho e ajusta as 2 proximas semanas',
       ),
       OnboardingIntroFeature(
         Icons.mic_none_outlined,
@@ -47,7 +47,7 @@ const kOnboardingIntroSlides = [
       OnboardingIntroFeature(
         Icons.analytics_outlined,
         'Analise completa',
-        'Metricas, zonas cardiacas, benchmark e tendencias',
+        'Metricas, zonas cardiacas e tendencias',
       ),
     ],
   ),
@@ -68,11 +68,6 @@ const kOnboardingIntroSlides = [
         'Splits ao vivo',
         'Comentarios a cada km sobre seu desempenho',
       ),
-      OnboardingIntroFeature(
-        Icons.music_note_outlined,
-        'Integra com musica',
-        'Volume baixa automaticamente durante orientacoes',
-      ),
     ],
   ),
   OnboardingIntroSlide(
@@ -86,11 +81,6 @@ const kOnboardingIntroSlides = [
         Icons.emoji_events_outlined,
         'Badges e XP',
         'Conquiste marcos, suba de nivel, desbloqueie recompensas',
-      ),
-      OnboardingIntroFeature(
-        Icons.trending_up_outlined,
-        'Benchmark',
-        'Compare seu desempenho com corredores do seu nivel',
       ),
       OnboardingIntroFeature(
         Icons.calendar_month_outlined,

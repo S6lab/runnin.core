@@ -112,10 +112,11 @@ class _HeaderCell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Convenção (invertida): HOJE em primary (chamativo, "ação ativa") e
+    // dia já FEITO em secondary (mais discreto, "consolidado").
     final bg = switch (data.status) {
-      WeekDayCellStatus.done => context.runninPalette.primary,
-      // Topo do card de HOJE em cor secundária (sólida) da palette.
-      WeekDayCellStatus.today => context.runninPalette.secondary,
+      WeekDayCellStatus.done => context.runninPalette.secondary,
+      WeekDayCellStatus.today => context.runninPalette.primary,
       _ => Colors.transparent,
     };
     final fg = switch (data.status) {
@@ -165,8 +166,10 @@ class _BodyCell extends StatelessWidget {
     // done. Independe da cor do cabeçalho → HOJE concluído também vira check.
     final done = data.executed || data.isDone;
 
+    // Cores invertidas vs versão anterior: done usa secondary, today/planned
+    // usam primary. Convenção: "agora/futuro = primary" / "feito = secondary".
     final iconColor = done
-        ? context.runninPalette.primary
+        ? context.runninPalette.secondary
         : isTodayAccent
             ? context.runninPalette.primary
             : FigmaColors.textDim;
@@ -175,17 +178,21 @@ class _BodyCell extends StatelessWidget {
         ? context.runninPalette.primary
         : accentDim
             ? FigmaColors.textDim
-            : context.runninPalette.primary;
+            : done
+                ? context.runninPalette.secondary
+                : context.runninPalette.primary;
 
     final distanceColor = isTodayAccent
-        ? context.runninPalette.secondary
+        ? context.runninPalette.primary
         : data.isDone
-            ? context.runninPalette.primary
+            ? context.runninPalette.secondary
             : FigmaColors.textDim;
 
     final paceColor = isTodayAccent
-        ? context.runninPalette.secondary
-        : FigmaColors.textDim;
+        ? context.runninPalette.primary
+        : done
+            ? context.runninPalette.secondary
+            : FigmaColors.textDim;
 
     final icon = done ? Icons.check : Icons.fiber_manual_record;
     final iconSize = done ? 12.0 : 6.0;

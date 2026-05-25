@@ -420,11 +420,6 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
                               pulsing: _coachAudioPlaying,
                             ),
                             _StatusChip(
-                              icon: Icons.music_note_outlined,
-                              label: 'MÚSICA · OFF',
-                              color: palette.muted,
-                            ),
-                            _StatusChip(
                               icon: Icons.favorite_outline,
                               label: 'BPM · —',
                               color: palette.muted,
@@ -936,7 +931,8 @@ class _StatsOverlay extends StatelessWidget {
                     : Text(
                         'INICIAR CORRIDA',
                         style: context.runninType.bodyMd.copyWith(
-                          fontWeight: FontWeight.w500,
+                          color: palette.background,
+                          fontWeight: FontWeight.w700,
                           letterSpacing: 1.4,
                         ),
                       ),

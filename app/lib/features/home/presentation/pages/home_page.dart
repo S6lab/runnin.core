@@ -9,6 +9,7 @@ import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 import 'package:runnin/features/home/domain/use_cases/get_home_data_use_case.dart';
+import 'package:runnin/features/location_weather/data/location_weather_controller.dart';
 import 'package:runnin/features/home/presentation/cubit/home_cubit.dart';
 import 'package:runnin/features/notifications/presentation/cubit/notifications_cubit.dart';
 import 'package:runnin/features/subscriptions/presentation/widgets/premium_locked_card.dart';
@@ -80,6 +81,8 @@ class _HomeViewState extends State<_HomeView> {
     // perdeu profile no server mas o flag local sobreviveu), home nunca
     // detectava e o user ficava preso vendo "perfil incompleto" eternamente.
     _checkOnboarding(onboardingCacheStatus());
+    // Cidade + clima — idempotente, dispara só 1x por sessão.
+    locationWeatherController.initIfNeeded();
   }
 
   Future<void> _checkOnboarding(bool? cachedStatus) async {
@@ -112,7 +115,10 @@ class _HomeViewState extends State<_HomeView> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _HomeHeader(profileName: state is HomeLoaded ? state.data.profile?.name : null),
+                  _HomeHeader(
+                    profileName: state is HomeLoaded ? state.data.profile?.name : null,
+                    hasWearable: state is HomeLoaded ? (state.data.profile?.hasWearable ?? false) : false,
+                  ),
                   const SizedBox(height: 20),
                   if (state is HomeLoading) ...[
                     const _LoadingCard(),
@@ -201,7 +207,8 @@ class _HomeViewState extends State<_HomeView> {
 
 class _HomeHeader extends StatelessWidget {
   final String? profileName;
-  const _HomeHeader({this.profileName});
+  final bool hasWearable;
+  const _HomeHeader({this.profileName, this.hasWearable = false});
 
   @override
   Widget build(BuildContext context) {
@@ -237,16 +244,107 @@ class _HomeHeader extends StatelessWidget {
             ),
           ],
         ),
-        // Canto superior direito: sino de notificações (substituiu o avatar
-        // de perfil — o perfil fica na aba PERFIL da navegação).
-        const Row(
+        // Canto superior direito: WATCH + AUDIO + sino. Lit/unlit segue
+        // estado real (WATCH: profile.hasWearable; AUDIO: estático off por
+        // enquanto, sem API web pra detectar BT). Clique em cada um leva
+        // pra config correspondente.
+        Row(
           children: [
-            _NotificationBell(),
+            _HeaderIconButton(
+              icon: Icons.watch_outlined,
+              isOn: hasWearable,
+              palette: palette,
+              tooltip: 'WATCH',
+              onTap: () => context.push('/profile/health/devices'),
+            ),
+            const SizedBox(width: 14),
+            _HeaderIconButton(
+              icon: Icons.headphones_outlined,
+              isOn: false,
+              palette: palette,
+              tooltip: 'AUDIO',
+              onTap: () => _openBluetoothSettings(context),
+            ),
+            const SizedBox(width: 14),
+            const _NotificationBell(),
           ],
         ),
       ],
     );
   }
+}
+
+/// Botão de ícone do header (WATCH/AUDIO) — mesmo footprint visual do
+/// sino: ícone 24x24, branco quando ligado, atenuado quando desligado.
+/// Dot indicator em volta sinaliza o estado.
+class _HeaderIconButton extends StatelessWidget {
+  final IconData icon;
+  final bool isOn;
+  final RunninPalette palette;
+  final String tooltip;
+  final VoidCallback onTap;
+
+  const _HeaderIconButton({
+    required this.icon,
+    required this.isOn,
+    required this.palette,
+    required this.tooltip,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = isOn ? Colors.white : Colors.white.withValues(alpha: 0.40);
+    return Tooltip(
+      message: tooltip,
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Icon(icon, color: color, size: 24),
+            if (isOn)
+              Positioned(
+                right: -2,
+                top: -2,
+                child: Container(
+                  width: 7,
+                  height: 7,
+                  decoration: BoxDecoration(
+                    color: palette.primary,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Tenta abrir as configs de Bluetooth do sistema. Sem package nativo
+/// (app_settings), o melhor que dá pra fazer cross-platform é mostrar
+/// instrução. Quando o app migrar pra mobile-only, trocar por
+/// AppSettings.openAppSettings(type: bluetooth).
+Future<void> _openBluetoothSettings(BuildContext context) async {
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      behavior: SnackBarBehavior.floating,
+      backgroundColor: const Color(0xFF1A1A2A),
+      content: Text(
+        'Áudio do coach sai pelo dispositivo conectado. Conecte/troque '
+        'fones de ouvido pelo Bluetooth do seu sistema.',
+        style: GoogleFonts.jetBrainsMono(
+          color: Colors.white,
+          fontSize: 12,
+          height: 1.4,
+        ),
+      ),
+      duration: const Duration(seconds: 4),
+    ),
+  );
 }
 
 // ─── Iniciar Sessão ───────────────────────────────────────────────────────────
@@ -1962,12 +2060,14 @@ class _HeroSection extends StatelessWidget {
         color: const Color(0xFF0A0A1A),
         image: DecorationImage(
           image: const AssetImage(heroAsset),
-          // Foto é retrato: fitHeight mostra a corredora INTEIRA (sem
-          // recortar) na altura do hero; centerRight ancora ela no
-          // MEIO-DIREITA, e o fundo escuro preenche a faixa da esquerda
-          // onde fica o texto de saudação.
-          fit: BoxFit.fitHeight,
-          alignment: Alignment.centerRight,
+          // Foto é ULTRA portrait (704x1524, aspect 0.46). fitHeight
+          // deixava a imagem fina (~250px) com tarja escura larga à
+          // esquerda — visualmente quebrado. cover preenche o container
+          // sempre; topCenter privilegia mountains + rosto do corredor
+          // e corta as pernas (parte menos interessante). Overlay de
+          // gradient (logo abaixo) mantém o texto legível.
+          fit: BoxFit.cover,
+          alignment: Alignment.topCenter,
           onError: (e, _) {
             debugPrint('HERO image error: $e');
           },
@@ -2026,24 +2126,49 @@ class _HeroSection extends StatelessWidget {
                     ),
                   ],
                 ),
-                const SizedBox(height: 14),
-                // Chips: WATCH + AUDIO
-                Row(
-                  children: [
-                    // Ponto azul SÓ quando realmente conectado. Sem detecção de
-                    // conexão de wearable/áudio ainda → cinza (desconectado).
-                    _HeroChip(
-                      icon: Icons.watch_outlined,
-                      label: 'WATCH',
-                      dotColor: Colors.white.withValues(alpha: 0.45),
-                    ),
-                    const SizedBox(width: 10),
-                    _HeroChip(
-                      icon: Icons.headphones_outlined,
-                      label: 'AUDIO',
-                      dotColor: Colors.white.withValues(alpha: 0.45),
-                    ),
-                  ],
+                // City + clima lêem o controller — escondem silenciosamente
+                // quando permissão negada ou Open-Meteo falhou.
+                ListenableBuilder(
+                  listenable: locationWeatherController,
+                  builder: (context, _) {
+                    final city = locationWeatherController.city;
+                    final weather = locationWeatherController.weather;
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (city != null && city.isNotEmpty) ...[
+                          const SizedBox(height: 6),
+                          Row(
+                            children: [
+                              const SizedBox(width: 18),
+                              Icon(Icons.place_outlined,
+                                  size: 12, color: Colors.white.withValues(alpha: 0.72)),
+                              const SizedBox(width: 4),
+                              Flexible(
+                                child: Text(
+                                  city.toUpperCase(),
+                                  overflow: TextOverflow.ellipsis,
+                                  style: GoogleFonts.jetBrainsMono(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w400,
+                                    color: Colors.white.withValues(alpha: 0.78),
+                                    letterSpacing: 0.9,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                        // WATCH + AUDIO chips moveram pro header (ao lado do
+                        // sino), ficaram só weather + city visíveis aqui.
+                        if (weather != null) ...[
+                          const SizedBox(height: 14),
+                          _WeatherStrip(weather: weather),
+                        ],
+                      ],
+                    );
+                  },
                 ),
                 const Spacer(),
                 // HOJE — bem grande, logo acima do session pill
@@ -2177,44 +2302,78 @@ class _HeroSection extends StatelessWidget {
   }
 }
 
-class _HeroChip extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final Color dotColor;
-
-  const _HeroChip({required this.icon, required this.label, required this.dotColor});
+/// Strip discreta de clima abaixo dos chips WATCH/AUDIO. Mesmo background
+/// dos chips mas sem dot indicator (não é status de conexão, é dado
+/// ambiental). Esconde-se quando weather=null (sem permissão / API down).
+class _WeatherStrip extends StatelessWidget {
+  final WeatherSnapshot weather;
+  const _WeatherStrip({required this.weather});
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.55),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.15), width: 1.0),
+        color: Colors.black.withValues(alpha: 0.45),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.10), width: 1.0),
       ),
       child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            width: 6,
-            height: 6,
-            decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle),
+          _WeatherCell(
+            icon: Icons.thermostat,
+            value: '${weather.temperatureC.toStringAsFixed(0)}°',
           ),
-          const SizedBox(width: 8),
-          Icon(icon, size: 14, color: Colors.white.withValues(alpha: 0.85)),
-          const SizedBox(width: 6),
-          Text(
-            label,
-            style: GoogleFonts.jetBrainsMono(
-              fontSize: 11,
-              fontWeight: FontWeight.w500,
-              color: Colors.white,
-              letterSpacing: 1.0,
-            ),
+          _WeatherDivider(),
+          _WeatherCell(
+            icon: Icons.water_drop_outlined,
+            value: '${weather.humidityPercent}%',
+          ),
+          _WeatherDivider(),
+          _WeatherCell(
+            icon: Icons.air,
+            value: '${weather.windKmh.toStringAsFixed(0)}km/h',
           ),
         ],
       ),
     );
   }
+}
+
+class _WeatherCell extends StatelessWidget {
+  final IconData icon;
+  final String value;
+  const _WeatherCell({required this.icon, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 12, color: Colors.white.withValues(alpha: 0.78)),
+        const SizedBox(width: 4),
+        Text(
+          value,
+          style: GoogleFonts.jetBrainsMono(
+            fontSize: 11,
+            fontWeight: FontWeight.w500,
+            color: Colors.white.withValues(alpha: 0.88),
+            letterSpacing: 0.8,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _WeatherDivider extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) => Container(
+        width: 1,
+        height: 10,
+        margin: const EdgeInsets.symmetric(horizontal: 10),
+        color: Colors.white.withValues(alpha: 0.20),
+      );
 }
 
 String _weekdayLabel(int weekday) {

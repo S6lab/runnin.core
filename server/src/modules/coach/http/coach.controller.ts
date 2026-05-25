@@ -35,9 +35,26 @@ export async function postCoachLiveToken(req: Request, res: Response, next: Next
       (req.query['planSessionId'] as string | undefined) ??
       (req.body?.['planSessionId'] as string | undefined);
     const runtime = await liveRuntimeContext.getContext(req.uid, planSessionId);
+    // Weather opcional — app passa snapshot capturado no início da corrida.
+    const body = (req.body ?? {}) as {
+      temperatureC?: number;
+      humidityPercent?: number;
+      windKmh?: number;
+    };
+    const weather =
+      typeof body.temperatureC === 'number' ||
+      typeof body.humidityPercent === 'number' ||
+      typeof body.windKmh === 'number'
+        ? {
+            temperatureC: body.temperatureC,
+            humidityPercent: body.humidityPercent,
+            windKmh: body.windKmh,
+          }
+        : undefined;
     const systemInstruction = await buildRunCoachInstruction(
       runtime,
       runtime.profile?.coachPersonality,
+      weather,
     );
     const result = await createLiveToken.execute({
       systemInstruction,

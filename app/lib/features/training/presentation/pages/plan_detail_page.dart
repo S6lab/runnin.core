@@ -8,6 +8,7 @@ import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 import 'package:runnin/features/training/data/datasources/plan_remote_datasource.dart';
 import 'package:runnin/features/training/domain/entities/plan.dart';
 import 'package:runnin/features/training/domain/week_phase_label.dart';
+import 'package:runnin/features/training/presentation/widgets/plan_closing_card.dart';
 import 'package:runnin/shared/widgets/app_panel.dart';
 import 'package:runnin/shared/widgets/runnin_app_bar.dart';
 
@@ -967,6 +968,14 @@ class _WeeksBreakdown extends StatelessWidget {
               initiallyExpanded: i == 0,
               dayNames: _dayNames,
               planStartDate: plan.effectiveStartDate,
+              // Última semana ganha pílula "SEMANA DA META — DD/MM/AAAA".
+              // initialDeadlineAt == raceDate (calculado de startDate +
+              // weeksCount × 7).
+              isLastWeek: i == plan.weeks.length - 1,
+              raceDateIso: plan.initialDeadlineAt,
+              // Plan inteira só pra a última semana renderizar o
+              // PlanClosingCard com weeksCount/initialDeadlineAt/etc.
+              closingPlan: i == plan.weeks.length - 1 ? plan : null,
             ),
           ),
           if (i < plan.weeks.length - 1) const SizedBox(height: 6),
@@ -976,6 +985,15 @@ class _WeeksBreakdown extends StatelessWidget {
   }
 }
 
+/// Formata ISO YYYY-MM-DD pra "DD/MM/AAAA" (usado na pílula META).
+String _formatRaceDate(String iso) {
+  final d = DateTime.tryParse(iso);
+  if (d == null) return iso;
+  return '${d.day.toString().padLeft(2, '0')}/'
+      '${d.month.toString().padLeft(2, '0')}/'
+      '${d.year}';
+}
+
 class _WeekTile extends StatelessWidget {
   final PlanWeek week;
   final bool initiallyExpanded;
@@ -983,11 +1001,23 @@ class _WeekTile extends StatelessWidget {
   /// D0 do plano. Usada pra calcular a data real (DD/MM) de cada
   /// dayOfWeek dessa semana — assim o user vê "Seg 19/05" e não só "Seg".
   final DateTime planStartDate;
+  /// true quando esta é a última semana do plano — recebe pílula
+  /// "SEMANA DA META" no header.
+  final bool isLastWeek;
+  /// ISO YYYY-MM-DD da data alvo (raceDate / initialDeadlineAt). Renderizada
+  /// na pílula da última semana.
+  final String? raceDateIso;
+  /// Plan inteira passada SOMENTE pra última semana — usada pelo
+  /// PlanClosingCard renderizado após as 7 linhas de dia.
+  final Plan? closingPlan;
   const _WeekTile({
     required this.week,
     required this.initiallyExpanded,
     required this.dayNames,
     required this.planStartDate,
+    this.isLastWeek = false,
+    this.raceDateIso,
+    this.closingPlan,
   });
 
   /// Calcula a data real do dayOfWeek nessa semana.
@@ -1053,6 +1083,33 @@ class _WeekTile extends StatelessWidget {
                       style: context.runninType.labelCaps.copyWith(color: palette.primary),
                     ),
                   ),
+                  if (isLastWeek) ...[
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 7,
+                        vertical: 3,
+                      ),
+                      color: palette.primary,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.flag, size: 10, color: palette.background),
+                          const SizedBox(width: 4),
+                          Text(
+                            raceDateIso != null
+                                ? 'META · ${_formatRaceDate(raceDateIso!)}'
+                                : 'SEMANA DA META',
+                            style: context.runninType.labelCaps.copyWith(
+                              color: palette.background,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.8,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
@@ -1106,6 +1163,12 @@ class _WeekTile extends StatelessWidget {
                         : _PlainRestRow(dayLabel: _dayDateLabel(d)),
               ),
             ],
+            // Última semana ganha card de fechamento (CHEGADA / FECHAMENTO)
+            // depois das 7 linhas de dia.
+            if (isLastWeek && closingPlan != null) ...[
+              const SizedBox(height: 10),
+              PlanClosingCard(plan: closingPlan!, lastWeek: week),
+            ],
           ],
         ),
       ),
@@ -1127,14 +1190,21 @@ class _SessionRow extends StatelessWidget {
         (session.nutritionPost?.isNotEmpty ?? false) ||
         session.notes.isNotEmpty;
 
+    // Sessão-alvo (RACE) ganha borda + tint mais fortes pra destacar
+    // visualmente que ESSA é a prova/meta do plano. Server marca via
+    // `markTargetSession` na última sessão da última semana.
+    final borderColor = session.isTarget
+        ? palette.primary
+        : palette.primary.withValues(alpha: 0.25);
+    final borderWidth = session.isTarget ? 1.6 : 1.0;
+    final bg = session.isTarget
+        ? palette.primary.withValues(alpha: 0.06)
+        : palette.background;
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 3),
       decoration: BoxDecoration(
-        color: palette.background,
-        border: Border.all(
-          color: palette.primary.withValues(alpha: 0.25),
-          width: 1.0,
-        ),
+        color: bg,
+        border: Border.all(color: borderColor, width: borderWidth),
       ),
       child: hasDetails
           ? Theme(
@@ -1184,6 +1254,32 @@ class _SessionHeader extends StatelessWidget {
             style: context.runninType.bodySm.copyWith(color: palette.text),
           ),
         ),
+        if (session.isTarget) ...[
+          const SizedBox(width: 6),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+            decoration: BoxDecoration(
+              color: palette.primary,
+              borderRadius: BorderRadius.zero,
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.flag, size: 10, color: palette.background),
+                const SizedBox(width: 3),
+                Text(
+                  'SESSÃO ALVO',
+                  style: context.runninType.labelCaps.copyWith(
+                    fontSize: 9,
+                    color: palette.background,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.8,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ],
     );
   }

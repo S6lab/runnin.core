@@ -47,6 +47,10 @@ class PlanSession {
   /// não foi feita.
   final String? executedRunId;
   final String? executedAt;
+  /// Marca a SESSÃO-META do plano RACE (última sessão da última semana).
+  /// Server seta via `markTargetSession` pós-LLM — distância = meta exata,
+  /// isenta do cap MAX_KM_PER_SESSION. UI renderiza badge "SESSÃO ALVO".
+  final bool isTarget;
 
   const PlanSession({
     required this.id,
@@ -62,6 +66,7 @@ class PlanSession {
     required this.notes,
     this.executedRunId,
     this.executedAt,
+    this.isTarget = false,
   });
 
   bool get isExecuted => executedRunId != null && executedRunId!.isNotEmpty;
@@ -82,6 +87,7 @@ class PlanSession {
     notes: j['notes'] as String? ?? '',
     executedRunId: j['executedRunId'] as String?,
     executedAt: j['executedAt'] as String?,
+    isTarget: j['isTarget'] as bool? ?? false,
   );
 }
 

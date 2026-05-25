@@ -68,6 +68,15 @@ export interface UserProfile {
   uiSkin?: string;
   textScale?: string;
 
+  // Localização (resolvida por reverse geocoding da posição GPS do device).
+  // Preenchida pelo POST /users/me/location quando o app abre a home com
+  // permissão de localização concedida. Usada na home (header) e nos chips
+  // de clima + injetada no contexto do live coach.
+  city?: string;
+  lastKnownLat?: number;
+  lastKnownLng?: number;
+  lastLocationAt?: string;
+
   // Plan revisions quota (revisão manual do plano atual — /request-revision)
   planRevisions?: { usedThisWeek: number; max: number; resetAt: string };
 

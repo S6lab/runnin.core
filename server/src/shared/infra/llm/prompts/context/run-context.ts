@@ -20,6 +20,11 @@ export interface RunContextInput {
    *  pelo client quando há plano com executionSegments. Server resolve
    *  o segment correspondente via runtime.currentSession. */
   currentSegmentIndex?: number;
+  /** Snapshot de clima do local da corrida (capturado pelo app ao iniciar
+   *  o run). Opcional — quando ausente, coach não fala sobre clima. */
+  temperatureC?: number;
+  humidityPercent?: number;
+  windKmh?: number;
 }
 
 export function formatRunContext(ctx: RunContextInput): string {
@@ -39,6 +44,9 @@ export function formatRunContext(ctx: RunContextInput): string {
   }
   if (typeof ctx.kmAvgBpm === 'number') lines.push(`- FC média do km: ${ctx.kmAvgBpm} bpm`);
   if (typeof ctx.kmCalories === 'number') lines.push(`- Calorias do km: ${ctx.kmCalories} kcal`);
+  if (typeof ctx.temperatureC === 'number') lines.push(`- Temperatura ambiente: ${ctx.temperatureC}°C`);
+  if (typeof ctx.humidityPercent === 'number') lines.push(`- Umidade: ${ctx.humidityPercent}%`);
+  if (typeof ctx.windKmh === 'number') lines.push(`- Vento: ${ctx.windKmh} km/h`);
   return lines.length > 0 ? lines.join('\n') : '- Sem contexto de corrida.';
 }
 

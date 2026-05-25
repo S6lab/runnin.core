@@ -6,6 +6,7 @@ import { CompleteOnboardingUseCase, CompleteOnboardingSchema } from '../domain/u
 import { ProvisionUserSchema, ProvisionUserUseCase } from '../domain/use-cases/provision-user.use-case';
 import { ActivateTrialUseCase } from '../domain/use-cases/activate-trial.use-case';
 import { ResetPlanRevisionsQuotaUseCase } from '../domain/use-cases/reset-plan-revisions-quota.use-case';
+import { UpsertLocationUseCase, UpsertLocationSchema } from '../domain/use-cases/upsert-location.use-case';
 
 const repo = new FirestoreUserRepository();
 const getProfile = new GetProfileUseCase(repo);
@@ -14,6 +15,7 @@ const completeOnboarding = new CompleteOnboardingUseCase(repo);
 const provisionUser = new ProvisionUserUseCase(repo);
 const activateTrial = new ActivateTrialUseCase(repo);
 const resetPlanRevisionsQuota = new ResetPlanRevisionsQuotaUseCase(repo);
+const upsertLocation = new UpsertLocationUseCase(repo);
 
 export async function getMe(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
@@ -160,4 +162,14 @@ export async function postActivateTrial(req: Request, res: Response, next: NextF
 export async function postResetPlanRevisionsQuota(_req: Request, res: Response): Promise<void> {
   const result = await resetPlanRevisionsQuota.execute();
   res.json(result);
+}
+
+export async function postMyLocation(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const input = UpsertLocationSchema.parse(req.body);
+    const result = await upsertLocation.execute(req.uid, input);
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
 }

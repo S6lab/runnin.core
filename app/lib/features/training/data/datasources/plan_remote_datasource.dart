@@ -109,6 +109,23 @@ class PlanRemoteDatasource {
     String? currentPaceMinKm,
     /// Dias da semana disponíveis pra treinar (1=seg…7=dom).
     List<int>? availableDays,
+    /// Tipo de objetivo: 'flow' (sem prova) ou 'race' (com meta de prova).
+    /// Quando ausente, server cai no caminho legado (parsing por `goal`).
+    String? goalKind,
+    /// Sub-meta dentro de FLOW: 'start' | 'improve' | 'injury_return' | 'postpartum'.
+    String? flowSubgoal,
+    /// Distância da prova (5, 10, 21, 42) quando goalKind=race.
+    int? raceDistanceKm,
+    /// Modo da meta race: 'complete' (só terminar) ou 'improve_pace' (bater pace alvo).
+    String? raceMode,
+    /// Pace alvo M:SS/km (só raceMode=improve_pace).
+    String? targetPaceMinKm,
+    /// Data da prova/alvo ISO YYYY-MM-DD.
+    String? raceDate,
+    /// Dia preferido pro long run (1=seg…7=dom).
+    int? longRunDayOfWeek,
+    /// Tempo máximo disponível pro long run em min. Coach cap a distância.
+    int? longRunMaxMinutes,
   }) async {
     if (_generateInFlight) {
       // ignore: avoid_print
@@ -134,6 +151,14 @@ class PlanRemoteDatasource {
           'currentWeeklyKm': ?currentWeeklyKm,
           'currentPaceMinKm': ?currentPaceMinKm,
           'availableDays': ?availableDays,
+          'goalKind': ?goalKind,
+          'flowSubgoal': ?flowSubgoal,
+          'raceDistanceKm': ?raceDistanceKm,
+          'raceMode': ?raceMode,
+          'targetPaceMinKm': ?targetPaceMinKm,
+          'raceDate': ?raceDate,
+          'longRunDayOfWeek': ?longRunDayOfWeek,
+          'longRunMaxMinutes': ?longRunMaxMinutes,
         },
       );
       // Plano novo no servidor — invalida o cache pra forçar refetch.

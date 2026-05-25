@@ -39,7 +39,6 @@ export 'figma_highlight_bullet.dart';
 export 'figma_hist_stat_card.dart';
 export 'figma_run_card.dart';
 export 'figma_zone_distribution_bar.dart';
-export 'figma_benchmark_bell_curve.dart';
 export 'figma_chart_line_spark.dart';
 export 'figma_period_selector.dart';
 export 'figma_stat_tile_with_delta.dart';
@@ -59,9 +58,6 @@ export 'figma_split_card.dart';
 export 'figma_split_row.dart';
 export 'figma_post_run_stat_card.dart';
 export 'figma_device_card.dart';
-
-// Benchmarks
-export 'figma_benchmark_table.dart';
 
 // Gamification wrappers
 export '../gamification/badge_card.dart';

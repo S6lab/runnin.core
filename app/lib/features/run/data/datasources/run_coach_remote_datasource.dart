@@ -43,6 +43,11 @@ class RunCoachRemoteDatasource {
     /// pra LLM comparar progressão km-a-km. Cada item: {km, paceMinKm,
     /// durationS, avgBpm?}. Server passa direto pro prompt.
     List<Map<String, dynamic>>? recentSplits,
+    /// Snapshot de clima capturado pelo app no início da corrida.
+    /// Opcional — coach considera quando presente, ignora se null.
+    double? temperatureC,
+    int? humidityPercent,
+    double? windKmh,
   }) async* {
     final res = await _dio.post<Object>(
       '/coach/message',
@@ -61,6 +66,9 @@ class RunCoachRemoteDatasource {
         'planSessionId': ?planSessionId,
         'currentSegmentIndex': ?currentSegmentIndex,
         'recentSplits': ?recentSplits,
+        'temperatureC': ?temperatureC,
+        'humidityPercent': ?humidityPercent,
+        'windKmh': ?windKmh,
       },
       options: Options(
         responseType: ResponseType.stream,

@@ -2,6 +2,11 @@ import { Request, Response, NextFunction } from 'express';
 import { ZodError } from 'zod';
 import { AppError, CooldownError } from '@shared/errors/app-error';
 import { CheckpointAlreadyAppliedError } from '@modules/plans/use-cases/checkpoint-shared';
+import { GoalWindowError } from '@modules/plans/use-cases/validate-goal-window';
+import { PaceTargetError } from '@modules/plans/use-cases/validate-pace-target';
+import { FrequencyError } from '@modules/plans/use-cases/validate-frequency-for-goal';
+import { AgeRestrictionError } from '@modules/plans/use-cases/validate-age-for-goal';
+import { MedicalRestrictionError } from '@modules/plans/use-cases/validate-medical-for-goal';
 import { logger } from '@shared/logger/logger';
 
 export function errorMiddleware(err: unknown, req: Request, res: Response, _next: NextFunction): void {
@@ -21,6 +26,32 @@ export function errorMiddleware(err: unknown, req: Request, res: Response, _next
     if (err instanceof CheckpointAlreadyAppliedError) {
       body['weekNumber'] = err.weekNumber;
       if (err.completedAt) body['completedAt'] = err.completedAt;
+    }
+    if (err instanceof GoalWindowError) {
+      body['reason'] = err.reason;
+      if (err.minWeeks !== undefined) body['minWeeks'] = err.minWeeks;
+      if (err.redirect) body['redirect'] = err.redirect;
+    }
+    if (err instanceof PaceTargetError) {
+      body['reason'] = err.reason;
+      body['maxImprovementPct'] = err.maxImprovementPct;
+      body['suggestedTargetPaceMinKm'] = err.suggestedTargetPaceMinKm;
+    }
+    if (err instanceof FrequencyError) {
+      body['reason'] = err.reason;
+      if (err.minFrequencyRequired !== undefined) body['minFrequencyRequired'] = err.minFrequencyRequired;
+      if (err.minAvailableDays !== undefined) body['minAvailableDays'] = err.minAvailableDays;
+      if (err.maxKmPerSession !== undefined) body['maxKmPerSession'] = err.maxKmPerSession;
+      if (err.projectedKmPerSession !== undefined) body['projectedKmPerSession'] = err.projectedKmPerSession;
+    }
+    if (err instanceof AgeRestrictionError) {
+      body['age'] = err.age;
+      body['recommendedMinWindow'] = err.recommendedMinWindow;
+    }
+    if (err instanceof MedicalRestrictionError) {
+      body['reason'] = err.reason;
+      body['matchedConditions'] = err.matchedConditions;
+      body['recommendedWindow'] = err.recommendedWindow;
     }
     res.status(err.statusCode).json({ error: body });
     return;

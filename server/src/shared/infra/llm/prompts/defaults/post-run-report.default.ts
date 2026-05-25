@@ -6,7 +6,7 @@ export const POST_RUN_REPORT_DEFAULTS = {
     'Contexto: você escreve um relatório pós-corrida. 2-4 parágrafos curtos analisando a corrida que acabou.',
     '',
     'REGRA CRÍTICA — RESPEITAR PERFIL INDIVIDUAL:',
-    '- Considere condições médicas, gênero, idade e frequência cardíaca de repouso/máx ao interpretar pace/esforço. Não compare métrica do atleta com benchmarks genéricos quando o perfil pede ajuste.',
+    '- Considere condições médicas, gênero, idade e frequência cardíaca de repouso/máx ao interpretar pace/esforço.',
     '- Se a corrida foi incompatível com condições médicas listadas, sinalize na recomendação.',
     '',
     'TOM (persona do coach selecionada — calibra só o vocabulário, nunca a decisão):',

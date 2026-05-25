@@ -13,10 +13,10 @@ import { notificationRouter } from '@modules/notifications/http/notification.rou
 import { zoneRouter } from '@modules/health/http/zone.routes';
 import { examRouter } from '@modules/exams/http/exam.routes';
 import { adminRouter } from '@modules/admin/http/admin.routes';
-import { benchmarkRoutes } from '@modules/benchmark/http/benchmark.routes';
 import { subscriptionRouter } from '@modules/subscriptions/http/subscription.routes';
 import { biometricRouter } from '@modules/biometrics/http/biometric.routes';
 import { statsRouter } from '@modules/stats';
+import { weatherRouter } from '@modules/weather/http/weather.routes';
 
 export function createServer(): express.Application {
   const app = express();
@@ -70,10 +70,10 @@ export function createServer(): express.Application {
   app.use('/v1/health', zoneRouter);
   app.use('/v1/exams', examRouter);
   app.use('/v1/admin', adminRouter);
-  app.use('/v1/benchmark', benchmarkRoutes);
   app.use('/v1/subscriptions', subscriptionRouter);
   app.use('/v1/biometrics', biometricRouter);
   app.use('/v1/stats', statsRouter);
+  app.use('/v1/weather', weatherRouter);
 
   app.use(errorMiddleware);
 

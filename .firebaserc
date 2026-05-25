@@ -2,5 +2,15 @@
   "projects": {
     "default": "runnin-494520",
     "staging": "runnin-staging"
-  }
+  },
+  "targets": {
+    "runnin-494520": {
+      "hosting": {
+        "staging": [
+          "runnin-staging"
+        ]
+      }
+    }
+  },
+  "etags": {}
 }

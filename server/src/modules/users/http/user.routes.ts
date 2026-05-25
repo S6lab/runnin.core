@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { authMiddleware } from '@shared/infra/http/middlewares/auth.middleware';
 import { cronTokenMiddleware } from '@shared/infra/http/middlewares/cron-token.middleware';
-import { getMe, patchMe, postOnboarding, postProvision, postActivateTrial, postResetPlanRevisionsQuota, deleteMe } from './user.controller';
+import { getMe, patchMe, postOnboarding, postProvision, postActivateTrial, postResetPlanRevisionsQuota, deleteMe, postMyLocation } from './user.controller';
 
 export const userRouter = Router();
 
@@ -11,4 +11,5 @@ userRouter.patch('/me', authMiddleware, patchMe);
 userRouter.delete('/me', authMiddleware, deleteMe);
 userRouter.post('/onboarding', authMiddleware, postOnboarding);
 userRouter.post('/me/trial', authMiddleware, postActivateTrial);
+userRouter.post('/me/location', authMiddleware, postMyLocation);
 userRouter.post('/internal/reset-plan-revision-quota', cronTokenMiddleware, postResetPlanRevisionsQuota);

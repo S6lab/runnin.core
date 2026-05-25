@@ -8,6 +8,7 @@ class UserProfileHeader extends StatelessWidget {
   final bool isPremium;
   final int totalRuns;
   final double totalDistanceKm;
+  final String? city;
 
   const UserProfileHeader({
     super.key,
@@ -16,6 +17,7 @@ class UserProfileHeader extends StatelessWidget {
     this.isPremium = false,
     required this.totalRuns,
     required this.totalDistanceKm,
+    this.city,
   });
 
   @override
@@ -42,6 +44,28 @@ class UserProfileHeader extends StatelessWidget {
                     color: palette.text,
                   ),
                 ),
+                if (city != null && city!.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.place_outlined, size: 12, color: palette.muted),
+                      const SizedBox(width: 4),
+                      Flexible(
+                        child: Text(
+                          city!,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            letterSpacing: 0.48,
+                            color: palette.muted,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
                 const SizedBox(height: 4),
                 Text(
                   'Nível $levelNumber · · ',

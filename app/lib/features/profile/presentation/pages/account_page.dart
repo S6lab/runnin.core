@@ -846,6 +846,13 @@ class _MenuSection extends StatelessWidget {
           subtitle: subscriptionController.isPro ? 'Plano Pro ativo' : 'Assine o Pro',
           onTap: () => context.push('/paywall?next=/profile'),
         ),
+        const SizedBox(height: AppSpacing.sm),
+        _MenuItem(
+          icon: Icons.gavel_outlined,
+          title: 'TERMOS DE USO',
+          subtitle: 'Condições, privacidade, dados',
+          onTap: () => context.push('/profile/terms'),
+        ),
       ],
     );
   }

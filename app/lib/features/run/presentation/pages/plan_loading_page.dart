@@ -1,13 +1,11 @@
 import 'dart:async';
 import 'dart:math' as math;
 
-import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:runnin/core/router/app_router.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
-import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 import 'package:runnin/features/training/data/datasources/plan_remote_datasource.dart';
 import 'package:runnin/shared/widgets/coach_ai_breadcrumb.dart';
 
@@ -44,7 +42,6 @@ class _PlanLoadingPageState extends State<PlanLoadingPage>
   int _elapsedSeconds = 0;
   bool _redirected = false;
   String? _error;
-  final _userDs = UserRemoteDatasource();
   final _planDs = PlanRemoteDatasource();
 
   late final AnimationController _clockAnim;
@@ -70,32 +67,25 @@ class _PlanLoadingPageState extends State<PlanLoadingPage>
     _kickoff();
   }
 
-  /// Fire-and-forget: dispara generate no server (que processa async) e
-  /// não bloqueia a UI esperando o resultado. Erros 409 (plano já existe)
-  /// são silenciados — é race condition normal.
+  /// Confirma que o doc do plano foi criado pelo `_submit` do plan_setup
+  /// (chamado ANTES de navegar pra cá). Faz até 5 retries com 500ms de
+  /// backoff pra cobrir race condition do Firestore.
+  ///
+  /// Removido o fallback que disparava generate com `profile.goal/level/
+  /// frequency` (stale): causava re-geração com objetivo antigo quando o
+  /// user trocava a meta no wizard. plan_setup já é a ÚNICA porta de
+  /// entrada — se o doc não aparecer em 2.5s, mostra erro.
   Future<void> _kickoff() async {
-    try {
-      final existing = await _planDs.getCurrentPlan();
-      if (existing != null) return; // já tem plano (ready ou generating)
-
-      final profile = await _userDs.getMe();
-      if (profile == null) return;
-
+    for (var attempt = 0; attempt < 5; attempt++) {
       try {
-        await _planDs.generatePlan(
-          goal: profile.goal,
-          level: profile.level,
-          frequency: profile.frequency,
-          startDate: widget.startDate,
-        );
-      } on DioException catch (e) {
-        if (e.response?.statusCode != 409) rethrow;
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() => _error =
-            'Não consegui iniciar geração. Tenta de novo em TREINO > GERAR PLANO.');
-      }
+        final existing = await _planDs.getCurrentPlan();
+        if (existing != null) return; // doc criado, generate rolando.
+      } catch (_) {/* tenta próxima */}
+      if (attempt < 4) await Future.delayed(const Duration(milliseconds: 500));
+    }
+    if (mounted) {
+      setState(() => _error =
+          'A geração demorou mais que o normal. Volte à home e em alguns instantes seu plano aparece em TREINO.');
     }
   }
 

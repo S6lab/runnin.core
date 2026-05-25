@@ -88,16 +88,16 @@ class MetricCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isBenchmark = backgroundColor != null;
+    final isFilled = backgroundColor != null;
     final effectiveBg = backgroundColor ?? FigmaColors.surfaceCard;
-    final effectiveBorder = isBenchmark ? Colors.transparent : FigmaColors.borderDefault;
-    final labelColor = isBenchmark
+    final effectiveBorder = isFilled ? Colors.transparent : FigmaColors.borderDefault;
+    final labelColor = isFilled
         ? FigmaColors.bgBase.withValues(alpha: 0.70)
         : FigmaColors.textMuted;
     final effectiveValueColor = valueColor ??
         accentColor ??
-        (isBenchmark ? FigmaColors.bgBase : FigmaColors.textPrimary);
-    final subColor = isBenchmark
+        (isFilled ? FigmaColors.bgBase : FigmaColors.textPrimary);
+    final subColor = isFilled
         ? FigmaColors.bgBase.withValues(alpha: 0.60)
         : FigmaColors.textMuted;
 
@@ -119,7 +119,7 @@ class MetricCard extends StatelessWidget {
             unit: unit,
             valueColor: effectiveValueColor,
             unitColor: labelColor,
-            isBenchmark: isBenchmark,
+            isFilled: isFilled,
           ),
           if (delta != null) ...[
             const SizedBox(height: 4),
@@ -216,7 +216,7 @@ class _ValueRow extends StatelessWidget {
     required this.value,
     required this.valueColor,
     required this.unitColor,
-    required this.isBenchmark,
+    required this.isFilled,
     this.unit,
   });
 
@@ -224,7 +224,7 @@ class _ValueRow extends StatelessWidget {
   final String? unit;
   final Color valueColor;
   final Color unitColor;
-  final bool isBenchmark;
+  final bool isFilled;
 
   @override
   Widget build(BuildContext context) {
@@ -238,7 +238,7 @@ class _ValueRow extends StatelessWidget {
             child: Text(
               value,
               style: GoogleFonts.jetBrainsMono(
-                fontSize: isBenchmark ? 36 : 28,
+                fontSize: isFilled ? 36 : 28,
                 height: 1,
                 fontWeight: FontWeight.w500,
                 color: valueColor,

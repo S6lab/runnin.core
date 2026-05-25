@@ -13,6 +13,7 @@ import 'package:runnin/features/run/domain/entities/run.dart';
 import 'package:runnin/features/training/data/datasources/plan_remote_datasource.dart';
 import 'package:runnin/features/training/data/weekly_report_remote_datasource.dart';
 import 'package:runnin/features/training/domain/entities/plan.dart';
+import 'package:runnin/features/training/presentation/widgets/plan_closing_card.dart';
 import 'package:runnin/features/training/domain/week_phase_label.dart';
 import 'package:runnin/features/training/domain/entities/weekly_report.dart';
 import 'package:runnin/features/subscriptions/presentation/subscription_controller.dart';
@@ -1067,9 +1068,15 @@ class _WeeklyPlanView extends StatelessWidget {
             itemCount: plan.weeks.length,
             itemBuilder: (_, index) {
               final isSelected = index == selectedWeek;
+              // Última semana é a SEMANA DA META quando o plano tem
+              // sessão-alvo marcada (RACE). Mostra label "META" abaixo.
+              final isLastWeek = index == plan.weeks.length - 1;
+              final hasTarget = isLastWeek &&
+                  plan.weeks[index].sessions.any((s) => s.isTarget);
               return _WeekChip(
                 weekNumber: index + 1,
                 selected: isSelected,
+                isTargetWeek: hasTarget,
                 onTap: () => onWeekChanged(index),
               );
             },
@@ -1149,6 +1156,13 @@ class _WeeklyPlanView extends StatelessWidget {
             );
           });
         }(),
+        // Última semana: card de fechamento (CHEGADA pra race, FECHAMENTO
+        // pra flow). Aparece DEPOIS dos 7 dias pra fechar visualmente
+        // a semana com o objetivo atingido.
+        if (week != null && selectedWeek == plan.weeks.length - 1) ...[
+          const SizedBox(height: 12),
+          PlanClosingCard(plan: plan, lastWeek: week),
+        ],
         const SizedBox(height: 12),
         _CheckpointEntry(
           planId: plan.id,
@@ -1526,12 +1540,16 @@ class _CargaBars extends StatelessWidget {
 class _WeekChip extends StatelessWidget {
   final int weekNumber;
   final bool selected;
+  /// true quando essa semana contém a meta (última do plano RACE).
+  /// Renderiza label "META" abaixo do número.
+  final bool isTargetWeek;
   final VoidCallback onTap;
 
   const _WeekChip({
     required this.weekNumber,
     required this.selected,
     required this.onTap,
+    this.isTargetWeek = false,
   });
 
   @override
@@ -1550,12 +1568,29 @@ class _WeekChip extends StatelessWidget {
             width: 1.041,
           ),
         ),
-        child: Text(
-          'S$weekNumber',
-          style: context.runninType.labelCaps.copyWith(
-            fontSize: 11,
-            color: selected ? palette.background : palette.muted,
-          ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'S$weekNumber',
+              style: context.runninType.labelCaps.copyWith(
+                fontSize: 11,
+                color: selected ? palette.background : palette.muted,
+              ),
+            ),
+            if (isTargetWeek) ...[
+              const SizedBox(height: 2),
+              Text(
+                'META',
+                style: context.runninType.labelCaps.copyWith(
+                  fontSize: 8,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.0,
+                  color: selected ? palette.background : palette.primary,
+                ),
+              ),
+            ],
+          ],
         ),
       ),
     );

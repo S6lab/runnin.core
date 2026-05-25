@@ -135,6 +135,12 @@ export class UpsertProfileUseCase {
       // UI preferences
       uiSkin: input.uiSkin ?? existing?.uiSkin,
       textScale: input.textScale ?? existing?.textScale,
+
+      // Location (escrita só pelo upsert-location.use-case)
+      city: existing?.city,
+      lastKnownLat: existing?.lastKnownLat,
+      lastKnownLng: existing?.lastKnownLng,
+      lastLocationAt: existing?.lastLocationAt,
       
       // Subscription handling — espelha legacy `premium` no plan novo
       subscriptionPlanId: (() => {

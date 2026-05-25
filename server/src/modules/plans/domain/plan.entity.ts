@@ -58,6 +58,11 @@ export interface PlanSession {
    *  o user antes de re-executar (sobrescreveria a anterior). */
   executedRunId?: string;
   executedAt?: string;
+  /** Marca a sessão-meta (a "prova" do plano RACE) — última sessão da
+   *  última semana. Isenta do cap MAX_KM_PER_SESSION (essa sessão TEM a
+   *  distância da prova, não importa o nível) e renderiza com badge no
+   *  UI. Setado pelo `markTargetSession()` pós-LLM. */
+  isTarget?: boolean;
 }
 
 /**

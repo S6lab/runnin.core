@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// Tabela canônica de uso (referência da home page como benchmark):
+/// Tabela canônica de uso (referência da home page):
 /// - `xxl` (~24): padding horizontal de page, gap entre seções grandes
 /// - `xl`  (~16): padding interno de card (RunninCard default)
 /// - `lg`  (~12): sub-cards, micro-padding interno, tight columns

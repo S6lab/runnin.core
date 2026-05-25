@@ -4,6 +4,15 @@ import { getPlanLLM } from '@shared/infra/llm/llm.factory';
 import { PlanRepository } from '../domain/plan.repository';
 import { Plan, PlanSegment, PlanSession, PlanWeek } from '../domain/plan.entity';
 import { sanitizeSessionType } from './checkpoint-shared';
+import { clampSessionDistance, enforceWeeklyLongRunRatio, markTargetSession } from './sanitize-session-distance';
+import { RunnerLevel } from '@modules/users/domain/user.entity';
+import { RACE_WINDOWS, getAllowedWindows, hasImprovePaceBypass } from './plan-windows.constants';
+import { validateGoalWindow, GoalWindowError } from './validate-goal-window';
+import { validatePaceTarget, PaceTargetError } from './validate-pace-target';
+import { validateVolumeForGoal } from './validate-volume-for-goal';
+import { validateFrequencyForGoal, FrequencyError } from './validate-frequency-for-goal';
+import { validateAgeForGoal, AgeRestrictionError } from './validate-age-for-goal';
+import { validateMedicalForGoal, MedicalRestrictionError } from './validate-medical-for-goal';
 import { buildExecutionSegments } from './build-execution-segments';
 import {
   getRoteiroTemplates,
@@ -60,7 +69,9 @@ export const GeneratePlanSchema = z.object({
   goal: z.string().min(1),
   level: z.enum(['iniciante', 'intermediario', 'avancado']),
   frequency: z.number().int().min(2).max(7).optional(),
-  weeksCount: z.number().int().min(4).max(16).optional(),
+  // Max 32 pra suportar maratona iniciante safe (26 sem) com folga. Validação
+  // fina por (distância × nível) acontece em validateGoalWindow.
+  weeksCount: z.number().int().min(4).max(32).optional(),
   /**
    * Data D0 escolhida pelo atleta no onboarding (ISO YYYY-MM-DD).
    * Se ausente, default = hoje. Plano e periodização começam nessa data.
@@ -88,6 +99,36 @@ export const GeneratePlanSchema = z.object({
    *  os melhores dias se `frequency < availableDays.length`. Array vazio ou
    *  ausente = sem restrição (IA escolhe livremente). */
   availableDays: z.array(z.number().int().min(1).max(7)).max(7).nullish(),
+  /**
+   * Tipo de objetivo:
+   *  - 'flow' = treinar pra forma (sem prova-alvo). Plano é fundação.
+   *  - 'race' = atingir uma meta de distância/pace. Plano CULMINA com a
+   *    meta na última sessão quando a janela é factível pro nível.
+   */
+  goalKind: z.enum(['flow', 'race']).optional(),
+  /** Sub-meta dentro de FLOW. Refina copy/protocolo do plano. Lesão e
+   *  pós-parto herdam contexto de `medicalConditions` (não duplicam). */
+  flowSubgoal: z
+    .enum(['start', 'improve', 'injury_return', 'postpartum'])
+    .optional(),
+  /** Distância alvo quando goalKind=race. Validada contra `RACE_WINDOWS`
+   *  via `validateGoalWindow()` antes de gerar plano. */
+  raceDistanceKm: z.union([z.literal(5), z.literal(10), z.literal(21), z.literal(42)]).optional(),
+  /** Modo da meta race: só completar a distância ou bater um pace alvo. */
+  raceMode: z.enum(['complete', 'improve_pace']).optional(),
+  /** Pace alvo (M:SS/km) quando raceMode=improve_pace. Validado contra
+   *  `currentPaceMinKm` via `validatePaceTarget()` (ganho %ceiling por
+   *  nível escalado por weeksCount). */
+  targetPaceMinKm: z.string().regex(/^\d{1,2}:\d{2}$/).optional(),
+  /** Data da prova/alvo (ISO YYYY-MM-DD). App calcula weeksCount a partir
+   *  de (raceDate - startDate). Validada contra a janela permitida. */
+  raceDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  /** Dia da semana preferido pro long run (1=seg…7=dom). Quando ausente,
+   *  IA escolhe (default sábado/domingo se disponível). */
+  longRunDayOfWeek: z.number().int().min(1).max(7).optional(),
+  /** Tempo máximo disponível pro long run em minutos. Coach respeita esse
+   *  cap calculando distância = tempo / pace estimado. Null = sem limite. */
+  longRunMaxMinutes: z.number().int().min(30).max(360).optional(),
 });
 
 export type GeneratePlanInput = z.infer<typeof GeneratePlanSchema>;
@@ -109,6 +150,37 @@ export class GeneratePlanUseCase {
   constructor(private repo: PlanRepository) {}
 
   async execute(userId: string, input: GeneratePlanInput, opts: { confirmOverwrite?: boolean } = {}): Promise<Plan> {
+    // LEGACY BRIDGE: requests antigos (cliente cacheado, integração externa,
+    // ou retry após patchMe) chegam sem `goalKind` mas com `goal` string
+    // tipo "Maratona (42K)". Sem essa derivação eles pulariam TODOS os
+    // validators de admissibilidade. Derivamos aqui pra o resto do fluxo
+    // tratar como race normalizado.
+    if (!input.goalKind && input.goal) {
+      const normalized = normalizeGoal(input.goal);
+      let derivedDistance: 5 | 10 | 21 | 42 | undefined;
+      if (normalized.includes('maratona') && !normalized.includes('meia')) {
+        derivedDistance = 42;
+      } else if (normalized.includes('42')) {
+        derivedDistance = 42;
+      } else if (normalized.includes('meia') || normalized.includes('21')) {
+        derivedDistance = 21;
+      } else if (normalized.includes('10k') || normalized.includes('10 km')) {
+        derivedDistance = 10;
+      } else if (normalized.includes('5k') || normalized.includes('5 km')) {
+        derivedDistance = 5;
+      }
+      if (derivedDistance) {
+        logger.info('plan.generate.legacy_goal_derived', {
+          userId,
+          originalGoal: input.goal,
+          derivedDistance,
+        });
+        input = { ...input, goalKind: 'race', raceDistanceKm: derivedDistance };
+      } else if (normalized === 'flow' || normalized.includes('flow')) {
+        input = { ...input, goalKind: 'flow' };
+      }
+    }
+
     // Guard CRÍTICO: plano requer onboarding completo. Sem isso o LLM
     // não tem dados pra personalizar (cai em template genérico) — e
     // user perde a percepção de "plano feito pra mim".
@@ -204,6 +276,169 @@ export class GeneratePlanUseCase {
     const now = new Date().toISOString();
     const weeksCount = input.weeksCount ?? resolvePlanWeeksCount(input);
 
+    // Validação de meta (race) — só dispara quando o FE envia o payload
+    // novo (goalKind + raceDistanceKm). Se a combinação distância × nível
+    // × weeksCount cai fora da tabela RACE_WINDOWS, joga GoalWindowError
+    // estruturado (FE renderiza tela de REDIRECT ou tooltip de janela
+    // mínima). Caminho legado (sem goalKind) segue gerando livre.
+    if (input.goalKind === 'race' && input.raceDistanceKm) {
+      // GATE 1: Window — (distância × nível × weeks) cabe na tabela?
+      const result = validateGoalWindow(input.raceDistanceKm, input.level, weeksCount);
+      if (!result.ok) {
+        if (result.reason === 'requires_redirect') {
+          throw new GoalWindowError(
+            `Meta ${input.raceDistanceKm}K não é factível pro nível ${input.level} na janela escolhida.`,
+            'requires_redirect',
+            { redirect: result.redirect ?? undefined },
+          );
+        }
+        throw new GoalWindowError(
+          `Janela curta demais — mínimo ${result.minWeeks} semanas pra essa meta + nível.`,
+          'too_aggressive',
+          { minWeeks: result.minWeeks },
+        );
+      }
+      const matchedWindowMode = result.matchedMode;
+
+      // GATE 1.5: Window restriction por (subnível × distância × freq).
+      // Casos:
+      //   - nunca_corri/esporadico + 10K → só safe
+      //   - intermediario + 21K + freq=3 → só safe
+      // Avançado em improve_pace tem bypass total — pula essa checagem.
+      const freqForWindow = input.frequency ?? 0;
+      const isImprovePaceBypassed =
+        input.raceMode === 'improve_pace' &&
+        hasImprovePaceBypass(input.level, input.raceDistanceKm);
+      if (!isImprovePaceBypassed) {
+        const allowed = getAllowedWindows(
+          input.level,
+          input.raceDistanceKm,
+          freqForWindow,
+          input.levelHint,
+        );
+        if (allowed && !allowed.includes(matchedWindowMode)) {
+          // Sugere a janela permitida + weeksCount mínima dela.
+          const targetMode = allowed[0]; // primeira opção permitida = mais restritiva
+          const targetWeeks = RACE_WINDOWS[input.raceDistanceKm][input.level][targetMode]
+            ?? RACE_WINDOWS[input.raceDistanceKm][input.level].safe;
+          throw new GoalWindowError(
+            `Pra ${input.raceDistanceKm}K nessa combinação (nível ${input.level}${input.levelHint ? '/' + input.levelHint : ''}, freq ${freqForWindow}), janela mínima é ${targetMode.toUpperCase()} (${targetWeeks}sem).`,
+            'requires_redirect',
+            {
+              redirect: {
+                distanceKm: input.raceDistanceKm,
+                suggestedWeeks: targetWeeks,
+              },
+            },
+          );
+        }
+      }
+
+      // GATE 2: Frequency — minimum de dias/sem + cap volume/sessão.
+      // Caso real: iniciante + 42K + freq 2 = 22km/sessão (acima do cap 14).
+      const freq = input.frequency ?? 0;
+      const freqResult = validateFrequencyForGoal(
+        input.raceDistanceKm,
+        input.level,
+        freq,
+        input.availableDays?.length ?? freq,
+        input.levelHint,
+        input.raceMode,
+      );
+      if (!freqResult.ok) {
+        let msg: string;
+        if (freqResult.reason === 'below_min_for_distance') {
+          msg = `Pra ${input.raceDistanceKm}K, mínimo ${freqResult.minFrequencyRequired} treinos/sem. Volta no passo dias e aumenta.`;
+        } else if (freqResult.reason === 'available_days_too_few') {
+          msg = `Você marcou ${input.availableDays?.length ?? 0} dia(s) mas pediu ${freq} treinos/sem. Precisa de pelo menos ${freqResult.minAvailableDays} dias disponíveis.`;
+        } else {
+          msg = `Com freq ${freq}, cada sessão ficaria com ~${freqResult.projectedKmPerSession}km — acima do cap de ${freqResult.maxKmPerSession}km/sessão pro ${input.level}. Mínimo ${freqResult.minFrequencyRequired} treinos/sem pra essa meta.`;
+        }
+        throw new FrequencyError(msg, freqResult.reason, {
+          minFrequencyRequired: freqResult.minFrequencyRequired,
+          minAvailableDays: freqResult.minAvailableDays,
+          maxKmPerSession: freqResult.maxKmPerSession,
+          projectedKmPerSession: freqResult.projectedKmPerSession,
+        });
+      }
+
+      // GATE 3: Volume — o currentWeeklyKm rampa até o pico necessário?
+      // Critério 10%/sem (regra dos 10%, Pfitzinger).
+      const volume = validateVolumeForGoal(
+        input.currentWeeklyKm ?? null,
+        input.raceDistanceKm,
+        weeksCount,
+      );
+      if (!volume.ok) {
+        const reportedKm = input.currentWeeklyKm ?? 0;
+        throw new GoalWindowError(
+          `Pra ${input.raceDistanceKm}K você precisa rampar até ~${volume.requiredPeakKm}km/sem no pico. Teu volume atual (${reportedKm.toFixed(0)}km/sem) só sobe pra ~${volume.rampedToKm.toFixed(0)}km/sem em ${weeksCount}sem. Te sugiro ${volume.redirect ?? input.raceDistanceKm}K como Fase 1.`,
+          'requires_redirect',
+          volume.redirect
+            ? { redirect: { distanceKm: volume.redirect, suggestedWeeks: weeksCount } }
+            : {},
+        );
+      }
+
+      // GATE 4: Age — master 55+ ou 65+ em meta longa força janela conservadora.
+      const ageResult = validateAgeForGoal(
+        profile.birthDate,
+        input.raceDistanceKm,
+        matchedWindowMode,
+      );
+      if (!ageResult.ok) {
+        throw new AgeRestrictionError(
+          `Aos ${ageResult.age} anos pra ${input.raceDistanceKm}K, recomendo janela ${ageResult.recommendedMinWindow === 'safe' ? 'segura' : 'factível'} no mínimo. Volta e escolhe a opção compatível.`,
+          ageResult.age,
+          ageResult.recommendedMinWindow,
+        );
+      }
+
+      // GATE 5: Medical — condições sérias ou 3+ comorbidades forçam safe.
+      const medResult = validateMedicalForGoal(
+        profile.medicalConditions,
+        input.raceDistanceKm,
+        matchedWindowMode,
+      );
+      if (!medResult.ok) {
+        const reasonLabel = medResult.reason === 'serious_condition'
+          ? `condição séria (${medResult.matchedConditions.join(', ')})`
+          : `${medResult.matchedConditions.length} comorbidades`;
+        throw new MedicalRestrictionError(
+          `Pelo seu perfil de saúde (${reasonLabel}), recomendo janela segura pra essa meta. Volta no passo de janela e escolhe SEGURO.`,
+          medResult.reason,
+          medResult.matchedConditions,
+        );
+      }
+    }
+
+    // Validação de pace alvo (RACE + improve_pace). Sanity check contra o
+    // ganho %ceiling por nível, escalado por weeksCount. Sem currentPace
+    // não temos como validar — segue sem check (LLM fica responsável).
+    if (
+      input.goalKind === 'race' &&
+      input.raceMode === 'improve_pace' &&
+      input.targetPaceMinKm &&
+      input.currentPaceMinKm
+    ) {
+      const result = validatePaceTarget(
+        input.currentPaceMinKm,
+        input.targetPaceMinKm,
+        input.level,
+        weeksCount,
+      );
+      if (!result.ok) {
+        throw new PaceTargetError(
+          result.reason === 'target_slower'
+            ? 'Pace alvo está mais lento que o atual — escolha algo mais rápido.'
+            : `Ganho pedido é maior que o factível pra ${input.level} em ${weeksCount}sem. Máximo ~${result.maxImprovementPct.toFixed(1)}% (sugerido: ${result.suggestedTargetPaceMinKm}/km).`,
+          result.reason,
+          result.maxImprovementPct,
+          result.suggestedTargetPaceMinKm,
+        );
+      }
+    }
+
     // startDate vem do onboarding (último step "quando começar"). Aceita
     // qualquer data futura (ou hoje). Sem ela, default = hoje.
     const startDate = input.startDate ?? new Date().toISOString().slice(0, 10);
@@ -258,6 +493,21 @@ export class GeneratePlanUseCase {
       5,
     );
 
+    // windowMode derivado a posteriori a partir da combinação
+    // (raceDistanceKm × level × weeksCount). Resultado já foi validado em
+    // execute(); aqui só consultamos pra dizer ao prompt qual modo o user
+    // escolheu — afeta a regra de culminação (agressivo/factível obriga;
+    // safe = filosofia fundação).
+    let windowMode: 'aggressive' | 'feasible' | 'safe' | undefined;
+    if (input.goalKind === 'race' && input.raceDistanceKm) {
+      const r = validateGoalWindow(
+        input.raceDistanceKm as 5 | 10 | 21 | 42,
+        input.level,
+        input.weeksCount,
+      );
+      if (r.ok) windowMode = r.matchedMode;
+    }
+
     const built = await buildPlanInitPrompt({
       profile: runtime.profile,
       input: {
@@ -273,6 +523,15 @@ export class GeneratePlanUseCase {
         currentWeeklyKm: input.currentWeeklyKm ?? null,
         currentPaceMinKm: input.currentPaceMinKm ?? null,
         availableDays: input.availableDays ?? null,
+        goalKind: input.goalKind,
+        flowSubgoal: input.flowSubgoal,
+        raceDistanceKm: input.raceDistanceKm,
+        raceMode: input.raceMode,
+        targetPaceMinKm: input.targetPaceMinKm,
+        windowMode,
+        longRunDayOfWeek: input.longRunDayOfWeek,
+        longRunMaxMinutes: input.longRunMaxMinutes,
+        raceDate: input.raceDate,
       },
       ragContext: knowledgeContext,
     });
@@ -290,11 +549,18 @@ export class GeneratePlanUseCase {
       });
       const llmMs = Date.now() - llmStart;
       const parseStart = Date.now();
-      const parsedWeeks = await this._parseWeeks(raw, input.weeksCount, input.startDate);
+      const parsedWeeks = await this._parseWeeks(raw, input.weeksCount, input.startDate, input.level);
       // Frequency enforcement: o LLM ocasionalmente devolve 1 sessão/sem
       // mesmo com freq=5 (sub-prompt frouxo ou bias defensivo). Preenchemos
       // determinísticamente com Easy Run em dias livres até bater freq.
-      const weeks = this._padToFrequency(parsedWeeks, freq, input.startDate);
+      const paddedWeeks = this._padToFrequency(parsedWeeks, freq, input.startDate);
+      // Marca a sessão-alvo (última da última semana) quando RACE. Garante
+      // que o plano CULMINA com a distância exata da prova — isenta do cap
+      // MAX_KM_PER_SESSION pq essa é a prova, não treino. Fix do bug
+      // reportado (maratona terminando em 12km).
+      const weeks = (input.goalKind === 'race' && input.raceDistanceKm)
+        ? markTargetSession(paddedWeeks, input.raceDistanceKm as 5 | 10 | 21 | 42, { planId: plan.id })
+        : paddedWeeks;
       const parseMs = Date.now() - parseStart;
       const totalMs = Date.now() - startedAt;
       logger.info('plan.generate.completed', {
@@ -663,9 +929,9 @@ ${weeksDigest}`;
     return ['', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'][i] ?? '?';
   }
 
-  private async _parseWeeks(raw: string, weeksCount: number, startDate: string): Promise<PlanWeek[]> {
+  private async _parseWeeks(raw: string, weeksCount: number, startDate: string, level: RunnerLevel = 'iniciante'): Promise<PlanWeek[]> {
     try {
-      const normalized = this._normalizeWeeks(raw, startDate);
+      const normalized = this._normalizeWeeks(raw, startDate, level);
       return this._ensureWeeksCount(normalized, weeksCount, startDate);
     } catch (initialError) {
       const firstErrorMessage =
@@ -697,7 +963,7 @@ ${raw}`,
       );
 
       try {
-        const normalized = this._normalizeWeeks(repaired, startDate);
+        const normalized = this._normalizeWeeks(repaired, startDate, level);
         return this._ensureWeeksCount(normalized, weeksCount, startDate);
       } catch (repairError) {
         const secondErrorMessage =
@@ -725,7 +991,7 @@ ${repaired}`,
           },
         );
 
-        const normalized = this._normalizeWeeks(repairedAgain, startDate);
+        const normalized = this._normalizeWeeks(repairedAgain, startDate, level);
         return this._ensureWeeksCount(normalized, weeksCount, startDate);
       }
     }
@@ -842,7 +1108,7 @@ ${repaired}`,
     return padded;
   }
 
-  private _normalizeWeeks(raw: string, startDate: string): PlanWeek[] {
+  private _normalizeWeeks(raw: string, startDate: string, level: RunnerLevel = 'iniciante'): PlanWeek[] {
     const parsedJson = this._parseJsonLenient(raw);
     // Parse tolerante: descarta sessions inválidas (campos undefined/null)
     // ao invés de invalidar o array inteiro. Gemini ocasionalmente omite
@@ -874,7 +1140,13 @@ ${repaired}`,
           { weekNumber: week.weekNumber, dayOfWeek: session.dayOfWeek },
         );
         const sessionType = sanitized.type;
-        const sessionDistance = sanitized.distanceKm;
+        // Cap por nível (iniciante=14, intermediario=22, avancado=32).
+        // Logado em plan.session.distance.clamped quando dispara.
+        const sessionDistance = clampSessionDistance(sanitized.distanceKm, level, {
+          weekNumber: week.weekNumber,
+          dayOfWeek: session.dayOfWeek,
+          sessionType,
+        });
         if (isFull) {
           const base = {
             id: uuid(),
@@ -923,12 +1195,20 @@ ${repaired}`,
         return a.id.localeCompare(b.id);
       });
 
+      // Defesa pós-LLM: long run não pode passar de 50% do volume semanal.
+      // Caso real (edu maratona iniciante W15): 18km long em semana de 23km
+      // (78%) — LLM ignorou prompt. Sanitizer reduz o long pra somar 50%.
+      const ratioBalanced = enforceWeeklyLongRunRatio(sorted, {
+        weekNumber: week.weekNumber || weekIndex + 1,
+        level,
+      });
+
       return {
         weekNumber: week.weekNumber || weekIndex + 1,
-        sessions: sorted,
+        sessions: ratioBalanced,
         detailLevel: isFull ? 'full' as const : 'skeleton' as const,
         projectedLoadKm: Number(
-          sorted.reduce((a, s) => a + s.distanceKm, 0).toFixed(1),
+          ratioBalanced.reduce((a, s) => a + s.distanceKm, 0).toFixed(1),
         ),
         // Esqueleto não tem restDayTips (liberado no checkpoint).
         restDayTips: isFull ? week.restDayTips : undefined,
@@ -1460,7 +1740,23 @@ ${JSON.stringify(normalizedWeeks)}`,
   }
 }
 
-export function resolvePlanWeeksCount(input: Pick<GeneratePlanInput, 'goal' | 'level' | 'frequency'>): number {
+export function resolvePlanWeeksCount(
+  input: Pick<GeneratePlanInput, 'goal' | 'level' | 'frequency' | 'goalKind' | 'raceDistanceKm'>,
+): number {
+  // Caminho novo: quando o app envia goalKind=race + raceDistanceKm, usa a
+  // tabela canônica de janelas (RACE_WINDOWS) e devolve a janela 'feasible'
+  // como default. Server pode receber weeksCount explícito no payload e
+  // ignora esse default — `validateGoalWindow()` é quem checa a combinação
+  // final antes da geração.
+  if (input.goalKind === 'race' && input.raceDistanceKm) {
+    const entry = RACE_WINDOWS[input.raceDistanceKm][input.level];
+    return entry.feasible ?? entry.safe;
+  }
+
+  // Caminho legado: parsing por string (planos gerados antes do redesign
+  // chegavam com `goal: "Meia maratona (21K)"` sem goalKind). Mantém pra
+  // backward compat enquanto FE migra; checkpoints + reusos antigos passam
+  // por aqui.
   const goal = normalizeGoal(input.goal);
   const frequency = Math.min(Math.max(input.frequency ?? 3, 1), 7);
   const isBeginner = input.level === 'iniciante';
@@ -1476,9 +1772,6 @@ export function resolvePlanWeeksCount(input: Pick<GeneratePlanInput, 'goal' | 'l
   } else if (goal.includes('5k') || goal.includes('5 km')) {
     weeks = isBeginner ? 8 : 6;
   } else if (goal === 'flow' || goal.includes('flow')) {
-    // Flow: "você contra você mesmo" — sem meta de distância/pace. Bloco curto
-    // de melhoria contínua; checkpoints semanais propõem incrementos. 10 sem
-    // base + 2 extras se freq baixa pra dar tempo de adaptar.
     weeks = isAdvanced ? 8 : 10;
   } else if (goal.includes('emagrec') || goal.includes('saude') || goal.includes('condicion')) {
     weeks = isAdvanced ? 6 : 8;

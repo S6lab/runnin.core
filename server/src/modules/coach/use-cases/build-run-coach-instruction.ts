@@ -18,9 +18,16 @@ import { CoachRuntimeContext } from './coach-runtime-context.service';
  * com 1008 (safety filter / tamanho). Por isso segments viram 1 linha cada
  * e o perfil entra como snippet, não JSON.
  */
+export interface WeatherSnapshot {
+  temperatureC?: number;
+  humidityPercent?: number;
+  windKmh?: number;
+}
+
 export async function buildRunCoachInstruction(
   runtime: CoachRuntimeContext,
   coachPersonality: string | null | undefined,
+  weather?: WeatherSnapshot,
 ): Promise<string> {
   const { config } = await getPromptConfig('live-voice');
   const tone = await resolvePersonaTone(coachPersonality);
@@ -54,6 +61,7 @@ export async function buildRunCoachInstruction(
   ].join('\n\n');
 
   const sessionBlock = formatSessionBriefing(runtime.currentSession);
+  const weatherBlock = formatWeatherBriefing(weather);
 
   // Como interpretar os turns: cada mensagem que chega é a VOZ DO ATLETA
   // falando com você em primeira pessoa (ex: "Coach, como estou indo? Fechei
@@ -72,7 +80,22 @@ export async function buildRunCoachInstruction(
     'o alvo da fase atual do roteiro e sugerindo ajuste só quando fora do plano.',
   ].join(' ');
 
-  return [base, '', sessionBlock, '', cadence].filter(Boolean).join('\n');
+  return [base, '', sessionBlock, '', weatherBlock, '', cadence]
+    .filter((s) => s !== null && s !== undefined && s !== '')
+    .join('\n');
+}
+
+function formatWeatherBriefing(w: WeatherSnapshot | undefined): string {
+  if (!w) return '';
+  const parts: string[] = [];
+  if (typeof w.temperatureC === 'number') parts.push(`${w.temperatureC}°C`);
+  if (typeof w.humidityPercent === 'number') parts.push(`umidade ${w.humidityPercent}%`);
+  if (typeof w.windKmh === 'number') parts.push(`vento ${w.windKmh}km/h`);
+  if (parts.length === 0) return '';
+  return [
+    `CLIMA NO MOMENTO: ${parts.join(' · ')}.`,
+    'Considere essas condições ao orientar — calor (>25°C) pede pace conservador e hidratação atenta; umidade alta (>70%) reduz dissipação térmica; vento contra forte (>15km/h) custa esforço extra. Use só quando for relevante pra fala — não mencione clima toda hora.',
+  ].join(' ');
 }
 
 /** Briefing compacto da sessão do dia + roteiro km-a-km (1 linha por fase). */

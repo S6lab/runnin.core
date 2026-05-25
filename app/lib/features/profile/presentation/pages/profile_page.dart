@@ -7,6 +7,7 @@ import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 import 'package:runnin/features/biometrics/data/health_sync_service.dart';
 import 'package:runnin/features/run/data/datasources/run_remote_datasource.dart';
 import 'package:runnin/features/run/domain/entities/run.dart';
+import 'package:runnin/features/location_weather/data/location_weather_controller.dart';
 import 'package:runnin/features/subscriptions/presentation/subscription_controller.dart';
 import 'package:runnin/shared/widgets/app_panel.dart';
 import 'package:runnin/shared/widgets/figma/figma_coach_ai_block.dart';
@@ -394,7 +395,9 @@ class _ProfilePageState extends State<ProfilePage> {
                           // válida; o controller é cached e listenado em
                           // outros lugares — single source of truth.
                           ListenableBuilder(
-                            listenable: subscriptionController,
+                            listenable: Listenable.merge(
+                              [subscriptionController, locationWeatherController],
+                            ),
                             builder: (context, _) => UserProfileHeader(
                               userName: _profile?.name.isNotEmpty == true
                                   ? _profile!.name
@@ -403,6 +406,7 @@ class _ProfilePageState extends State<ProfilePage> {
                               isPremium: subscriptionController.isPro,
                               totalRuns: totalRuns,
                               totalDistanceKm: totalDistKm,
+                              city: locationWeatherController.city,
                             ),
                           ),
                           if (firebaseUser?.isAnonymous ?? false) ...[

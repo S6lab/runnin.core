@@ -70,6 +70,12 @@ export const CoachContextSchema = z.object({
    *  pelo client em eventos segment_*. Server usa pra extrair o segment
    *  específico e referenciá-lo no prompt. */
   currentSegmentIndex: z.number().int().nonnegative().optional(),
+  /** Snapshot de clima capturado pelo app no início da corrida (uma vez).
+   *  Quando presente, o coach considera calor/umidade/vento ao orientar
+   *  pace/hidratação/respiração. Não aparece na UI da corrida. */
+  temperatureC: OptionalNumberSchema,
+  humidityPercent: OptionalNumberSchema,
+  windKmh: OptionalNumberSchema,
 });
 
 export type CoachContext = z.infer<typeof CoachContextSchema>;

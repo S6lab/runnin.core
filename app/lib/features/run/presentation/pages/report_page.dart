@@ -6,6 +6,7 @@ import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/features/run/data/datasources/run_remote_datasource.dart';
 import 'package:runnin/features/run/domain/entities/run.dart';
+import 'package:runnin/features/subscriptions/presentation/subscription_controller.dart';
 
 class ReportPage extends StatefulWidget {
   final String runId;
@@ -31,7 +32,11 @@ class _ReportPageState extends State<ReportPage> {
   void initState() {
     super.initState();
     _loadRun();
-    _pollReport();
+    // Coach AI report é feature premium. Freemium nem dispara polling
+    // pra não bater no backend nem mostrar card de "analisando...".
+    if (subscriptionController.isPro) {
+      _pollReport();
+    }
   }
 
   Future<void> _loadRun() async {
@@ -132,14 +137,16 @@ class _ReportPageState extends State<ReportPage> {
             // summary_ready/ready mostra summary curto + hint "análise
             // completa em segundos". Enriched mostra summary expandido
             // (texto markdown com `## ` headings renderizado contínuo).
-            _CoachReportBlock(
-              status: _reportStatus,
-              summary: _summary,
-              error: _reportError,
-              palette: palette,
-            ),
-
-            const SizedBox(height: 24),
+            // Premium-only: freemium não vê nem o card "Analisando...".
+            if (subscriptionController.isPro) ...[
+              _CoachReportBlock(
+                status: _reportStatus,
+                summary: _summary,
+                error: _reportError,
+                palette: palette,
+              ),
+              const SizedBox(height: 24),
+            ],
             if (_run != null)
               SizedBox(
                 width: double.infinity,
