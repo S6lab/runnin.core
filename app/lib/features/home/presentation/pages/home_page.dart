@@ -1381,7 +1381,7 @@ class _StatusCorporalSectionState extends State<_StatusCorporalSection> {
                   value: hasSleepData ? 'OK' : '--',
                   valueColor: FigmaColors.textPrimary,
                   sub: profile?.hasWearable == true
-                      ? 'Wearable sem sono sincronizado'
+                      ? 'Sem sono sincronizado via Health'
                       : 'Sem origem de sono conectada',
                   chart: TextButton(
                     onPressed: () => context.push('/profile/edit'),
@@ -2433,7 +2433,7 @@ class _PremiumUpsellBanner extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Plano personalizado, coach ao vivo e integração com wearable. R\$ 19,90/mês.',
+                    'Plano personalizado, coach ao vivo e integração com Apple Health / Google Health Connect. R\$ 19,90/mês.',
                     style: GoogleFonts.jetBrainsMono(
                       fontSize: 11, fontWeight: FontWeight.w400,
                       color: palette.text.withValues(alpha: 0.75),

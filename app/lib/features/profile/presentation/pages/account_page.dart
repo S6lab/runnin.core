@@ -829,7 +829,7 @@ class _MenuSection extends StatelessWidget {
         _MenuItem(
           icon: Icons.favorite_outline,
           title: 'SAÚDE',
-          subtitle: 'BPM, Zonas, Wearable',
+          subtitle: 'BPM, Zonas, Apple/Google Health',
           onTap: () => context.push('/profile/health'),
         ),
         const SizedBox(height: AppSpacing.sm),

@@ -27,7 +27,7 @@ class HealthIndexPage extends StatelessWidget {
                   children: [
                     const SizedBox(height: AppSpacing.md),
                     Text(
-                      'BPM, Zonas, Wearable, Exames',
+                      'BPM, Zonas, Apple/Google Health, Exames',
                       style: context.runninType.bodySm.copyWith(
                         color: palette.muted,
                         height: 1.5,
@@ -49,8 +49,8 @@ class HealthIndexPage extends StatelessWidget {
                     ),
                     const SizedBox(height: AppSpacing.md),
                     _HealthCard(
-                      title: 'DISPOSITIVOS',
-                      subtitle: 'Wearables conectados',
+                      title: 'PLATAFORMAS DE SAÚDE',
+                      subtitle: 'Apple Health / Google Health Connect',
                       onTap: () => context.push('/profile/health/devices'),
                       available: true,
                     ),

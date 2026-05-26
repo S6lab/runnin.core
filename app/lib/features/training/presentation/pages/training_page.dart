@@ -63,6 +63,10 @@ class _TrainingPageState extends State<TrainingPage> {
   DateTime? _lastPlanCheckAt;
   Timer? _planPollTimer;
   int _selectedWeek = 0;
+  // Garante que a semana atual (calculada via createdAt vs hoje) seja
+  // selecionada na PRIMEIRA carga do plano. Depois disso, respeitamos a
+  // navegação manual do usuário — não reescrevemos por cima da escolha dele.
+  bool _weekAutoSelected = false;
   _TrainingTab _selectedTab = _TrainingTab.plan;
   // Mensal abre por padrão pra atleta ver mesociclo (visão macro) antes
   // do detalhe da semana corrente.
@@ -120,6 +124,13 @@ class _TrainingPageState extends State<TrainingPage> {
           _generating = plan?.isGenerating ?? false;
           _pendingPlanId = pendingPlanId;
           _loading = false;
+          if (plan != null &&
+              !(plan.isGenerating) &&
+              !_weekAutoSelected &&
+              plan.weeks.isNotEmpty) {
+            _selectedWeek = _currentPlanWeekIndex(plan);
+            _weekAutoSelected = true;
+          }
         });
       }
       if (pendingPlanId != null) {
@@ -221,6 +232,12 @@ class _TrainingPageState extends State<TrainingPage> {
         _generating = plan.isGenerating;
         _pendingPlanId = plan.isGenerating ? plan.id : null;
         _lastPlanCheckAt = DateTime.now();
+        if (!plan.isGenerating &&
+            !_weekAutoSelected &&
+            plan.weeks.isNotEmpty) {
+          _selectedWeek = _currentPlanWeekIndex(plan);
+          _weekAutoSelected = true;
+        }
       });
 
       if (plan.isGenerating) return;

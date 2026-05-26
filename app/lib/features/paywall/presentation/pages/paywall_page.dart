@@ -122,7 +122,8 @@ class _PaywallPageState extends State<PaywallPage> {
                     const SizedBox(height: 10),
                     Text(
                       'Sem premium você corre, registra e compartilha. Com premium, o coach AI '
-                      'cria seu plano, te guia ao vivo e usa seus exames + wearable.',
+                      'cria seu plano, te guia ao vivo e usa seus exames + dados da Apple '
+                      'Health / Google Health Connect.',
                       style: context.runninType.bodyMd.copyWith(
                         fontSize: 13,
                         color: palette.muted,
@@ -154,7 +155,7 @@ class _PaywallPageState extends State<PaywallPage> {
                     const _ComparisonRow(label: 'Plano de treino personalizado (AI)', free: false, premium: true),
                     const _ComparisonRow(label: 'Coach ao vivo durante corrida', free: false, premium: true),
                     const _ComparisonRow(label: 'Análise pós-corrida + insights', free: false, premium: true),
-                    const _ComparisonRow(label: 'Integração com wearable', free: false, premium: true),
+                    const _ComparisonRow(label: 'Apple Health / Google Health Connect', free: false, premium: true),
                     const _ComparisonRow(label: 'Análise de exames (OCR)', free: false, premium: true),
                     const SizedBox(height: 24),
                     OutlinedButton(
@@ -221,7 +222,8 @@ class _ProActiveView extends StatelessWidget {
                       const SizedBox(height: 6),
                       Text(
                         'Seu plano Pro está ativo — plano de treino AI, coach ao vivo, '
-                        'relatórios e integração com wearable liberados.',
+                        'relatórios e sincronização com Apple Health / Google Health Connect '
+                        'liberados.',
                         style: context.runninType.bodySm.copyWith(
                           color: palette.text,
                           height: 1.5,

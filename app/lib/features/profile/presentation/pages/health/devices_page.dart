@@ -20,7 +20,7 @@ class _HealthDevicesPageState extends State<HealthDevicesPage> {
       body: Column(
         children: [
           const FigmaTopNav(
-            breadcrumb: 'DISPOSITIVOS',
+            breadcrumb: 'SAÚDE',
             showBackButton: true,
           ),
           Expanded(
@@ -30,11 +30,13 @@ class _HealthDevicesPageState extends State<HealthDevicesPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const SizedBox(height: AppSpacing.xxl),
-                  _FieldLabel(label: 'CONECTADOS'),
+                  _FieldLabel(label: 'CONECTADAS'),
                   const SizedBox(height: AppSpacing.md),
                   const _EmptyConnectedState(),
                   const SizedBox(height: AppSpacing.xxl),
-                  _FieldLabel(label: 'COMPATÍVEIS AGORA'),
+                  _FieldLabel(label: 'PLATAFORMAS DE SAÚDE'),
+                  const SizedBox(height: AppSpacing.md),
+                  const _PlatformsHelperText(),
                   const SizedBox(height: AppSpacing.md),
                   ..._kCompatibleProviders
                       .where((p) => _isAvailableNow(p))
@@ -50,7 +52,7 @@ class _HealthDevicesPageState extends State<HealthDevicesPage> {
                         ),
                       ),
                   const SizedBox(height: AppSpacing.xxl),
-                  _FieldLabel(label: 'EM BREVE'),
+                  _FieldLabel(label: 'INTEGRAÇÕES DIRETAS (EM BREVE)'),
                   const SizedBox(height: AppSpacing.md),
                   ..._kCompatibleProviders
                       .where((p) => !_isAvailableNow(p))
@@ -74,13 +76,12 @@ class _HealthDevicesPageState extends State<HealthDevicesPage> {
     );
   }
 
-  /// Apple Watch + Samsung Galaxy Watch usam HealthKit / Health Connect direto
-  /// via plugin `health`. Outros providers (Garmin, Polar, etc.) ainda exigem
-  /// OAuth próprio — mostram dialog "em breve".
-  /// Apple Watch + Samsung sincronizam via HealthKit/Health Connect hoje.
-  /// Os demais providers ainda exigem OAuth próprio (em breve).
+  /// Apple Health (iOS) + Google Health Connect (Android) já estão integrados
+  /// via plugin `health`. Cards de marcas (Garmin, Polar, etc.) ficam em
+  /// "INTEGRAÇÕES DIRETAS (EM BREVE)" porque exigem OAuth próprio do fabricante
+  /// — não vão pelas plataformas de saúde do SO.
   bool _isAvailableNow(_ProviderSpec p) =>
-      p.name == 'Apple Watch' || p.name == 'Samsung Galaxy Watch';
+      p.name == 'Apple Health' || p.name == 'Google Health Connect';
 
   void _onConnectProvider(BuildContext context, _ProviderSpec p) {
     if (_isAvailableNow(p) && healthSyncService.isSupported) {
@@ -129,8 +130,10 @@ class _HealthDevicesPageState extends State<HealthDevicesPage> {
           ),
         ),
         content: Text(
-          'Integração com ${p.name} está em desenvolvimento. '
-          'Em breve você poderá sincronizar BPM, sono, HRV e passos automaticamente.',
+          'A integração direta com ${p.name} (via OAuth do fabricante) ainda '
+          'está em desenvolvimento. Enquanto isso, se o seu dispositivo '
+          'sincroniza dados com a Apple Health ou Google Health Connect, '
+          'você já pode importar BPM, sono e passos por essas plataformas.',
           style: context.runninType.bodySm.copyWith(
             height: 1.5,
             color: FigmaColors.textSecondary,
@@ -191,14 +194,14 @@ class _EmptyConnectedState extends StatelessWidget {
           Row(
             children: [
               Icon(
-                Icons.watch_outlined,
+                Icons.health_and_safety_outlined,
                 size: 22,
                 color: FigmaColors.textMuted,
               ),
               const SizedBox(width: AppSpacing.lg),
               Expanded(
                 child: Text(
-                  'NENHUM DISPOSITIVO',
+                  'NENHUMA PLATAFORMA',
                   style: context.runninType.labelMd.copyWith(
                     letterSpacing: 1.0,
                     fontWeight: FontWeight.w500,
@@ -210,13 +213,32 @@ class _EmptyConnectedState extends StatelessWidget {
           ),
           const SizedBox(height: AppSpacing.sm),
           Text(
-            'Conecte um wearable abaixo para sincronizar BPM, sono e passos.',
+            'Conecte a Apple Health (iOS) ou o Google Health Connect (Android) '
+            'abaixo para importar BPM, sono e passos do seu relógio ou celular.',
             style: context.runninType.bodyXs.copyWith(
               height: 1.5,
               color: FigmaColors.textMuted,
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _PlatformsHelperText extends StatelessWidget {
+  const _PlatformsHelperText();
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      'A sincronização acontece pela plataforma de saúde do seu sistema — '
+      'não conectamos diretamente ao relógio. Apple Health lê dados de Apple '
+      'Watch e iPhone; Google Health Connect lê de Galaxy Watch, Mi Band e '
+      'outros wearables compatíveis com Health Connect.',
+      style: context.runninType.bodyXs.copyWith(
+        height: 1.5,
+        color: FigmaColors.textMuted,
       ),
     );
   }
@@ -235,44 +257,45 @@ class _ProviderSpec {
 }
 
 const _kCompatibleProviders = <_ProviderSpec>[
+  // Plataformas de saúde — integração disponível hoje via plugin `health`
+  // (HealthKit no iOS, Health Connect no Android). Lê dados dos relógios/
+  // celulares que sincronizam com essas plataformas, não conecta direto.
   _ProviderSpec(
-    name: 'Apple Watch',
-    metrics: 'BPM · Sono · Passos · HRV',
-    icon: Icons.watch_outlined,
+    name: 'Apple Health',
+    metrics: 'iPhone, Apple Watch · BPM · Sono · Passos · HRV',
+    icon: Icons.health_and_safety_outlined,
   ),
   _ProviderSpec(
-    name: 'Garmin',
-    metrics: 'BPM · Sono · Passos · HRV',
+    name: 'Google Health Connect',
+    metrics: 'Galaxy, Mi Band e Android · BPM · Sono · Passos',
+    icon: Icons.health_and_safety_outlined,
+  ),
+  // Integrações diretas (cloud-to-cloud via OAuth do fabricante) — em
+  // desenvolvimento. Por enquanto, esses dispositivos só chegam se forem
+  // sincronizados via Health Connect/Apple Health.
+  _ProviderSpec(
+    name: 'Garmin Connect',
+    metrics: 'BPM · Sono · Passos · HRV (via OAuth)',
     icon: Icons.track_changes_outlined,
   ),
   _ProviderSpec(
     name: 'Fitbit',
-    metrics: 'BPM · Sono · ECG · SpO2',
-    icon: Icons.health_and_safety_outlined,
-  ),
-  _ProviderSpec(
-    name: 'Samsung Galaxy Watch',
-    metrics: 'BPM · Sono · Passos',
-    icon: Icons.watch_later_outlined,
-  ),
-  _ProviderSpec(
-    name: 'Xiaomi Mi Band',
-    metrics: 'BPM · Sono · Passos',
-    icon: Icons.fitness_center_outlined,
-  ),
-  _ProviderSpec(
-    name: 'Polar',
-    metrics: 'BPM · ECG · Sono',
+    metrics: 'BPM · Sono · ECG · SpO2 (via OAuth)',
     icon: Icons.favorite_outline,
   ),
   _ProviderSpec(
+    name: 'Polar Flow',
+    metrics: 'BPM · ECG · Sono (via OAuth)',
+    icon: Icons.monitor_heart_outlined,
+  ),
+  _ProviderSpec(
     name: 'COROS',
-    metrics: 'BPM · Sono · HRV',
+    metrics: 'BPM · Sono · HRV (via OAuth)',
     icon: Icons.directions_run_outlined,
   ),
   _ProviderSpec(
     name: 'Whoop',
-    metrics: 'BPM · HRV · Recovery',
+    metrics: 'BPM · HRV · Recovery (via OAuth)',
     icon: Icons.bolt_outlined,
   ),
 ];

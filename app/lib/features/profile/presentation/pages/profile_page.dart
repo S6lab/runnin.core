@@ -583,12 +583,12 @@ class _WearableConnectRowState extends State<_WearableConnectRow> {
     final palette = context.runninPalette;
     final platformSupported = healthSyncService.isSupported;
     final statusText = !platformSupported
-        ? 'Sincronização nativa só está disponível em iOS/Android.'
+        ? 'Sincronização de saúde só está disponível em iOS/Android.'
         : _checking
             ? 'Checando conexão…'
             : _connected
-                ? 'Conectado · Apple Health / Health Connect ativo.'
-                : 'Não conectado. Toque pra escolher um dispositivo.';
+                ? 'Conectado · Apple Health / Google Health Connect ativo.'
+                : 'Não conectado. Toque pra sincronizar com sua plataforma de saúde.';
     return GestureDetector(
       onTap: () async {
         await context.push('/profile/health/devices');
@@ -613,7 +613,7 @@ class _WearableConnectRowState extends State<_WearableConnectRow> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    _connected ? 'DISPOSITIVO CONECTADO' : 'CONECTAR DISPOSITIVO',
+                    _connected ? 'SAÚDE CONECTADA' : 'CONECTAR APPLE/GOOGLE HEALTH',
                     style: context.runninType.labelMd.copyWith(
                       letterSpacing: 0.5,
                     ),

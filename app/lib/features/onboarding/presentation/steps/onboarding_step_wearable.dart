@@ -20,11 +20,13 @@ class OnboardingStepWearable extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const SizedBox(height: 12),
-          const FigmaAssessmentHeading(text: 'Conectar wearable?'),
+          const FigmaAssessmentHeading(text: 'Sincronizar dados de saúde?'),
           const SizedBox(height: 10),
           const FigmaAssessmentDescription(
             text:
-                'Dados de BPM, sono e atividade permitem que o Coach personalize com mais precisão.',
+                'A gente lê BPM, sono e atividade da Apple Health (iOS) ou do '
+                'Google Health Connect (Android) — o que o seu relógio já '
+                'envia pra essas plataformas. Não conectamos ao dispositivo direto.',
           ),
           const SizedBox(height: 24),
           FigmaSelectionButton(

@@ -4,6 +4,7 @@ import { PlanSession } from '@modules/plans/domain/plan.entity';
 import { FirestoreDeviceRepository } from '../../infra/firestore-device.repository';
 import { getMessaging } from '@shared/infra/firebase/firebase.client';
 import { logger } from '@shared/logger/logger';
+import { GetUserFeaturesUseCase } from '@modules/subscriptions/use-cases/get-user-features.use-case';
 
 function pickCurrentWeekSessions(
   plan: { weeks: { sessions: PlanSession[] }[]; createdAt: string } | null,
@@ -40,6 +41,10 @@ function buildMessage(session: PlanSession | null, profileName?: string | null):
  * Envia 1 push motivacional por dia indicando se há treino planejado.
  * Respeita user.notificationsEnabled.push (default true se ausente) — mesmo
  * campo que o toggle "Push" da tela de Alertas grava em /users/me.
+ *
+ * Gate de tier: o push é amarrado ao plano do coach.ai ("ritmo do plano",
+ * próxima sessão). Freemium não tem coach.ai → pula. Mesmo proxy do
+ * EnsureDailyInsightsUseCase: feature `coachChat`.
  */
 export class SendDailyPushUseCase {
   private readonly devices = new FirestoreDeviceRepository();
@@ -47,6 +52,7 @@ export class SendDailyPushUseCase {
   constructor(
     private readonly userRepo: UserRepository,
     private readonly planRepo: PlanRepository,
+    private readonly userFeatures: GetUserFeaturesUseCase,
   ) {}
 
   async executeForUser(userId: string): Promise<{ sent: number; skipped: string | null }> {
@@ -54,6 +60,8 @@ export class SendDailyPushUseCase {
     if (!profile?.onboarded) return { sent: 0, skipped: 'not_onboarded' };
     const enabled = profile.notificationsEnabled?.push ?? true;
     if (!enabled) return { sent: 0, skipped: 'disabled_by_user' };
+    const hasCoach = await this.userFeatures.hasFeature(userId, 'coachChat');
+    if (!hasCoach) return { sent: 0, skipped: 'freemium_no_coach' };
 
     const tokens = await this.devices.listByUser(userId);
     if (tokens.length === 0) return { sent: 0, skipped: 'no_devices' };

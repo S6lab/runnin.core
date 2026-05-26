@@ -166,7 +166,7 @@ class _BenefitActivationPageState extends State<BenefitActivationPage> {
                     Text(
                       'Plano completo do coach: plano de treino personalizado por IA, '
                       'coach ao vivo durante a corrida, análise pós-corrida, relatórios '
-                      'semanais e integração com wearable.',
+                      'semanais e sincronização com Apple Health / Google Health Connect.',
                       style: type.bodyMd.copyWith(color: palette.text, height: 1.5),
                     ),
                   ],

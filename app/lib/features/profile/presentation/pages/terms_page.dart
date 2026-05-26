@@ -50,7 +50,8 @@ class TermsPage extends StatelessWidget {
                     title: '2. USO DO APP',
                     body:
                         'O Runnin é um app de treino que combina GPS, sensores '
-                        'do dispositivo, dados de wearables conectados (opcional) '
+                        'do dispositivo, dados de saúde sincronizados via Apple '
+                        'Health (iOS) ou Google Health Connect (Android) — opcional — '
                         'e inteligência artificial pra montar planos personalizados '
                         'e dar orientação em tempo real. Os planos são sugestões — '
                         'a decisão de executar é sua. Em caso de dúvida médica, '
@@ -62,9 +63,11 @@ class TermsPage extends StatelessWidget {
                         'Coletamos: perfil (nome, telefone, e-mail, dados '
                         'biométricos que você informa), sessões de corrida '
                         '(GPS, BPM, ritmo, distância), interações com o coach AI, '
-                        'estatísticas de uso e, se autorizado, dados de wearables '
-                        'conectados (Garmin, Apple Health). Não vendemos '
-                        'seus dados pra terceiros.',
+                        'estatísticas de uso e, se autorizado, dados de saúde '
+                        'sincronizados pela Apple Health (iOS) ou Google Health '
+                        'Connect (Android). Não conectamos diretamente ao seu '
+                        'relógio — lemos só o que essas plataformas já agregam. '
+                        'Não vendemos seus dados pra terceiros.',
                   ),
                   _Section(
                     title: '4. INTELIGÊNCIA ARTIFICIAL',

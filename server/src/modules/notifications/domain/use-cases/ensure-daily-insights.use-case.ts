@@ -4,6 +4,7 @@ import { RunRepository } from '@modules/runs/domain/run.repository';
 import { CreateNotificationInput, CreateNotificationUseCase } from './create-notification.use-case';
 import { PlanSession } from '@modules/plans/domain/plan.entity';
 import { NotificationRepository } from '../notification.repository';
+import { GetUserFeaturesUseCase } from '@modules/subscriptions/use-cases/get-user-features.use-case';
 
 const DAY_NAMES = ['', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SAB', 'DOM'];
 
@@ -96,6 +97,11 @@ function hydrationBodyFor(
  * Garante que as 7 notificações diárias do coach existem para o usuário no dia atual.
  * Idempotente: cada notificação tem id `${type}_${YYYY-MM-DD}` — chamadas repetidas
  * não duplicam, e se o usuário já dispensou, não é recriada (porque o doc continua existindo).
+ *
+ * Gate de tier: insights diários são features do coach.ai (calibram com plano,
+ * zonas, sono, BPM). Freemium não tem coach.ai → não gera nada pra evitar
+ * notificação enganosa de feature que o user não tem acesso. O gate usa a
+ * feature `coachChat` como proxy do "tem coach.ai ligado" (PRO-only).
  */
 export class EnsureDailyInsightsUseCase {
   constructor(
@@ -110,16 +116,21 @@ export class EnsureDailyInsightsUseCase {
      * que esperar o próximo dia.
      */
     private readonly notifRepo: NotificationRepository,
+    private readonly userFeatures: GetUserFeaturesUseCase,
   ) {}
 
   async execute(userId: string): Promise<void> {
-    const [profile, plan, runsResult] = await Promise.all([
+    const [profile, plan, runsResult, hasCoach] = await Promise.all([
       this.userRepo.findById(userId),
       this.planRepo.findCurrent(userId),
       this.runRepo.findByUser(userId, 30),
+      this.userFeatures.hasFeature(userId, 'coachChat'),
     ]);
 
     if (!profile?.onboarded) return;
+    // Freemium não tem coach.ai → não cria insights diários (que são todos
+    // derivados de plano/zonas/coach). Mantém a inbox limpa pra esse tier.
+    if (!hasCoach) return;
 
     const dedupeKey = todayKey();
     const completedRuns = runsResult.runs.filter(r => r.status === 'completed');

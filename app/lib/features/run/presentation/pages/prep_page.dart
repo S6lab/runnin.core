@@ -632,7 +632,7 @@ class _PrepViewState extends State<_PrepView> {
       items.add('Aquecimento progressivo (8-10min) antes do tempo');
     }
     items.add('Tênis confortável + cadarço firme');
-    items.add('GPS / wearable conectado e carregado');
+    items.add('GPS ativo, celular e relógio carregados');
     items.add('Fone com Coach AI pronto');
     return items;
   }
