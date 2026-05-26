@@ -1073,13 +1073,14 @@ class _WeeklyPlanView extends StatelessWidget {
         ],
         ...() {
           // Datas reais por sessão: cada semana começa na segunda anterior
-          // (ou em plan.createdAt se foi gerado numa segunda). Week 1 alinha
-          // com a semana corrente da geração; weeks subsequentes somam +7 dias.
+          // ao startDate (ou no próprio startDate se ele cair numa segunda).
+          // Week 1 alinha com a semana civil do startDate; semanas seguintes
+          // somam +7 dias.
           final today = DateTime.now();
           final todayDateOnly = DateTime(today.year, today.month, today.day);
-          final planCreated = DateTime.tryParse(plan.createdAt) ?? today;
-          final week1Monday = planCreated.subtract(
-            Duration(days: (planCreated.weekday - 1) % 7),
+          final planStart = plan.effectiveStartDate;
+          final week1Monday = planStart.subtract(
+            Duration(days: (planStart.weekday - 1) % 7),
           );
           final weekStartMonday = DateTime(
             week1Monday.year,
@@ -2077,17 +2078,7 @@ _MonthlyStats _buildMonthlyStats(Plan plan) {
   );
 }
 
-int _currentPlanWeekIndex(Plan plan) {
-  if (plan.weeks.isEmpty) return 0;
-
-  final createdAt = DateTime.tryParse(plan.createdAt);
-  if (createdAt == null) return 0;
-
-  final elapsedDays = DateTime.now().difference(createdAt).inDays;
-  if (elapsedDays <= 0) return 0;
-
-  return (elapsedDays ~/ 7).clamp(0, plan.weeks.length - 1);
-}
+int _currentPlanWeekIndex(Plan plan) => plan.currentWeekIndex();
 
 String _buildWeekHeadline(PlanWeek? week) {
   if (week == null) return 'Semana sem sessoes planejadas';

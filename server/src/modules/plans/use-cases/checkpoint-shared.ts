@@ -170,10 +170,32 @@ export function mergeProposedWeeks(
   });
 }
 
-/** Número da semana corrente do plano (1-based), pelo startDate/createdAt. */
+/**
+ * Segunda-feira (00:00 local) da semana civil que contém `d`. Em PT-BR a
+ * semana é seg→dom. getDay() em domingo = 0 → recua 6 dias até a segunda
+ * anterior; demais dias → recua (getDay()-1) dias.
+ */
+function startOfCivilWeek(d: Date): Date {
+  const out = new Date(d);
+  const dow = out.getDay();
+  const back = dow === 0 ? 6 : dow - 1;
+  out.setDate(out.getDate() - back);
+  out.setHours(0, 0, 0, 0);
+  return out;
+}
+
+/**
+ * Número da semana corrente do plano (1-based), alinhado à semana civil
+ * (seg-dom). Semana 1 = semana civil que contém o startDate; a semana avança
+ * toda segunda-feira, não 7 dias rolling desde a criação — caso contrário um
+ * plano criado num domingo continuaria como "semana 1" até a próxima semana.
+ */
 export function currentWeekNumber(plan: Plan, now: Date = new Date()): number {
   const start = parseISO(plan.startDate ?? plan.createdAt.slice(0, 10)) ?? new Date(plan.createdAt);
-  const diffWeeks = Math.floor((now.getTime() - start.getTime()) / (7 * 86_400_000));
+  const diffWeeks = Math.floor(
+    (startOfCivilWeek(now).getTime() - startOfCivilWeek(start).getTime()) /
+      (7 * 86_400_000),
+  );
   return Math.min(Math.max(diffWeeks + 1, 1), plan.weeksCount);
 }
 

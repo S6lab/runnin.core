@@ -100,17 +100,7 @@ class GetHomeDataUseCase {
 
     PlanWeek? currentPlanWeek;
     if (plan != null && plan.weeks.isNotEmpty) {
-      final created = DateTime.tryParse(plan.createdAt);
-      if (created != null) {
-        final daysSinceCreation = today.difference(created).inDays;
-        final weekIndex = (daysSinceCreation / 7).floor().clamp(
-          0,
-          plan.weeks.length - 1,
-        );
-        currentPlanWeek = plan.weeks[weekIndex];
-      } else {
-        currentPlanWeek = plan.weeks.first;
-      }
+      currentPlanWeek = plan.weeks[plan.currentWeekIndex(now: today)];
     }
 
     PlanSession? todaySession;

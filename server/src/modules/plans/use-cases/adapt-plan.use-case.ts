@@ -1,8 +1,10 @@
+import { Plan } from '../domain/plan.entity';
 import { PlanRepository } from '../domain/plan.repository';
 import { PlanRevisionRepository } from '../domain/plan-revision.repository';
 import { UserRepository } from '@modules/users/domain/user.repository';
 import { RunRepository } from '@modules/runs/domain/run.repository';
 import { RequestRevisionUseCase } from './request-revision.use-case';
+import { currentWeekNumber } from './checkpoint-shared';
 import { logger } from '@shared/logger/logger';
 
 export type AdaptSource = 'post_run' | 'missed_day';
@@ -196,11 +198,7 @@ export class AdaptPlanUseCase {
     return parts.join('. ');
   }
 
-  private _getCurrentWeekIndex(plan: { createdAt: string; weeksCount: number }): number {
-    const now = new Date();
-    const planDate = new Date(plan.createdAt);
-    const diffTime = Math.abs(now.getTime() - planDate.getTime());
-    const diffWeeks = Math.floor(diffTime / (1000 * 60 * 60 * 24 * 7));
-    return Math.min(diffWeeks, plan.weeksCount - 1);
+  private _getCurrentWeekIndex(plan: Plan): number {
+    return currentWeekNumber(plan) - 1;
   }
 }

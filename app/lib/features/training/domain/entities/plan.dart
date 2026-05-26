@@ -282,4 +282,21 @@ class Plan {
   /// "começa 18/05 → termina 12/07" no header do plan-detail.
   DateTime get mesocycleEndDate =>
       effectiveStartDate.add(Duration(days: weeksCount * 7 - 1));
+
+  /// Índice (0-based) da semana corrente do plano, alinhado à semana civil
+  /// (seg-dom). Quando o startDate cai num domingo, a semana 1 cobre a semana
+  /// civil que termina nesse domingo; a semana 2 começa na segunda seguinte.
+  /// Sem alinhamento civil, a UI mostraria semana errada do dia da semana de
+  /// hoje vs. dia da semana da criação do plano.
+  int currentWeekIndex({DateTime? now}) {
+    if (weeks.isEmpty) return 0;
+    final start = effectiveStartDate;
+    final startMonday = DateTime(start.year, start.month, start.day)
+        .subtract(Duration(days: start.weekday - 1));
+    final today = now ?? DateTime.now();
+    final todayMonday = DateTime(today.year, today.month, today.day)
+        .subtract(Duration(days: today.weekday - 1));
+    final diffDays = todayMonday.difference(startMonday).inDays;
+    return (diffDays ~/ 7).clamp(0, weeks.length - 1);
+  }
 }
