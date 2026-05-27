@@ -37,6 +37,11 @@ class _HistoryPageState extends State<HistoryPage> {
   String? _error;
   _Period _period = _Period.month;
   _ContentTab _tab = _ContentTab.data;
+  /// Offset do período exibido em relação ao corrente:
+  ///   0 = período atual (semana/mês/3-meses corrente)
+  ///  -1 = anterior (semana passada, mês passado, ou 3 meses anteriores)
+  /// Sempre <= 0 (não navegamos pro futuro). Reset pra 0 ao trocar `_period`.
+  int _periodCursor = 0;
   final _periodAnalysisDatasource = PeriodAnalysisRemoteDatasource();
   PeriodAnalysis? _periodAnalysis;
   bool _loadingAnalysis = false;
@@ -56,6 +61,45 @@ class _HistoryPageState extends State<HistoryPage> {
     _Period.threeMonths => 'threeMonths',
   };
 
+  /// Janela civil [start, end) do período selecionado, deslocada por
+  /// `_periodCursor`. Convenção: end é exclusivo — bate com `buildBuckets`
+  /// do backend ([server] get-stats-breakdown.use-case.ts) pra alinhamento.
+  ({DateTime start, DateTime end}) _periodRange() {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    switch (_period) {
+      case _Period.week:
+        // Segunda da semana civil corrente (weekday: Mon=1..Sun=7).
+        final monday = today.subtract(Duration(days: today.weekday - 1));
+        final start = monday.add(Duration(days: _periodCursor * 7));
+        return (start: start, end: start.add(const Duration(days: 7)));
+      case _Period.month:
+        final monthStart = DateTime(today.year, today.month + _periodCursor, 1);
+        final monthEnd = DateTime(monthStart.year, monthStart.month + 1, 1);
+        return (start: monthStart, end: monthEnd);
+      case _Period.threeMonths:
+        // 3 meses civis terminando no mês corrente (com cursor: -1 = 3 meses
+        // imediatamente anteriores aos 3 atuais).
+        final endMonth = DateTime(
+          today.year,
+          today.month + 1 + _periodCursor * 3,
+          1,
+        );
+        final startMonth = DateTime(endMonth.year, endMonth.month - 3, 1);
+        return (start: startMonth, end: endMonth);
+    }
+  }
+
+  String _fmtBR(DateTime d) =>
+      '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
+
+  String _fmtRangeLabel() {
+    final r = _periodRange();
+    // end é exclusivo — pro label mostramos o último dia inclusivo.
+    final endInclusive = r.end.subtract(const Duration(days: 1));
+    return 'DE ${_fmtBR(r.start)} ATÉ ${_fmtBR(endInclusive)}';
+  }
+
   @override
   void initState() {
     super.initState();
@@ -67,6 +111,12 @@ class _HistoryPageState extends State<HistoryPage> {
 
   Future<void> _loadAggregate() async {
     if (!mounted) return;
+    // Backend só conhece o período corrente — em janela histórica
+    // (cursor != 0) zeramos pra cair no fallback client-side.
+    if (_periodCursor != 0) {
+      setState(() => _aggregate = null);
+      return;
+    }
     try {
       final result = await _statsDatasource.getAggregate(_periodKey);
       if (mounted) setState(() => _aggregate = result);
@@ -77,6 +127,10 @@ class _HistoryPageState extends State<HistoryPage> {
 
   Future<void> _loadBreakdown() async {
     if (!mounted) return;
+    if (_periodCursor != 0) {
+      setState(() => _breakdown = null);
+      return;
+    }
     try {
       final result = await _statsDatasource.getBreakdown(_periodKey);
       if (mounted) setState(() => _breakdown = result);
@@ -87,6 +141,13 @@ class _HistoryPageState extends State<HistoryPage> {
 
   Future<void> _loadPeriodAnalysis() async {
     if (!mounted) return;
+    if (_periodCursor != 0) {
+      setState(() {
+        _periodAnalysis = null;
+        _loadingAnalysis = false;
+      });
+      return;
+    }
     setState(() => _loadingAnalysis = true);
     try {
       final result = await _periodAnalysisDatasource.getPeriodAnalysis(_analysisLimit);
@@ -94,6 +155,12 @@ class _HistoryPageState extends State<HistoryPage> {
     } catch (e) {
       if (mounted) setState(() => _loadingAnalysis = false);
     }
+  }
+
+  void _reloadPeriodData() {
+    _loadPeriodAnalysis();
+    _loadAggregate();
+    _loadBreakdown();
   }
 
   Future<void> _load() async {
@@ -121,17 +188,16 @@ class _HistoryPageState extends State<HistoryPage> {
 
   List<Run> get _filteredRuns {
     if (_allRuns == null) return [];
-    final cutoff = switch (_period) {
-      _Period.week       => DateTime.now().subtract(const Duration(days: 7)),
-      _Period.month      => DateTime.now().subtract(const Duration(days: 30)),
-      _Period.threeMonths => DateTime.now().subtract(const Duration(days: 90)),
-    };
+    final r = _periodRange();
     return _allRuns!
-        .where((r) {
-          final d = DateTime.tryParse(r.createdAt);
-          return d != null && d.isAfter(cutoff);
+        .where((run) => run.status == 'completed')
+        .where((run) {
+          final d = DateTime.tryParse(run.createdAt);
+          if (d == null) return false;
+          // Compara em local time pra bater com a fronteira civil [start, end).
+          final local = d.toLocal();
+          return !local.isBefore(r.start) && local.isBefore(r.end);
         })
-        .where((r) => r.status == 'completed')
         .toList()
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
   }
@@ -169,14 +235,41 @@ class _HistoryPageState extends State<HistoryPage> {
                 tabs: const ['SEMANA', 'MÊS', '3 MESES'],
                 selectedIndex: _Period.values.indexOf(_period),
                 onChanged: (i) {
-                  setState(() => _period = _Period.values[i]);
-                  _loadPeriodAnalysis();
-                  _loadAggregate();
-                  _loadBreakdown();
+                  setState(() {
+                    _period = _Period.values[i];
+                    // Resetar cursor pra "atual" quando troca de tipo de
+                    // período — o offset não traduz semanticamente (cursor
+                    // = -1 em SEMANA é 1 semana, em 3 MESES é 3 meses).
+                    _periodCursor = 0;
+                  });
+                  _reloadPeriodData();
                 },
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 8),
+            // Range exibido (janela civil) + setas pra navegar pra trás.
+            // Tap no label volta pro período corrente.
+            _PeriodRangeBar(
+              label: _fmtRangeLabel(),
+              canGoForward: _periodCursor < 0,
+              onPrev: () {
+                setState(() => _periodCursor--);
+                _reloadPeriodData();
+              },
+              onNext: _periodCursor < 0
+                  ? () {
+                      setState(() => _periodCursor++);
+                      _reloadPeriodData();
+                    }
+                  : null,
+              onResetToCurrent: _periodCursor < 0
+                  ? () {
+                      setState(() => _periodCursor = 0);
+                      _reloadPeriodData();
+                    }
+                  : null,
+            ),
+            const SizedBox(height: 12),
             Expanded(child: _buildBody()),
           ],
         ),
@@ -216,7 +309,17 @@ class _HistoryPageState extends State<HistoryPage> {
       backgroundColor: palette.surface,
       onRefresh: _load,
       child: _tab == _ContentTab.data
-          ? _DataView(runs: runs, plan: _plan, period: _period, periodAnalysis: _periodAnalysis, loadingAnalysis: _loadingAnalysis, aggregate: _aggregate, breakdown: _breakdown)
+          ? _DataView(
+              runs: runs,
+              plan: _plan,
+              period: _period,
+              range: _periodRange(),
+              showDeltas: _periodCursor == 0,
+              periodAnalysis: _periodAnalysis,
+              loadingAnalysis: _loadingAnalysis,
+              aggregate: _aggregate,
+              breakdown: _breakdown,
+            )
           : _RunsListView(runs: runs, plan: _plan),
     );
   }
@@ -228,11 +331,28 @@ class _DataView extends StatelessWidget {
   final List<Run> runs;
   final Plan? plan;
   final _Period period;
+  /// Janela civil [start, end) usada pra filtrar runs e construir buckets.
+  /// Mantém os gráficos wired com o range selecionado pelo seletor de período.
+  final ({DateTime start, DateTime end}) range;
+  /// Esconde a Row de FigmaStatTileWithDelta quando navegando histórico
+  /// (cursor != 0). Deltas só fazem sentido pro período corrente, já que o
+  /// backend compara contra "período imediatamente anterior".
+  final bool showDeltas;
   final PeriodAnalysis? periodAnalysis;
   final bool loadingAnalysis;
   final StatsAggregate? aggregate;
   final StatsBreakdown? breakdown;
-  const _DataView({required this.runs, required this.plan, required this.period, this.periodAnalysis, this.loadingAnalysis = false, this.aggregate, this.breakdown});
+  const _DataView({
+    required this.runs,
+    required this.plan,
+    required this.period,
+    required this.range,
+    this.showDeltas = true,
+    this.periodAnalysis,
+    this.loadingAnalysis = false,
+    this.aggregate,
+    this.breakdown,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -248,7 +368,9 @@ class _DataView extends StatelessWidget {
     final pace = bd?.avgPace ?? stats.avgPaceLabel;
     final bpmMed = (bd?.avgBpm ?? stats.avgBpm)?.toString() ?? '--';
     final bpmMax = bd?.maxBpm?.toString() ?? '--';
-    final calorias = bd != null ? '${bd.calories}' : '--';
+    final calorias = bd != null
+        ? '${bd.calories}'
+        : (stats.calories != null ? '${stats.calories}' : '--');
     final distMedia = (bd?.avgDistanceKm ??
             (stats.count > 0 ? stats.totalKm / stats.count : 0))
         .toStringAsFixed(1);
@@ -309,7 +431,7 @@ class _DataView extends StatelessWidget {
                           label: b.label,
                         ))
                     .toList()
-                : _buildVolumeBuckets(period, plan, runs),
+                : _buildVolumeBuckets(period, range, plan, runs),
           ),
         ),
         const SizedBox(height: 16),
@@ -333,41 +455,46 @@ class _DataView extends StatelessWidget {
 
         // Evolução Resumo — deltas vêm de /stats/aggregate quando disponível,
         // fallback pra '--' enquanto carrega ou se backend não responde.
-        Row(children: [
-          Expanded(child: FigmaStatTileWithDelta(
-            label: 'PACE',
-            value: stats.avgPaceLabel,
-            delta: _fmtDeltaPct(aggregate?.deltas.pacePctVsPrev),
-            // pace: lower = better → delta negativo é "positivo" pro usuário
-            deltaIsPositive: (aggregate?.deltas.pacePctVsPrev ?? 0) <= 0,
-          )),
-          const SizedBox(width: 8),
-          Expanded(child: FigmaStatTileWithDelta(
-            label: 'VOLUME',
-            value: stats.totalKm.toStringAsFixed(1),
-            unit: 'km',
-            delta: _fmtDeltaPct(aggregate?.deltas.volumePctVsPrev),
-            deltaIsPositive: (aggregate?.deltas.volumePctVsPrev ?? 0) >= 0,
-          )),
-        ]),
-        const SizedBox(height: 8),
-        Row(children: [
-          Expanded(child: FigmaStatTileWithDelta(
-            label: 'BPM',
-            value: stats.avgBpm?.toString() ?? '--',
-            unit: 'BPM',
-            delta: _fmtDeltaBpm(aggregate?.deltas.bpmDeltaBpm),
-            // bpm: lower = better → delta negativo é "positivo"
-            deltaIsPositive: (aggregate?.deltas.bpmDeltaBpm ?? 0) <= 0,
-          )),
-          const SizedBox(width: 8),
-          Expanded(child: FigmaStatTileWithDelta(
-            label: 'CORRIDAS',
-            value: '${stats.count}',
-            delta: _fmtDeltaInt(aggregate?.deltas.runsCountDelta),
-            deltaIsPositive: (aggregate?.deltas.runsCountDelta ?? 0) >= 0,
-          )),
-        ]),
+        // Em janela histórica (showDeltas=false) escondemos a seção inteira:
+        // o backend não sabe comparar contra "período anterior" de uma janela
+        // que não é a corrente.
+        if (showDeltas) ...[
+          Row(children: [
+            Expanded(child: FigmaStatTileWithDelta(
+              label: 'PACE',
+              value: stats.avgPaceLabel,
+              delta: _fmtDeltaPct(aggregate?.deltas.pacePctVsPrev),
+              // pace: lower = better → delta negativo é "positivo" pro usuário
+              deltaIsPositive: (aggregate?.deltas.pacePctVsPrev ?? 0) <= 0,
+            )),
+            const SizedBox(width: 8),
+            Expanded(child: FigmaStatTileWithDelta(
+              label: 'VOLUME',
+              value: stats.totalKm.toStringAsFixed(1),
+              unit: 'km',
+              delta: _fmtDeltaPct(aggregate?.deltas.volumePctVsPrev),
+              deltaIsPositive: (aggregate?.deltas.volumePctVsPrev ?? 0) >= 0,
+            )),
+          ]),
+          const SizedBox(height: 8),
+          Row(children: [
+            Expanded(child: FigmaStatTileWithDelta(
+              label: 'BPM',
+              value: stats.avgBpm?.toString() ?? '--',
+              unit: 'BPM',
+              delta: _fmtDeltaBpm(aggregate?.deltas.bpmDeltaBpm),
+              // bpm: lower = better → delta negativo é "positivo"
+              deltaIsPositive: (aggregate?.deltas.bpmDeltaBpm ?? 0) <= 0,
+            )),
+            const SizedBox(width: 8),
+            Expanded(child: FigmaStatTileWithDelta(
+              label: 'CORRIDAS',
+              value: '${stats.count}',
+              delta: _fmtDeltaInt(aggregate?.deltas.runsCountDelta),
+              deltaIsPositive: (aggregate?.deltas.runsCountDelta ?? 0) >= 0,
+            )),
+          ]),
+        ],
       ],
     );
   }
@@ -378,6 +505,10 @@ class _DataView extends StatelessWidget {
     final totalDistM = runs.fold<double>(0.0, (s, r) => s + r.distanceM);
     final totalS = runs.fold<int>(0, (s, r) => s + r.durationS);
     final totalXp = runs.fold<int>(0, (s, r) => s + (r.xpEarned ?? 0));
+    // Calorias: server enriquece cada run em CompleteRunUseCase via MET ×
+    // peso × tempo. Runs antigas (retroativas) podem ter null — soma só
+    // o que estiver disponível pra ficar consistente com o /stats/breakdown.
+    final totalCalories = runs.fold<int>(0, (s, r) => s + (r.calories ?? 0));
     final runningCount = runs.where((r) => r.status == 'completed').length;
 
     // Pace médio em segundos/km
@@ -481,6 +612,7 @@ class _DataView extends StatelessWidget {
       streakDays: streak,
       totalXp: totalXp,
       avgBpm: avgBpm,
+      calories: totalCalories,
       zoneDistribution: zoneDistribution,
       weeklyVolume: weeklyVolume,
     );
@@ -498,6 +630,9 @@ class _HistoryStats {
   final int streakDays;
   final int totalXp;
   final int? avgBpm;
+  /// Soma de calorias (kcal) das runs do período. Null = sem dado (todas
+  /// as runs sem `calories` enriquecido); 0 é resultado válido.
+  final int? calories;
   final List<double> zoneDistribution;
   final List<_WeeklyEntry> weeklyVolume;
 
@@ -511,6 +646,7 @@ class _HistoryStats {
     required this.streakDays,
     required this.totalXp,
     this.avgBpm,
+    this.calories,
     this.zoneDistribution = const [],
     required this.weeklyVolume,
   });
@@ -518,7 +654,7 @@ class _HistoryStats {
   factory _HistoryStats.empty() => const _HistoryStats(
     count: 0, runningCount: 0, totalKm: 0, totalS: 0, totalTimeLabel: '0m',
     avgPaceLabel: '--:--', streakDays: 0, totalXp: 0,
-    avgBpm: null, zoneDistribution: [], weeklyVolume: [],
+    avgBpm: null, calories: null, zoneDistribution: [], weeklyVolume: [],
   );
 }
 
@@ -552,35 +688,41 @@ String _paceSubtitle(_Period p) {
   }
 }
 
-/// Constrói os buckets de volume baseado no período selecionado.
-/// Para cada bucket, soma planned (do Plan) e executed (das Runs).
+/// Constrói os buckets de volume baseado no período selecionado, usando a
+/// janela civil [range.start, range.end). Cada bucket soma planned (do Plan)
+/// e executed (das Runs) restritos ao range. Wired com `_periodRange()` da
+/// HistoryPage pra que filtro/label/gráficos vejam o mesmo intervalo.
 List<TwoToneBarData> _buildVolumeBuckets(
   _Period period,
+  ({DateTime start, DateTime end}) range,
   Plan? plan,
   List<Run> runs,
 ) {
-  final now = DateTime.now();
   switch (period) {
     case _Period.week:
-      return _bucketByDayOfWeek(now, plan, runs);
+      return _bucketByDayOfWeek(range, plan, runs);
     case _Period.month:
-      return _bucketByWeekOfMonth(now, plan, runs);
+      return _bucketByWeekOfMonth(range, plan, runs);
     case _Period.threeMonths:
-      return _bucketByMonth(now, plan, runs);
+      return _bucketByMonth(range, plan, runs);
   }
 }
 
-/// 7 buckets — Seg..Dom da semana atual.
-List<TwoToneBarData> _bucketByDayOfWeek(DateTime now, Plan? plan, List<Run> runs) {
-  // Domingo = 7 no padrão do plano, então mapeamos cronologicamente.
+/// 7 buckets — Seg..Dom da semana civil definida por [range].
+/// Range.start é a segunda da semana (vide `_periodRange`).
+List<TwoToneBarData> _bucketByDayOfWeek(
+  ({DateTime start, DateTime end}) range,
+  Plan? plan,
+  List<Run> runs,
+) {
   const dayLabels = ['SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB', 'DOM'];
-  final monday = now.subtract(Duration(days: now.weekday - 1));
-  final mondayDate = DateTime(monday.year, monday.month, monday.day);
+  final monday = DateTime(range.start.year, range.start.month, range.start.day);
 
-  // Sessão planejada para esta semana (se plano ativo cobrir esses dias).
+  // Sessão planejada para a semana do plano correspondente a esta semana
+  // civil (se houver). Pode dar 0 quando range está fora do mesociclo.
   final plannedByDay = <int, double>{};
   if (plan != null && plan.isReady) {
-    final daysFromStart = mondayDate.difference(plan.effectiveStartDate).inDays;
+    final daysFromStart = monday.difference(plan.effectiveStartDate).inDays;
     final weekIdx = (daysFromStart / 7).floor();
     if (weekIdx >= 0 && weekIdx < plan.weeks.length) {
       for (final s in plan.weeks[weekIdx].sessions) {
@@ -589,17 +731,14 @@ List<TwoToneBarData> _bucketByDayOfWeek(DateTime now, Plan? plan, List<Run> runs
     }
   }
 
-  // Executed por dia (das runs desta semana).
+  // Executed por dia (runs dentro do range).
   final executedByDay = <int, double>{};
   for (final r in runs) {
     final d = DateTime.tryParse(r.createdAt);
     if (d == null) continue;
-    final localDate = DateTime(d.year, d.month, d.day);
-    if (localDate.isBefore(mondayDate) ||
-        localDate.isAfter(mondayDate.add(const Duration(days: 6)))) {
-      continue;
-    }
-    final dow = localDate.weekday; // 1=Mon..7=Sun
+    final local = d.toLocal();
+    if (local.isBefore(range.start) || !local.isBefore(range.end)) continue;
+    final dow = local.weekday; // 1=Mon..7=Sun
     executedByDay[dow] = (executedByDay[dow] ?? 0) + r.distanceM / 1000;
   }
 
@@ -613,15 +752,19 @@ List<TwoToneBarData> _bucketByDayOfWeek(DateTime now, Plan? plan, List<Run> runs
   });
 }
 
-/// 4-5 buckets — semanas do mês atual.
-List<TwoToneBarData> _bucketByWeekOfMonth(DateTime now, Plan? plan, List<Run> runs) {
-  final firstOfMonth = DateTime(now.year, now.month, 1);
-  final lastOfMonth = DateTime(now.year, now.month + 1, 0);
+/// Buckets por semana civil que intersectam o mês [range].
+List<TwoToneBarData> _bucketByWeekOfMonth(
+  ({DateTime start, DateTime end}) range,
+  Plan? plan,
+  List<Run> runs,
+) {
+  final firstOfMonth = range.start;
+  // end é exclusivo (primeiro dia do mês seguinte) — último inclusivo:
+  final lastOfMonth = range.end.subtract(const Duration(days: 1));
   final weekStarts = <DateTime>[];
-  // Começa na segunda da semana que contém o dia 1.
+  // Começa na segunda da semana civil que contém o dia 1 do mês.
   var cursor = firstOfMonth.subtract(Duration(days: firstOfMonth.weekday - 1));
-  while (cursor.isBefore(lastOfMonth) ||
-      cursor.isAtSameMomentAs(lastOfMonth)) {
+  while (!cursor.isAfter(lastOfMonth)) {
     weekStarts.add(cursor);
     cursor = cursor.add(const Duration(days: 7));
   }
@@ -642,7 +785,8 @@ List<TwoToneBarData> _bucketByWeekOfMonth(DateTime now, Plan? plan, List<Run> ru
     for (final r in runs) {
       final d = DateTime.tryParse(r.createdAt);
       if (d == null) continue;
-      final localDate = DateTime(d.year, d.month, d.day);
+      final local = d.toLocal();
+      final localDate = DateTime(local.year, local.month, local.day);
       if (localDate.isBefore(start) || localDate.isAfter(end)) continue;
       executed += r.distanceM / 1000;
     }
@@ -654,13 +798,19 @@ List<TwoToneBarData> _bucketByWeekOfMonth(DateTime now, Plan? plan, List<Run> ru
   });
 }
 
-/// 3 buckets — últimos 3 meses (incluindo o atual).
-List<TwoToneBarData> _bucketByMonth(DateTime now, Plan? plan, List<Run> runs) {
+/// 3 buckets — meses civis cobertos por [range] (range cobre exatamente
+/// 3 meses pelo _periodRange).
+List<TwoToneBarData> _bucketByMonth(
+  ({DateTime start, DateTime end}) range,
+  Plan? plan,
+  List<Run> runs,
+) {
   const monthLabels = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN',
       'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
   return List.generate(3, (i) {
-    final month = DateTime(now.year, now.month - (2 - i), 1);
-    final monthEnd = DateTime(now.year, now.month - (2 - i) + 1, 0);
+    final month = DateTime(range.start.year, range.start.month + i, 1);
+    final monthEnd = DateTime(month.year, month.month + 1, 1)
+        .subtract(const Duration(days: 1));
     double planned = 0;
     if (plan != null && plan.isReady) {
       for (var wi = 0; wi < plan.weeks.length; wi++) {
@@ -676,7 +826,8 @@ List<TwoToneBarData> _bucketByMonth(DateTime now, Plan? plan, List<Run> runs) {
     for (final r in runs) {
       final d = DateTime.tryParse(r.createdAt);
       if (d == null) continue;
-      if (d.year != month.year || d.month != month.month) continue;
+      final local = d.toLocal();
+      if (local.year != month.year || local.month != month.month) continue;
       executed += r.distanceM / 1000;
     }
     return TwoToneBarData(
@@ -685,6 +836,76 @@ List<TwoToneBarData> _bucketByMonth(DateTime now, Plan? plan, List<Run> runs) {
       label: monthLabels[month.month - 1],
     );
   });
+}
+
+// ── Barra de período (label de range + setas de navegação) ──────────────────
+
+/// Barra discreta abaixo dos chips SEMANA/MÊS/3 MESES mostrando o range
+/// civil exibido. Setas pra navegar pra semanas/meses passados; tap no label
+/// volta pra "atual" quando o user está navegando histórico.
+class _PeriodRangeBar extends StatelessWidget {
+  final String label;
+  final bool canGoForward;
+  final VoidCallback onPrev;
+  final VoidCallback? onNext;
+  final VoidCallback? onResetToCurrent;
+
+  const _PeriodRangeBar({
+    required this.label,
+    required this.canGoForward,
+    required this.onPrev,
+    required this.onNext,
+    required this.onResetToCurrent,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    final type = context.runninType;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxl),
+      child: Row(
+        children: [
+          IconButton(
+            onPressed: onPrev,
+            iconSize: 16,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+            visualDensity: VisualDensity.compact,
+            icon: Icon(Icons.chevron_left, color: palette.muted),
+            tooltip: 'Período anterior',
+          ),
+          Expanded(
+            child: GestureDetector(
+              onTap: onResetToCurrent,
+              behavior: HitTestBehavior.opaque,
+              child: Center(
+                child: Text(
+                  label,
+                  style: type.bodyXs.copyWith(
+                    color: palette.muted,
+                    letterSpacing: 0.6,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          IconButton(
+            onPressed: onNext,
+            iconSize: 16,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+            visualDensity: VisualDensity.compact,
+            icon: Icon(
+              Icons.chevron_right,
+              color: canGoForward ? palette.muted : palette.muted.withValues(alpha: 0.3),
+            ),
+            tooltip: canGoForward ? 'Período seguinte' : 'Sem futuro',
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 // ── Aba Corridas ─────────────────────────────────────────────────────────────
