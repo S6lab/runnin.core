@@ -4,7 +4,7 @@ import { Run } from '@modules/runs/domain/run.entity';
 import { Plan } from '../domain/plan.entity';
 import { CheckpointInput } from '../domain/plan-checkpoint.entity';
 import { ApplyWeeklyRevisionUseCase } from './apply-weekly-revision.use-case';
-import { currentWeekNumber } from './checkpoint-shared';
+import { civilWeekRange, currentWeekNumber } from './checkpoint-shared';
 import { logger } from '@shared/logger/logger';
 
 const ACTIVE_WINDOW_DAYS = 14;
@@ -60,15 +60,13 @@ export class ProcessUserProposalUseCase {
     plan: Plan,
     weekNumber: number,
   ): Promise<CheckpointInput[]> {
-    const start = _parseISO(plan.startDate ?? plan.createdAt.slice(0, 10));
-    if (!start) return [];
-    const weekStart = new Date(start.getTime() + (weekNumber - 1) * 7 * 86_400_000);
-    const weekEnd = new Date(weekStart.getTime() + 7 * 86_400_000);
+    const range = civilWeekRange(plan, weekNumber);
+    if (!range) return [];
     const recent = await this.runRepo.findByUser(userId, 50);
     const inWeek = recent.runs.filter((r: Run) => {
       if (r.status !== 'completed') return false;
       const t = new Date(r.createdAt).getTime();
-      return t >= weekStart.getTime() && t < weekEnd.getTime();
+      return t >= range.start.getTime() && t < range.end.getTime();
     });
     const all = inWeek.flatMap((r) => r.userFeedback ?? []);
     const seen = new Set<string>();
@@ -79,9 +77,4 @@ export class ProcessUserProposalUseCase {
       return true;
     });
   }
-}
-
-function _parseISO(s: string): Date | null {
-  const d = new Date(`${s}T00:00:00`);
-  return isNaN(d.getTime()) ? null : d;
 }

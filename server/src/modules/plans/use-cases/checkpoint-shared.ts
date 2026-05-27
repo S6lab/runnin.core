@@ -175,7 +175,7 @@ export function mergeProposedWeeks(
  * semana é seg→dom. getDay() em domingo = 0 → recua 6 dias até a segunda
  * anterior; demais dias → recua (getDay()-1) dias.
  */
-function startOfCivilWeek(d: Date): Date {
+export function startOfCivilWeek(d: Date): Date {
   const out = new Date(d);
   const dow = out.getDay();
   const back = dow === 0 ? 6 : dow - 1;
@@ -199,18 +199,36 @@ export function currentWeekNumber(plan: Plan, now: Date = new Date()): number {
   return Math.min(Math.max(diffWeeks + 1, 1), plan.weeksCount);
 }
 
+/**
+ * Janela [start, end) da semana civil N (1-based) do plano. Semana 1 é a
+ * semana civil (seg→dom) que contém o startDate; demais somam +7d.
+ * Usado pra agregar runs/feedback da semana — alinhado com a fórmula de
+ * `currentWeekNumber`. Antes a fórmula era rolling-7-day-from-startDate,
+ * o que gerava janela errada quando startDate caía meio de semana civil.
+ */
+export function civilWeekRange(
+  plan: Pick<Plan, 'startDate' | 'createdAt'>,
+  weekNumber: number,
+): { start: Date; end: Date } | null {
+  const startISO = parseISO(plan.startDate ?? plan.createdAt.slice(0, 10));
+  if (!startISO) return null;
+  const startMonday = startOfCivilWeek(startISO);
+  const start = new Date(startMonday.getTime() + (weekNumber - 1) * 7 * 86_400_000);
+  const end = new Date(start.getTime() + 7 * 86_400_000);
+  return { start, end };
+}
+
 export async function computeWeekData(
   runRepo: RunRepository,
   plan: Plan,
   weekNumber: number,
   userId: string,
 ): Promise<{ runs: CheckpointWeekRun[]; metrics: CheckpointWeekMetrics }> {
-  const start = parseISO(plan.startDate ?? plan.createdAt.slice(0, 10));
-  if (!start) {
+  const range = civilWeekRange(plan, weekNumber);
+  if (!range) {
     return { runs: [], metrics: emptyMetrics(plan, weekNumber) };
   }
-  const weekStart = new Date(start.getTime() + (weekNumber - 1) * 7 * 86_400_000);
-  const weekEnd = new Date(weekStart.getTime() + 7 * 86_400_000);
+  const { start: weekStart, end: weekEnd } = range;
   // findByUser (ordenado por createdAt desc) + filtro em memória — evita o
   // composite index exigido por findByDateRange (status + createdAt).
   const recentRuns = await runRepo.findByUser(userId, 50);
