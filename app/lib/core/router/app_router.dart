@@ -25,7 +25,6 @@ import 'package:runnin/features/run/presentation/pages/plan_loading_page.dart';
 import 'package:runnin/features/training/presentation/pages/training_page.dart';
 import 'package:runnin/features/training/presentation/pages/plan_detail_page.dart';
 import 'package:runnin/features/training/presentation/pages/day_detail_page.dart';
-import 'package:runnin/features/training/presentation/pages/revision_flow_page.dart';
 import 'package:runnin/features/training/presentation/pages/plan_report_page.dart';
 import 'package:runnin/features/training/presentation/pages/plan_setup_page.dart';
 import 'package:runnin/features/history/presentation/pages/history_page.dart';
@@ -273,12 +272,6 @@ final appRouter = GoRouter(
           path: '/training/report/:weekStart',
           builder: (_, state) => WeeklyReportDetailPage(
             weekStart: state.pathParameters['weekStart']!,
-          ),
-        ),
-        GoRoute(
-          path: '/training/revise',
-          builder: (_, state) => RevisionFlowPage(
-            planId: state.uri.queryParameters['planId'] ?? '',
           ),
         ),
         GoRoute(

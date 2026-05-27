@@ -10,7 +10,6 @@ import {
 import { NotFoundError } from '@shared/errors/app-error';
 import { triggerReportGeneration } from '@modules/coach/http/coach.controller';
 import { FirestoreCoachReportRepository } from '@modules/coach/infra/firestore-coach-report.repository';
-import { container } from '@shared/container';
 
 const repo = new FirestoreRunRepository();
 const createRun = new CreateRunUseCase(repo);
@@ -40,9 +39,6 @@ export async function patchComplete(req: Request, res: Response, next: NextFunct
     const input = CompleteRunSchema.parse(req.body);
     const run = await completeRun.execute(req.params['id'] as string, req.uid, input);
     triggerReportGeneration(run.id, req.uid);
-    // Adapta plano em background com base na corrida concluída (sem consumir
-    // cota manual do usuário). Não bloqueia a resposta.
-    void container.useCases.adaptPlan.executeAfterRun(req.uid, run.id);
     res.json(run);
   } catch (err) { next(err); }
 }

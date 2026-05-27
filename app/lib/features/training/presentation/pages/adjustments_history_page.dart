@@ -1,8 +1,10 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/features/training/data/plan_revision_remote_datasource.dart';
+import 'package:runnin/features/training/domain/entities/plan.dart';
 import 'package:runnin/features/training/domain/entities/plan_revision.dart';
 import 'package:runnin/shared/widgets/app_panel.dart';
 import 'package:runnin/shared/widgets/app_tag.dart';
@@ -82,31 +84,20 @@ class _AdjustmentsHistoryPageState extends State<AdjustmentsHistoryPage> {
       );
     }
 
+    // Mais recente primeiro.
+    final sorted = [..._revisions]
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _QuotaCard(
-          palette: palette,
-          usedThisWeek: _revisions.where((r) => _isThisWeek(r.createdAt)).length,
-        ),
-        const SizedBox(height: 12),
         _CoachEducationalCard(palette: palette),
-        const SizedBox(height: 12),
-        if (widget.planId != null)
-          SizedBox(
-            width: double.infinity,
-            height: 48,
-            child: ElevatedButton(
-              onPressed: () => context.push('/training/revise?planId=${widget.planId}'),
-              child: const Text('SOLICITAR ALTERAÇÃO ↗'),
-            ),
-          ),
         const SizedBox(height: 20),
-        if (_revisions.isEmpty)
+        if (sorted.isEmpty)
           _EmptyRevisions(palette: palette)
         else ...[
           Text(
-            'SOLICITAÇÕES ANTERIORES',
+            'AJUSTES DO COACH',
             style: context.runninType.labelCaps.copyWith(
               fontSize: 11,
               fontWeight: FontWeight.w500,
@@ -115,72 +106,9 @@ class _AdjustmentsHistoryPageState extends State<AdjustmentsHistoryPage> {
             ),
           ),
           const SizedBox(height: 12),
-          ..._revisions.map((r) => _RevisionCard(revision: r, palette: palette)),
-          const SizedBox(height: 20),
-          _CalendarVisualization(revisions: _revisions, palette: palette),
+          ...sorted.map((r) => _RevisionCard(revision: r, palette: palette)),
         ],
       ],
-    );
-  }
-
-  bool _isThisWeek(String dateStr) {
-    final date = DateTime.tryParse(dateStr);
-    if (date == null) return false;
-    final now = DateTime.now();
-    final weekStart = now.subtract(Duration(days: now.weekday - 1));
-    return date.isAfter(weekStart.subtract(const Duration(days: 1)));
-  }
-}
-
-class _QuotaCard extends StatelessWidget {
-  final RunninPalette palette;
-  final int usedThisWeek;
-
-  const _QuotaCard({required this.palette, required this.usedThisWeek});
-
-  @override
-  Widget build(BuildContext context) {
-    final remaining = (1 - usedThisWeek).clamp(0, 1);
-
-    return AppPanel(
-      borderColor: palette.secondary.withValues(alpha: 0.6),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              AppTag(
-                label: 'REVISÃO USADA ESTA SEMANA',
-                color: palette.secondary,
-              ),
-              const Spacer(),
-              Text(
-                '$usedThisWeek/1',
-                style: context.runninType.dataSm.copyWith(
-                  fontSize: 18,
-                  color: palette.secondary,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          ClipRRect(
-            child: LinearProgressIndicator(
-              value: usedThisWeek.toDouble(),
-              backgroundColor: palette.border,
-              valueColor: AlwaysStoppedAnimation(palette.secondary),
-              minHeight: 4,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            remaining > 0
-                ? '$remaining alteração disponível esta semana'
-                : 'Próxima disponível na próxima semana',
-            style: context.runninType.bodySm.copyWith(color: palette.muted),
-          ),
-        ],
-      ),
     );
   }
 }
@@ -197,12 +125,13 @@ class _CoachEducationalCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const FigmaCoachAIBreadcrumb(action: 'COMO FUNCIONAM AS REVISÕES'),
+          const FigmaCoachAIBreadcrumb(action: 'COMO FUNCIONAM OS AJUSTES'),
           const SizedBox(height: 8),
           Text(
-            'Você pode solicitar 1 alteração por semana. O Coach.AI analisa seus dados '
-            'clínicos, exames e histórico de treino para recalcular as semanas futuras '
-            'do seu plano sem comprometer a periodização.',
+            'Todo domingo à noite o Coach revisa sua semana — corridas, ritmos e o '
+            'que você relatou em cada treino. Quando faz sentido, ele ajusta as '
+            'próximas 2 semanas. Quando o plano está rolando bem, ele só confirma e '
+            'segue.',
             style: context.runninType.bodyMd.copyWith(color: palette.text, height: 1.5, fontSize: 13),
           ),
         ],
@@ -226,14 +155,15 @@ class _EmptyRevisions extends StatelessWidget {
           Icon(Icons.history_outlined, size: 40, color: palette.border),
           const SizedBox(height: 12),
           Text(
-            'Nenhuma solicitação ainda',
+            'Sem ajustes ainda',
             style: context.runninType.dataSm.copyWith(
               color: palette.text,
             ),
           ),
           const SizedBox(height: 6),
           Text(
-            'Quando você solicitar alterações no plano, o histórico aparecerá aqui.',
+            'O primeiro ajuste acontece no domingo após sua primeira semana. '
+            'Suas corridas e relatos ficam visíveis pro coach até lá.',
             textAlign: TextAlign.center,
             style: context.runninType.bodyMd.copyWith(color: palette.muted, height: 1.5),
           ),
@@ -251,16 +181,24 @@ class _RevisionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final noChanges = revision.newWeeksSnapshot.isEmpty;
     final date = DateTime.tryParse(revision.createdAt);
     final dateLabel = date != null
-        ? DateFormat('dd/MM · HH:mm').format(date.toLocal())
+        ? DateFormat('dd/MM/yyyy · HH:mm').format(date.toLocal())
         : '--';
 
+    final title = noChanges
+        ? 'Plano completo da semana'
+        : 'Semana ${revision.weekIndex + 1} revisada';
+    final badgeLabel = noChanges ? 'SEM AJUSTES' : 'AJUSTADO';
+    final badgeColor = noChanges ? palette.muted : palette.primary;
+    final borderColor = noChanges
+        ? palette.border
+        : palette.primary.withValues(alpha: 0.4);
+
     return AppPanel(
-      margin: const EdgeInsets.only(bottom: 8),
-      borderColor: revision.isApplied
-          ? palette.primary.withValues(alpha: 0.4)
-          : palette.border,
+      margin: const EdgeInsets.only(bottom: 12),
+      borderColor: borderColor,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -268,115 +206,178 @@ class _RevisionCard extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
-                  'Semana ${revision.weekIndex + 1}',
+                  title,
                   style: context.runninType.dataSm.copyWith(
-                    fontSize: 18,
+                    fontSize: 16,
                     color: palette.text,
                   ),
                 ),
               ),
-              if (revision.isApplied)
-                AppTag(label: 'APLICADO', color: palette.primary),
+              AppTag(label: badgeLabel, color: badgeColor),
             ],
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 4),
           Text(
-            _revisionTypeLabel(revision.type) +
-                (revision.subOption != null ? ' · ${revision.subOption}' : ''),
-            style: context.runninType.bodyMd.copyWith(color: palette.text, fontWeight: FontWeight.w600),
+            'Semana ${revision.weekIndex + 1} · $dateLabel',
+            style: context.runninType.bodyXs.copyWith(color: palette.muted),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 12),
           Text(
             revision.coachExplanation,
-            style: context.runninType.bodyMd.copyWith(color: palette.muted, height: 1.5),
+            style: context.runninType.bodyMd.copyWith(color: palette.text, height: 1.5),
           ),
-          const SizedBox(height: 8),
-          Text(dateLabel, style: context.runninType.bodyXs.copyWith(color: palette.border)),
+          if (!noChanges) ...[
+            const SizedBox(height: 16),
+            _ChangesDiff(
+              oldWeeks: revision.oldWeeksSnapshot,
+              newWeeks: revision.newWeeksSnapshot,
+              palette: palette,
+            ),
+          ],
         ],
       ),
     );
   }
-
-  String _revisionTypeLabel(String type) {
-    const labels = {
-      'more_load': 'Mais carga',
-      'less_load': 'Menos carga',
-      'more_days': 'Mais dias',
-      'less_days': 'Menos dias',
-      'more_tempo': 'Mais tempo runs',
-      'more_resistance': 'Mais resistência',
-      'more_intervals': 'Mais intervalados',
-      'change_days': 'Mudar dias',
-      'pain_or_discomfort': 'Dor/Desconforto',
-      'other': 'Outro',
-    };
-    return labels[type] ?? type;
-  }
 }
 
-class _CalendarVisualization extends StatelessWidget {
-  final List<PlanRevision> revisions;
+class _ChangesDiff extends StatelessWidget {
+  final List<PlanWeek> oldWeeks;
+  final List<PlanWeek> newWeeks;
   final RunninPalette palette;
 
-  const _CalendarVisualization({required this.revisions, required this.palette});
+  const _ChangesDiff({
+    required this.oldWeeks,
+    required this.newWeeks,
+    required this.palette,
+  });
 
   @override
   Widget build(BuildContext context) {
+    // Diff só das 2 primeiras semanas seguintes (~15 dias) — alinhado com o
+    // two-tier do checkpoint (N+1 e N+2 ganham detalhe). Pares casados por
+    // weekNumber pra robustez se o LLM devolver em outra ordem.
+    final byNum = {for (final w in oldWeeks) w.weekNumber: w};
+    final pairs = newWeeks
+        .take(2)
+        .map((newW) => _DiffPair(old: byNum[newW.weekNumber], fresh: newW))
+        .where((p) => p.old != null)
+        .toList();
+
+    if (pairs.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'CALENDÁRIO DE REVISÕES',
+          'MUDANÇAS NOS PRÓXIMOS 15 DIAS',
           style: context.runninType.labelCaps.copyWith(
-            fontSize: 11,
+            fontSize: 10,
             fontWeight: FontWeight.w500,
             letterSpacing: 0.08,
             color: palette.muted,
           ),
         ),
-        const SizedBox(height: 12),
-        Row(
-          children: List.generate(4, (i) {
-            final weekNum = i + 1;
-            final hasRevision = revisions.any((r) => r.weekIndex == i);
-            return Expanded(
-              child: Container(
-                margin: EdgeInsets.only(right: i < 3 ? 6 : 0),
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                decoration: BoxDecoration(
-                  color: hasRevision
-                      ? palette.primary.withValues(alpha: 0.1)
-                      : palette.surface,
-                  border: Border.all(
-                    color: hasRevision
-                        ? palette.primary.withValues(alpha: 0.5)
-                        : palette.border,
-                    width: 1.041,
-                  ),
-                ),
-                child: Column(
-                  children: [
-                    Text(
-                      'S$weekNum',
-                      style: context.runninType.labelCaps.copyWith(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w500,
-                        color: hasRevision ? palette.primary : palette.muted,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Icon(
-                      hasRevision ? Icons.check : Icons.remove,
-                      size: 14,
-                      color: hasRevision ? palette.primary : palette.border,
-                    ),
-                  ],
-                ),
-              ),
-            );
-          }),
-        ),
+        const SizedBox(height: 10),
+        ...pairs.map((p) => _WeekDiffRow(pair: p, palette: palette)),
       ],
+    );
+  }
+}
+
+class _DiffPair {
+  final PlanWeek? old;
+  final PlanWeek fresh;
+  _DiffPair({required this.old, required this.fresh});
+}
+
+class _WeekDiffRow extends StatelessWidget {
+  final _DiffPair pair;
+  final RunninPalette palette;
+
+  const _WeekDiffRow({required this.pair, required this.palette});
+
+  @override
+  Widget build(BuildContext context) {
+    final old = pair.old!;
+    final fresh = pair.fresh;
+    final oldKm = _totalKm(old);
+    final newKm = _totalKm(fresh);
+    final deltaKm = newKm - oldKm;
+    final oldSessions = old.sessions.length;
+    final newSessions = fresh.sessions.length;
+    final deltaSessions = newSessions - oldSessions;
+
+    final hasVolumeChange = deltaKm.abs() >= 0.1;
+    final hasSessionChange = deltaSessions != 0;
+    final unchanged = !hasVolumeChange && !hasSessionChange;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 36,
+            child: Text(
+              'S${fresh.weekNumber}',
+              style: context.runninType.labelCaps.copyWith(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: palette.text,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              unchanged
+                  ? '${newKm.toStringAsFixed(1)}km · $newSessions sessões'
+                  : '${oldKm.toStringAsFixed(1)}→${newKm.toStringAsFixed(1)}km · $oldSessions→$newSessions sessões',
+              style: context.runninType.bodySm.copyWith(color: palette.muted),
+            ),
+          ),
+          if (!unchanged) ...[
+            const SizedBox(width: 8),
+            _DeltaChip(
+              deltaKm: deltaKm,
+              palette: palette,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  double _totalKm(PlanWeek w) =>
+      w.sessions.fold<double>(0, (sum, s) => sum + s.distanceKm);
+}
+
+class _DeltaChip extends StatelessWidget {
+  final double deltaKm;
+  final RunninPalette palette;
+
+  const _DeltaChip({required this.deltaKm, required this.palette});
+
+  @override
+  Widget build(BuildContext context) {
+    final sign = deltaKm > 0 ? '+' : '';
+    final color = deltaKm > 0 ? palette.primary : palette.secondary;
+    final magnitude = math.max(deltaKm.abs(), 0.1);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        border: Border.all(color: color.withValues(alpha: 0.5)),
+      ),
+      child: Text(
+        '$sign${magnitude.toStringAsFixed(1)}km',
+        style: context.runninType.labelCaps.copyWith(
+          fontSize: 10,
+          fontWeight: FontWeight.w600,
+          color: color,
+        ),
+      ),
     );
   }
 }

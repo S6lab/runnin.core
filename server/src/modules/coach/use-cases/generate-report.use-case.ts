@@ -16,8 +16,8 @@ import { Plan, PlanRevision } from '@modules/plans/domain/plan.entity';
 /**
  * Geração two-phase do relatório pós-corrida:
  *   Fase A (summary_ready): texto curto ~30s (UX rápida)
- *   Fase B (enriched): 4 seções estruturadas via JSON, após delay pra
- *     adaptPlan.executeAfterRun (background) ter chance de gravar revisão
+ *   Fase B (enriched): 4 seções estruturadas via JSON, lendo plano +
+ *     última revisão (do checkpoint semanal) pra contexto rico
  *
  * UI ([report_page.dart]) renderiza por status:
  *   pending      → skeleton
@@ -129,11 +129,10 @@ export class GenerateReportUseCase {
   }
 
   /**
-   * Fase B: gera as 4 seções estruturadas. Aguarda 15s pra dar tempo do
-   * adaptPlan.executeAfterRun (rodando em paralelo no run.controller)
-   * gravar a revisão; depois busca plano e revisões pra ancorar o prompt
-   * com input mais rico (10 últimas runs + revisão recente + semanas
-   * vizinhas).
+   * Fase B: gera as 4 seções estruturadas usando plano + revisões já
+   * registradas (não há mais ajuste por corrida — a revisão mais recente
+   * vem do checkpoint semanal de domingo). Busca 10 últimas runs +
+   * última revisão pra ancorar o prompt com input rico.
    */
   private async _enrichInBackground(
     run: Run,
@@ -141,10 +140,6 @@ export class GenerateReportUseCase {
     legacySummary: string,
     runSummary: string,
   ): Promise<void> {
-    // Janela pra adaptPlan terminar — runs em background tipicamente
-    // resolvem em <10s. 15s deixa folga sem demorar demais pra UX.
-    await new Promise(resolve => setTimeout(resolve, 15_000));
-
     try {
       const [runtime, plan, recentResult] = await Promise.all([
         this.runtime.getContext(userId),

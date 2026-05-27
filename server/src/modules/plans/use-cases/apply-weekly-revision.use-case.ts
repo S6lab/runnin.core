@@ -75,18 +75,14 @@ export class ApplyWeeklyRevisionUseCase {
       userId,
     );
 
-    if (proposal.newWeeks.length === 0) {
-      if (cp) {
-        await this.checkpointRepo.update(planId, weekNumber, userId, {
-          autoAnalysis: proposal.autoAnalysis,
-        });
-      }
-      logger.info('weekly_revision.no_changes', { planId, weekNumber, userId });
-      return { reason: 'no_changes' };
-    }
-
+    // Caminho único — independente de o LLM ajustar ou não, o checkpoint
+    // SEMPRE vira registro no histórico. "Sem ajustes" é sinalizado por
+    // newWeeksSnapshot=[] pra a UI distinguir do caso ajustado.
+    const noChanges = proposal.newWeeks.length === 0;
     const now = new Date().toISOString();
-    const newPlanWeeks = mergeProposedWeeks(plan, weekNumber, proposal.newWeeks);
+    const newPlanWeeks = noChanges
+      ? plan.weeks
+      : mergeProposedWeeks(plan, weekNumber, proposal.newWeeks);
 
     const revision: PlanRevision = {
       id: uuid(),
@@ -108,9 +104,13 @@ export class ApplyWeeklyRevisionUseCase {
       weekNumber,
       revisedAt: now,
       trigger: 'weekly_cron',
-      summary: buildLogSummary(mergedInputs, proposal.oldFollowingWeeks, proposal.newWeeks),
+      summary: noChanges
+        ? 'Plano completo da semana — sem ajustes'
+        : buildLogSummary(mergedInputs, proposal.oldFollowingWeeks, proposal.newWeeks),
       details: proposal.coachExplanation,
-      changes: buildChangesSnapshot(proposal.oldFollowingWeeks, proposal.newWeeks),
+      changes: noChanges
+        ? { sessionsAdjusted: 0, intensityShift: 'unchanged' }
+        : buildChangesSnapshot(proposal.oldFollowingWeeks, proposal.newWeeks),
     };
 
     await this.planRepo.update(planId, userId, {
@@ -129,13 +129,18 @@ export class ApplyWeeklyRevisionUseCase {
       });
     }
 
+    const notifTitle = noChanges ? 'Coach revisou sua semana' : 'Plano atualizado';
+    const notifBody = noChanges
+      ? 'Plano segue como estava — você está no ritmo certo. Toque pra ver a avaliação.'
+      : 'O coach ajustou as próximas 2 semanas com base na sua jornada. Toque pra ver o que mudou.';
+
     try {
       await this.createNotification.execute({
         userId,
         type: 'plan_updated',
         dedupeKey: revision.id,
-        title: 'Plano atualizado',
-        body: 'O coach ajustou as próximas 2 semanas com base na sua jornada. Toque pra ver o que mudou.',
+        title: notifTitle,
+        body: notifBody,
         icon: 'auto_awesome',
         ctaLabel: 'VER',
         ctaRoute: '/training/plan-detail',
@@ -147,8 +152,8 @@ export class ApplyWeeklyRevisionUseCase {
 
     try {
       await this.sendPush.execute(userId, {
-        title: 'Plano atualizado',
-        body: 'Coach ajustou as próximas 2 semanas. Toque pra ver o que mudou.',
+        title: notifTitle,
+        body: notifBody,
         data: {
           kind: 'plan_updated',
           route: '/training/plan-detail',
@@ -161,7 +166,7 @@ export class ApplyWeeklyRevisionUseCase {
     }
 
     logger.info('weekly_revision.applied', {
-      planId, userId, weekNumber, revisionId: revision.id,
+      planId, userId, weekNumber, revisionId: revision.id, noChanges,
     });
     return { revision };
   }

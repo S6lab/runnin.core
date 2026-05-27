@@ -3,9 +3,9 @@
  * estruturado com 4 chaves — cliente renderiza como cards expansíveis
  * (Análise / Evolução / Próximas / Recomendações).
  *
- * Pensado pra rodar DEPOIS da adaptação do plano (adaptPlan.executeAfterRun),
- * então o prompt já enxerga o resultado da revisão pra mencioná-lo em
- * planEvolution/nextSessions.
+ * Lê o plano + última revisão registrada (vinda do checkpoint semanal do
+ * domingo) pra ancorar o prompt em planEvolution/nextSessions com contexto
+ * real.
  *
  * NÃO substitui post-run-report.default — fase A (summary curto) continua
  * usando o builder legado pra latência baixa.

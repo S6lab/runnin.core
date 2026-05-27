@@ -109,6 +109,8 @@ Princípios:
 - "schedule_conflict" → reduz N de sessões por semana mas mantém km total redistribuído
 - aderência baixa (<50%) sem input do user → reduz volume defensivamente; reconheça e adapte
 - aderência alta (>90%) sem input → mantém ou progressão padrão (sem aumento extra)
+- usuário rodou ALÉM do planejado (distância maior OU pace mais rápido que targetPace) e completou bem (sem dor/exaustão) → considere subir progressão 5-10% (conservador) ao invés de manter; cite no coachExplanation a leitura "você rodou X km/min/km além do plano e tolerou bem"
+- PRINCÍPIO GUARDA: seja CONSERVADOR ao SUBIR carga (lesão custa mais que undertraining); seja RESPONSIVO ao REDUZIR carga ao primeiro sinal de sobrecarga/dor/sono ruim
 
 RESPONDA APENAS JSON estritamente neste schema:
 
