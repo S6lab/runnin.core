@@ -6,6 +6,9 @@ import { Plan, PlanSegment, PlanSession, PlanWeek } from '../domain/plan.entity'
 import { sanitizeSessionType } from './checkpoint-shared';
 import { clampSessionDistance, enforceWeeklyLongRunRatio, markTargetSession } from './sanitize-session-distance';
 import { clampSessionsToCaps } from './clamp-sessions-to-caps';
+import { enforceAvailableDays } from './enforce-available-days';
+import { enforceLongRunDay } from './enforce-long-run-day';
+import { enforceTargetPace } from './enforce-target-pace';
 import { RunnerLevel, UserProfile } from '@modules/users/domain/user.entity';
 import { UserRepository } from '@modules/users/domain/user.repository';
 import { RACE_WINDOWS, getAllowedWindows, hasImprovePaceBypass } from './plan-windows.constants';
@@ -590,29 +593,61 @@ export class GeneratePlanUseCase {
       // Frequency enforcement: o LLM ocasionalmente devolve 1 sessão/sem
       // mesmo com freq=5 (sub-prompt frouxo ou bias defensivo). Preenchemos
       // determinísticamente com Easy Run em dias livres até bater freq.
-      const paddedWeeks = this._padToFrequency(parsedWeeks, freq, input.startDate);
+      const paddedWeeks = this._padToFrequency(parsedWeeks, freq, input.startDate, input.availableDays ?? null);
       // Marca a sessão-alvo (última da última semana) quando RACE. Garante
       // que o plano CULMINA com a distância exata da prova — isenta do cap
       // MAX_KM_PER_SESSION pq essa é a prova, não treino. Fix do bug
       // reportado (maratona terminando em 12km).
       const targetedWeeks = (input.goalKind === 'race' && input.raceDistanceKm)
-        ? markTargetSession(paddedWeeks, input.raceDistanceKm as 5 | 10 | 21 | 42, { planId: plan.id })
+        ? markTargetSession(paddedWeeks, input.raceDistanceKm as 5 | 10 | 21 | 42, {
+            planId: plan.id,
+            targetPaceMinKm: input.raceMode === 'improve_pace' ? (input.targetPaceMinKm ?? null) : null,
+          })
         : paddedWeeks;
-      // Defensive layer: clamp pra respeitar caps reportados pelo atleta
-      // (currentWeeklyKm, capacityDistanceKm) mesmo se o LLM tiver gerado
-      // acima do que foi pedido como REGRA DURA no prompt.
-      const clampResult = clampSessionsToCaps(targetedWeeks, {
+
+      // Defensive enforcement chain (soft — clamp/move + log warn). Cada
+      // estágio garante uma restrição do assessment que o LLM pode ter
+      // ignorado mesmo com REGRAS DURAS no prompt. Ordem importa:
+      //  1) dias permitidos → 2) long run day (move dentro do permitido)
+      //  3) target pace → 4) caps de volume/long run
+      const startDow = (new Date(`${input.startDate}T00:00:00`).getDay() || 7);
+      const daysRes = enforceAvailableDays(targetedWeeks, input.availableDays ?? null, startDow);
+      const lrRes = enforceLongRunDay(daysRes.weeks, input.longRunDayOfWeek ?? null, input.availableDays ?? null);
+      const paceRes = enforceTargetPace(
+        lrRes.weeks,
+        input.raceMode ?? null,
+        input.targetPaceMinKm ?? null,
+        input.currentPaceMinKm ?? null,
+      );
+      const clampResult = clampSessionsToCaps(paceRes.weeks, {
         currentWeeklyKm: input.currentWeeklyKm ?? null,
         capacityDistanceKm: input.capacityDistanceKm ?? null,
       });
       const weeks = clampResult.weeks;
-      if (clampResult.ops.length > 0) {
-        logger.warn('plan.generate.clamp_applied', {
+      const allOps = [
+        ...daysRes.ops.map((o) => ({ kind: 'days', ...o })),
+        ...lrRes.ops.map((o) => ({ kind: 'long_run', ...o })),
+        ...paceRes.ops.map((o) => ({ kind: 'pace', ...o })),
+        ...clampResult.ops.map((o) => ({ kind: 'clamp', ...o })),
+      ];
+      if (allOps.length > 0) {
+        logger.warn('plan.generate.enforcement_applied', {
           planId: plan.id,
-          ops: clampResult.ops,
+          opsCount: allOps.length,
+          countsByKind: {
+            days: daysRes.ops.length,
+            long_run: lrRes.ops.length,
+            pace: paceRes.ops.length,
+            clamp: clampResult.ops.length,
+          },
+          ops: allOps,
           inputs: {
             currentWeeklyKm: input.currentWeeklyKm,
-            capacityDistanceKm: input.capacityDistanceKm,
+            currentPaceMinKm: input.currentPaceMinKm,
+            targetPaceMinKm: input.targetPaceMinKm,
+            availableDays: input.availableDays,
+            longRunDayOfWeek: input.longRunDayOfWeek,
+            raceMode: input.raceMode,
           },
         });
       }
@@ -1073,9 +1108,13 @@ ${repaired}`,
     weeks: PlanWeek[],
     targetFreq: number,
     startDate: string,
+    availableDays: number[] | null = null,
   ): PlanWeek[] {
     const start = new Date(`${startDate}T00:00:00`);
     const startDow = start.getDay() || 7;
+    const allowed = availableDays && availableDays.length > 0
+      ? new Set(availableDays)
+      : null;
     let totalPadded = 0;
     const padded = weeks.map((w, idx) => {
       // Semana 1: cap em (8 - startDow) sessões possíveis (D0 → domingo)
@@ -1086,7 +1125,11 @@ ${repaired}`,
       const dowMin = idx === 0 ? startDow : 1;
       const freeDays: number[] = [];
       for (let d = dowMin; d <= 7; d++) {
-        if (!occupiedDays.has(d)) freeDays.push(d);
+        if (occupiedDays.has(d)) continue;
+        // Quando availableDays informado, padding SÓ nesses dias —
+        // antes preenchia em qualquer dia livre, violando a restrição.
+        if (allowed && !allowed.has(d)) continue;
+        freeDays.push(d);
       }
       // Distribui dias com gaps (evita 3 dias seguidos).
       freeDays.sort((a, b) => a - b);
@@ -1567,13 +1610,33 @@ ${repaired}`,
         return w;
       }
       const validSessions = w.sessions.map(s => {
-        if (!s || typeof s !== 'object') return null;
+        if (!s || typeof s !== 'object') {
+          logger.warn('plan.parse.session_dropped', {
+            reason: 'not_object',
+            weekIndex: weekIdx,
+          });
+          return null;
+        }
         const sess = s as Record<string, unknown>;
         const dayOk = typeof sess.dayOfWeek === 'number' &&
           sess.dayOfWeek >= 1 && sess.dayOfWeek <= 7;
         const typeOk = typeof sess.type === 'string' && sess.type.trim().length > 0;
         const distOk = typeof sess.distanceKm === 'number' && sess.distanceKm > 0;
-        if (!dayOk || !typeOk || !distOk) return null;
+        if (!dayOk || !typeOk || !distOk) {
+          logger.warn('plan.parse.session_dropped', {
+            reason: 'invalid_required_fields',
+            weekIndex: weekIdx,
+            hadDayOfWeek: dayOk,
+            hadType: typeOk,
+            hadDistanceKm: distOk,
+            rawSession: {
+              dayOfWeek: sess.dayOfWeek,
+              type: typeof sess.type === 'string' ? sess.type.slice(0, 40) : null,
+              distanceKm: sess.distanceKm,
+            },
+          });
+          return null;
+        }
         // Limpa campos opcionais malformados pra Zod não rejeitar.
         const cleaned: Record<string, unknown> = { ...sess };
         if (typeof cleaned.durationMin !== 'number' || cleaned.durationMin <= 0) {

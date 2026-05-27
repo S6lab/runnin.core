@@ -122,7 +122,7 @@ const TARGET_SESSION_TYPE: Record<RaceDistanceKm, string> = {
 export function markTargetSession(
   weeks: PlanWeek[],
   raceDistanceKm: RaceDistanceKm,
-  ctx: { planId?: string } = {},
+  ctx: { planId?: string; targetPaceMinKm?: string | null } = {},
 ): PlanWeek[] {
   if (weeks.length === 0) return weeks;
   const lastWeek = weeks[weeks.length - 1];
@@ -135,10 +135,14 @@ export function markTargetSession(
   const lastIdx = lastWeek.sessions.length - 1;
   const orig = lastWeek.sessions[lastIdx];
   const targetType = TARGET_SESSION_TYPE[raceDistanceKm];
+  // Quando raceMode='improve_pace' + targetPaceMinKm informado, força o pace
+  // alvo na sessão-meta (LLM ocasionalmente devolve pace mais lento ou ausente).
+  const targetPace = ctx.targetPaceMinKm ?? orig.targetPace;
   const updatedSession = {
     ...orig,
     type: targetType,
     distanceKm: raceDistanceKm,
+    targetPace,
     isTarget: true,
     notes: orig.notes && orig.notes.length > 0
       ? `[META] ${orig.notes}`

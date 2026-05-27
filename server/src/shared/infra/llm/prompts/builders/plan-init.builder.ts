@@ -233,6 +233,12 @@ export async function buildPlanInitPrompt(args: PlanInitBuildInput): Promise<Bui
     journeyLines.push(
       `Objetivo RACE — janela ${windowLabel}${raceDateClause}: o plano DEVE culminar com o atleta executando ${dist}km${paceClause} na ÚLTIMA sessão da última semana — essa é a SESSÃO-META (type="${dist === 42 ? 'Maratona' : dist === 21 ? 'Meia Maratona' : dist + 'K'}", distanceKm=${dist}). Periodize pra isso: long run cresce gradualmente até atingir ${dist}km na semana de pico; qualidade (tempo run, intervalado específico) nas semanas centrais alinhada com o pace alvo; última semana = taper (volume reduzido nos dias anteriores) + SESSÃO-META no último dia disponível. NÃO trate este plano como "fundação" — é o ciclo completo até a meta.${args.input.raceDate ? ' Se a data da prova permitir antecipar (atleta progride bem nos checkpoints), o coach pode oferecer a sessão-meta antes — mas o plano BASE termina exatamente nessa data.' : ''}`,
     );
+    if (args.input.raceMode === 'improve_pace' && args.input.targetPaceMinKm) {
+      const tp = args.input.targetPaceMinKm;
+      journeyLines.push(
+        `REGRA DURA — TARGET PACE: a SESSÃO-META (última da última semana) DEVE ter targetPace = "${tp}" (não mais lento). Sessões de QUALIDADE (Tempo Run, Tiros, Intervalado, Progressivo, Fartlek) nas semanas centrais (entre 40% e 90% do plano) DEVEM aproximar-se de ${tp}/km — pace ≤ ${tp} no esforço principal. Esses paces NÃO podem ser mais lentos que os defaults do level; o atleta declarou meta concreta.`,
+      );
+    }
   }
 
   // Long run prefs (longRunDayOfWeek + longRunMaxMinutes) já estão no bloco
