@@ -1,0 +1,13 @@
+# Cópia esse arquivo pra `terraform.tfvars` e preencha com os tokens reais.
+# `terraform.tfvars` está no .gitignore — nunca commitar.
+#
+# Pra recuperar os tokens em uso hoje:
+#   gcloud scheduler jobs describe weekly-plan-proposals \
+#     --location=southamerica-east1 --project=runnin-494520 \
+#     --format='value(httpTarget.headers["X-Cron-Token"])'
+#   gcloud scheduler jobs describe weekly-plan-proposals-prod \
+#     --location=southamerica-east1 --project=runnin-494520 \
+#     --format='value(httpTarget.headers["X-Cron-Token"])'
+
+cron_token_staging = "PASTE_STAGING_TOKEN_HERE"
+cron_token_prod    = "PASTE_PROD_TOKEN_HERE"
