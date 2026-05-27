@@ -1019,6 +1019,7 @@ class _WeeklyPlanView extends StatelessWidget {
             itemCount: plan.weeks.length,
             itemBuilder: (_, index) {
               final isSelected = index == selectedWeek;
+              final isCurrent = index == plan.currentWeekIndex();
               // Última semana é a SEMANA DA META quando o plano tem
               // sessão-alvo marcada (RACE). Mostra label "META" abaixo.
               final isLastWeek = index == plan.weeks.length - 1;
@@ -1027,6 +1028,7 @@ class _WeeklyPlanView extends StatelessWidget {
               return _WeekChip(
                 weekNumber: index + 1,
                 selected: isSelected,
+                isCurrent: isCurrent,
                 isTargetWeek: hasTarget,
                 onTap: () => onWeekChanged(index),
               );
@@ -1405,6 +1407,10 @@ class _CargaBars extends StatelessWidget {
 class _WeekChip extends StatelessWidget {
   final int weekNumber;
   final bool selected;
+  /// true pra a semana corrente do plano (calculada por civil-week). Quando
+  /// não selecionada, renderiza outline em palette.primary pra indicar
+  /// "você está aqui" mesmo navegando pra outra semana.
+  final bool isCurrent;
   /// true quando essa semana contém a meta (última do plano RACE).
   /// Renderiza label "META" abaixo do número.
   final bool isTargetWeek;
@@ -1414,12 +1420,25 @@ class _WeekChip extends StatelessWidget {
     required this.weekNumber,
     required this.selected,
     required this.onTap,
+    this.isCurrent = false,
     this.isTargetWeek = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final palette = context.runninPalette;
+    final Color borderColor;
+    final double borderWidth;
+    if (selected) {
+      borderColor = palette.primary;
+      borderWidth = 1.041;
+    } else if (isCurrent) {
+      borderColor = palette.primary;
+      borderWidth = 1.5;
+    } else {
+      borderColor = palette.border;
+      borderWidth = 1.041;
+    }
 
     return GestureDetector(
       onTap: onTap,
@@ -1428,10 +1447,7 @@ class _WeekChip extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.md),
         decoration: BoxDecoration(
           color: selected ? palette.primary : palette.surface,
-          border: Border.all(
-            color: selected ? palette.primary : palette.border,
-            width: 1.041,
-          ),
+          border: Border.all(color: borderColor, width: borderWidth),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,

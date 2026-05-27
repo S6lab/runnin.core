@@ -37,6 +37,7 @@ class WeekDayCellData {
     this.distance,
     this.paceOrDuration,
     this.executed = false,
+    this.isToday = false,
   });
 
   final String label;
@@ -50,9 +51,14 @@ class WeekDayCellData {
   /// o dia de HOJE já concluído também mostra o check.
   final bool executed;
 
+  /// Marca o dia corrente. Flag independente do [status] porque um dia de
+  /// HOJE pode ser de descanso (sem sessão) e ainda assim precisar do
+  /// destaque visual no cabeçalho. Antes era derivado de status==today,
+  /// mas isso perdia o destaque quando session era null.
+  final bool isToday;
+
   bool get isRest => status == WeekDayCellStatus.rest;
   bool get isDone => status == WeekDayCellStatus.done;
-  bool get isToday => status == WeekDayCellStatus.today;
 }
 
 /// 7-column weekly grid per `docs/figma/screens/HOME.md` §03 (lines 105–131).
@@ -99,7 +105,7 @@ class _DayColumn extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         _HeaderCell(data: data),
-        _BodyCell(data: data),
+        if (data.isRest) _RestBody(isToday: data.isToday) else _BodyCell(data: data),
       ],
     );
   }
@@ -113,17 +119,19 @@ class _HeaderCell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Convenção (invertida): HOJE em primary (chamativo, "ação ativa") e
-    // dia já FEITO em secondary (mais discreto, "consolidado").
-    final bg = switch (data.status) {
-      WeekDayCellStatus.done => context.runninPalette.secondary,
-      WeekDayCellStatus.today => context.runninPalette.primary,
-      _ => Colors.transparent,
-    };
-    final fg = switch (data.status) {
-      WeekDayCellStatus.done => FigmaColors.bgBase,
-      WeekDayCellStatus.today => FigmaColors.bgBase,
-      _ => FigmaColors.textSecondary,
-    };
+    // dia já FEITO em secondary (mais discreto, "consolidado"). isToday tem
+    // precedência: dia atual sem sessão (descanso) ainda destaca o header.
+    final Color bg;
+    if (data.isToday) {
+      bg = context.runninPalette.primary;
+    } else if (data.status == WeekDayCellStatus.done) {
+      bg = context.runninPalette.secondary;
+    } else {
+      bg = Colors.transparent;
+    }
+    final fg = data.isToday || data.status == WeekDayCellStatus.done
+        ? FigmaColors.bgBase
+        : FigmaColors.textSecondary;
 
     return Container(
       height: 37.711,
@@ -156,10 +164,6 @@ class _BodyCell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (data.isRest) {
-      return _RestBody();
-    }
-
     final accentDim = data.status == WeekDayCellStatus.planned;
     final isTodayAccent = data.isToday;
     // Concluído = corrida realizada (executed) OU dia passado marcado como
@@ -286,7 +290,9 @@ class _FitText extends StatelessWidget {
 }
 
 class _RestBody extends StatelessWidget {
-  const _RestBody();
+  const _RestBody({this.isToday = false});
+
+  final bool isToday;
 
   @override
   Widget build(BuildContext context) {
@@ -302,15 +308,33 @@ class _RestBody extends StatelessWidget {
         ),
         borderRadius: FigmaBorderRadius.zero,
       ),
-      child: Text(
-        'DESC',
-        style: GoogleFonts.jetBrainsMono(
-          fontSize: 11,
-          height: 16.5 / 11,
-          letterSpacing: 1.65,
-          fontWeight: FontWeight.w500,
-          color: FigmaColors.textSecondary,
-        ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            'DESC',
+            style: GoogleFonts.jetBrainsMono(
+              fontSize: 11,
+              height: 16.5 / 11,
+              letterSpacing: 1.65,
+              fontWeight: FontWeight.w500,
+              color: FigmaColors.textSecondary,
+            ),
+          ),
+          if (isToday) ...[
+            const SizedBox(height: 4),
+            Text(
+              'HOJE',
+              style: GoogleFonts.jetBrainsMono(
+                fontSize: 10,
+                height: 1.2,
+                letterSpacing: 0.8,
+                fontWeight: FontWeight.w600,
+                color: context.runninPalette.primary,
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }

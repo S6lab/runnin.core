@@ -723,16 +723,14 @@ class _SemanaSection extends StatelessWidget {
             for (final d in data.weekDays)
               wg.WeekDayCellData(
                 label: d.shortName,
-                // HOJE tem precedência: o card do dia atual fica sempre com o
-                // topo em cor secundária (laranja), mesmo se a sessão já foi
-                // concluída. "done" (azul/primária) é só pros dias passados.
+                // status reflete só o conteúdo da célula (rest/done/planned).
+                // O destaque de HOJE vai por `isToday` separado, pra cobrir
+                // também dias de descanso (sem sessão).
                 status: d.session == null
                     ? wg.WeekDayCellStatus.rest
-                    : d.isToday
-                        ? wg.WeekDayCellStatus.today
-                        : d.isDone
-                            ? wg.WeekDayCellStatus.done
-                            : wg.WeekDayCellStatus.planned,
+                    : d.isDone
+                        ? wg.WeekDayCellStatus.done
+                        : wg.WeekDayCellStatus.planned,
                 type: d.session == null
                     ? null
                     : d.session!.type.length >= 3
@@ -744,6 +742,7 @@ class _SemanaSection extends StatelessWidget {
                 paceOrDuration: d.session?.targetPace,
                 // Corrida realizada → ícone vira check (mesmo no card de HOJE).
                 executed: d.isDone,
+                isToday: d.isToday,
               ),
           ],
         ),
