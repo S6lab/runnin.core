@@ -20,7 +20,14 @@ import {
   postDiagnoseWeeklyRevise,
   postCronWeeklyProposals,
   postCronWeeklyProposalUser,
+  postAdminWeeklyProposalsTrigger,
   postUserReset,
+  getPromptsRegistry,
+  getCoachAiMoments,
+  getCronsList,
+  getPlansCatalog,
+  getPlanRules,
+  getAdminWiringStatus,
 } from './admin.controller';
 
 export const adminRouter = Router();
@@ -49,3 +56,17 @@ adminRouter.post('/rag/reindex', postRagReindex);
 adminRouter.post('/rag/purge', postRagPurge);
 adminRouter.get('/roteiro-templates/defaults', getRoteiroTemplatesDefaults);
 adminRouter.post('/roteiro-templates/invalidate-cache', postInvalidateRoteiroCache);
+// Disparo manual da revisão semanal — simula o cron de domingo sem ter que
+// esperar o scheduler. Usa auth admin (não X-Cron-Token) pra ser tocável
+// do admin panel da app.
+adminRouter.post('/cron/weekly-proposals/trigger', postAdminWeeklyProposalsTrigger);
+
+// ─── Registry endpoints (dynamic discovery) ──────────────────────────────
+// Source-of-truth pra listas que antes ficavam hardcoded no app admin.
+// Mexer aqui = mexer no admin sem deploy do Flutter. Read-only.
+adminRouter.get('/prompts/registry', getPromptsRegistry);
+adminRouter.get('/coach-ai/moments', getCoachAiMoments);
+adminRouter.get('/crons', getCronsList);
+adminRouter.get('/users/plans-catalog', getPlansCatalog);
+adminRouter.get('/constants/plan-rules', getPlanRules);
+adminRouter.get('/wiring-status', getAdminWiringStatus);

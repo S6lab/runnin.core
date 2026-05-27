@@ -5,7 +5,10 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:runnin/core/theme/app_palette.dart';
+import 'package:runnin/features/admin/data/admin_cron_datasource.dart';
+import 'package:runnin/features/admin/data/admin_registry_datasource.dart';
 import 'package:runnin/features/admin/data/admin_users_datasource.dart';
+import 'package:runnin/features/admin/domain/registry_entries.dart';
 
 class AdminPage extends StatefulWidget {
   const AdminPage({super.key});
@@ -509,8 +512,208 @@ class _DrivePanel extends StatelessWidget {
           _CoachAiConsoleEntry(canRead: session.canRead),
           const SizedBox(height: 8),
           _PromptsConsoleEntry(canRead: session.canRead),
+          const SizedBox(height: 8),
+          _PlanRulesEntry(canRead: session.canRead),
+          const SizedBox(height: 8),
+          _CronTriggersPanel(canTrigger: session.canUpload),
           const SizedBox(height: 14),
           _UsersPanel(canEdit: session.canUpload),
+        ],
+      ),
+    );
+  }
+}
+
+// ───────────────────────────── Cron triggers (manual) ─────────────────────
+
+/// Disparo manual de jobs do Cloud Scheduler — usado pra simular o
+/// comportamento de cron sem ter que esperar a janela real. Lista vem de
+/// `GET /admin/crons` (espelha `infra/scheduler.tf`). Botão DISPARAR
+/// aparece só pro weekly-plan-proposals (único trigger admin manual).
+/// Auth: admin claim.
+class _CronTriggersPanel extends StatefulWidget {
+  final bool canTrigger;
+  const _CronTriggersPanel({required this.canTrigger});
+
+  @override
+  State<_CronTriggersPanel> createState() => _CronTriggersPanelState();
+}
+
+class _CronTriggersPanelState extends State<_CronTriggersPanel> {
+  final _ds = AdminCronDatasource();
+  final _registry = AdminRegistryDatasource();
+  List<CronEntry>? _crons;
+  bool _running = false;
+  String? _lastResult;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCrons();
+  }
+
+  Future<void> _loadCrons() async {
+    try {
+      final list = await _registry.listCrons();
+      if (!mounted) return;
+      setState(() => _crons = list);
+    } catch (_) {
+      // best-effort — se falha, segue com fallback de display estático
+    }
+  }
+
+  Future<void> _triggerWeekly() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Disparar revisão semanal?'),
+        content: const Text(
+          'Simula o cron de domingo 06:00 BRT. Vai percorrer todos os '
+          'usuários com plano ativo e enfileirar 1 task por user pra gerar '
+          'a proposta de revisão das próximas 2 semanas. Idempotente — não '
+          'duplica proposta pendente, mas pode gerar carga de LLM. Rodar?',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('CANCELAR')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('DISPARAR'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    setState(() {
+      _running = true;
+      _error = null;
+      _lastResult = null;
+    });
+    try {
+      final result = await _ds.triggerWeeklyProposals();
+      if (!mounted) return;
+      setState(() => _lastResult = result.toString());
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Revisão semanal disparada · $result')),
+      );
+    } catch (e) {
+      if (mounted) setState(() => _error = '$e');
+    } finally {
+      if (mounted) setState(() => _running = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    final disabled = !widget.canTrigger || _running;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: palette.surface,
+        border: Border.all(color: palette.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.schedule_outlined, size: 18, color: palette.primary),
+              const SizedBox(width: 8),
+              Text(
+                'TRIGGERS DE CRON',
+                style: context.runninType.labelMd.copyWith(letterSpacing: 0.5),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Dispara manualmente jobs do Cloud Scheduler pra simular execução fora da janela.',
+            style: context.runninType.bodyXs.copyWith(color: palette.muted),
+          ),
+          const SizedBox(height: 12),
+          // Lista crons dinâmica do server (espelha infra/scheduler.tf).
+          // Botão DISPARAR aparece só pro weekly-proposals (único trigger
+          // manual exposto via auth-admin).
+          if (_crons == null)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: SizedBox(
+                width: 14, height: 14,
+                child: CircularProgressIndicator(strokeWidth: 2, color: palette.primary),
+              ),
+            )
+          else if (_crons!.isEmpty)
+            Text(
+              'Nenhum cron registrado.',
+              style: context.runninType.bodyXs.copyWith(color: palette.muted),
+            )
+          else
+            ..._crons!.map((cron) {
+              final isWeekly = cron.name.startsWith('weekly-plan-proposals');
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '${cron.description} · ${cron.humanSchedule} · ${cron.env}',
+                            style: context.runninType.bodySm,
+                          ),
+                          Text(
+                            '${cron.name} (cron: ${cron.schedule})',
+                            style: context.runninType.bodyXs.copyWith(
+                              color: palette.muted,
+                              fontFamily: 'monospace',
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (isWeekly && cron.env == 'staging') ...[
+                      const SizedBox(width: 8),
+                      ElevatedButton(
+                        onPressed: disabled ? null : _triggerWeekly,
+                        child: _running
+                            ? const SizedBox(
+                                width: 14,
+                                height: 14,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Text('DISPARAR'),
+                      ),
+                    ],
+                  ],
+                ),
+              );
+            }),
+          if (!widget.canTrigger) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Sem permissão pra disparar (precisa de admin write).',
+              style: context.runninType.bodyXs.copyWith(color: palette.muted),
+            ),
+          ],
+          if (_error != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              _error!,
+              style: context.runninType.bodyXs.copyWith(color: palette.error),
+            ),
+          ],
+          if (_lastResult != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Último resultado: $_lastResult',
+              style: context.runninType.bodyXs.copyWith(color: palette.muted),
+            ),
+          ],
         ],
       ),
     );
@@ -529,11 +732,29 @@ class _UsersPanel extends StatefulWidget {
 
 class _UsersPanelState extends State<_UsersPanel> {
   final _ds = AdminUsersDatasource();
+  final _registry = AdminRegistryDatasource();
   final _searchCtrl = TextEditingController();
   List<AdminUserSummary> _users = [];
+  List<SubscriptionPlanOption> _plansCatalog = const [];
   bool _loading = false;
   String? _error;
   String? _savingUserId;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPlansCatalog();
+  }
+
+  Future<void> _loadPlansCatalog() async {
+    try {
+      final list = await _registry.listPlansCatalog();
+      if (!mounted) return;
+      setState(() => _plansCatalog = list);
+    } catch (_) {
+      // fallback hardcoded fica no DropdownMenu
+    }
+  }
 
   Future<void> _refresh() async {
     setState(() {
@@ -710,24 +931,39 @@ class _UsersPanelState extends State<_UsersPanel> {
                                 child: CircularProgressIndicator(strokeWidth: 1.5, color: palette.primary),
                               )
                             else
-                              DropdownButton<String>(
-                                value: const ['freemium', 'pro', 'claro_basic']
-                                        .contains(u.subscriptionPlanId)
+                              Builder(builder: (_) {
+                                // Lista do server (registry). Fallback estático
+                                // se catálogo não carregou ainda.
+                                final catalog = _plansCatalog.isNotEmpty
+                                    ? _plansCatalog
+                                    : const <SubscriptionPlanOption>[
+                                        SubscriptionPlanOption(id: 'freemium', label: 'freemium', isDefault: true),
+                                        SubscriptionPlanOption(id: 'pro_s6lab', label: 'pro · s6lab'),
+                                        SubscriptionPlanOption(id: 'claro_basic', label: 'claro · básico'),
+                                      ];
+                                final validIds = catalog.map((p) => p.id).toSet();
+                                final defaultId = catalog.firstWhere(
+                                  (p) => p.isDefault,
+                                  orElse: () => catalog.first,
+                                ).id;
+                                final value = validIds.contains(u.subscriptionPlanId)
                                     ? u.subscriptionPlanId
-                                    : 'freemium',
-                                items: const [
-                                  DropdownMenuItem(value: 'freemium', child: Text('freemium')),
-                                  DropdownMenuItem(value: 'pro', child: Text('pro · s6lab')),
-                                  DropdownMenuItem(value: 'claro_basic', child: Text('claro_basic · claro')),
-                                ],
-                                onChanged: widget.canEdit
-                                    ? (v) {
-                                        if (v != null && v != u.subscriptionPlanId) _setPlan(u, v);
-                                      }
-                                    : null,
-                                style: TextStyle(color: palette.text, fontSize: 12),
-                                dropdownColor: palette.surface,
-                              ),
+                                    : defaultId;
+                                return DropdownButton<String>(
+                                  value: value,
+                                  items: [
+                                    for (final p in catalog)
+                                      DropdownMenuItem(value: p.id, child: Text(p.label)),
+                                  ],
+                                  onChanged: widget.canEdit
+                                      ? (v) {
+                                          if (v != null && v != u.subscriptionPlanId) _setPlan(u, v);
+                                        }
+                                      : null,
+                                  style: TextStyle(color: palette.text, fontSize: 12),
+                                  dropdownColor: palette.surface,
+                                );
+                              }),
                             const SizedBox(width: 6),
                             PopupMenuButton<String>(
                               icon: Icon(Icons.more_vert, size: 18, color: palette.muted),
@@ -828,6 +1064,26 @@ class _PromptsConsoleEntry extends StatelessWidget {
         subtitle: const Text('Editar prompts dos momentos LLM, personas do coach, knobs do decision layer'),
         trailing: const Icon(Icons.chevron_right),
         onTap: () => GoRouter.of(context).push('/admin/prompts'),
+      ),
+    );
+  }
+}
+
+class _PlanRulesEntry extends StatelessWidget {
+  final bool canRead;
+  const _PlanRulesEntry({required this.canRead});
+
+  @override
+  Widget build(BuildContext context) {
+    if (!canRead) return const SizedBox.shrink();
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 0, vertical: 0),
+      child: ListTile(
+        leading: const Icon(Icons.rule_folder_outlined),
+        title: const Text('Regras do plano'),
+        subtitle: const Text('Constantes vigentes: janelas, picos, frequência mínima, caps, idade, comorbidades — read-only'),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => GoRouter.of(context).push('/admin/plan-rules'),
       ),
     );
   }

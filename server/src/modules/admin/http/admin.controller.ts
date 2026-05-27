@@ -781,3 +781,48 @@ export async function patchUserPlan(req: Request, res: Response, next: NextFunct
     next(err);
   }
 }
+
+// ─── Registry endpoints (read-only discovery) ────────────────────────────
+
+export async function getPromptsRegistry(_req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { PROMPTS_REGISTRY } = await import('./admin-registries');
+    res.json({ prompts: PROMPTS_REGISTRY });
+  } catch (err) { next(err); }
+}
+
+export async function getCoachAiMoments(_req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { COACH_AI_MOMENTS } = await import('./admin-registries');
+    res.json({ moments: COACH_AI_MOMENTS });
+  } catch (err) { next(err); }
+}
+
+export async function getCronsList(_req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { CRONS_REGISTRY } = await import('./admin-registries');
+    res.json({ crons: CRONS_REGISTRY });
+  } catch (err) { next(err); }
+}
+
+export async function getPlansCatalog(_req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { PLANS_CATALOG } = await import('./admin-registries');
+    res.json({ plans: PLANS_CATALOG });
+  } catch (err) { next(err); }
+}
+
+export async function getPlanRules(_req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { getPlanRulesSnapshot } = await import('./admin-registries');
+    res.json(getPlanRulesSnapshot());
+  } catch (err) { next(err); }
+}
+
+export async function getAdminWiringStatus(_req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { getWiringStatus } = await import('./wiring-status');
+    const payload = await getWiringStatus();
+    res.json(payload);
+  } catch (err) { next(err); }
+}

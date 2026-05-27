@@ -1,5 +1,5 @@
 import { UserProfile } from '@modules/users/domain/user.entity';
-import { getPromptConfig } from '../config-store';
+import { getKnobs, getPromptConfig } from '../config-store';
 import { renderTemplate } from '../render';
 import { resolvePersonaTone } from '../persona/resolver';
 import { formatProfileContext, formatFeedbackFlags } from '../context/profile-context';
@@ -27,10 +27,15 @@ export interface LiveCoachBuildInput {
 }
 
 export async function buildLiveCoachPrompt(args: LiveCoachBuildInput): Promise<BuiltPrompt> {
-  const { config, source } = await getPromptConfig('live-coach');
-  const tone = await resolvePersonaTone(args.profile?.coachPersonality);
+  const [{ config, source }, tone, knobs] = await Promise.all([
+    getPromptConfig('live-coach'),
+    resolvePersonaTone(args.profile?.coachPersonality),
+    getKnobs(),
+  ]);
   const isRunTime = RUN_TIME_EVENTS.has(args.ctx.event ?? '');
-  const feedback = formatFeedbackFlags(args.profile);
+  const feedback = formatFeedbackFlags(args.profile, {
+    respectToggles: knobs.respectFeedbackToggles,
+  });
 
   const eventPrompt = args.ctx.event === 'question' && args.ctx.question
     ? `O corredor perguntou: "${args.ctx.question}".`

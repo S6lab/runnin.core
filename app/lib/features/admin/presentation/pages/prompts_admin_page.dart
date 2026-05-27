@@ -5,21 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:runnin/features/admin/data/admin_prompts_datasource.dart';
-
-const _promptIds = <String>[
-  'plan-init',
-  'plan-revision',
-  'live-coach',
-  'live-voice',
-  'post-run-report',
-  'post-run-report-enriched',
-  'period-analysis',
-  'weekly-report',
-  'coach-chat',
-  'exam-analysis',
-];
-
-const _personaIds = <String>['motivador', 'tecnico'];
+import 'package:runnin/features/admin/data/admin_registry_datasource.dart';
+import 'package:runnin/features/admin/domain/registry_entries.dart';
+import 'package:runnin/features/admin/presentation/widgets/override_status_badge.dart';
 
 /// Minimal admin console for personas/prompts/knobs.
 /// Reads/writes directly to Firestore `app_config/prompts`.
@@ -35,10 +23,13 @@ class _PromptsAdminPageState extends State<PromptsAdminPage> with SingleTickerPr
   late final TabController _tab = TabController(length: 3, vsync: this);
 
   final _api = AdminPromptsDatasource();
+  final _registry = AdminRegistryDatasource();
   final _docRef = FirebaseFirestore.instance.collection('app_config').doc('prompts');
 
   Map<String, dynamic> _doc = {};
   Map<String, dynamic> _defaults = {};
+  List<PromptRegistryEntry> _prompts = const [];
+  WiringStatusPayload? _wiring;
   bool _loading = true;
   bool _saving = false;
   String? _error;
@@ -61,11 +52,21 @@ class _PromptsAdminPageState extends State<PromptsAdminPage> with SingleTickerPr
       _error = null;
     });
     try {
-      final snap = await _docRef.get();
-      final defaults = await _api.getDefaults();
+      final results = await Future.wait([
+        _docRef.get(),
+        _api.getDefaults(),
+        _registry.listPrompts(),
+        _registry.getWiringStatus(),
+      ]);
+      final snap = results[0] as DocumentSnapshot<Map<String, dynamic>>;
+      final defaults = results[1] as Map<String, dynamic>;
+      final prompts = results[2] as List<PromptRegistryEntry>;
+      final wiring = results[3] as WiringStatusPayload;
       setState(() {
         _doc = snap.data() ?? {};
         _defaults = defaults;
+        _prompts = prompts;
+        _wiring = wiring;
         _loading = false;
       });
     } on DioException catch (e) {
@@ -144,6 +145,7 @@ class _PromptsAdminPageState extends State<PromptsAdminPage> with SingleTickerPr
                       doc: _doc,
                       defaults: _defaults,
                       saving: _saving,
+                      wiring: _wiring,
                       onSave: _persistMerge,
                     ),
                     _PromptsTab(
@@ -151,11 +153,14 @@ class _PromptsAdminPageState extends State<PromptsAdminPage> with SingleTickerPr
                       defaults: _defaults,
                       saving: _saving,
                       api: _api,
+                      prompts: _prompts,
+                      wiring: _wiring,
                       onSave: _persistMerge,
                     ),
                     _KnobsTab(
                       doc: _doc,
                       saving: _saving,
+                      wiring: _wiring,
                       onSave: _persistMerge,
                     ),
                   ],
@@ -170,20 +175,25 @@ class _PersonasTab extends StatelessWidget {
   final Map<String, dynamic> doc;
   final Map<String, dynamic> defaults;
   final bool saving;
+  final WiringStatusPayload? wiring;
   final Future<void> Function(Map<String, dynamic>) onSave;
 
   const _PersonasTab({
     required this.doc,
     required this.defaults,
     required this.saving,
+    required this.wiring,
     required this.onSave,
   });
 
   @override
   Widget build(BuildContext context) {
+    // Lista de personas vem do wiring-status (server). Fallback pros 2
+    // padrão caso o endpoint não responda (ex: cache loading).
+    final ids = wiring?.personas.keys.toList() ?? const ['motivador', 'tecnico'];
     return ListView(
       padding: const EdgeInsets.all(16),
-      children: _personaIds.map((id) {
+      children: ids.map((id) {
         final override = (doc['personas'] as Map?)?[id] as Map?;
         final defaultDesc = ((defaults['personas'] as Map?)?[id] as Map?)?['description'] as String? ?? '';
         final initial = (override?['description'] as String?) ?? defaultDesc;
@@ -192,7 +202,7 @@ class _PersonasTab extends StatelessWidget {
           defaultDescription: defaultDesc,
           initialDescription: initial,
           saving: saving,
-          isOverridden: override != null && (override['description'] as String?)?.isNotEmpty == true,
+          status: wiring?.personas[id],
           onSave: (text) => onSave({
             'personas': {
               id: {'description': text}
@@ -211,7 +221,7 @@ class _PersonaCard extends StatefulWidget {
   final String id;
   final String defaultDescription;
   final String initialDescription;
-  final bool isOverridden;
+  final OverrideStatus? status;
   final bool saving;
   final Future<void> Function(String) onSave;
   final Future<void> Function() onReset;
@@ -220,11 +230,13 @@ class _PersonaCard extends StatefulWidget {
     required this.id,
     required this.defaultDescription,
     required this.initialDescription,
-    required this.isOverridden,
+    required this.status,
     required this.saving,
     required this.onSave,
     required this.onReset,
   });
+
+  bool get isOverridden => status?.hasOverride ?? false;
 
   @override
   State<_PersonaCard> createState() => _PersonaCardState();
@@ -266,8 +278,8 @@ class _PersonaCardState extends State<_PersonaCard> {
               children: [
                 Text(widget.id.toUpperCase(), style: Theme.of(context).textTheme.titleMedium),
                 const Spacer(),
-                if (widget.isOverridden)
-                  const Chip(label: Text('OVERRIDE', style: TextStyle(fontSize: 11)), padding: EdgeInsets.zero),
+                if (widget.status != null)
+                  OverrideStatusBadge(status: widget.status!),
               ],
             ),
             const SizedBox(height: 8),
@@ -311,6 +323,8 @@ class _PromptsTab extends StatelessWidget {
   final Map<String, dynamic> defaults;
   final bool saving;
   final AdminPromptsDatasource api;
+  final List<PromptRegistryEntry> prompts;
+  final WiringStatusPayload? wiring;
   final Future<void> Function(Map<String, dynamic>) onSave;
 
   const _PromptsTab({
@@ -318,6 +332,8 @@ class _PromptsTab extends StatelessWidget {
     required this.defaults,
     required this.saving,
     required this.api,
+    required this.prompts,
+    required this.wiring,
     required this.onSave,
   });
 
@@ -325,23 +341,54 @@ class _PromptsTab extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListView(
       padding: const EdgeInsets.all(16),
-      children: _promptIds.map((id) {
+      children: prompts.map((entry) {
+        final id = entry.id;
         final override = (doc['prompts'] as Map?)?[id] as Map?;
         final defaultPrompt = (defaults['prompts'] as Map?)?[id] as Map?;
         if (defaultPrompt == null) return const SizedBox.shrink();
-        final isOverridden = override != null && (
-          (override['systemPrompt'] as String?)?.isNotEmpty == true ||
-          (override['userTemplate'] as String?)?.isNotEmpty == true
-        );
+        final status = wiring?.prompts[id];
         return Card(
           margin: const EdgeInsets.only(bottom: 8),
           child: ListTile(
-            title: Text(id, style: const TextStyle(fontFamily: 'monospace')),
-            subtitle: Text(
-              'temp ${(override?['temperature'] ?? defaultPrompt['temperature'])} · maxTokens ${(override?['maxTokens'] ?? defaultPrompt['maxTokens'])} · ragChunks ${(override?['ragChunks'] ?? defaultPrompt['ragChunks'])}',
-              style: const TextStyle(fontSize: 12),
+            title: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    entry.label,
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ),
+                if (entry.deprecated)
+                  const Padding(
+                    padding: EdgeInsets.only(left: 4),
+                    child: Chip(
+                      label: Text('DEPRECATED', style: TextStyle(fontSize: 9)),
+                      padding: EdgeInsets.zero,
+                      visualDensity: VisualDensity(horizontal: -4, vertical: -4),
+                    ),
+                  ),
+              ],
             ),
-            trailing: isOverridden ? const Chip(label: Text('OVERRIDE', style: TextStyle(fontSize: 11)), padding: EdgeInsets.zero) : const Icon(Icons.chevron_right),
+            subtitle: Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '$id · ${entry.category}',
+                    style: const TextStyle(fontFamily: 'monospace', fontSize: 11),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'temp ${(override?['temperature'] ?? defaultPrompt['temperature'])} · maxTokens ${(override?['maxTokens'] ?? defaultPrompt['maxTokens'])} · ragChunks ${(override?['ragChunks'] ?? defaultPrompt['ragChunks'])}',
+                    style: const TextStyle(fontSize: 11),
+                  ),
+                ],
+              ),
+            ),
+            trailing: status != null
+                ? OverrideStatusBadge(status: status, dense: true)
+                : const Icon(Icons.chevron_right),
             onTap: () => Navigator.of(context).push(MaterialPageRoute(
               builder: (_) => _PromptEditorPage(
                 id: id,
@@ -624,9 +671,15 @@ class _PreviewBox extends StatelessWidget {
 class _KnobsTab extends StatelessWidget {
   final Map<String, dynamic> doc;
   final bool saving;
+  final WiringStatusPayload? wiring;
   final Future<void> Function(Map<String, dynamic>) onSave;
 
-  const _KnobsTab({required this.doc, required this.saving, required this.onSave});
+  const _KnobsTab({
+    required this.doc,
+    required this.saving,
+    required this.wiring,
+    required this.onSave,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -634,6 +687,34 @@ class _KnobsTab extends StatelessWidget {
     bool getFlag(String key, [bool def = true]) {
       final v = knobs[key];
       return v is bool ? v : def;
+    }
+
+    Widget knobTile(String knobKey, String title, String subtitle) {
+      final status = wiring?.knobs[knobKey];
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SwitchListTile(
+              title: Text(title),
+              subtitle: Text(subtitle),
+              value: getFlag(knobKey),
+              onChanged: saving ? null : (v) => onSave({
+                'knobs': {'decisionLayer': {knobKey: v}}
+              }),
+            ),
+            if (status != null)
+              Padding(
+                padding: const EdgeInsets.only(left: 16, bottom: 4),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: OverrideStatusBadge(status: status, dense: true),
+                ),
+              ),
+          ],
+        ),
+      );
     }
 
     return ListView(
@@ -644,29 +725,20 @@ class _KnobsTab extends StatelessWidget {
           style: TextStyle(fontSize: 12, color: Colors.grey),
         ),
         const SizedBox(height: 16),
-        SwitchListTile(
-          title: const Text('Respeitar coachMessageFrequency'),
-          subtitle: const Text('silent / alerts_only / per_2km / per_km'),
-          value: getFlag('respectMessageFrequency'),
-          onChanged: saving ? null : (v) => onSave({
-            'knobs': {'decisionLayer': {'respectMessageFrequency': v}}
-          }),
+        knobTile(
+          'respectMessageFrequency',
+          'Respeitar coachMessageFrequency',
+          'silent / alerts_only / per_2km / per_km',
         ),
-        SwitchListTile(
-          title: const Text('Respeitar coachFeedbackEnabled'),
-          subtitle: const Text('Filtra menções a pace/bpm/etc no prompt'),
-          value: getFlag('respectFeedbackToggles'),
-          onChanged: saving ? null : (v) => onSave({
-            'knobs': {'decisionLayer': {'respectFeedbackToggles': v}}
-          }),
+        knobTile(
+          'respectFeedbackToggles',
+          'Respeitar coachFeedbackEnabled',
+          'Filtra menções a pace/bpm/etc no prompt',
         ),
-        SwitchListTile(
-          title: const Text('Respeitar DND window'),
-          subtitle: const Text('Suprime cues durante a janela do user (exceto pace_alert/finish)'),
-          value: getFlag('respectDndWindow'),
-          onChanged: saving ? null : (v) => onSave({
-            'knobs': {'decisionLayer': {'respectDndWindow': v}}
-          }),
+        knobTile(
+          'respectDndWindow',
+          'Respeitar DND window',
+          'Suprime cues durante a janela do user (exceto pace_alert/finish)',
         ),
       ],
     );

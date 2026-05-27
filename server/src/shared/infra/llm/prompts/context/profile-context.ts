@@ -52,7 +52,25 @@ export function formatProfileContext(profile: Partial<UserProfile> | null | unde
   return lines.length > 0 ? lines.join('\n') : '- Perfil sem dados relevantes.';
 }
 
-export function formatFeedbackFlags(profile: Partial<UserProfile> | null | undefined): FeedbackFlags {
+export function formatFeedbackFlags(
+  profile: Partial<UserProfile> | null | undefined,
+  opts: { respectToggles?: boolean } = {},
+): FeedbackFlags {
+  // Quando o knob `respectFeedbackToggles` está OFF, ignoramos os toggles
+  // do user e devolvemos "sem restrição" — coach comenta tudo. ON (default)
+  // respeita `profile.coachFeedbackEnabled`.
+  const respect = opts.respectToggles ?? true;
+  if (!respect) {
+    const allOn = Object.keys(FEEDBACK_LABELS).reduce<Record<string, boolean>>((acc, k) => {
+      acc[k] = true;
+      return acc;
+    }, {});
+    return {
+      enabled: allOn,
+      inclusionRules: 'Pode comentar sobre todos os tópicos (toggles do user ignorados pelo knob).',
+      exclusionRules: '',
+    };
+  }
   const enabled = profile?.coachFeedbackEnabled ?? {};
   const on: string[] = [];
   const off: string[] = [];

@@ -5,7 +5,10 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import 'package:runnin/core/theme/app_palette.dart';
+import 'package:runnin/features/admin/data/admin_registry_datasource.dart';
 import 'package:runnin/features/admin/data/admin_roteiro_datasource.dart';
+import 'package:runnin/features/admin/domain/registry_entries.dart';
+import 'package:runnin/features/admin/presentation/widgets/override_status_badge.dart';
 
 /// Editor cru (JSON) dos templates de roteiro de fases (Dossiê 4).
 /// Lê o default do backend e o override de app_config/roteiro_templates.
@@ -20,12 +23,14 @@ class RoteiroTemplatesAdminPage extends StatefulWidget {
 
 class _RoteiroTemplatesAdminPageState extends State<RoteiroTemplatesAdminPage> {
   final _api = AdminRoteiroDatasource();
+  final _registry = AdminRegistryDatasource();
   final _docRef =
       FirebaseFirestore.instance.collection('app_config').doc('roteiro_templates');
   final _ctrl = TextEditingController();
 
   Map<String, dynamic> _defaults = {};
   bool _hasOverride = false;
+  OverrideStatus? _roteiroStatus;
   bool _loading = true;
   bool _saving = false;
   String? _error;
@@ -52,13 +57,31 @@ class _RoteiroTemplatesAdminPageState extends State<RoteiroTemplatesAdminPage> {
       _msg = null;
     });
     try {
-      final defaults = await _api.getDefaults();
-      final snap = await _docRef.get();
+      final results = await Future.wait([
+        _api.getDefaults(),
+        _docRef.get(),
+        _registry.getWiringStatus().catchError((_) =>
+          const WiringStatusPayload(
+            prompts: {},
+            personas: {},
+            knobs: {},
+            roteiroTemplates: OverrideStatus(
+              hasOverride: false,
+              consumer: '',
+              cacheKey: 'roteiro_templates',
+              cacheTtlSec: 60,
+            ),
+          )),
+      ]);
+      final defaults = results[0] as Map<String, dynamic>;
+      final snap = results[1] as DocumentSnapshot<Map<String, dynamic>>;
+      final wiring = results[2] as WiringStatusPayload;
       final override =
           (snap.data()?['templates'] as Map?)?.cast<String, dynamic>();
       setState(() {
         _defaults = defaults;
         _hasOverride = override != null && override.isNotEmpty;
+        _roteiroStatus = wiring.roteiroTemplates;
         // Editor mostra o override se existe, senão o default como ponto de partida.
         _ctrl.text = _encoder.convert(_hasOverride ? override : defaults);
         _loading = false;
@@ -181,10 +204,13 @@ class _RoteiroTemplatesAdminPageState extends State<RoteiroTemplatesAdminPage> {
                   const SizedBox(height: 8),
                   Row(
                     children: [
-                      _StatusPill(
-                        text: _hasOverride ? 'OVERRIDE ATIVO' : 'USANDO DEFAULT',
-                        color: _hasOverride ? palette.warning : palette.muted,
-                      ),
+                      if (_roteiroStatus != null)
+                        OverrideStatusBadge(status: _roteiroStatus!)
+                      else
+                        _StatusPill(
+                          text: _hasOverride ? 'OVERRIDE ATIVO' : 'USANDO DEFAULT',
+                          color: _hasOverride ? palette.warning : palette.muted,
+                        ),
                     ],
                   ),
                   const SizedBox(height: 10),

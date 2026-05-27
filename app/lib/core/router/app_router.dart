@@ -6,6 +6,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:runnin/features/admin/presentation/pages/admin_page.dart';
 import 'package:runnin/features/admin/presentation/pages/prompts_admin_page.dart';
 import 'package:runnin/features/admin/presentation/pages/coach_ai_admin_page.dart';
+import 'package:runnin/features/admin/presentation/pages/plan_rules_admin_page.dart';
 import 'package:runnin/features/admin/presentation/pages/roteiro_templates_admin_page.dart';
 import 'package:runnin/features/intro/presentation/pages/intro_page.dart';
 import 'package:runnin/features/paywall/presentation/pages/paywall_page.dart';
@@ -151,6 +152,7 @@ final appRouter = GoRouter(
     GoRoute(path: '/admin', builder: (_, _) => const AdminPage()),
     GoRoute(path: '/admin/prompts', builder: (_, _) => const PromptsAdminPage()),
     GoRoute(path: '/admin/coach-ai', builder: (_, _) => const CoachAiAdminPage()),
+    GoRoute(path: '/admin/plan-rules', builder: (_, _) => const PlanRulesAdminPage()),
     GoRoute(path: '/admin/roteiro-templates', builder: (_, _) => const RoteiroTemplatesAdminPage()),
     GoRoute(path: '/intro', builder: (_, _) => const IntroPage()),
     GoRoute(

@@ -5,6 +5,8 @@ import 'package:go_router/go_router.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/features/admin/data/admin_file_picker.dart';
 import 'package:runnin/features/admin/data/admin_rag_datasource.dart';
+import 'package:runnin/features/admin/data/admin_registry_datasource.dart';
+import 'package:runnin/features/admin/domain/registry_entries.dart';
 
 /// Console do Coach.AI organizado pelos 5 MOMENTOS da jornada (arquitetura v3:
 /// 4 modelos / 5 momentos). Cada momento mostra o modelo, seus system prompts
@@ -16,75 +18,28 @@ class CoachAiAdminPage extends StatefulWidget {
   State<CoachAiAdminPage> createState() => _CoachAiAdminPageState();
 }
 
-class _Moment {
-  final int n;
-  final String title;
-  final String model;
-  final String description;
-  final List<String> promptIds;
-  final bool usesRag;
-  const _Moment({
-    required this.n,
-    required this.title,
-    required this.model,
-    required this.description,
-    required this.promptIds,
-    required this.usesRag,
-  });
-}
-
-const _moments = <_Moment>[
-  _Moment(
-    n: 1,
-    title: 'Indexação do conhecimento (RAG)',
-    model: 'gemini-embedding-001',
-    description: 'A base científica (Doc 1) é vetorizada e recuperada por similaridade. Os limites clínicos (seção R) são vinculantes.',
-    promptIds: [],
-    usesRag: true,
-  ),
-  _Moment(
-    n: 2,
-    title: 'Geração de Plano + Ajuste',
-    model: 'gemini-3.1-pro-preview',
-    description: 'Raciocínio: gera a estrutura do plano e decide os ajustes. "Pro decide".',
-    promptIds: ['plan-init', 'plan-revision'],
-    usesRag: true,
-  ),
-  _Moment(
-    n: 3,
-    title: 'Operação de Texto',
-    model: 'gemini-3.5-flash',
-    description: 'Redação na voz do Coach: relatórios, briefing, checkpoint, copy, cues. "Flash escreve".',
-    promptIds: [
-      'post-run-report',
-      'post-run-report-enriched',
-      'weekly-report',
-      'period-analysis',
-      'coach-chat',
-      'live-coach',
-    ],
-    usesRag: true,
-  ),
-  _Moment(
-    n: 4,
-    title: 'Multimodal / Exame',
-    model: 'gemini-3.5-flash',
-    description: 'Lê exame (PDF/foto) e extrai dados estruturados. Nunca diagnostica.',
-    promptIds: ['exam-analysis'],
-    usesRag: true,
-  ),
-  _Moment(
-    n: 5,
-    title: 'Voz ao Vivo',
-    model: 'gemini-2.5-flash-native-audio',
-    description: 'Fala durante a corrida. Executa o que foi decidido — não raciocina, NÃO faz RAG.',
-    promptIds: ['live-voice'],
-    usesRag: false,
-  ),
-];
-
 class _CoachAiAdminPageState extends State<CoachAiAdminPage> {
   final _rag = AdminRagDatasource();
+  final _registry = AdminRegistryDatasource();
+  List<CoachMoment>? _moments;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final moments = await _registry.listMoments();
+      if (!mounted) return;
+      setState(() => _moments = moments);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = 'Erro ao carregar momentos: $e');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -104,11 +59,19 @@ class _CoachAiAdminPageState extends State<CoachAiAdminPage> {
         padding: const EdgeInsets.all(16),
         children: [
           Text(
-            '4 modelos · 5 momentos. Pro decide, flash escreve. A voz só fala na corrida.',
+            '4 modelos · ${_moments?.length ?? '?'} momentos. Pro decide, flash escreve. A voz só fala na corrida.',
             style: context.runninType.bodySm.copyWith(color: palette.muted),
           ),
           const SizedBox(height: 16),
-          for (final m in _moments) _MomentCard(moment: m, rag: _rag),
+          if (_error != null)
+            Padding(
+              padding: const EdgeInsets.all(8),
+              child: Text(_error!, style: TextStyle(color: palette.secondary)),
+            )
+          else if (_moments == null)
+            Center(child: CircularProgressIndicator(color: palette.primary, strokeWidth: 2))
+          else
+            for (final m in _moments!) _MomentCard(moment: m, rag: _rag),
         ],
       ),
     );
@@ -116,7 +79,7 @@ class _CoachAiAdminPageState extends State<CoachAiAdminPage> {
 }
 
 class _MomentCard extends StatelessWidget {
-  final _Moment moment;
+  final CoachMoment moment;
   final AdminRagDatasource rag;
   const _MomentCard({required this.moment, required this.rag});
 
@@ -145,7 +108,7 @@ class _MomentCard extends StatelessWidget {
                   color: palette.primary,
                   borderRadius: BorderRadius.circular(6),
                 ),
-                child: Text('${moment.n}',
+                child: Text('${moment.id}',
                     style: type.dataSm.copyWith(color: palette.background)),
               ),
               const SizedBox(width: 10),
@@ -161,19 +124,19 @@ class _MomentCard extends StatelessWidget {
             children: [
               _Badge(text: moment.model, color: palette.secondary),
               _Badge(
-                text: moment.usesRag ? 'usa RAG' : 'sem RAG',
-                color: moment.usesRag ? palette.tertiary : palette.muted,
+                text: moment.ragEnabled ? 'usa RAG' : 'sem RAG',
+                color: moment.ragEnabled ? palette.tertiary : palette.muted,
               ),
             ],
           ),
           const SizedBox(height: 8),
           Text(moment.description, style: type.bodySm.copyWith(color: palette.muted)),
           const SizedBox(height: 10),
-          if (moment.usesRag && moment.n == 1)
+          if (moment.ragEnabled && moment.id == 1)
             _RagPanel(rag: rag)
           else
             _PromptList(promptIds: moment.promptIds),
-          if (moment.n == 2) ...[
+          if (moment.id == 2) ...[
             const SizedBox(height: 8),
             Align(
               alignment: Alignment.centerRight,
