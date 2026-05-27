@@ -812,6 +812,7 @@ class _PlanSetupPageState extends State<PlanSetupPage> {
         levelHint: level.levelHint,
         currentPaceMinKm: _currentPaceMinKm,
         currentWeeklyKm: _weeklyKm,
+        capacityDistanceKm: _capacityDistanceKm,
         availableDays: availableDays.isEmpty ? null : availableDays,
         goalKind: _goalKind?.backendValue,
         flowSubgoal: _flowSubgoal?.backendValue,

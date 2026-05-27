@@ -107,6 +107,9 @@ class PlanRemoteDatasource {
     double? currentWeeklyKm,
     /// Pace atual confortável (M:SS/km), tela 05.
     String? currentPaceMinKm,
+    /// Distância confortável recente em km (chip 3/5/10/21/42). Usado pelo
+    /// server pra cap long run das primeiras semanas.
+    int? capacityDistanceKm,
     /// Dias da semana disponíveis pra treinar (1=seg…7=dom).
     List<int>? availableDays,
     /// Tipo de objetivo: 'flow' (sem prova) ou 'race' (com meta de prova).
@@ -150,6 +153,7 @@ class PlanRemoteDatasource {
           'levelHint': ?levelHint,
           'currentWeeklyKm': ?currentWeeklyKm,
           'currentPaceMinKm': ?currentPaceMinKm,
+          'capacityDistanceKm': ?capacityDistanceKm,
           'availableDays': ?availableDays,
           'goalKind': ?goalKind,
           'flowSubgoal': ?flowSubgoal,

@@ -22,6 +22,35 @@ export interface UserProfile {
    * = sem restrição (IA escolhe livremente).
    */
   availableDays?: number[];
+
+  // ─── Inputs do assessment de criação do plano ───────────────────────────
+  // Persistidos aqui pra auditoria + reuso em re-geração. Atualizados em
+  // GeneratePlanUseCase quando o user gera/regera um plano. Espelham o
+  // payload de /plans/generate; nem todos são obrigatórios.
+  /** Volume semanal atual auto-reportado (km/sem). */
+  currentWeeklyKm?: number;
+  /** Pace confortável auto-reportado (M:SS/km). */
+  currentPaceMinKm?: string;
+  /** Distância confortável recente auto-reportada (km). */
+  capacityDistanceKm?: number;
+  /** Matiz fino do nível "iniciante" (jornada nova). */
+  levelHint?: 'nunca_corri' | 'esporadico' | 'iniciante_freq';
+  /** Tipo de objetivo do plano atual: 'flow' (sem prova) ou 'race' (meta). */
+  goalKind?: 'flow' | 'race';
+  /** Sub-meta dentro de FLOW. */
+  flowSubgoal?: 'start' | 'improve' | 'injury_return' | 'postpartum';
+  /** Distância da prova (5, 10, 21, 42) quando goalKind=race. */
+  raceDistanceKm?: 5 | 10 | 21 | 42;
+  /** Modo da meta race: completar ou bater pace alvo. */
+  raceMode?: 'complete' | 'improve_pace';
+  /** Pace alvo M:SS/km (só raceMode=improve_pace). */
+  targetPaceMinKm?: string;
+  /** Data da prova/alvo (ISO YYYY-MM-DD). */
+  raceDate?: string;
+  /** Dia preferido pro long run (1=seg…7=dom). */
+  longRunDayOfWeek?: number;
+  /** Tempo máximo disponível pro long run (minutos). */
+  longRunMaxMinutes?: number;
   birthDate?: string;
   weight?: string;
   height?: string;

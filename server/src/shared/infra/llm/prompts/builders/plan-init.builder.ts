@@ -23,6 +23,9 @@ export interface PlanInitBuildInput {
     currentWeeklyKm?: number | null;
     /** Pace atual confortável "M:SS/km" (informado na jornada). */
     currentPaceMinKm?: string | null;
+    /** Distância confortável recente em km (chip 3/5/10/21/42). Base do cap
+     *  de long run das primeiras semanas. */
+    capacityDistanceKm?: number | null;
     /** Dias em que o atleta pode treinar (1=seg…7=dom). [] = sem restrição. */
     availableDays?: number[] | null;
     /** Tipo de objetivo: 'flow' (sem prova) ou 'race' (meta de distância/pace). */
@@ -80,6 +83,13 @@ export async function buildPlanInitPrompt(args: PlanInitBuildInput): Promise<Bui
   const goalNorm = (args.input.goal ?? '').toLowerCase();
   const isFlow = goalNorm === 'flow' || goalNorm.includes('flow');
   const journeyLines: string[] = [];
+
+  // ─── DADOS DO ASSESSMENT (HARD CONSTRAINTS) ─────────────────────────────
+  // Todos os campos do onboarding aparecem aqui — incluindo os NÃO
+  // INFORMADOS — pra o LLM não cair em defaults silenciosos. Cada campo
+  // informado vira REGRA DURA quando aplicável. Campos NÃO INFORMADOS
+  // recebem heurística do level explicitamente.
+  const assessmentLines: string[] = [];
   if (args.input.levelHint) {
     const hintLabel =
       args.input.levelHint === 'nunca_corri'
@@ -87,20 +97,90 @@ export async function buildPlanInitPrompt(args: PlanInitBuildInput): Promise<Bui
         : args.input.levelHint === 'esporadico'
           ? 'Corre esporadicamente (1-2x/sem sem regularidade) — base aeróbica frágil, sem qualidade nas 3 primeiras semanas.'
           : 'Já corre com alguma frequência — pode aceitar 1 qualidade leve a partir da semana 2.';
-    journeyLines.push(`Matiz do nível (refinamento dentro de "iniciante"): ${hintLabel}`);
+    assessmentLines.push(`Matiz do nível (refinamento dentro de "iniciante"): ${hintLabel}`);
   }
-  if (typeof args.input.currentWeeklyKm === 'number' && args.input.currentWeeklyKm > 0) {
-    journeyLines.push(`Volume atual auto-reportado: ~${args.input.currentWeeklyKm} km/sem — calibre a semana 1 NUNCA acima desse valor + 10%.`);
+
+  const hasWeeklyKm = typeof args.input.currentWeeklyKm === 'number' && args.input.currentWeeklyKm > 0;
+  if (hasWeeklyKm) {
+    assessmentLines.push(
+      `Volume semanal atual: ${args.input.currentWeeklyKm} km/sem (REPORTADO PELO ATLETA). ` +
+      `REGRA DURA: o volume total da Semana 1 NUNCA pode exceder ${(args.input.currentWeeklyKm! * 1.1).toFixed(1)} km (=1.1× reportado). Cresça as semanas seguintes em rampa 5-10%/sem.`,
+    );
+  } else {
+    assessmentLines.push(
+      'Volume semanal atual: NÃO INFORMADO — use heurística conservadora pelo nível ' +
+      `(${args.input.level === 'iniciante' ? '5-15 km/sem na semana 1' : args.input.level === 'intermediario' ? '20-30 km/sem' : '35-50 km/sem'}).`,
+    );
   }
-  if (args.input.currentPaceMinKm) {
-    journeyLines.push(`Pace confortável auto-reportado: ${args.input.currentPaceMinKm}/km — use como referência pro Easy Run (não acelere acima).`);
+
+  const hasPace = !!args.input.currentPaceMinKm;
+  if (hasPace) {
+    assessmentLines.push(
+      `Pace confortável: ${args.input.currentPaceMinKm}/km (REPORTADO PELO ATLETA). ` +
+      'REGRA DURA — DERIVAÇÃO DE PACES POR TIPO DE SESSÃO a partir desse pace P:\n' +
+      '    • Easy Run / Long Run: P + 30 a 60s/km (zona conversável)\n' +
+      '    • Recovery: P + 60 a 90s/km (zona regenerativa)\n' +
+      '    • Tempo Run / Progressivo: P − 10 a 20s/km (limiar confortavelmente difícil)\n' +
+      '    • Intervalado / Tiros / Fartlek (no esforço): P − 30 a 45s/km\n' +
+      '    • Caminhada: pace próprio de caminhada (não derivar)\n' +
+      '  Esses paces são MAIS RÁPIDOS que os defaults do nível — RESPEITE o reportado, NÃO desconte aplicando defaults de iniciante por cima.',
+    );
+  } else {
+    assessmentLines.push(
+      'Pace confortável: NÃO INFORMADO — derive paces das heurísticas do nível ' +
+      `(${args.input.level === 'iniciante' ? '~7-8min/km zona 2' : args.input.level === 'intermediario' ? '~5-6min/km' : '~4-5min/km'}).`,
+    );
   }
+
+  const hasCapacityDist = typeof args.input.capacityDistanceKm === 'number' && args.input.capacityDistanceKm > 0;
+  if (hasCapacityDist) {
+    assessmentLines.push(
+      `Distância confortável recente: ${args.input.capacityDistanceKm} km (REPORTADO PELO ATLETA). ` +
+      `REGRA DURA: Long Run das 4 primeiras semanas NUNCA acima de ${(args.input.capacityDistanceKm! * 1.5).toFixed(1)} km (=1.5× reportado). Cresça progressivamente nas semanas seguintes.`,
+    );
+  } else {
+    assessmentLines.push(
+      'Distância confortável recente: NÃO INFORMADO — começar Long Run com cap conservador pelo nível ' +
+      `(${args.input.level === 'iniciante' ? '4-6 km' : args.input.level === 'intermediario' ? '10-14 km' : '16-22 km'}).`,
+    );
+  }
+
+  // Frequência semanal alvo: sempre auditar (o LLM tende a propor < frequency
+  // pra "ser conservador"; precisa ouvir explicitamente que freq é HARD).
+  assessmentLines.push(
+    `Frequência semanal alvo: ${args.input.frequency} sessões/sem (REPORTADO PELO ATLETA). REGRA DURA: cada semana DEVE ter exatamente ${args.input.frequency} sessões de treino (sem contar caminhada como "extra"). Não reduza por conta própria.`,
+  );
+
   const days = args.input.availableDays ?? [];
   if (days.length > 0) {
     const label = days.map((d) => dayNamesShort[d] ?? '').filter(Boolean).join(', ');
-    journeyLines.push(
-      `Dias disponíveis pra treinar (HARD CONSTRAINT): ${label}. Distribua as sessões SOMENTE nestes dias. Se frequency (${args.input.frequency}) for menor que esses dias, escolha os melhores; se for maior, mantenha frequency = ${days.length}.`,
+    assessmentLines.push(
+      `Dias disponíveis (REPORTADO PELO ATLETA): ${label}. REGRA DURA: distribua as sessões SOMENTE nesses dias. Se frequency (${args.input.frequency}) for menor que esses dias, escolha os melhores; se maior, mantenha frequency = ${days.length}.`,
     );
+  } else {
+    assessmentLines.push('Dias disponíveis: NÃO INFORMADO — IA escolhe livremente.');
+  }
+
+  // Long run preferências (movido pra cá pra centralizar o bloco
+  // "ASSESSMENT"; instruções imperativas permanecem).
+  if (args.input.longRunDayOfWeek) {
+    const lrDay = dayNamesShort[args.input.longRunDayOfWeek] ?? '';
+    assessmentLines.push(
+      `Long Run no ${lrDay} (REPORTADO PELO ATLETA). REGRA DURA: SEMPRE coloque o Long Run da semana neste dia, salvo se fora dos availableDays (nesse caso o dia mais próximo nos disponíveis).`,
+    );
+  }
+  if (args.input.longRunMaxMinutes) {
+    assessmentLines.push(
+      `Tempo máximo do Long Run: ${args.input.longRunMaxMinutes} minutos (REPORTADO PELO ATLETA). REGRA DURA: NUNCA proponha Long Run que exija mais tempo. distanceKm_max = ${args.input.longRunMaxMinutes} / pace_easy_estimado.`,
+    );
+  }
+
+  // Adiciona o bloco completo ao journey final (header explicativo no topo)
+  if (assessmentLines.length > 0) {
+    journeyLines.push(
+      'DADOS DO ASSESSMENT DO ATLETA (HARD CONSTRAINTS — todos os valores REPORTADOS são lei; NUNCA os contradiga; use defaults do level APENAS pros campos marcados NÃO INFORMADO):',
+    );
+    for (const line of assessmentLines) journeyLines.push(`  • ${line}`);
   }
   // FLOW: bloco de melhoria contínua sem meta de prova. Sub-metas
   // refinam o protocolo (lesão/pós-parto pedem mais cautela; iniciar
@@ -155,25 +235,8 @@ export async function buildPlanInitPrompt(args: PlanInitBuildInput): Promise<Bui
     );
   }
 
-  // Long run preferido (1=seg…7=dom) — quando user escolheu, força o LLM
-  // a colocar o long run sempre nesse dia.
-  if (args.input.longRunDayOfWeek) {
-    const lrDay = dayNamesShort[args.input.longRunDayOfWeek] ?? '';
-    journeyLines.push(
-      `Dia preferido pro LONG RUN: ${lrDay}. SEMPRE coloque o Long Run da semana neste dia da semana, salvo quando dayOfWeek estiver fora dos availableDays (nesse caso escolha o dia mais próximo nos disponíveis).`,
-    );
-  }
-
-  // Cap de tempo do long run — quando user disse "só tenho X minutos no
-  // dia do long run", coach respeita esse teto. Estima distance = tempo
-  // (min) / pace_easy_estimado (min/km). Atletas com cap baixo (60min)
-  // crescerão o long run mais devagar — ok, é tradeoff aceito pra
-  // viabilidade real.
-  if (args.input.longRunMaxMinutes) {
-    journeyLines.push(
-      `Cap do LONG RUN: máximo ${args.input.longRunMaxMinutes} minutos de duração. NUNCA coloque um Long Run que exija mais tempo que isso. Calcule distanceKm máxima = ${args.input.longRunMaxMinutes} / pace_easy_estimado (min/km). Se mesmo o long run de pico exceder esse cap, distribua a quilometragem perdida em outra sessão de easy/recovery durante a semana.`,
-    );
-  }
+  // Long run prefs (longRunDayOfWeek + longRunMaxMinutes) já estão no bloco
+  // "DADOS DO ASSESSMENT" acima como REGRAS DURAS.
 
   const journey = {
     context: journeyLines.length === 0 ? '' : `CONTEXTO DA JORNADA DE CRIAÇÃO DO PLANO (sobrepõe defaults do perfil):\n- ${journeyLines.join('\n- ')}`,

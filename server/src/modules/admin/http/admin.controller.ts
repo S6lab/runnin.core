@@ -274,8 +274,12 @@ export async function postDiagnoseRegeneratePlan(req: Request, res: Response, ne
     const { FirestorePlanRepository } = await import(
       '@modules/plans/infra/firestore-plan.repository'
     );
+    const { FirestoreUserRepository } = await import(
+      '@modules/users/infra/firestore-user.repository'
+    );
     const repo = new FirestorePlanRepository();
-    const uc = new GeneratePlanUseCase(repo);
+    const userRepoLocal = new FirestoreUserRepository();
+    const uc = new GeneratePlanUseCase(repo, userRepoLocal);
     const plan = await uc.execute(user.uid, {
       goal: profile.goal,
       level: profile.level,
@@ -326,6 +330,22 @@ export async function postCronWeeklyProposals(_req: Request, res: Response, next
     const { container } = await import('@shared/container');
     const result = await container.useCases.runWeeklyProposals.execute();
     res.json({ ok: true, ...result });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * POST /admin/cron/weekly-proposals/trigger — disparo MANUAL que simula o
+ * cron de domingo. Mesma lógica do `postCronWeeklyProposals`, mas autenticado
+ * via Firebase ID token + custom claim admin (não X-Cron-Token), pra ser
+ * chamado do admin panel da app sem expor o token do scheduler no cliente.
+ */
+export async function postAdminWeeklyProposalsTrigger(_req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { container } = await import('@shared/container');
+    const result = await container.useCases.runWeeklyProposals.execute();
+    res.json({ ok: true, triggeredAt: new Date().toISOString(), ...result });
   } catch (err) {
     next(err);
   }

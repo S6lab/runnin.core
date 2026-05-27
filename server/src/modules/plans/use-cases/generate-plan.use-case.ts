@@ -5,7 +5,9 @@ import { PlanRepository } from '../domain/plan.repository';
 import { Plan, PlanSegment, PlanSession, PlanWeek } from '../domain/plan.entity';
 import { sanitizeSessionType } from './checkpoint-shared';
 import { clampSessionDistance, enforceWeeklyLongRunRatio, markTargetSession } from './sanitize-session-distance';
-import { RunnerLevel } from '@modules/users/domain/user.entity';
+import { clampSessionsToCaps } from './clamp-sessions-to-caps';
+import { RunnerLevel, UserProfile } from '@modules/users/domain/user.entity';
+import { UserRepository } from '@modules/users/domain/user.repository';
 import { RACE_WINDOWS, getAllowedWindows, hasImprovePaceBypass } from './plan-windows.constants';
 import { validateGoalWindow, GoalWindowError } from './validate-goal-window';
 import { validatePaceTarget, PaceTargetError } from './validate-pace-target';
@@ -95,6 +97,10 @@ export const GeneratePlanSchema = z.object({
   currentWeeklyKm: z.number().positive().max(300).nullish(),
   /** Pace atual confortável (M:SS/km). Vem da tela 05. null = "não sei". */
   currentPaceMinKm: z.string().regex(/^\d{1,2}:\d{2}$/).nullish(),
+  /** Distância confortável recente em km (chip 3/5/10/21/42). É a base usada
+   *  pra cap long run das primeiras semanas (não > 1.5× esse valor). null =
+   *  "não sei". */
+  capacityDistanceKm: z.number().int().positive().max(100).nullish(),
   /** Dias da semana em que o atleta pode treinar (1=seg…7=dom). A IA escolhe
    *  os melhores dias se `frequency < availableDays.length`. Array vazio ou
    *  ausente = sem restrição (IA escolhe livremente). */
@@ -147,7 +153,10 @@ export class GeneratePlanUseCase {
   // e lido pelos builders síncronos. Default in-memory até ser resolvido.
   private _roteiroTpl: RoteiroTemplates = getRoteiroTemplatesDefault();
 
-  constructor(private repo: PlanRepository) {}
+  constructor(
+    private repo: PlanRepository,
+    private userRepo?: UserRepository,
+  ) {}
 
   async execute(userId: string, input: GeneratePlanInput, opts: { confirmOverwrite?: boolean } = {}): Promise<Plan> {
     // LEGACY BRIDGE: requests antigos (cliente cacheado, integração externa,
@@ -467,6 +476,33 @@ export class GeneratePlanUseCase {
     };
     await this.repo.create(plan);
 
+    // Persiste todos os inputs do assessment no profile do user pra
+    // auditoria + reuso em re-geração. Best-effort: não falha o fluxo se
+    // não tem userRepo ou se a escrita falhar. updatePartial faz merge.
+    if (this.userRepo) {
+      const patch: Partial<UserProfile> = {};
+      if (typeof input.currentWeeklyKm === 'number') patch.currentWeeklyKm = input.currentWeeklyKm;
+      if (input.currentPaceMinKm) patch.currentPaceMinKm = input.currentPaceMinKm;
+      if (typeof input.capacityDistanceKm === 'number') patch.capacityDistanceKm = input.capacityDistanceKm;
+      if (input.levelHint) patch.levelHint = input.levelHint;
+      if (input.goalKind) patch.goalKind = input.goalKind;
+      if (input.flowSubgoal) patch.flowSubgoal = input.flowSubgoal;
+      if (input.raceDistanceKm) patch.raceDistanceKm = input.raceDistanceKm as 5 | 10 | 21 | 42;
+      if (input.raceMode) patch.raceMode = input.raceMode;
+      if (input.targetPaceMinKm) patch.targetPaceMinKm = input.targetPaceMinKm;
+      if (input.raceDate) patch.raceDate = input.raceDate;
+      if (input.longRunDayOfWeek) patch.longRunDayOfWeek = input.longRunDayOfWeek;
+      if (input.longRunMaxMinutes) patch.longRunMaxMinutes = input.longRunMaxMinutes;
+      if (input.availableDays) patch.availableDays = input.availableDays;
+      if (Object.keys(patch).length > 0) {
+        this.userRepo.updatePartial(userId, patch).catch(err =>
+          logger.warn('plan.generate.persist_assessment_failed', {
+            userId, planId, err: err instanceof Error ? err.message : String(err),
+          }),
+        );
+      }
+    }
+
     // Gera o plano em background
     this._generateAsync(plan, { ...input, weeksCount, startDate }).catch(err =>
       logger.error('plan.generate.background_failed', {
@@ -522,6 +558,7 @@ export class GeneratePlanUseCase {
         levelHint: input.levelHint ?? null,
         currentWeeklyKm: input.currentWeeklyKm ?? null,
         currentPaceMinKm: input.currentPaceMinKm ?? null,
+        capacityDistanceKm: input.capacityDistanceKm ?? null,
         availableDays: input.availableDays ?? null,
         goalKind: input.goalKind,
         flowSubgoal: input.flowSubgoal,
@@ -558,9 +595,27 @@ export class GeneratePlanUseCase {
       // que o plano CULMINA com a distância exata da prova — isenta do cap
       // MAX_KM_PER_SESSION pq essa é a prova, não treino. Fix do bug
       // reportado (maratona terminando em 12km).
-      const weeks = (input.goalKind === 'race' && input.raceDistanceKm)
+      const targetedWeeks = (input.goalKind === 'race' && input.raceDistanceKm)
         ? markTargetSession(paddedWeeks, input.raceDistanceKm as 5 | 10 | 21 | 42, { planId: plan.id })
         : paddedWeeks;
+      // Defensive layer: clamp pra respeitar caps reportados pelo atleta
+      // (currentWeeklyKm, capacityDistanceKm) mesmo se o LLM tiver gerado
+      // acima do que foi pedido como REGRA DURA no prompt.
+      const clampResult = clampSessionsToCaps(targetedWeeks, {
+        currentWeeklyKm: input.currentWeeklyKm ?? null,
+        capacityDistanceKm: input.capacityDistanceKm ?? null,
+      });
+      const weeks = clampResult.weeks;
+      if (clampResult.ops.length > 0) {
+        logger.warn('plan.generate.clamp_applied', {
+          planId: plan.id,
+          ops: clampResult.ops,
+          inputs: {
+            currentWeeklyKm: input.currentWeeklyKm,
+            capacityDistanceKm: input.capacityDistanceKm,
+          },
+        });
+      }
       const parseMs = Date.now() - parseStart;
       const totalMs = Date.now() - startedAt;
       logger.info('plan.generate.completed', {

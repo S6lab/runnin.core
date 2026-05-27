@@ -17,6 +17,13 @@ export class FirestoreUserRepository implements UserRepository {
     await this.col().doc(id).set({ ...data, updatedAt: new Date().toISOString() }, { merge: true });
   }
 
+  async updatePartial(id: string, patch: Partial<UserProfile>): Promise<void> {
+    await this.col().doc(id).set(
+      { ...patch, updatedAt: new Date().toISOString() },
+      { merge: true },
+    );
+  }
+
   async archiveOnboarding(userId: string, snapshot: UserProfile): Promise<void> {
     const archivedAt = new Date().toISOString();
     const { id: _id, ...data } = snapshot;

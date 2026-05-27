@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { FirestorePlanRepository } from '../infra/firestore-plan.repository';
+import { FirestoreUserRepository } from '@modules/users/infra/firestore-user.repository';
 import { GeneratePlanUseCase, GeneratePlanSchema } from '../use-cases/generate-plan.use-case';
 import { NotFoundError } from '@shared/errors/app-error';
 import { getRunningKnowledgeCorpusWithStorage } from '@shared/knowledge/running/running-knowledge';
@@ -8,7 +9,8 @@ import { buildExecutionSegments } from '../use-cases/build-execution-segments';
 import { getRoteiroTemplates } from '@shared/knowledge/running/roteiro-templates.store';
 
 const repo = new FirestorePlanRepository();
-const generatePlan = new GeneratePlanUseCase(repo);
+const userRepo = new FirestoreUserRepository();
+const generatePlan = new GeneratePlanUseCase(repo, userRepo);
 
 /**
  * Calcula a data final do mesociclo (ISO YYYY-MM-DD) baseada em startDate +
