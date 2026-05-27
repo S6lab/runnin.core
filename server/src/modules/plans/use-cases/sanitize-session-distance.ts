@@ -108,55 +108,118 @@ const TARGET_SESSION_TYPE: Record<RaceDistanceKm, string> = {
 };
 
 /**
- * Marca a ÚLTIMA sessão da ÚLTIMA semana como sessão-alvo:
- *  - `isTarget = true`
- *  - `type` = label canônico ("Maratona" pra 42K, "Meia Maratona" pra 21K…)
- *  - `distanceKm` = `raceDistanceKm` (isento do cap MAX_KM_PER_SESSION
- *    porque essa é a PROVA, não treino).
+ * Marca a sessão-prova na ÚLTIMA semana, alinhada ao dia da semana do raceDate
+ * (raceDayOfWeek = 1..7, Mon..Sun). Comportamento:
  *
- * Roda SÓ pra goalKind=race. Resolve o problema reportado: plano de
- * maratona terminando em 12km de "Maratona" — agora termina em 42km
- * mesmo (e se cap do nível impede, é porque a meta não cabe → bloqueado
- * antes pelos validators).
+ *   1. Se raceDayOfWeek vier: insere/atualiza sessão exatamente nesse dia,
+ *      remove qualquer sessão com dayOfWeek > raceDayOfWeek (não treinamos
+ *      DEPOIS da prova) e ordena por dayOfWeek.
+ *   2. Sem raceDayOfWeek (fallback legado): substitui a última sessão da
+ *      última semana — mesmo comportamento antigo. Mantido pra suportar
+ *      planos criados antes da migração.
+ *
+ * Sessão-alvo final tem:
+ *   - `isTarget = true`
+ *   - `type` = label canônico ("Maratona" pra 42K, "Meia Maratona" pra 21K…)
+ *   - `distanceKm` = `raceDistanceKm` (isento do cap MAX_KM_PER_SESSION
+ *     porque essa é a PROVA, não treino).
+ *
+ * Resolve o bug reportado: prova de domingo aparecia na sexta porque o LLM
+ * tinha treinos Mon/Wed/Fri/Sat e o código substituía Sat. Agora insere no
+ * domingo e descarta sessões pós-prova.
  */
 export function markTargetSession(
   weeks: PlanWeek[],
   raceDistanceKm: RaceDistanceKm,
-  ctx: { planId?: string; targetPaceMinKm?: string | null } = {},
+  ctx: { planId?: string; targetPaceMinKm?: string | null; raceDayOfWeek?: number } = {},
 ): PlanWeek[] {
   if (weeks.length === 0) return weeks;
   const lastWeek = weeks[weeks.length - 1];
-  if (lastWeek.sessions.length === 0) {
-    logger.warn('plan.target_session.empty_last_week', { weekNumber: lastWeek.weekNumber, ...ctx });
-    return weeks;
-  }
-  // Última sessão = maior dayOfWeek; se empate, última da array (já ordenada
-  // por dayOfWeek antes deste sanitizer).
-  const lastIdx = lastWeek.sessions.length - 1;
-  const orig = lastWeek.sessions[lastIdx];
   const targetType = TARGET_SESSION_TYPE[raceDistanceKm];
-  // Quando raceMode='improve_pace' + targetPaceMinKm informado, força o pace
-  // alvo na sessão-meta (LLM ocasionalmente devolve pace mais lento ou ausente).
-  const targetPace = ctx.targetPaceMinKm ?? orig.targetPace;
-  const updatedSession = {
-    ...orig,
+  const raceDow = ctx.raceDayOfWeek;
+
+  // ─── Caminho legado: sem raceDayOfWeek ────────────────────────────────
+  if (!raceDow) {
+    if (lastWeek.sessions.length === 0) {
+      logger.warn('plan.target_session.empty_last_week', { weekNumber: lastWeek.weekNumber, planId: ctx.planId });
+      return weeks;
+    }
+    const lastIdx = lastWeek.sessions.length - 1;
+    const orig = lastWeek.sessions[lastIdx];
+    const targetPace = ctx.targetPaceMinKm ?? orig.targetPace;
+    const updatedSession = {
+      ...orig,
+      type: targetType,
+      distanceKm: raceDistanceKm,
+      targetPace,
+      isTarget: true,
+      notes: orig.notes && orig.notes.length > 0
+        ? `[META] ${orig.notes}`
+        : `[META] ${raceDistanceKm}K — sessão-prova: execute a distância completa no pace alvo do plano.`,
+    };
+    logger.info('plan.target_session.marked', {
+      weekNumber: lastWeek.weekNumber,
+      mode: 'legacy_last',
+      rawType: orig.type,
+      rawDistanceKm: orig.distanceKm,
+      targetType,
+      targetDistanceKm: raceDistanceKm,
+      planId: ctx.planId,
+    });
+    const updatedSessions = lastWeek.sessions.map((s, i) => i === lastIdx ? updatedSession : s);
+    const updatedWeek = { ...lastWeek, sessions: updatedSessions };
+    return weeks.map((w, i) => i === weeks.length - 1 ? updatedWeek : w);
+  }
+
+  // ─── Caminho novo: raceDayOfWeek presente ─────────────────────────────
+  // 1. Filtra sessões com dayOfWeek > raceDow (não há treino DEPOIS da prova).
+  const droppedPostRace = lastWeek.sessions.filter(s => s.dayOfWeek > raceDow);
+  const keptSessions = lastWeek.sessions.filter(s => s.dayOfWeek <= raceDow);
+
+  // 2. Busca sessão existente no raceDow. Se achou, substitui; senão, insere.
+  const existingIdx = keptSessions.findIndex(s => s.dayOfWeek === raceDow);
+  const templateSession = existingIdx >= 0
+    ? keptSessions[existingIdx]
+    : (keptSessions[keptSessions.length - 1] ?? {
+        dayOfWeek: raceDow,
+        type: 'Easy',
+        distanceKm: 0,
+        durationMin: 0,
+        targetPace: null,
+        notes: null,
+        isExecuted: false,
+        executedRunId: null,
+      });
+  const targetPace = ctx.targetPaceMinKm ?? templateSession.targetPace;
+  const targetSession = {
+    ...templateSession,
+    dayOfWeek: raceDow,
     type: targetType,
     distanceKm: raceDistanceKm,
     targetPace,
     isTarget: true,
-    notes: orig.notes && orig.notes.length > 0
-      ? `[META] ${orig.notes}`
+    notes: templateSession.notes && templateSession.notes.length > 0 && existingIdx >= 0
+      ? `[META] ${templateSession.notes}`
       : `[META] ${raceDistanceKm}K — sessão-prova: execute a distância completa no pace alvo do plano.`,
   };
+
+  // 3. Monta lista final: sessões mantidas (sem a do dia da prova) + targetSession,
+  //    ordenadas por dayOfWeek.
+  const withoutTargetDay = keptSessions.filter(s => s.dayOfWeek !== raceDow);
+  const finalSessions = [...withoutTargetDay, targetSession]
+    .sort((a, b) => a.dayOfWeek - b.dayOfWeek);
+
   logger.info('plan.target_session.marked', {
     weekNumber: lastWeek.weekNumber,
-    rawType: orig.type,
-    rawDistanceKm: orig.distanceKm,
+    mode: existingIdx >= 0 ? 'replaced_existing' : 'inserted_new',
+    raceDayOfWeek: raceDow,
     targetType,
     targetDistanceKm: raceDistanceKm,
-    ...ctx,
+    droppedPostRaceCount: droppedPostRace.length,
+    droppedPostRaceDays: droppedPostRace.map(s => s.dayOfWeek),
+    planId: ctx.planId,
   });
-  const updatedSessions = lastWeek.sessions.map((s, i) => i === lastIdx ? updatedSession : s);
-  const updatedWeek = { ...lastWeek, sessions: updatedSessions };
+
+  const updatedWeek = { ...lastWeek, sessions: finalSessions };
   return weeks.map((w, i) => i === weeks.length - 1 ? updatedWeek : w);
 }

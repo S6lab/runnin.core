@@ -77,6 +77,39 @@ export class LlmCheckpointAnalysisStrategy
       .map((w) => w.weekNumber)
       .join(', ');
 
+    // ─── RACE anchor block (só em planos RACE com raceDate) ──────────────
+    // Mesmo recebendo a instrução, o LLM pode tentar mexer na race week ou
+    // subir carga próximo dela. enforceRevisionInvariants (no apply) repara
+    // se ele violar — esse bloco é o primeiro line of defense.
+    const isRace = !!plan.raceDate && !!plan.raceDayOfWeek;
+    const raceWeekNumber = plan.weeksCount;
+    const taperWeekNumber = raceWeekNumber - 1;
+    const deltaPct = weekMetrics.plannedDistanceKm > 0
+      ? ((weekMetrics.actualDistanceKm - weekMetrics.plannedDistanceKm) / weekMetrics.plannedDistanceKm) * 100
+      : 0;
+    let raceAnchorBlock = '';
+    if (isRace) {
+      const dowName = ['', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado', 'domingo'][plan.raceDayOfWeek!];
+      const [y, m, d] = plan.raceDate!.split('-');
+      const antiFatigue = deltaPct > 15
+        ? `- DETECÇÃO: atleta está ${deltaPct.toFixed(0)}% ACIMA do volume planejado nesta semana. NÃO suba carga nas próximas semanas — MANTÉM ou REDUZA 5-10%. Objetivo é chegar fresco na prova (semana ${raceWeekNumber}), não maximizar treino no meio do mesociclo. Cite essa leitura no coachExplanation com o aviso "vamos preservar pra você chegar inteiro na prova".`
+        : deltaPct < -15
+          ? `- DETECÇÃO: atleta está ${Math.abs(deltaPct).toFixed(0)}% ABAIXO do volume planejado. Ajuste pra cima com cautela, mas RESPEITE a curva do plano — nada de "recuperar carga perdida" próximo do taper (semana ${taperWeekNumber}).`
+          : `- Performance dentro do esperado. Progressão padrão na janela revisável.`;
+      raceAnchorBlock = [
+        '',
+        'ÂNCORA DA PROVA — REGRA DURA IMUTÁVEL:',
+        `- Prova: ${d}/${m}/${y} (semana ${raceWeekNumber}, dia ${plan.raceDayOfWeek} = ${dowName}).`,
+        `- weeksCount permanece ${plan.weeksCount}. NÃO adicione/remova semanas.`,
+        `- Race week (${raceWeekNumber}) e Taper week (${taperWeekNumber}) são INTOCÁVEIS — devolva exatamente como estão no plano atual (cópia verbatim no \`newWeeks\`).`,
+        `- AJUSTES reais apenas em ${detailWeekNums || `semanas ${weekNumber + 1}+`} (janela de revisão).`,
+        '',
+        'ANTI-FADIGA (objetivo é chegar inteiro na prova, não brilhar no meio do plano):',
+        antiFatigue,
+        '',
+      ].join('\n');
+    }
+
     const prompt = `Você é o Coach AI do runnin executando um CHECKPOINT semanal.
 
 CONTEXTO DA SEMANA ${weekNumber}:
@@ -93,7 +126,7 @@ ${inputsDigest}
 
 SEMANAS RESTANTES NO PLANO (você vai ajustar essas):
 ${followingDigest}
-
+${raceAnchorBlock}
 Sua tarefa: avaliar a semana, considerar inputs do usuário e ajustar as semanas SEGUINTES (NÃO mexa em semanas anteriores nem na semana ${weekNumber}). Mantenha estrutura/ID das sessions onde possível; ajuste distanceKm, targetPace, durationMin, type, notes conforme necessário.
 
 REGRA DURA — TIPO DE SESSÃO (igual à criação do plano): o runnin é um app de CORRIDA. As sessões agendadas SÓ podem ser corrida (Easy Run, Intervalado, Tempo Run, Long Run, Recovery, Fartlek, Progressivo, Tiros) ou "Caminhada" (único tipo não-corrida permitido como sessão, pra baixo impacto/base aeróbica/recuperação). NUNCA agende ciclismo/bike, natação, elíptico, remo ou musculação como uma SESSÃO (campo type). Esses cross-trainings podem, no MÁXIMO, ser SUGERIDOS no campo notes como atividade complementar opcional — jamais viram uma sessão do plano.

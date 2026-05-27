@@ -25,6 +25,8 @@ export const PLAN_REVISION_DEFAULTS = {
     'Plano atual ({{plan.weeksCount}} semanas, objetivo {{plan.goal}}, nível {{plan.level}}):',
     '{{plan.weeksJson}}',
     '',
+    '{{raceAnchor.context}}',
+    '',
     'Perfil do atleta:',
     '{{profile.context}}',
     '',

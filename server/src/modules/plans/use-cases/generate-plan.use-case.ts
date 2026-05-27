@@ -19,6 +19,8 @@ import { validateFrequencyForGoal, FrequencyError } from './validate-frequency-f
 import { validateAgeForGoal, AgeRestrictionError } from './validate-age-for-goal';
 import { validateMedicalForGoal, MedicalRestrictionError } from './validate-medical-for-goal';
 import { buildExecutionSegments } from './build-execution-segments';
+import { deriveWeeksCountFromRaceDate, isoDateToDayOfWeek } from './race-date.helpers';
+import { enforceRaceWeekStructure } from './enforce-race-week-structure';
 import {
   getRoteiroTemplates,
   getRoteiroTemplatesDefault,
@@ -286,7 +288,14 @@ export class GeneratePlanUseCase {
 
     const planId = uuid();
     const now = new Date().toISOString();
-    const weeksCount = input.weeksCount ?? resolvePlanWeeksCount(input);
+    // Derivação de weeksCount: quando o user marca uma raceDate, ela é
+    // soberana — o plano DEVE terminar nela. ceil((race - start) / 7) garante
+    // que a última semana inclua o dia da prova. resolvePlanWeeksCount() vira
+    // fallback pra fluxos sem raceDate (flow goal ou input legado).
+    const startDateForCount = input.startDate ?? new Date().toISOString().slice(0, 10);
+    const weeksCount = input.weeksCount
+      ?? deriveWeeksCountFromRaceDate(input, startDateForCount)
+      ?? resolvePlanWeeksCount(input);
 
     // Validação de meta (race) — só dispara quando o FE envia o payload
     // novo (goalKind + raceDistanceKm). Se a combinação distância × nível
@@ -455,9 +464,16 @@ export class GeneratePlanUseCase {
     // qualquer data futura (ou hoje). Sem ela, default = hoje.
     const startDate = input.startDate ?? new Date().toISOString().slice(0, 10);
 
+    // raceDate vira a âncora imutável quando presente. Caso contrário, o
+    // mesociclo dura weeksCount × 7d a partir do startDate (comportamento
+    // legado pra goals tipo flow).
+    const raceDate = input.goalKind === 'race' ? input.raceDate : undefined;
+    const raceDayOfWeek = raceDate ? isoDateToDayOfWeek(raceDate) : undefined;
+
     // Prazo INICIAL (data prevista de conclusão na criação do plano). Fica
-    // imutável pro relatório final. Mesociclo dura weeksCount × 7d.
-    const initialDeadlineAt = (() => {
+    // imutável pro relatório final. Pra RACE plans = raceDate; pra resto =
+    // startDate + (weeksCount × 7) - 1.
+    const initialDeadlineAt = raceDate ?? (() => {
       const d = new Date(`${startDate}T00:00:00Z`);
       d.setUTCDate(d.getUTCDate() + weeksCount * 7 - 1);
       return d.toISOString().slice(0, 10);
@@ -474,6 +490,8 @@ export class GeneratePlanUseCase {
       weeks: [],
       startDate,
       initialDeadlineAt,
+      raceDate,
+      raceDayOfWeek,
       createdAt: now,
       updatedAt: now,
     };
@@ -602,8 +620,26 @@ export class GeneratePlanUseCase {
         ? markTargetSession(paddedWeeks, input.raceDistanceKm as 5 | 10 | 21 | 42, {
             planId: plan.id,
             targetPaceMinKm: input.raceMode === 'improve_pace' ? (input.targetPaceMinKm ?? null) : null,
+            // Quando temos raceDate, alinha a sessão-prova no dia certo da última
+            // semana (sem isso, replaceLast desalinha em planos com freq != 7).
+            raceDayOfWeek: plan.raceDayOfWeek,
           })
         : paddedWeeks;
+
+      // Pós-LLM: estrutura da race week + taper week. Auto-repara quando o
+      // LLM ignora as regras do prompt (7 sessões na semana da prova, tempo
+      // run em D-1, volume igual ao pico). Loga drift pra captura.
+      const raceEnforced = (
+        input.goalKind === 'race' &&
+        input.raceDistanceKm &&
+        plan.raceDayOfWeek
+      )
+        ? enforceRaceWeekStructure(targetedWeeks, {
+            planId: plan.id,
+            raceDistanceKm: input.raceDistanceKm as 5 | 10 | 21 | 42,
+            raceDayOfWeek: plan.raceDayOfWeek,
+          }).weeks
+        : targetedWeeks;
 
       // Defensive enforcement chain (soft — clamp/move + log warn). Cada
       // estágio garante uma restrição do assessment que o LLM pode ter
@@ -611,7 +647,7 @@ export class GeneratePlanUseCase {
       //  1) dias permitidos → 2) long run day (move dentro do permitido)
       //  3) target pace → 4) caps de volume/long run
       const startDow = (new Date(`${input.startDate}T00:00:00`).getDay() || 7);
-      const daysRes = enforceAvailableDays(targetedWeeks, input.availableDays ?? null, startDow);
+      const daysRes = enforceAvailableDays(raceEnforced, input.availableDays ?? null, startDow);
       const lrRes = enforceLongRunDay(daysRes.weeks, input.longRunDayOfWeek ?? null, input.availableDays ?? null);
       const paceRes = enforceTargetPace(
         lrRes.weeks,

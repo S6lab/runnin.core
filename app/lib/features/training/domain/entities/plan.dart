@@ -221,6 +221,14 @@ class Plan {
   /// criação do plano. Imutável — checkpoints podem ajustar weeksCount, mas
   /// este campo serve de baseline pro relatório final ("prazo inicial × real").
   final String? initialDeadlineAt;
+  /// Data da prova (ISO YYYY-MM-DD) quando o plano é do tipo RACE. Ancora o
+  /// último dia do mesociclo — a revisão semanal NÃO pode mudar. UI usa pra
+  /// mostrar "PROVA: 05/jul" na última semana e diferenciar do mesocycleEnd
+  /// padrão (que pode ter days off pós-startDate).
+  final String? raceDate;
+  /// Dia da semana da prova (1=Mon..7=Sun). Derivado de raceDate no server;
+  /// chega pronto aqui pra UI marcar visualmente o card da última semana.
+  final int? raceDayOfWeek;
   /// Data em que o plano foi marcado como completed (detecção lazy no
   /// server quando mesocycleEndDate < hoje). Null = ainda em curso.
   final String? completedAt;
@@ -239,6 +247,8 @@ class Plan {
     this.goalAssessment,
     this.revisions = const [],
     this.initialDeadlineAt,
+    this.raceDate,
+    this.raceDayOfWeek,
     this.completedAt,
   });
 
@@ -260,6 +270,8 @@ class Plan {
             .map((r) => PlanRevisionLog.fromJson(r as Map<String, dynamic>))
             .toList(),
         initialDeadlineAt: j['initialDeadlineAt'] as String?,
+        raceDate: j['raceDate'] as String?,
+        raceDayOfWeek: j['raceDayOfWeek'] as int?,
         completedAt: j['completedAt'] as String?,
       );
 

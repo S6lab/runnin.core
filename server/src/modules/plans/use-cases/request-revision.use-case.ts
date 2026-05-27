@@ -10,6 +10,7 @@ import { Plan, PlanWeek } from '../domain/plan.entity';
 import { logger } from '@shared/logger/logger';
 import { formatRunningKnowledgeContext } from '@shared/knowledge/running/running-knowledge';
 import { buildPlanRevisionPrompt } from '@shared/infra/llm/prompts';
+import { enforceRevisionInvariants } from './enforce-race-week-structure';
 
 export class QuotaExhaustedError extends Error {
   public readonly quota: { usedThisWeek: number; max: number; resetAt: string };
@@ -118,12 +119,15 @@ export class RequestRevisionUseCase {
         level: plan.level,
         weeksCount: plan.weeksCount,
         weeks: futureWeeks,
+        raceDate: plan.raceDate,
+        raceDayOfWeek: plan.raceDayOfWeek,
       },
       revision: {
         type: input.type,
         subOption: input.subOption,
         freeText: input.freeText,
       },
+      currentWeekNumber: currentWeekIndex + 1, // 1-based pro prompt
       ragContext: knowledgeContext,
     });
 
@@ -143,7 +147,15 @@ export class RequestRevisionUseCase {
 
       const parsed = this._parseRevisionResponse(raw);
       coachExplanation = parsed.coachExplanation;
-      newWeeks = this._mergeWeeks(plan.weeks, parsed.newWeeks, currentWeekIndex);
+      const merged = this._mergeWeeks(plan.weeks, parsed.newWeeks, currentWeekIndex);
+      // Garante invariantes da âncora da prova quando RACE — repara se o LLM
+      // mexer na race week ou mudar weeksCount mesmo com instrução no prompt.
+      const enforced = enforceRevisionInvariants(merged, {
+        plan,
+        originalWeeks: plan.weeks,
+        currentWeekNumber: currentWeekIndex + 1,
+      });
+      newWeeks = enforced.weeks;
       logger.info('plan.revision.generated', { planId, version: built.version, source: built.source });
     } catch (err) {
       logger.error('plan.revision.llm_failed', {

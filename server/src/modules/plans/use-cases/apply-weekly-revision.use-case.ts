@@ -18,6 +18,7 @@ import {
   mergeProposedWeeks,
   PlanNotReadyError,
 } from './checkpoint-shared';
+import { enforceRevisionInvariants } from './enforce-race-week-structure';
 import { NotFoundError } from '@shared/errors/app-error';
 import { logger } from '@shared/logger/logger';
 
@@ -80,9 +81,22 @@ export class ApplyWeeklyRevisionUseCase {
     // newWeeksSnapshot=[] pra a UI distinguir do caso ajustado.
     const noChanges = proposal.newWeeks.length === 0;
     const now = new Date().toISOString();
-    const newPlanWeeks = noChanges
+    const mergedWeeks = noChanges
       ? plan.weeks
       : mergeProposedWeeks(plan, weekNumber, proposal.newWeeks);
+
+    // Pós-merge: garante invariantes da âncora da prova (race week intocada,
+    // weeksCount preservado, passado intacto). Se o LLM violou, repara e
+    // segue — não bloqueia a revisão. Log `plan.revision.repaired` captura
+    // drift pra debug.
+    const enforced = noChanges
+      ? { weeks: mergedWeeks, changes: [] as string[] }
+      : enforceRevisionInvariants(mergedWeeks, {
+          plan,
+          originalWeeks: plan.weeks,
+          currentWeekNumber: weekNumber,
+        });
+    const newPlanWeeks = enforced.weeks;
 
     const revision: PlanRevision = {
       id: uuid(),

@@ -172,6 +172,20 @@ export interface Plan {
    */
   initialDeadlineAt?: string;
   /**
+   * Data da prova (ISO YYYY-MM-DD) quando goalKind=race. Ancora o último dia
+   * do mesociclo — a revisão semanal NÃO pode mudar isso. Vive aqui no plano
+   * (e não só no UserProfile) pra que o user possa marcar uma prova futura
+   * sem afetar o plano em execução. Setada na criação a partir do input do
+   * onboarding RACE.
+   */
+  raceDate?: string;
+  /**
+   * Dia da semana da prova (1=Mon..7=Sun) derivado de raceDate. Armazenado
+   * separadamente porque é consultado em hot path (markTargetSession,
+   * enforce-race-week) e evita ter que reparsear raceDate todo lugar.
+   */
+  raceDayOfWeek?: number;
+  /**
    * Data em que o plano foi marcado como completed. Setado pela detecção lazy
    * no GetCurrentPlanUseCase quando mesocycleEndDate < hoje. Usado no relatório
    * final pra comparar com initialDeadlineAt.

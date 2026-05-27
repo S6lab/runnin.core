@@ -230,9 +230,52 @@ export async function buildPlanInitPrompt(args: PlanInitBuildInput): Promise<Bui
       : args.input.windowMode === 'feasible'
         ? 'FACTÍVEL'
         : 'SEGURA';
+
+    // raceDayOfWeek (1=Mon..7=Sun) — dia da semana em que a prova cai. Pós-LLM
+    // o `markTargetSession` insere a sessão-prova nesse dia exatamente, mas
+    // mandar pro LLM aqui economiza retrabalho e ancora a periodização da
+    // race week certa.
+    const raceDow = args.input.raceDate
+      ? (() => {
+          const d = new Date(`${args.input.raceDate}T00:00:00Z`);
+          const js = d.getUTCDay();
+          return js === 0 ? 7 : js;
+        })()
+      : null;
+    const dowName = raceDow ? ['', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado', 'domingo'][raceDow] : null;
+    const taperWeeks = dist === 42 ? 2 : dist === 21 ? 2 : 1;
+    const raceWeekVolPct = dist === 42 ? 45 : dist === 21 ? 55 : dist === 10 ? 65 : 70;
+    const taperWeekVolPct = dist === 42 ? 70 : dist === 21 ? 75 : null;
+    const restDaysBefore = dist === 5 ? 1 : 2;
+
     journeyLines.push(
-      `Objetivo RACE — janela ${windowLabel}${raceDateClause}: o plano DEVE culminar com o atleta executando ${dist}km${paceClause} na ÚLTIMA sessão da última semana — essa é a SESSÃO-META (type="${dist === 42 ? 'Maratona' : dist === 21 ? 'Meia Maratona' : dist + 'K'}", distanceKm=${dist}). Periodize pra isso: long run cresce gradualmente até atingir ${dist}km na semana de pico; qualidade (tempo run, intervalado específico) nas semanas centrais alinhada com o pace alvo; última semana = taper (volume reduzido nos dias anteriores) + SESSÃO-META no último dia disponível. NÃO trate este plano como "fundação" — é o ciclo completo até a meta.${args.input.raceDate ? ' Se a data da prova permitir antecipar (atleta progride bem nos checkpoints), o coach pode oferecer a sessão-meta antes — mas o plano BASE termina exatamente nessa data.' : ''}`,
+      `Objetivo RACE — janela ${windowLabel}${raceDateClause}: o plano DEVE culminar com o atleta executando ${dist}km${paceClause} na ÚLTIMA sessão da última semana — essa é a SESSÃO-META (type="${dist === 42 ? 'Maratona' : dist === 21 ? 'Meia Maratona' : dist + 'K'}", distanceKm=${dist}). Periodize pra isso: long run cresce gradualmente até atingir ${dist}km na semana de pico; qualidade (tempo run, intervalado específico) nas semanas centrais alinhada com o pace alvo. NÃO trate este plano como "fundação" — é o ciclo completo até a meta.`,
     );
+
+    // Bloco RACE WEEK — instrução explícita pra LLM. Mesmo com pós-LLM repair,
+    // pedir certo evita reparos visíveis no log.
+    const raceWeekRules = [
+      `RACE WEEK (última semana, número ${args.input.weeksCount}) — REGRAS DURAS:`,
+      raceDow
+        ? `- A sessão-prova DEVE estar no dia ${raceDow} (${dowName}) — dayOfWeek=${raceDow}.`
+        : `- A sessão-prova DEVE ser a ÚLTIMA sessão da semana (maior dayOfWeek).`,
+      `- ≤ 4 sessões totais nessa semana (override da frequência do atleta — mesmo se ele treina 7d/semana, race week é exceção).`,
+      raceDow
+        ? `- Nos ${restDaysBefore} dia${restDaysBefore > 1 ? 's' : ''} ANTES da prova (dayOfWeek ${Array.from({length: restDaysBefore}, (_, i) => raceDow - 1 - i).reverse().join(', ')}): rest OU recovery muito leve (≤4km, type=Easy, Z1). Sem tempo run, sem interval, sem long run.`
+        : `- Os 2 dias antes da prova: rest OU recovery muito leve (≤4km Z1).`,
+      `- Volume total da race week ≤ ${raceWeekVolPct}% do volume da semana pico.`,
+      raceDow
+        ? `- SEM sessões DEPOIS do dia ${raceDow} — a semana termina na prova.`
+        : `- Sem sessões depois da prova na mesma semana.`,
+    ];
+    journeyLines.push(raceWeekRules.join('\n  '));
+
+    if (taperWeeks >= 2 && taperWeekVolPct) {
+      journeyLines.push(
+        `TAPER WEEK (semana ${args.input.weeksCount - 1}) — REGRA DURA: volume entre ${taperWeekVolPct - 5}-${taperWeekVolPct}% do volume da semana pico. Reduz long run, mantém uma sessão de qualidade curta (≤6km), sem volume novo. Atleta JÁ está em fase de afiamento.`,
+      );
+    }
+
     if (args.input.raceMode === 'improve_pace' && args.input.targetPaceMinKm) {
       const tp = args.input.targetPaceMinKm;
       journeyLines.push(
