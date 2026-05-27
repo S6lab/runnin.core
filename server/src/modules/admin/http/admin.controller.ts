@@ -283,11 +283,23 @@ export async function postDiagnoseRegeneratePlan(req: Request, res: Response, ne
     // Pega TODOS os campos do assessment persistidos no profile pra
     // exercitar o pipeline real (não só os 4 mínimos). Esses campos
     // foram salvos pelo GeneratePlanUseCase na geração anterior.
+    // weeksCount não é persistido no profile → deriva do raceDate quando
+    // RACE; fallback 8 weeks (caso flow sem data).
+    const computeWeeksFromRaceDate = (raceDate?: string): number | undefined => {
+      if (!raceDate) return undefined;
+      const r = new Date(`${raceDate}T00:00:00`);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const days = Math.ceil((r.getTime() - today.getTime()) / 86_400_000);
+      if (days < 7) return undefined;
+      return Math.ceil(days / 7);
+    };
+    const weeksCount = computeWeeksFromRaceDate(profile.raceDate) ?? 8;
     const plan = await uc.execute(user.uid, {
       goal: profile.goal,
       level: profile.level,
       frequency: profile.frequency,
-      weeksCount: profile.weeksCount ?? 8,
+      weeksCount,
       levelHint: profile.levelHint,
       currentWeeklyKm: profile.currentWeeklyKm,
       currentPaceMinKm: profile.currentPaceMinKm,
