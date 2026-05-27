@@ -280,11 +280,27 @@ export async function postDiagnoseRegeneratePlan(req: Request, res: Response, ne
     const repo = new FirestorePlanRepository();
     const userRepoLocal = new FirestoreUserRepository();
     const uc = new GeneratePlanUseCase(repo, userRepoLocal);
+    // Pega TODOS os campos do assessment persistidos no profile pra
+    // exercitar o pipeline real (não só os 4 mínimos). Esses campos
+    // foram salvos pelo GeneratePlanUseCase na geração anterior.
     const plan = await uc.execute(user.uid, {
       goal: profile.goal,
       level: profile.level,
       frequency: profile.frequency,
-      weeksCount: 8,
+      weeksCount: profile.weeksCount ?? 8,
+      levelHint: profile.levelHint,
+      currentWeeklyKm: profile.currentWeeklyKm,
+      currentPaceMinKm: profile.currentPaceMinKm,
+      capacityDistanceKm: profile.capacityDistanceKm,
+      availableDays: profile.availableDays,
+      goalKind: profile.goalKind,
+      flowSubgoal: profile.flowSubgoal,
+      raceDistanceKm: profile.raceDistanceKm,
+      raceMode: profile.raceMode,
+      targetPaceMinKm: profile.targetPaceMinKm,
+      raceDate: profile.raceDate,
+      longRunDayOfWeek: profile.longRunDayOfWeek,
+      longRunMaxMinutes: profile.longRunMaxMinutes,
     });
     res.json({
       ok: true,
