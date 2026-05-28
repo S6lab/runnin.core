@@ -321,18 +321,11 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
                     right: 16,
                     child: _CoachLiveBanner(message: state.coachLiveMessage!),
                   ),
-                // Push-to-talk: segure o botão "Coach" pra falar com o coach
-                // (canal bidirecional sob demanda). Solta → o coach responde.
-                // Freemium não tem sessão Live aberta — botão é hidden.
-                if (state.status == RunStatus.active && _isPremium)
-                  Positioned(
-                    right: 16,
-                    // Sobe acima do painel quando os splits aparecem (painel
-                    // cresce assim que a corrida começa a andar), pra não ser
-                    // coberto pelo painel de baixo.
-                    bottom: state.distanceM > 0 ? 440 : 300,
-                    child: const _CoachTalkButton(),
-                  ),
+                // Push-to-talk do coach (mic) oculto na UI. A infra
+                // (_CoachTalkButton + events CoachTalkStart/Stop + startTalk/
+                // stopTalk na sessão Live) fica dormindo pra reativação futura
+                // — reinserir este Positioned com const _CoachTalkButton().
+                // Cues automáticos do coach por km seguem funcionando.
                 // Topo: voltar (idle) + linha de chips em Wrap.
                 // GPS, COACH, MÚSICA, BPM. Tudo passível de toque (futuro).
                 Positioned(
@@ -1137,6 +1130,11 @@ class _CoachLiveBanner extends StatelessWidget {
 /// Botão push-to-talk "Coach": segure pra abrir a janela de fala (streama o
 /// mic pra sessão Live), solte pra o coach responder. Canal bidirecional sob
 /// demanda — sem wake word, sem dependência extra.
+///
+/// OCULTO NA UI: o Positioned que renderizava este botão na tela de corrida
+/// ativa foi removido (push-to-talk desativado visualmente). A classe fica
+/// aqui dormindo pra reativação — reinserir o Positioned no build.
+// ignore: unused_element
 class _CoachTalkButton extends StatefulWidget {
   const _CoachTalkButton();
 

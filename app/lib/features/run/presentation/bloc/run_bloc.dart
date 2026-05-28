@@ -643,15 +643,11 @@ class RunBloc extends Bloc<RunEvent, RunState> {
     final newPoints = [...state.points, newPoint];
     final newDistance = state.distanceM + addedDistance;
 
-    // Pace suavizado (média móvel dos últimos 3 pontos com speed)
-    final recentPaces = newPoints.reversed
-        .where((p) => p.pace != null)
-        .take(3)
-        .map((p) => p.pace!)
-        .toList();
-    final smoothedPace = recentPaces.isEmpty
-        ? null
-        : recentPaces.reduce((a, b) => a + b) / recentPaces.length;
+    // Pace instantâneo pela distância/tempo real dos últimos ~30m (robusto
+    // contra drift de GPS parado, que com pos.speed cru gerava pace absurdo
+    // tipo 235 min/km). null quando parado/ruído → UI mostra "--:--" e os
+    // cues de pace (pace_alert/segment_pace_off) não disparam à toa.
+    final smoothedPace = rollingPaceMinKm(newPoints);
 
     final kmReached = (newDistance / 1000).floor();
     final crossedKmBoundary = kmReached > _lastCoachKm && kmReached > 0;

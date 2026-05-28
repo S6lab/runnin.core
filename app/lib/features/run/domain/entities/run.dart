@@ -211,6 +211,48 @@ List<KmSplit> computeKmSplits(List<GpsPoint> points) {
   return splits;
 }
 
+/// Pace instantâneo (min/km) pela distância real / tempo real dos últimos
+/// [windowMeters]. Robusto contra drift de GPS parado — diferente do
+/// `pos.speed` cru que gera pace absurdo (~235 min/km) quando a velocidade
+/// reportada é minúscula com o atleta parado.
+///
+/// Retorna null (→ UI mostra "--:--") quando:
+///   - há menos de 2 pontos
+///   - a janela juntou < [minDistMeters] (parado / drift)
+///   - o pace resultante passa de [maxPaceMinKm] (não é corrida)
+///
+/// [maxWindowMs] limita quantos segundos pra trás varremos — quando parado,
+/// os pontos não acumulam [windowMeters] e sem esse cap o loop percorreria
+/// a run inteira (a lista de pontos cresce indefinidamente).
+double? rollingPaceMinKm(
+  List<GpsPoint> points, {
+  double windowMeters = 30,
+  int maxWindowMs = 30000,
+  double minDistMeters = 8,
+  double maxPaceMinKm = 20,
+}) {
+  if (points.length < 2) return null;
+  final lastTs = points.last.ts;
+  double dist = 0;
+  int startTs = lastTs;
+  for (int i = points.length - 1; i > 0; i--) {
+    final a = points[i - 1];
+    final b = points[i];
+    if (lastTs - a.ts > maxWindowMs) break;
+    dist += _haversineM(a.lat, a.lng, b.lat, b.lng);
+    startTs = a.ts;
+    if (dist >= windowMeters) break;
+  }
+  if (dist < minDistMeters) return null;
+  final dtSec = (lastTs - startTs) / 1000.0;
+  if (dtSec <= 0) return null;
+  final speedMps = dist / dtSec;
+  if (speedMps <= 0) return null;
+  final pace = (1000 / speedMps) / 60;
+  if (pace > maxPaceMinKm) return null;
+  return pace;
+}
+
 class Run {
   final String id;
   final String status;
