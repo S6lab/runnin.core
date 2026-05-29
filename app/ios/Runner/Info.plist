@@ -26,6 +26,8 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
@@ -65,6 +67,18 @@
 		<string>UIInterfaceOrientationPortraitUpsideDown</string>
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>O runnin usa seu GPS pra medir distância, ritmo e traçado da sua corrida.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>O runnin continua rastreando sua corrida pelo GPS mesmo com o app em segundo plano ou a tela bloqueada, pra não perder distância nem ritmo.</string>
+	<key>NSMotionUsageDescription</key>
+	<string>O runnin usa os sensores de movimento pra contar passos e estimar sua atividade durante o treino.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>location</string>
+		<string>audio</string>
+		<string>remote-notification</string>
 	</array>
 	<key>NSHealthShareUsageDescription</key>
 	<string>O runnin lê seus dados de saúde (batimentos, sono, passos, peso) pra personalizar seu plano de treino e dar feedback do coach.</string>

@@ -7,7 +7,7 @@
 # Workflows ATIVOS:
 #  - android-debug    → APK em push pra main (smoke + analyze + APK staging)
 #  - android-release  → AAB assinado + Play Store internal em tag v*
-#  - ios-release      → STUB desativado até Apple Developer + APNs estarem prontos
+#  - ios-release      → IPA assinado + TestFlight em tag v* (ver pré-reqs no bloco)
 #
 # Web foi REMOVIDO daqui (era web-staging em push pra main + web-production em
 # tag v*). Deploy do web Firebase Hosting agora é manual — usa o canal staging
@@ -140,28 +140,66 @@ workflows:
         submit_as_draft: false
         in_app_update_priority: 3
 
-  # ───────────────────────────── iOS (STUB) ──────────────────────────
+  # ───────────────────────────── iOS (TestFlight) ─────────────────────
   ios-release:
-    # Apple Developer account em revisão — sem App ID/certificates ainda.
-    # Quando aprovar:
-    #  1. Firebase Console > Cloud Messaging → upload APNs Auth Key (.p8 + Key ID + Team ID)
-    #  2. Codemagic UI > Code signing > iOS → conecta Apple Developer integration
-    #  3. Adiciona perfis: provisioning profile + distribution certificate
-    #  4. Troca `events: []` por `events: [tag]` aqui
-    #  5. Adiciona publishing.app_store_connect com api_key reference
-    name: iOS Release (TestFlight) [DISABLED]
+    # Pré-requisitos (uma vez) antes do primeiro build:
+    #  1. Apple Developer Program ativo + App ID `com.s6lab.runnin` com as
+    #     capabilities Push Notifications e HealthKit habilitadas no portal.
+    #  2. App criado no App Store Connect com o mesmo bundle id.
+    #  3. Firebase Console > Cloud Messaging → upload da APNs Auth Key (.p8 +
+    #     Key ID + Team ID) pra push chegar no device.
+    #  4. Codemagic > Team settings > Integrations > App Store Connect → cria
+    #     uma API key (role App Manager) e nomeia `runnin_app_store_connect`.
+    #     É esse nome que `integrations.app_store_connect` referencia: o
+    #     Codemagic usa a key pra buscar/gerar o distribution cert + o
+    #     provisioning profile App Store automaticamente (bloco ios_signing).
+    #
+    # Dispara na MESMA tag v* do android-release: uma tag → AAB no Play
+    # internal + IPA no TestFlight.
+    name: iOS Release (TestFlight)
     instance_type: mac_mini_m1
     max_build_duration: 60
+    integrations:
+      app_store_connect: runnin_app_store_connect
     environment:
       <<: *env_versions
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.s6lab.runnin
+      vars:
+        <<: *shared_vars
     triggering:
-      events: []
+      events:
+        - tag
+      tag_patterns:
+        - pattern: 'v*'
+          include: true
     scripts:
-      - name: Placeholder
+      - name: Pub get
+        script: cd app && flutter pub get
+      # Aplica o provisioning profile App Store (baixado via ios_signing) no
+      # Runner.xcodeproj e gera o export_options.plist em $HOME. Roda da raiz
+      # do repo: o use-profiles varre **/*.xcodeproj e acha app/ios.
+      - name: Set up code signing (use-profiles)
+        script: xcode-project use-profiles
+      # PROJECT_BUILD_NUMBER é o contador monotônico do Codemagic (mesmo do
+      # android-release) → CFBundleVersion único e crescente no TestFlight.
+      # Se um dia subir build manual com número maior, troque por:
+      #   --build-number=$(($(app-store-connect get-latest-testflight-build-number "$APP_STORE_APP_ID") + 1))
+      - name: Build IPA (signed, release)
         script: |
-          echo "iOS workflow desativado. Habilitar:"
-          echo "1. Apple Developer account aprovado"
-          echo "2. APNs key upload no Firebase Console"
-          echo "3. Codemagic UI > Code signing > iOS integration"
-          echo "4. Trocar events: [] -> events: [tag] aqui no yaml"
-          exit 0
+          cd app
+          flutter build ipa --release \
+            --build-number=$PROJECT_BUILD_NUMBER \
+            --dart-define=API_BASE_URL=$API_BASE_URL_PROD \
+            --dart-define=FIREBASE_VAPID_KEY=$FIREBASE_VAPID_KEY \
+            --export-options-plist=$HOME/export_options.plist
+    artifacts:
+      - app/build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
+        # Promoção pra App Store review fica manual: valida no TestFlight
+        # primeiro, depois submete no App Store Connect.
