@@ -183,6 +183,15 @@ workflows:
     scripts:
       - name: Pub get
         script: cd app && flutter pub get
+      # firebase_crashlytics injeta um Run Script no Runner que chama
+      # `flutterfire upload-crashlytics-symbols` (sobe dSYMs pro Crashlytics).
+      # O runner do Codemagic não traz esse CLI → "flutterfire: command not
+      # found" derruba o archive. Instala e bota no PATH; o $CM_ENV propaga o
+      # PATH pro flutter build ipa → xcodebuild → fase de script.
+      - name: Install FlutterFire CLI (upload de dSYM do Crashlytics)
+        script: |
+          dart pub global activate flutterfire_cli
+          echo "PATH=$PATH:$HOME/.pub-cache/bin" >> $CM_ENV
       # fetch-signing-files autentica via integração codemagic_app_store e usa
       # CERTIFICATE_PRIVATE_KEY pra (re)usar o distribution cert; --create gera
       # cert/profile se faltarem. use-profiles aplica no Runner.xcodeproj e gera
