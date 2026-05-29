@@ -141,31 +141,37 @@ workflows:
         in_app_update_priority: 3
 
   # ───────────────────────────── iOS (TestFlight) ─────────────────────
+  # Espelha o setup do cordas.app: a auth do App Store Connect vem da
+  # INTEGRAÇÃO de time `codemagic_app_store` (Codemagic > Integrations,
+  # compartilhada entre apps do mesmo time), e o único secret por-app é
+  # CERTIFICATE_PRIVATE_KEY (RSA PEM) no grupo `ios_signing`. O
+  # fetch-signing-files cria o distribution cert (a partir dessa key) + o
+  # provisioning profile App Store se não existirem.
+  #
+  # Pré-requisitos no portal Apple (uma vez):
+  #  1. App ID `com.s6lab.runnin` com Push Notifications + HealthKit
+  #     habilitados (precisa casar com Runner*.entitlements, senão o profile
+  #     gerado não cobre as capabilities e o signing falha).
+  #  2. App criado no App Store Connect com o mesmo bundle id.
+  #  3. Firebase Console > Cloud Messaging → upload da APNs Auth Key (.p8 +
+  #     Key ID + Team ID) pra push chegar no device.
+  #
+  # CERTIFICATE_PRIVATE_KEY tem que ser a MESMA entre builds pra reusar o cert
+  # e não estourar o limite (2-3) da Apple. Se o grupo `ios_signing` não for
+  # global do time, replique a var neste app também.
+  #
+  # Dispara na MESMA tag v* do android-release: uma tag → AAB no Play internal
+  # + IPA no TestFlight.
   ios-release:
-    # Pré-requisitos (uma vez) antes do primeiro build:
-    #  1. Apple Developer Program ativo + App ID `com.s6lab.runnin` com as
-    #     capabilities Push Notifications e HealthKit habilitadas no portal.
-    #  2. App criado no App Store Connect com o mesmo bundle id.
-    #  3. Firebase Console > Cloud Messaging → upload da APNs Auth Key (.p8 +
-    #     Key ID + Team ID) pra push chegar no device.
-    #  4. Codemagic > Team settings > Integrations > App Store Connect → cria
-    #     uma API key (role App Manager) e nomeia `runnin_app_store_connect`.
-    #     É esse nome que `integrations.app_store_connect` referencia: o
-    #     Codemagic usa a key pra buscar/gerar o distribution cert + o
-    #     provisioning profile App Store automaticamente (bloco ios_signing).
-    #
-    # Dispara na MESMA tag v* do android-release: uma tag → AAB no Play
-    # internal + IPA no TestFlight.
     name: iOS Release (TestFlight)
     instance_type: mac_mini_m1
-    max_build_duration: 60
+    max_build_duration: 90
     integrations:
-      app_store_connect: runnin_app_store_connect
+      app_store_connect: codemagic_app_store
     environment:
       <<: *env_versions
-      ios_signing:
-        distribution_type: app_store
-        bundle_identifier: com.s6lab.runnin
+      groups:
+        - ios_signing   # CERTIFICATE_PRIVATE_KEY (RSA PEM)
       vars:
         <<: *shared_vars
     triggering:
@@ -177,15 +183,22 @@ workflows:
     scripts:
       - name: Pub get
         script: cd app && flutter pub get
-      # Aplica o provisioning profile App Store (baixado via ios_signing) no
-      # Runner.xcodeproj e gera o export_options.plist em $HOME. Roda da raiz
-      # do repo: o use-profiles varre **/*.xcodeproj e acha app/ios.
-      - name: Set up code signing (use-profiles)
-        script: xcode-project use-profiles
+      # fetch-signing-files autentica via integração codemagic_app_store e usa
+      # CERTIFICATE_PRIVATE_KEY pra (re)usar o distribution cert; --create gera
+      # cert/profile se faltarem. use-profiles aplica no Runner.xcodeproj e gera
+      # o export_options.plist em $HOME (varre **/*.xcodeproj da raiz → app/ios).
+      - name: Set up code signing (cria cert + profile se faltar)
+        script: |
+          keychain initialize
+          app-store-connect fetch-signing-files "$PACKAGE_NAME" \
+            --type IOS_APP_STORE \
+            --certificate-key="@env:CERTIFICATE_PRIVATE_KEY" \
+            --create
+          keychain add-certificates
+          xcode-project use-profiles
       # PROJECT_BUILD_NUMBER é o contador monotônico do Codemagic (mesmo do
       # android-release) → CFBundleVersion único e crescente no TestFlight.
-      # Se um dia subir build manual com número maior, troque por:
-      #   --build-number=$(($(app-store-connect get-latest-testflight-build-number "$APP_STORE_APP_ID") + 1))
+      # flutter build ipa roda o pod install sozinho (não há Podfile commitado).
       - name: Build IPA (signed, release)
         script: |
           cd app
@@ -201,5 +214,8 @@ workflows:
       app_store_connect:
         auth: integration
         submit_to_testflight: true
-        # Promoção pra App Store review fica manual: valida no TestFlight
-        # primeiro, depois submete no App Store Connect.
+        submit_to_app_store: false
+        # Pra mandar pra um beta group específico, cria o grupo no App Store
+        # Connect e adiciona aqui:
+        #   beta_groups:
+        #     - Internal Testers
