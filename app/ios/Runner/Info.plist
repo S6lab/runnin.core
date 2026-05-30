@@ -86,5 +86,7 @@
 	<string>O runnin pode salvar suas corridas no Apple Health pra centralizar seu histórico de atividades.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>O runnin usa o microfone pro Coach Live, onde você conversa por voz com o assistente AI durante e fora do treino.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Usada para que você possa definir sua foto de perfil.</string>
 </dict>
 </plist>
