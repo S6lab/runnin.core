@@ -78,8 +78,12 @@ Future<void> _runApp() async {
           if (await healthSyncService.hasPermissions()) {
             await healthSyncService.syncSince();
           }
-        } catch (_) {
-          // Falha de sync nunca quebra o app.
+        } catch (e, st) {
+          // Falha de sync nunca quebra o app, mas precisamos saber que aconteceu.
+          if (!kIsWeb) {
+            FirebaseCrashlytics.instance
+                .recordError(e, st, reason: 'wearable_boot_autosync_failed');
+          }
         }
       });
     }

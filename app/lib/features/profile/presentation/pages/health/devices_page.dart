@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:runnin/core/analytics/analytics_service.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/features/biometrics/data/health_sync_service.dart';
@@ -84,6 +85,10 @@ class _HealthDevicesPageState extends State<HealthDevicesPage> {
       p.name == 'Apple Health' || p.name == 'Google Health Connect';
 
   void _onConnectProvider(BuildContext context, _ProviderSpec p) {
+    analytics.logEvent('wearable_connect_tapped', params: {
+      'provider': p.name,
+      'available_now': _isAvailableNow(p),
+    });
     if (_isAvailableNow(p) && healthSyncService.isSupported) {
       _connectViaHealthBridge(context, p);
       return;
@@ -92,12 +97,15 @@ class _HealthDevicesPageState extends State<HealthDevicesPage> {
   }
 
   Future<void> _connectViaHealthBridge(BuildContext context, _ProviderSpec p) async {
+    analytics.logEvent('wearable_connect_started', params: {'provider': p.name});
     final granted = await healthSyncService.requestPermissions();
     if (!context.mounted) return;
     if (!granted) {
-      _showProviderDialog(context, p);
+      analytics.logEvent('wearable_connect_denied', params: {'provider': p.name});
+      _showPermissionDeniedDialog(context, p);
       return;
     }
+    analytics.logEvent('wearable_connect_granted', params: {'provider': p.name});
     // Permissão OK → sincroniza últimos 7d em background.
     healthSyncService.syncSince().then((count) {
       if (context.mounted) {
@@ -113,6 +121,45 @@ class _HealthDevicesPageState extends State<HealthDevicesPage> {
       SnackBar(
         content: Text('Conectado a ${p.name}. Sincronizando dados…'),
         duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  void _showPermissionDeniedDialog(BuildContext context, _ProviderSpec p) {
+    final isApple = p.name == 'Apple Health';
+    final settingsPath = isApple
+        ? 'Ajustes do iPhone > Privacidade e Segurança > Saúde > runnin'
+        : 'Configurações do Android > Apps > Health Connect > runnin';
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: FigmaColors.surfaceCard,
+        title: Text(
+          'Permissão negada',
+          style: context.runninType.bodyMd.copyWith(
+            fontWeight: FontWeight.w500,
+            color: FigmaColors.textPrimary,
+          ),
+        ),
+        content: Text(
+          'Pra ler seus dados de ${p.name}, libere o acesso em:\n\n$settingsPath\n\n'
+          'Depois volte aqui e tente conectar de novo.',
+          style: context.runninType.bodySm.copyWith(
+            height: 1.5,
+            color: FigmaColors.textSecondary,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: Text(
+              'OK',
+              style: context.runninType.labelMd.copyWith(
+                color: context.runninPalette.primary,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

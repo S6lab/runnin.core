@@ -1,7 +1,8 @@
 import 'dart:io' show Platform;
-import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:health/health.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:runnin/core/analytics/analytics_service.dart';
 import 'package:runnin/features/biometrics/data/biometric_remote_datasource.dart';
 
 /// Sincroniza dados de Apple HealthKit (iOS) / Google Health Connect (Android)
@@ -35,14 +36,46 @@ class HealthSyncService {
 
   bool get isSupported => !kIsWeb && (Platform.isIOS || Platform.isAndroid);
 
+  String get _platformLabel {
+    if (kIsWeb) return 'web';
+    if (Platform.isIOS) return 'ios';
+    if (Platform.isAndroid) return 'android';
+    return 'other';
+  }
+
   Future<bool> requestPermissions() async {
-    if (!isSupported) return false;
+    if (!isSupported) {
+      analytics.logEvent('wearable_connect_skipped', params: {
+        'reason': 'unsupported_platform',
+        'platform': _platformLabel,
+      });
+      return false;
+    }
+    analytics.logEvent('wearable_permission_requested', params: {
+      'platform': _platformLabel,
+      'provider': _sourceLabel,
+    });
     try {
       final permissions = _types.map((_) => HealthDataAccess.READ).toList();
       final ok = await _health.requestAuthorization(_types, permissions: permissions);
+      analytics.logEvent('wearable_permission_result', params: {
+        'platform': _platformLabel,
+        'provider': _sourceLabel,
+        'granted': ok,
+      });
       return ok;
-    } catch (e) {
-      debugPrint('HealthSyncService.requestPermissions failed: $e');
+    } catch (e, st) {
+      analytics.recordError(
+        e,
+        st,
+        reason: 'wearable_request_permissions_failed',
+        context: {'platform': _platformLabel, 'provider': _sourceLabel},
+      );
+      analytics.logEvent('wearable_permission_error', params: {
+        'platform': _platformLabel,
+        'provider': _sourceLabel,
+        'error_type': e.runtimeType.toString(),
+      });
       return false;
     }
   }
@@ -53,7 +86,13 @@ class HealthSyncService {
       final permissions = _types.map((_) => HealthDataAccess.READ).toList();
       final ok = await _health.hasPermissions(_types, permissions: permissions);
       return ok ?? false;
-    } catch (_) {
+    } catch (e, st) {
+      analytics.recordError(
+        e,
+        st,
+        reason: 'wearable_has_permissions_failed',
+        context: {'platform': _platformLabel},
+      );
       return false;
     }
   }
@@ -72,8 +111,22 @@ class HealthSyncService {
         endTime: to,
         types: _types,
       );
-    } catch (e) {
-      debugPrint('HealthSyncService.fetch failed: $e');
+    } catch (e, st) {
+      analytics.recordError(
+        e,
+        st,
+        reason: 'wearable_fetch_failed',
+        context: {
+          'platform': _platformLabel,
+          'provider': _sourceLabel,
+          'window_days': to.difference(from).inDays,
+        },
+      );
+      analytics.logEvent('wearable_sync_failed', params: {
+        'stage': 'fetch',
+        'platform': _platformLabel,
+        'provider': _sourceLabel,
+      });
       return 0;
     }
 
@@ -85,22 +138,46 @@ class HealthSyncService {
 
     if (samples.isEmpty) {
       await _saveLastSync(to);
+      analytics.logEvent('wearable_sync_completed', params: {
+        'platform': _platformLabel,
+        'provider': _sourceLabel,
+        'samples_saved': 0,
+        'samples_fetched': raw.length,
+      });
       return 0;
     }
 
     // Backend aceita até 500/req; chunk em batches.
     int totalSaved = 0;
+    int failedBatches = 0;
     for (var i = 0; i < samples.length; i += 500) {
       final batch = samples.sublist(i, (i + 500).clamp(0, samples.length));
       try {
         final result = await _ds.ingest(batch);
         totalSaved += result.saved;
-      } catch (e) {
-        debugPrint('HealthSyncService.ingest batch failed: $e');
+      } catch (e, st) {
+        failedBatches++;
+        analytics.recordError(
+          e,
+          st,
+          reason: 'wearable_ingest_batch_failed',
+          context: {
+            'platform': _platformLabel,
+            'provider': _sourceLabel,
+            'batch_size': batch.length,
+          },
+        );
       }
     }
 
     await _saveLastSync(to);
+    analytics.logEvent('wearable_sync_completed', params: {
+      'platform': _platformLabel,
+      'provider': _sourceLabel,
+      'samples_saved': totalSaved,
+      'samples_fetched': raw.length,
+      'failed_batches': failedBatches,
+    });
     return totalSaved;
   }
 
