@@ -47,6 +47,10 @@
 			</array>
 		</dict>
 	</dict>
+	<key>NSHealthShareUsageDescription</key>
+	<string>O Runnin usa dados de saúde para exibir BPM, sono e prontidão no seu painel de treino.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>O Runnin pode registrar corridas no Apple Health para manter seu histórico sincronizado.</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>

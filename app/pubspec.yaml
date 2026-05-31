@@ -1,7 +1,7 @@
 name: runnin
 description: "runnin.ai — AI Running Coach"
 publish_to: 'none'
-version: 1.0.0+1
+version: 1.0.1+2
 
 environment:
   sdk: ^3.11.4
@@ -51,6 +51,7 @@ dependencies:
   flutter_bloc: ^9.1.1
   firebase_storage: ^12.4.10
   file_picker: ^11.0.2
+  health: ^12.0.0
 
 dev_dependencies:
   flutter_test:

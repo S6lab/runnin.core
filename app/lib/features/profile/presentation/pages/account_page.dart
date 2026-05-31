@@ -1,7 +1,10 @@
+import 'dart:io';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:runnin/core/health/health_service.dart';
 import 'package:runnin/core/router/app_router.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/theme_controller.dart';
@@ -20,13 +23,18 @@ class AccountPage extends StatefulWidget {
 class _AccountPageState extends State<AccountPage> {
   bool _signingOut = false;
   bool _savingVoice = false;
+  bool _healthConnecting = false;
   final _userDs = UserRemoteDatasource();
+  final _health = HealthService();
   UserProfile? _profile;
+  bool _healthConnected = false;
+  HealthSnapshot? _healthSnapshot;
 
   @override
   void initState() {
     super.initState();
     _loadProfile();
+    _loadHealthStatus();
   }
 
   Future<void> _loadProfile() async {
@@ -35,6 +43,43 @@ class _AccountPageState extends State<AccountPage> {
       if (!mounted) return;
       setState(() => _profile = profile);
     } catch (_) {}
+  }
+
+  Future<void> _loadHealthStatus() async {
+    if (!HealthService.isSupported) return;
+    final connected = _health.isConnected;
+    if (!mounted) return;
+    setState(() => _healthConnected = connected);
+    if (connected) {
+      final snapshot = await _health.fetchSnapshot();
+      if (!mounted) return;
+      setState(() => _healthSnapshot = snapshot);
+    }
+  }
+
+  Future<void> _connectHealth() async {
+    setState(() => _healthConnecting = true);
+    try {
+      final granted = await _health.requestPermissions();
+      if (!mounted) return;
+      setState(() => _healthConnected = granted);
+      if (granted) {
+        final snapshot = await _health.fetchSnapshot();
+        if (!mounted) return;
+        setState(() => _healthSnapshot = snapshot);
+      }
+    } finally {
+      if (mounted) setState(() => _healthConnecting = false);
+    }
+  }
+
+  Future<void> _disconnectHealth() async {
+    await _health.disconnect();
+    if (!mounted) return;
+    setState(() {
+      _healthConnected = false;
+      _healthSnapshot = null;
+    });
   }
 
   Future<void> _signOut() async {
@@ -228,6 +273,104 @@ class _AccountPageState extends State<AccountPage> {
                     },
                   ),
                   const SizedBox(height: 24),
+
+                  // ── Saúde ─────────────────────────────────────────────────
+                  if (HealthService.isSupported) ...[
+                    _SectionLabel(label: 'SAÚDE'),
+                    AppPanel(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                width: 10,
+                                height: 10,
+                                decoration: BoxDecoration(
+                                  color: _healthConnected
+                                      ? palette.primary
+                                      : palette.muted,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Text(
+                                Platform.isIOS
+                                    ? 'Apple Health'
+                                    : 'Health Connect',
+                                style: type.labelMd,
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          if (_healthConnected) ...[
+                            if (_healthSnapshot?.avgBpm != null)
+                              Text(
+                                'BPM médio (24h): ${_healthSnapshot!.avgBpm!.round()} bpm',
+                                style: type.bodySm.copyWith(
+                                  color: palette.muted,
+                                ),
+                              ),
+                            if (_healthSnapshot?.sleepHours != null)
+                              Text(
+                                'Sono (última noite): ${_healthSnapshot!.sleepHours!.toStringAsFixed(1)}h',
+                                style: type.bodySm.copyWith(
+                                  color: palette.muted,
+                                ),
+                              ),
+                            if (_healthSnapshot?.avgBpm == null &&
+                                _healthSnapshot?.sleepHours == null)
+                              Text(
+                                'Conectado. Sem dados nas últimas 24h.',
+                                style: type.bodySm.copyWith(
+                                  color: palette.muted,
+                                ),
+                              ),
+                            const SizedBox(height: 10),
+                            TextButton(
+                              onPressed: _disconnectHealth,
+                              child: const Text('DESCONECTAR'),
+                            ),
+                          ] else ...[
+                            Text(
+                              Platform.isIOS
+                                  ? 'Autorize o Runnin a ler BPM e sono do Apple Health.'
+                                  : 'Autorize o Runnin a ler BPM e sono do Health Connect.',
+                              style: type.bodySm.copyWith(
+                                color: palette.muted,
+                                height: 1.5,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            SizedBox(
+                              width: double.infinity,
+                              height: 46,
+                              child: ElevatedButton(
+                                onPressed: _healthConnecting
+                                    ? null
+                                    : _connectHealth,
+                                child: _healthConnecting
+                                    ? SizedBox(
+                                        width: 18,
+                                        height: 18,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: palette.background,
+                                        ),
+                                      )
+                                    : Text(
+                                        Platform.isIOS
+                                            ? 'CONECTAR APPLE HEALTH'
+                                            : 'CONECTAR HEALTH CONNECT',
+                                      ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                  ],
 
                   // ── Sessão ────────────────────────────────────────────────
                   _SectionLabel(label: 'SESSÃO'),
