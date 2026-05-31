@@ -26,6 +26,11 @@ void main() async {
   runZonedGuarded(_runApp, (error, stack) {
     // ignore: avoid_print
     print('[ZONE_ERROR] $error\n$stack');
+    if (!kIsWeb) {
+      // Reporta erro fatal capturado pela zone (escapou de FlutterError.onError
+      // e PlatformDispatcher.onError — ex.: throws síncronos pré-binding).
+      FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+    }
   });
 }
 
@@ -85,6 +90,13 @@ Future<void> _runApp() async {
 
   if (!kIsWeb) {
     FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
+    // Async errors fora do framework (PlatformChannels, plugins nativos como
+    // google_sign_in / firebase_auth) caem aqui — sem isso o Crashlytics nunca
+    // vê esses crashes.
+    WidgetsBinding.instance.platformDispatcher.onError = (error, stack) {
+      FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+      return true;
+    };
   } else {
     // Em release web, Dart strippa as mensagens de erro do bundle ("Uncaught
     // Error" sem detalhes). Esses handlers convertem o erro pra string ANTES

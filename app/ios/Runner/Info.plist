@@ -88,5 +88,16 @@
 	<string>O runnin usa o microfone pro Coach Live, onde você conversa por voz com o assistente AI durante e fora do treino.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Usada para que você possa definir sua foto de perfil.</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.506126899076-vrt53k0kh9us2rq193jvspac0hhjnl44</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>
