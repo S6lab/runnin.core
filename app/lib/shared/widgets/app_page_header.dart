@@ -17,7 +17,7 @@ class AppPageHeader extends StatelessWidget {
     final titleWidget = Text(
       title,
       style: Theme.of(context).textTheme.titleLarge?.copyWith(
-        fontWeight: FontWeight.w900,
+        fontWeight: FontWeight.w500,
         letterSpacing: -0.03,
       ),
     );

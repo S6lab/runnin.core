@@ -21,6 +21,19 @@ String _normalizeBaseUrl(String raw) {
   return base;
 }
 
+/// Deriva WS URL pro coach-live a partir do base HTTP. Mantém staging
+/// vs prod alinhado automaticamente — nada de hardcode em prod.
+String resolveCoachLiveWsUrl() {
+  final base = _resolveBaseUrl();
+  if (base.startsWith('https://')) {
+    return '${base.replaceFirst('https://', 'wss://')}/coach/live';
+  }
+  if (base.startsWith('http://')) {
+    return '${base.replaceFirst('http://', 'ws://')}/coach/live';
+  }
+  return '$base/coach/live';
+}
+
 Dio createApiClient() {
   final dio = Dio(BaseOptions(
     baseUrl: _resolveBaseUrl(),

@@ -1,7 +1,7 @@
 name: runnin
 description: "runnin.ai — AI Running Coach"
 publish_to: 'none'
-version: 1.0.1+2
+version: 1.0.0+7
 
 environment:
   sdk: ^3.11.4
@@ -18,16 +18,21 @@ dependencies:
   cloud_firestore: ^5.6.6
   firebase_analytics: ^11.4.5
   firebase_crashlytics: ^4.3.5
+  firebase_messaging: ^15.2.5
+  firebase_remote_config: ^5.4.3
+  package_info_plus: ^8.3.0
 
   # State management
   flutter_riverpod: ^2.6.1
-  riverpod_annotation: ^2.6.1
+  # riverpod_annotation removido — não há @Riverpod em uso. Bloqueava
+  # upgrade de json_serializable necessário pro gemini_live.
 
   # Navigation
   go_router: ^14.8.1
 
   # Network
   dio: ^5.8.0+1
+  web_socket_channel: ^3.0.1
 
   # GPS & Maps
   geolocator: ^13.0.4
@@ -41,17 +46,35 @@ dependencies:
   # UI
   flutter_animate: ^4.5.2
   google_fonts: ^6.2.1
+  intl_phone_field: ^3.2.0
 
   # Utils
   freezed_annotation: ^3.0.0
-  json_annotation: ^4.9.0
+  json_annotation: ^4.11.0
   intl: ^0.20.2
   uuid: ^4.5.1
   google_sign_in: ^6.2.2
   flutter_bloc: ^9.1.1
   firebase_storage: ^12.4.10
   file_picker: ^11.0.2
-  health: ^12.0.0
+  url_launcher: ^6.3.1
+  share_plus: ^10.1.4
+  image_picker: ^1.1.2
+  # Apple HealthKit (iOS) + Google Health Connect (Android) unified plugin.
+  # Web não suportado — guard com kIsWeb antes de chamar.
+  health: ^13.3.1
+  # Coach Live audio (mic capture + playback) for Gemini Live multimodal.
+  record: ^5.2.1
+  audioplayers: ^6.1.0
+  # TTS on-device (iOS AVSpeechSynthesizer / Android TextToSpeech / Web
+  # SpeechSynthesis) pro modo FREEMIUM falar telemetria a cada km sem
+  # backend hit. Premium continua usando Gemini Live (voz natural).
+  flutter_tts: ^4.2.0
+  # Gemini Live multimodal (text/audio bidi). Substitui TTS legado (ElevenLabs)
+  # nos cues automáticos da run — app fala direto com Gemini, sem proxy.
+  gemini_live: ^2026.4.19
+  # usado em produção (blocs/states) — por isso em dependencies, não dev.
+  equatable: ^2.0.5
 
 dev_dependencies:
   flutter_test:
@@ -59,8 +82,16 @@ dev_dependencies:
   flutter_lints: ^6.0.0
   build_runner: ^2.4.14
   freezed: ^3.0.0
-  riverpod_generator: ^2.6.5
-  json_serializable: ^6.9.4
+  json_serializable: ^6.11.0
+
+# record 5.2.1 resolve record_linux para 0.7.2, que não implementa o
+# startStream exigido por record_platform_interface 1.5.0 — quebra o build.
+# Fix: forçar record_linux atualizado.
+dependency_overrides:
+  record_linux: ^1.3.0
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/warmup_exercises.json
+    - assets/img/hero/

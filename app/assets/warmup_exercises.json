@@ -1,0 +1,42 @@
+{
+  "easy_run": [
+    {"icon": "directions_walk", "title": "Rotação de tornozelos", "reps": "10x cada lado", "description": "Gire o pé em círculos para aquecer a articulação do tornozelo."},
+    {"icon": "accessibility_new", "title": "Elevação de panturrilha", "reps": "15x", "description": "Suba na ponta dos pés e desça devagar, ativando a panturrilha."},
+    {"icon": "self_improvement", "title": "Alongamento de quadríceps", "reps": "20s cada lado", "description": "Puxe o pé em direção ao glúteo mantendo o joelho apontado para baixo."},
+    {"icon": "directions_run", "title": "Elevação de joelhos", "reps": "20 passos", "description": "Caminhe elevando os joelhos à altura do quadril de forma controlada."},
+    {"icon": "swap_vert", "title": "Balanço de pernas frontal", "reps": "10x cada lado", "description": "Apoie-se e balance a perna para frente e para trás em movimento pendular."},
+    {"icon": "rotate_right", "title": "Rotação de quadril", "reps": "10x cada lado", "description": "Gire o quadril em círculos amplos para soltar a articulação."},
+    {"icon": "straighten", "title": "Alongamento de posterior", "reps": "20s cada lado", "description": "Estenda a perna à frente e incline o tronco mantendo a coluna reta."},
+    {"icon": "directions_walk", "title": "Trote leve no lugar", "reps": "2 min", "description": "Trote no lugar para elevar a temperatura corporal antes de sair."}
+  ],
+  "interval": [
+    {"icon": "directions_run", "title": "Trote progressivo", "reps": "3 min", "description": "Comece caminhando e acelere gradualmente até trote moderado."},
+    {"icon": "swap_vert", "title": "Skipping alto", "reps": "2x 20m", "description": "Eleve os joelhos com impulso, coordenando braços e pernas."},
+    {"icon": "accessibility_new", "title": "Agachamento dinâmico", "reps": "12x", "description": "Agache até 90° e suba com explosão para ativar glúteos e quadríceps."},
+    {"icon": "rotate_right", "title": "Rotação de tronco", "reps": "10x cada lado", "description": "Em pé, gire o tronco de um lado ao outro com os braços estendidos."},
+    {"icon": "directions_run", "title": "Acelerações curtas", "reps": "4x 30m", "description": "Sprints curtos a 70-80% para preparar fibras rápidas."},
+    {"icon": "self_improvement", "title": "Lunge frontal", "reps": "8x cada lado", "description": "Dê um passo à frente flexionando o joelho traseiro próximo ao chão."},
+    {"icon": "swap_vert", "title": "Pé no glúteo correndo", "reps": "2x 20m", "description": "Corra levando o calcanhar ao glúteo a cada passada."},
+    {"icon": "straighten", "title": "Alongamento de panturrilha", "reps": "20s cada lado", "description": "Apoie as mãos na parede e pressione o calcanhar contra o chão."}
+  ],
+  "tempo": [
+    {"icon": "directions_walk", "title": "Caminhada rápida", "reps": "3 min", "description": "Caminhe em ritmo acelerado para aquecer gradualmente."},
+    {"icon": "directions_run", "title": "Trote moderado", "reps": "3 min", "description": "Trote em ritmo confortável para elevar a frequência cardíaca."},
+    {"icon": "accessibility_new", "title": "Elevação de panturrilha", "reps": "15x", "description": "Suba e desça na ponta dos pés para ativar a musculatura inferior."},
+    {"icon": "self_improvement", "title": "Alongamento de flexores", "reps": "20s cada lado", "description": "Avance uma perna e pressione o quadril para frente para alongar o flexor."},
+    {"icon": "rotate_right", "title": "Giro de tornozelos", "reps": "10x cada lado", "description": "Apoie a ponta do pé no chão e gire o tornozelo em círculos."},
+    {"icon": "swap_vert", "title": "Balanço lateral de pernas", "reps": "10x cada lado", "description": "Balance a perna de um lado ao outro para soltar adutores e abdutores."},
+    {"icon": "straighten", "title": "Inclinação com pernas estendidas", "reps": "20s", "description": "Com os pés juntos, incline o tronco à frente tocando os dedos dos pés."},
+    {"icon": "directions_run", "title": "Progressão de pace", "reps": "2 min", "description": "Aumente gradualmente o ritmo do trote até o pace-alvo da sessão."}
+  ],
+  "long_run": [
+    {"icon": "directions_walk", "title": "Caminhada de ativação", "reps": "5 min", "description": "Caminhe em ritmo moderado para aquecer articulações e músculos."},
+    {"icon": "rotate_right", "title": "Rotação de quadril", "reps": "10x cada lado", "description": "Círculos amplos com o quadril para soltar a articulação coxofemoral."},
+    {"icon": "self_improvement", "title": "Alongamento de quadríceps", "reps": "30s cada lado", "description": "Segure o pé atrás por mais tempo para preparar para o volume."},
+    {"icon": "straighten", "title": "Alongamento de isquiotibiais", "reps": "30s cada lado", "description": "Perna estendida à frente, incline o tronco mantendo a coluna neutra."},
+    {"icon": "swap_vert", "title": "Balanço de pernas frontal", "reps": "12x cada lado", "description": "Balance a perna para frente e trás em amplitude crescente."},
+    {"icon": "accessibility_new", "title": "Agachamento suave", "reps": "10x", "description": "Agache lentamente até 90° e suba controlando o movimento."},
+    {"icon": "directions_walk", "title": "Rotação de tornozelos", "reps": "10x cada lado", "description": "Gire cada tornozelo para prevenir desconforto em corridas longas."},
+    {"icon": "directions_run", "title": "Trote leve", "reps": "3 min", "description": "Trote suave para finalizar o aquecimento e iniciar com ritmo baixo."}
+  ]
+}

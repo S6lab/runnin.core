@@ -1,12 +1,27 @@
 import { Router } from 'express';
 import { authMiddleware } from '@shared/infra/http/middlewares/auth.middleware';
-import { requirePremium } from '@shared/infra/http/middlewares/require-premium.middleware';
-import { postCoachMessage, postCoachChat, getCoachReport } from './coach.controller';
+import { requireFeature } from '@shared/infra/http/middlewares/require-feature.middleware';
+import { postCoachMessage, postCoachChat, getCoachReport, postGenerateReport, getCoachMessagesByRun, getPeriodAnalysis, postCoachLiveToken, postCoachLiveDiag, postCoachLiveTurn } from './coach.controller';
 
 export const coachRouter = Router();
 
 coachRouter.use(authMiddleware);
-coachRouter.use(requirePremium);
-coachRouter.post('/message', postCoachMessage);
-coachRouter.post('/chat', postCoachChat);
-coachRouter.get('/report/:runId', getCoachReport);
+// Token efêmero pra app conectar direto no Gemini Live (sem expor a
+// API key real). Token tem 30min de validade, 1 uso. Premium-gated
+// pelo mesmo feature flag dos cues durante a corrida.
+coachRouter.post('/live-token', requireFeature('coachVoiceDuringRun'), postCoachLiveToken);
+// Beacon de diagnóstico da sessão Live (open/close/error) — pra rastrear 1008.
+coachRouter.post('/live-diag', postCoachLiveDiag);
+// Persistência de cada turno da sessão Live (coach/user) pra replay e
+// auditoria — cliente conecta direto no Google, então o conteúdo só
+// chega aqui via beacon.
+coachRouter.post('/live-turn', requireFeature('coachVoiceDuringRun'), postCoachLiveTurn);
+// Coach durante corrida (voz/cues)
+coachRouter.post('/message', requireFeature('coachVoiceDuringRun'), postCoachMessage);
+// Chat texto
+coachRouter.post('/chat', requireFeature('coachChat'), postCoachChat);
+// Reports + análises pós-corrida
+coachRouter.get('/report/:runId', requireFeature('weeklyReports'), getCoachReport);
+coachRouter.post('/report/:runId/generate', requireFeature('weeklyReports'), postGenerateReport);
+coachRouter.get('/messages/:runId', requireFeature('coachVoiceDuringRun'), getCoachMessagesByRun);
+coachRouter.get('/period-analysis', requireFeature('weeklyReports'), getPeriodAnalysis);

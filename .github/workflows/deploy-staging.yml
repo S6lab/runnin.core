@@ -1,0 +1,49 @@
+name: Deploy Staging (Flutter Web)
+
+# Web staging mora junto com o server staging na branch `homologation`.
+# Um push em homologation atualiza server (deploy-server-staging.yml) +
+# web (este). Site Firebase: runnin-staging.web.app (target `staging`
+# no .firebaserc, projeto runnin-494520). API_BASE_URL aponta pro Cloud
+# Run staging — sem isso o web batia em produção.
+on:
+  push:
+    branches:
+      - homologation
+  workflow_dispatch:
+
+jobs:
+  deploy-staging:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build Flutter web (staging)
+        run: |
+          flutter build web --release \
+            --dart-define=FLAVOR=staging \
+            --dart-define=API_BASE_URL=https://runnin-api-staging-rogiz7losq-rj.a.run.app \
+            -t lib/main_staging.dart \
+            --no-tree-shake-icons
+
+      - name: Deploy to Firebase Hosting (staging)
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          projectId: runnin-494520
+          target: staging
+          channelId: live
+          entryPoint: ./app

@@ -1,0 +1,230 @@
+# Codemagic CI/CD — runnin.core (monorepo: app Flutter em /app)
+#
+# A app Flutter mora em ./app. Codemagic clona o repo inteiro e cada
+# script faz `cd app` antes dos comandos flutter. Mantemos o yaml na raiz
+# porque essa é a localização que o Codemagic varre por padrão.
+#
+# Workflows ATIVOS:
+#  - android-debug    → APK em push pra main (smoke + analyze + APK staging)
+#  - android-release  → AAB assinado + Play Store internal em tag v*
+#  - ios-release      → IPA assinado + TestFlight em tag v* (ver pré-reqs no bloco)
+#
+# Web foi REMOVIDO daqui (era web-staging em push pra main + web-production em
+# tag v*). Deploy do web Firebase Hosting agora é manual — usa o canal staging
+# via `firebase hosting:channel:deploy staging` rodado da máquina do dev, e o
+# live é deploy direto também manual. Razão: pra evitar redeploy automático em
+# cada commit e poder testar mudanças cirúrgicas no browser antes de subir.
+#
+# Pré-requisitos no Codemagic UI (Settings):
+#  Code signing → Android → upload keystore .jks com reference `runnin_keystore`
+#  Integrations → Google Play → conecta SA JSON (a mesma com permissão no Play Console)
+#  Environment variables → Groups:
+#    `google_play`:
+#       - GOOGLE_PLAY_SERVICE_ACCOUNT_JSON (secure, conteúdo do SA JSON)
+#    `runnin_secrets` (opcional, pra centralizar):
+#       - FIREBASE_VAPID_KEY (pode ficar plain, é embutido no JS web)
+
+definitions:
+  env_versions: &env_versions
+    flutter: 3.41.9
+    java: 17
+    xcode: latest
+
+  shared_vars: &shared_vars
+    API_BASE_URL_STAGING: "https://runnin-api-staging-rogiz7losq-rj.a.run.app"
+    API_BASE_URL_PROD: "https://runnin-api-rogiz7losq-rj.a.run.app"
+    FIREBASE_VAPID_KEY: "BE1oX84SuJLSCWO-JqYSyIFEtCEPj8d4ol3xWlwPHmBp_ncd372Fsau6Fr5mYxIjzpWKfg5KZcM8ueoMQu78P5Q"
+    PACKAGE_NAME: "com.s6lab.runnin"
+
+workflows:
+  # ───────────────────────────── Android ─────────────────────────────
+  android-debug:
+    name: Android Debug APK
+    instance_type: mac_mini_m1
+    max_build_duration: 30
+    environment:
+      <<: *env_versions
+      vars:
+        <<: *shared_vars
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: 'main'
+          include: true
+    scripts:
+      - name: Pub get
+        script: cd app && flutter pub get
+      - name: Analyze
+        script: cd app && flutter analyze --no-fatal-infos
+      - name: Build debug APK
+        script: |
+          cd app
+          flutter build apk --debug \
+            --dart-define=API_BASE_URL=$API_BASE_URL_STAGING \
+            --dart-define=FIREBASE_VAPID_KEY=$FIREBASE_VAPID_KEY
+    artifacts:
+      - app/build/**/outputs/**/*.apk
+
+  android-release:
+    name: Android Release (Play Internal)
+    instance_type: mac_mini_m1
+    max_build_duration: 60
+    environment:
+      <<: *env_versions
+      groups:
+        - google_play
+      vars:
+        <<: *shared_vars
+        GOOGLE_PLAY_TRACK: "internal"
+      android_signing:
+        - runnin_keystore
+    triggering:
+      events:
+        - tag
+      tag_patterns:
+        - pattern: 'v*'
+          include: true
+    scripts:
+      - name: Pub get
+        script: cd app && flutter pub get
+      # build.gradle.kts lê signing config de android/key.properties (mesma
+      # convenção do dev local). Em CI, Codemagic injeta CM_KEYSTORE_PATH /
+      # CM_KEYSTORE_PASSWORD / CM_KEY_ALIAS / CM_KEY_PASSWORD via
+      # `android_signing: - runnin_keystore`. Aqui só materializamos isso
+      # num key.properties efêmero antes do build.
+      #
+      # Fail-fast: se alguma variável estiver vazia, é sinal que o keystore
+      # `runnin_keystore` não foi uploaded no Codemagic UI (App settings →
+      # Code signing identities → Android keystores). Sem isso, o gradle
+      # cai em NPE no signReleaseBundle 8min depois — preferimos abortar já.
+      - name: Generate key.properties from Codemagic signing vars
+        script: |
+          set -e
+          missing=""
+          [ -z "$CM_KEYSTORE_PATH" ] && missing="$missing CM_KEYSTORE_PATH"
+          [ -z "$CM_KEYSTORE_PASSWORD" ] && missing="$missing CM_KEYSTORE_PASSWORD"
+          [ -z "$CM_KEY_ALIAS" ] && missing="$missing CM_KEY_ALIAS"
+          [ -z "$CM_KEY_PASSWORD" ] && missing="$missing CM_KEY_PASSWORD"
+          if [ -n "$missing" ]; then
+            echo "ERROR: Codemagic signing vars ausentes:$missing"
+            echo "Faça upload do keystore .jks em App settings → Code signing identities"
+            echo "→ Android keystores → reference name: runnin_keystore"
+            exit 1
+          fi
+          if [ ! -f "$CM_KEYSTORE_PATH" ]; then
+            echo "ERROR: CM_KEYSTORE_PATH=$CM_KEYSTORE_PATH não existe no FS do runner"
+            exit 1
+          fi
+          cat > app/android/key.properties <<EOF
+          storePassword=$CM_KEYSTORE_PASSWORD
+          keyPassword=$CM_KEY_PASSWORD
+          keyAlias=$CM_KEY_ALIAS
+          storeFile=$CM_KEYSTORE_PATH
+          EOF
+          echo "key.properties materializado (storeFile=$CM_KEYSTORE_PATH)"
+      - name: Build release AAB (signed)
+        script: |
+          cd app
+          flutter build appbundle --release \
+            --build-number=$PROJECT_BUILD_NUMBER \
+            --dart-define=API_BASE_URL=$API_BASE_URL_PROD \
+            --dart-define=FIREBASE_VAPID_KEY=$FIREBASE_VAPID_KEY
+    artifacts:
+      - app/build/**/outputs/**/*.aab
+      - app/build/**/outputs/**/mapping.txt
+    publishing:
+      google_play:
+        credentials: $GOOGLE_PLAY_SERVICE_ACCOUNT_JSON
+        track: $GOOGLE_PLAY_TRACK
+        submit_as_draft: false
+        in_app_update_priority: 3
+
+  # ───────────────────────────── iOS (TestFlight) ─────────────────────
+  # Espelha o setup do cordas.app: a auth do App Store Connect vem da
+  # INTEGRAÇÃO de time `codemagic_app_store` (Codemagic > Integrations,
+  # compartilhada entre apps do mesmo time), e o único secret por-app é
+  # CERTIFICATE_PRIVATE_KEY (RSA PEM) no grupo `ios_signing`. O
+  # fetch-signing-files cria o distribution cert (a partir dessa key) + o
+  # provisioning profile App Store se não existirem.
+  #
+  # Pré-requisitos no portal Apple (uma vez):
+  #  1. App ID `com.s6lab.runnin` com Push Notifications + HealthKit
+  #     habilitados (precisa casar com Runner*.entitlements, senão o profile
+  #     gerado não cobre as capabilities e o signing falha).
+  #  2. App criado no App Store Connect com o mesmo bundle id.
+  #  3. Firebase Console > Cloud Messaging → upload da APNs Auth Key (.p8 +
+  #     Key ID + Team ID) pra push chegar no device.
+  #
+  # CERTIFICATE_PRIVATE_KEY tem que ser a MESMA entre builds pra reusar o cert
+  # e não estourar o limite (2-3) da Apple. Se o grupo `ios_signing` não for
+  # global do time, replique a var neste app também.
+  #
+  # Dispara na MESMA tag v* do android-release: uma tag → AAB no Play internal
+  # + IPA no TestFlight.
+  ios-release:
+    name: iOS Release (TestFlight)
+    instance_type: mac_mini_m1
+    max_build_duration: 90
+    integrations:
+      app_store_connect: codemagic_app_store
+    environment:
+      <<: *env_versions
+      groups:
+        - ios_signing   # CERTIFICATE_PRIVATE_KEY (RSA PEM)
+      vars:
+        <<: *shared_vars
+    triggering:
+      events:
+        - tag
+      tag_patterns:
+        - pattern: 'v*'
+          include: true
+    scripts:
+      - name: Pub get
+        script: cd app && flutter pub get
+      # firebase_crashlytics injeta um Run Script no Runner que chama
+      # `flutterfire upload-crashlytics-symbols` (sobe dSYMs pro Crashlytics).
+      # O runner do Codemagic não traz esse CLI → "flutterfire: command not
+      # found" derruba o archive. Instala e bota no PATH; o $CM_ENV propaga o
+      # PATH pro flutter build ipa → xcodebuild → fase de script.
+      - name: Install FlutterFire CLI (upload de dSYM do Crashlytics)
+        script: |
+          dart pub global activate flutterfire_cli
+          echo "PATH=$PATH:$HOME/.pub-cache/bin" >> $CM_ENV
+      # fetch-signing-files autentica via integração codemagic_app_store e usa
+      # CERTIFICATE_PRIVATE_KEY pra (re)usar o distribution cert; --create gera
+      # cert/profile se faltarem. use-profiles aplica no Runner.xcodeproj e gera
+      # o export_options.plist em $HOME (varre **/*.xcodeproj da raiz → app/ios).
+      - name: Set up code signing (cria cert + profile se faltar)
+        script: |
+          keychain initialize
+          app-store-connect fetch-signing-files "$PACKAGE_NAME" \
+            --type IOS_APP_STORE \
+            --certificate-key="@env:CERTIFICATE_PRIVATE_KEY" \
+            --create
+          keychain add-certificates
+          xcode-project use-profiles
+      # PROJECT_BUILD_NUMBER é o contador monotônico do Codemagic (mesmo do
+      # android-release) → CFBundleVersion único e crescente no TestFlight.
+      # flutter build ipa roda o pod install sozinho (não há Podfile commitado).
+      - name: Build IPA (signed, release)
+        script: |
+          cd app
+          flutter build ipa --release \
+            --build-number=$PROJECT_BUILD_NUMBER \
+            --dart-define=API_BASE_URL=$API_BASE_URL_PROD \
+            --dart-define=FIREBASE_VAPID_KEY=$FIREBASE_VAPID_KEY \
+            --export-options-plist=$HOME/export_options.plist
+    artifacts:
+      - app/build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
+        submit_to_app_store: false
+        # Pra mandar pra um beta group específico, cria o grupo no App Store
+        # Connect e adiciona aqui:
+        #   beta_groups:
+        #     - Internal Testers

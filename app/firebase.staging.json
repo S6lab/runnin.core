@@ -1,0 +1,53 @@
+{
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "runnin-494520",
+          "appId": "1:506126899076:android:dad670e264e4523b4b6fd1",
+          "fileOutput": "android/app/google-services.json"
+        },
+        "staging": {
+          "projectId": "runnin-staging-494520",
+          "appId": "1:STAGING_APP_ID:android:STAGING_ANDROID_APP_ID",
+          "fileOutput": "android/app/google-services-staging.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "runnin-494520",
+          "configurations": {
+            "android": "1:506126899076:android:dad670e264e4523b4b6fd1",
+            "ios": "1:506126899076:ios:9176f04cb7a9be694b6fd1",
+            "web": "1:506126899076:web:d4fd630dc0d2b9364b6fd1",
+            "staging": "1:STAGING_APP_ID:web:STAGING_WEB_APP_ID"
+          }
+        }
+      }
+    }
+  },
+  "hosting": [
+    {
+      "target": "staging",
+      "public": "build/web",
+      "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+      "headers": [
+        {
+          "source": "**/*.@(js|html)",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "max-age=300"
+            }
+          ]
+        }
+      ],
+      "rewrites": [
+        {
+          "source": "**",
+          "destination": "/index.html"
+        }
+      ]
+    }
+  ]
+}

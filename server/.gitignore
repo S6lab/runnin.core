@@ -1,0 +1,19 @@
+node_modules/
+dist/
+coverage/
+server/node_modules/
+server/dist/
+
+# Environment files — never commit, use .env.example as template
+.env
+.env.local
+.env.development
+.env.staging
+.env.production
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store

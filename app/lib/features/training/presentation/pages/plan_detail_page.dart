@@ -1,0 +1,1467 @@
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import 'package:runnin/core/theme/app_palette.dart';
+import 'package:runnin/core/theme/design_system_tokens.dart';
+import 'package:runnin/features/auth/data/user_remote_datasource.dart';
+import 'package:runnin/features/training/data/datasources/plan_remote_datasource.dart';
+import 'package:runnin/features/training/domain/entities/plan.dart';
+import 'package:runnin/features/training/domain/week_phase_label.dart';
+import 'package:runnin/features/training/presentation/widgets/plan_closing_card.dart';
+import 'package:runnin/shared/widgets/app_panel.dart';
+import 'package:runnin/shared/widgets/runnin_app_bar.dart';
+
+/// Vista detalhada do plano com:
+///  - Estratégia do coach (markdown gerado pela IA quando disponível)
+///  - Dados do perfil considerados (deterministicamente do UserProfile)
+///  - Resumo numérico do plano (semanas, volume, distribuição)
+///  - Plano semana a semana com sessões + pace + notas
+///
+/// Rotada via /training/plan-detail.
+class PlanDetailPage extends StatefulWidget {
+  /// Quando vier de uma navegação que aponta uma semana específica
+  /// (ex: monthly card em TREINO → /training/plan-detail?focusWeek=3),
+  /// faz scroll automático pra essa semana após o load.
+  final int? focusWeek;
+  const PlanDetailPage({super.key, this.focusWeek});
+
+  @override
+  State<PlanDetailPage> createState() => _PlanDetailPageState();
+}
+
+class _PlanDetailPageState extends State<PlanDetailPage> {
+  final _planDs = PlanRemoteDatasource();
+  final _userDs = UserRemoteDatasource();
+  Plan? _plan;
+  UserProfile? _profile;
+  bool _loading = true;
+  String? _error;
+  /// Poll que re-puxa o plano enquanto coachRationale ainda não veio (ele é
+  /// gerado em background no server, ~30-60s depois do plano ficar ready).
+  /// Antes a página carregava 1x e mostrava placeholder pra sempre.
+  Timer? _rationalePoll;
+  // GlobalKey por weekNumber — usado pra Scrollable.ensureVisible quando
+  // user clica numa semana na periodização.
+  final Map<int, GlobalKey> _weekKeys = {};
+
+  GlobalKey _keyFor(int weekNumber) =>
+      _weekKeys.putIfAbsent(weekNumber, () => GlobalKey());
+
+  Future<void> _jumpToWeek(int weekNumber) async {
+    final key = _weekKeys[weekNumber];
+    final ctx = key?.currentContext;
+    if (ctx != null) {
+      await Scrollable.ensureVisible(
+        ctx,
+        duration: const Duration(milliseconds: 350),
+        curve: Curves.easeOut,
+        alignment: 0.05,
+      );
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _rationalePoll?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    setState(() { _loading = true; _error = null; });
+    try {
+      final results = await Future.wait([
+        _planDs.getCurrentPlan(),
+        _userDs.getMe(),
+      ]);
+      if (mounted) {
+        setState(() {
+        _plan = results[0] as Plan?;
+        _profile = results[1] as UserProfile?;
+        _loading = false;
+      });
+      }
+      // Plano completed → redireciona pra o relatório final. PlanDetail só
+      // faz sentido pra plano em curso (ready/generating). Se ainda mostrasse
+      // semanas detalhadas pra plano completed, ficaria conflituoso.
+      if (_plan?.isCompleted == true) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) context.go('/training/plan-report/${_plan!.id}');
+        });
+        return;
+      }
+      // Se navegou com ?focusWeek=N, scroll após primeiro paint.
+      final fw = widget.focusWeek;
+      if (fw != null && _plan != null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _jumpToWeek(fw);
+        });
+      }
+      // Poll curto enquanto o racional ainda não chegou (server gera em
+      // background ~30-60s depois do plano ficar ready). Sem isso, user via
+      // o placeholder "está escrevendo" pra sempre até refresh manual.
+      _maybeStartRationalePoll();
+    } catch (e) {
+      if (mounted) setState(() { _error = '$e'; _loading = false; });
+    }
+  }
+
+  void _maybeStartRationalePoll() {
+    _rationalePoll?.cancel();
+    final needsRationale =
+        _plan != null && (_plan!.coachRationale?.trim().isEmpty ?? true);
+    if (!needsRationale) return;
+    // Polling a cada 4s, máximo ~2min. Quando o racional aparece (ou o user
+    // sai da tela), o timer para. Sem backoff fancy — janela curta o suficiente
+    // pra não consumir bateria mesmo no pior caso.
+    var ticks = 0;
+    _rationalePoll = Timer.periodic(const Duration(seconds: 4), (t) async {
+      ticks++;
+      if (!mounted || ticks > 30) {
+        t.cancel();
+        return;
+      }
+      try {
+        final fresh = await _planDs.getCurrentPlan();
+        if (!mounted) return;
+        if (fresh != null && (fresh.coachRationale?.trim().isNotEmpty ?? false)) {
+          setState(() => _plan = fresh);
+          t.cancel();
+        }
+      } catch (_) {
+        // erro de rede silencioso — próximo tick tenta de novo.
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    return Scaffold(
+      backgroundColor: palette.background,
+      appBar: const RunninAppBar(title: 'PLANO BASE', fallbackRoute: '/training'),
+      body: _loading
+          ? Center(child: CircularProgressIndicator(color: palette.primary, strokeWidth: 2))
+          : _error != null
+              ? Center(child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Text(_error!, style: context.runninType.bodyMd.copyWith(color: palette.error)),
+                ))
+              : _plan == null
+                  ? Center(child: Text(
+                      'Nenhum plano ativo. Gere um plano em TREINO.',
+                      style: context.runninType.bodySm,
+                    ))
+                  : RefreshIndicator(
+                      onRefresh: _load,
+                      color: palette.primary,
+                      child: ListView(
+                        padding: const EdgeInsets.fromLTRB(20, 24, 20, 40),
+                        children: [
+                          // 1. Header com objetivo + stats principais
+                          _Header(plan: _plan!, profile: _profile),
+                          const SizedBox(height: 14),
+                          // 1b. Avaliação honesta do objetivo (gap nível→meta).
+                          if (_plan!.goalAssessment != null &&
+                              _plan!.goalAssessment!.trim().isNotEmpty) ...[
+                            _GoalAssessmentCard(text: _plan!.goalAssessment!),
+                            const SizedBox(height: 14),
+                          ],
+                          // Disclaimer: regra "1 ajuste por semana" via checkpoint.
+                          // Aparece logo no topo pra criar expectativa correta
+                          // antes do user ler o plano detalhado.
+                          _CheckpointDisclaimer(),
+                          const SizedBox(height: 14),
+                          // 2. Ficha do perfil — dados que o coach considerou
+                          _CollapsibleSection(
+                            icon: Icons.person_outline,
+                            title: 'SEU PERFIL CONSIDERADO',
+                            initiallyExpanded: true,
+                            child: _ProfileSummary(profile: _profile),
+                          ),
+                          const SizedBox(height: 10),
+                          // 3. Racional colapsável (por seções ## — inclui
+                          //    seção "Periodização" do coach)
+                          _RationaleAccordion(plan: _plan!),
+                          const SizedBox(height: 10),
+                          // 4. Stats numérico
+                          _CollapsibleSection(
+                            icon: Icons.bar_chart_outlined,
+                            title: 'NÚMEROS DO PLANO',
+                            child: _StatsSection(plan: _plan!),
+                          ),
+                          const SizedBox(height: 10),
+                          // 5. UNIFICADO: só _WeeksBreakdown agora. Cada
+                          //    week tile tem header rico com FASE/foco/km/
+                          //    dates. Removidos os chips duplicados de
+                          //    periodização — informação aparece direto no
+                          //    header colapsado de cada semana.
+                          if (_plan!.mesocycleNarrative != null &&
+                              _plan!.mesocycleNarrative!.trim().isNotEmpty) ...[
+                            _MesocycleCard(text: _plan!.mesocycleNarrative!),
+                            const SizedBox(height: 14),
+                          ],
+                          _WeeksBreakdown(plan: _plan!, weekKey: _keyFor),
+                          // 7. Histórico de revisões (se houver)
+                          if (_plan!.revisions.isNotEmpty) ...[
+                            const SizedBox(height: 10),
+                            _RevisionsSection(revisions: _plan!.revisions),
+                          ],
+                          // Rodapé: CTA pra regerar plano + copy "plano vivo".
+                          // Antes era bottomNavigationBar fixo — ficava sempre
+                          // por cima do conteúdo. Agora rola junto com o resto.
+                          const SizedBox(height: 24),
+                          _RegenerateFooter(
+                            onRegenerate: () =>
+                                context.push('/training/criar-plano'),
+                          ),
+                        ],
+                      ),
+                    ),
+    );
+  }
+}
+
+/// Rodapé do plan-detail (renderizado no final do scroll, NÃO como
+/// bottomNavigationBar): CTA pra regerar o plano + texto reforçando
+/// "plano vivo / 1 por semana". O cooldown propriamente é tratado na
+/// PlanSetupPage (server retorna 403 COOLDOWN_ACTIVE com availableAt).
+class _RegenerateFooter extends StatelessWidget {
+  final VoidCallback onRegenerate;
+  const _RegenerateFooter({required this.onRegenerate});
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: double.infinity,
+          height: 46,
+          child: OutlinedButton(
+            onPressed: onRegenerate,
+            style: OutlinedButton.styleFrom(
+              side: BorderSide(color: palette.primary, width: 1.041),
+              shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+            ),
+            child: Text(
+              'GERAR PLANO NOVAMENTE',
+              style: context.runninType.labelMd.copyWith(
+                color: palette.primary,
+                letterSpacing: 1.1,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Você pode gerar 1 plano novo por semana se quiser recomeçar. Pra ajustes pontuais, deixa o checkpoint semanal trabalhar — ele ajusta as 2 próximas semanas sem zerar seu histórico.',
+          style: context.runninType.bodySm.copyWith(
+            color: palette.muted,
+            height: 1.4,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Disclaimer 1x/semana — comunica a regra do checkpoint logo no topo.
+/// Não tem CTA: o entry pro checkpoint vive na visão SEMANAL do training_page.
+class _CheckpointDisclaimer extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    return AppPanel(
+      borderColor: palette.primary.withValues(alpha: 0.5),
+      padding: const EdgeInsets.all(AppSpacing.xl),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '> AJUSTES DO PLANO',
+            style: context.runninType.labelCaps.copyWith(fontSize: 11, color: palette.primary, letterSpacing: 1.2),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Seu plano é ajustável 1x por semana, no checkpoint do fim de cada semana. O coach lê tudo que você fez (corridas, pace, BPM, aderência) e cruza com o que você marcar nos chips (mais carga, dor específica, etc). Histórico dos ajustes fica visível abaixo.',
+            style: context.runninType.bodyMd,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Wrapper colapsável genérico pras seções da ficha do plano.
+/// Mantém visual consistente: header com icon + title + chevron.
+class _CollapsibleSection extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final Widget child;
+  final bool initiallyExpanded;
+  final bool accent = false;
+  const _CollapsibleSection({
+    required this.icon,
+    required this.title,
+    required this.child,
+    this.initiallyExpanded = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    return Theme(
+      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+      child: Container(
+        decoration: BoxDecoration(
+          color: accent ? palette.primary.withValues(alpha: 0.05) : palette.surface,
+          border: Border.all(
+            color: accent
+                ? palette.primary.withValues(alpha: 0.4)
+                : palette.border,
+            width: 1.0,
+          ),
+        ),
+        child: ExpansionTile(
+          initiallyExpanded: initiallyExpanded,
+          tilePadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+          childrenPadding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+          iconColor: palette.primary,
+          collapsedIconColor: palette.muted,
+          leading: Icon(icon,
+              size: 18,
+              color: accent ? palette.primary : palette.muted),
+          title: Text(
+            title,
+            // ExpansionTile default truncava o título com ellipsis quando
+            // longo (ex: "AVALIAÇÃO DO OBJETIVO"). softWrap explícito +
+            // maxLines null garante que o texto inteiro caiba quebrando.
+            softWrap: true,
+            overflow: TextOverflow.visible,
+            maxLines: null,
+            style: context.runninType.labelCaps.copyWith(fontSize: 11, color: accent ? palette.primary : palette.text, letterSpacing: 1.2),
+          ),
+          children: [child],
+        ),
+      ),
+    );
+  }
+}
+
+/// Splita o coach rationale por seções `## ` e renderiza cada uma como
+/// um ExpansionTile separado. Primeira seção começa aberta.
+/// Bloco do racional do coach. Renderiza o texto INTEIRO em markdown,
+/// truncado por padrão a [_collapsedLineLimit] linhas (com fade no fim) +
+/// botão VER MAIS. Tap expande pra texto completo + botão VER MENOS.
+///
+/// Substitui o accordion anterior (que splitava por `## `): o LLM nem sempre
+/// devolvia headers no formato esperado, então sections.length acabava igual
+/// a 1, o botão "VER MAIS" sumia e o user via texto parcial sem escape.
+/// Render contínuo é simples e funciona pra qualquer formato de markdown.
+class _RationaleAccordion extends StatefulWidget {
+  final Plan plan;
+  const _RationaleAccordion({required this.plan});
+
+  @override
+  State<_RationaleAccordion> createState() => _RationaleAccordionState();
+}
+
+class _RationaleAccordionState extends State<_RationaleAccordion> {
+  /// Quando colapsado, mostra esse número de linhas e um fade no fim.
+  /// 14 linhas ~ 1 seção curta — o user vê o "Avaliação do objetivo" inteira
+  /// na maior parte dos casos sem precisar clicar.
+  static const _collapsedLineLimit = 14;
+
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    final rationale = widget.plan.coachRationale?.trim();
+
+    Widget header = Padding(
+      padding: const EdgeInsets.only(left: 4, bottom: 6),
+      child: Row(
+        children: [
+          Icon(Icons.psychology_outlined, size: 18, color: palette.primary),
+          const SizedBox(width: 8),
+          Text(
+            'RACIONAL DO COACH',
+            style: context.runninType.labelCaps.copyWith(
+              fontSize: 11,
+              color: palette.primary,
+              letterSpacing: 1.2,
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (rationale == null || rationale.isEmpty) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          header,
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: palette.surface,
+              border: Border.all(color: palette.border, width: 1.041),
+            ),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(
+                    color: palette.primary,
+                    strokeWidth: 1.5,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'O coach está escrevendo a análise detalhada do seu plano. Volte em alguns minutos.',
+                    style: context.runninType.bodyMd.copyWith(color: palette.muted),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
+    }
+
+    // Decide se cabe limitar — texto curto não precisa de toggle.
+    final lineCount = rationale.split('\n').length;
+    final needsToggle = lineCount > _collapsedLineLimit + 2;
+    final bodyText = (!_expanded && needsToggle)
+        ? _firstNLines(rationale, _collapsedLineLimit)
+        : rationale;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        header,
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: palette.surface,
+            border: Border.all(color: palette.border, width: 1.041),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Render markdown inteiro. Stack + fade só quando colapsado pra
+              // sinalizar visualmente que tem mais conteúdo abaixo.
+              if (!_expanded && needsToggle)
+                ShaderMask(
+                  shaderCallback: (rect) => LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    stops: const [0.75, 1.0],
+                    colors: [palette.text, palette.text.withValues(alpha: 0)],
+                  ).createShader(rect),
+                  blendMode: BlendMode.dstIn,
+                  child: _MarkdownText(bodyText),
+                )
+              else
+                _MarkdownText(bodyText),
+              if (needsToggle) ...[
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  height: 40,
+                  child: OutlinedButton(
+                    onPressed: () => setState(() => _expanded = !_expanded),
+                    style: OutlinedButton.styleFrom(
+                      side: BorderSide(color: palette.primary, width: 1.041),
+                      shape: const RoundedRectangleBorder(
+                        borderRadius: BorderRadius.zero,
+                      ),
+                      padding: EdgeInsets.zero,
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          _expanded ? 'VER MENOS' : 'VER MAIS',
+                          style: context.runninType.labelMd.copyWith(
+                            color: palette.primary,
+                            letterSpacing: 1.1,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Icon(
+                          _expanded ? Icons.expand_less : Icons.expand_more,
+                          size: 18,
+                          color: palette.primary,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Retorna as primeiras N linhas do texto, preservando quebras (mantém o
+  /// markdown válido pro _MarkdownText interpretar).
+  static String _firstNLines(String text, int n) {
+    final lines = text.split('\n');
+    if (lines.length <= n) return text;
+    return lines.take(n).join('\n');
+  }
+}
+
+class _RevisionsSection extends StatelessWidget {
+  final List<PlanRevisionLog> revisions;
+  const _RevisionsSection({required this.revisions});
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    return _CollapsibleSection(
+      icon: Icons.history,
+      title: 'HISTÓRICO DE REVISÕES (${revisions.length})',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (final r in revisions) ...[
+            Container(
+              margin: const EdgeInsets.only(top: 10),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: palette.background,
+                border: Border.all(color: palette.border, width: 1.0),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'SEMANA ${r.weekNumber} · ${_shortDate(r.revisedAt)} · ${r.trigger}',
+                    style: context.runninType.labelCaps.copyWith(color: palette.muted),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    r.summary,
+                    style: context.runninType.bodySm.copyWith(color: palette.text, height: 1.5),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  static String _shortDate(String iso) {
+    final d = DateTime.tryParse(iso);
+    if (d == null) return iso;
+    return '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}';
+  }
+}
+
+class _Header extends StatelessWidget {
+  final Plan plan;
+  final UserProfile? profile;
+  const _Header({required this.plan, this.profile});
+
+  static String _fmt(DateTime d) =>
+      '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    final start = plan.effectiveStartDate;
+    final end = plan.mesocycleEndDate;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: palette.surface,
+        border: Border.all(color: palette.primary.withValues(alpha: 0.35), width: 1.0),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('OBJETIVO',
+              style: context.runninType.labelCaps.copyWith(color: palette.muted)),
+          const SizedBox(height: 6),
+          // plan.goal é texto livre do onboarding (ex: "Maratona em sub
+          // 4h mantendo trabalho e família") — pode ser longo. Wrap
+          // explícito pra crescer verticalmente sem cortar.
+          Text(plan.goal,
+              softWrap: true,
+              overflow: TextOverflow.visible,
+              maxLines: null,
+              style: context.runninType.displaySm.copyWith(color: palette.text, fontSize: 18)),
+          const SizedBox(height: 12),
+          // Mesociclo: D0 → final
+          Row(
+            children: [
+              Icon(Icons.event_outlined, size: 14, color: palette.primary),
+              const SizedBox(width: 6),
+              Text(
+                'D0 ${_fmt(start)} → ${_fmt(end)}',
+                style: context.runninType.labelMd.copyWith(color: palette.primary, letterSpacing: 0.4),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 16,
+            runSpacing: 4,
+            children: [
+              _PillStat(label: 'Nível', value: plan.level),
+              _PillStat(label: 'Duração', value: '${plan.weeksCount} sem'),
+              _PillStat(label: 'Sessões',
+                  value: '${plan.weeks.fold<int>(0, (s, w) => s + w.sessions.length)}'),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PillStat extends StatelessWidget {
+  final String label;
+  final String value;
+  const _PillStat({required this.label, required this.value});
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label.toUpperCase(),
+            style: context.runninType.labelCaps.copyWith(color: palette.muted)),
+        const SizedBox(height: 2),
+        Text(value,
+            style: context.runninType.labelMd.copyWith(color: palette.text, fontSize: 13)),
+      ],
+    );
+  }
+}
+
+class _MesocycleCard extends StatelessWidget {
+  final String text;
+  const _MesocycleCard({required this.text});
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: palette.primary.withValues(alpha: 0.05),
+        border: Border.all(color: palette.primary.withValues(alpha: 0.4), width: 1.0),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.timeline, size: 18, color: palette.primary),
+              const SizedBox(width: 8),
+              Text('ESTRATÉGIA DO MESOCICLO',
+                  style: context.runninType.labelCaps.copyWith(fontSize: 11, color: palette.primary, letterSpacing: 1.2)),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(text,
+              style: context.runninType.bodyMd.copyWith(color: palette.text)),
+        ],
+      ),
+    );
+  }
+}
+
+/// Avaliação honesta do objetivo: o coach diz se a meta é alcançável neste
+/// mesociclo ou se o plano é a fundação. Em destaque (cor secundária) logo
+/// abaixo do header.
+class _GoalAssessmentCard extends StatelessWidget {
+  final String text;
+  const _GoalAssessmentCard({required this.text});
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: palette.secondary.withValues(alpha: 0.05),
+        border: Border.all(color: palette.secondary.withValues(alpha: 0.4), width: 1.0),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.flag_outlined, size: 18, color: palette.secondary),
+              const SizedBox(width: 8),
+              Text('AVALIAÇÃO DO OBJETIVO',
+                  style: context.runninType.labelCaps.copyWith(
+                      fontSize: 11, color: palette.secondary, letterSpacing: 1.2)),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(text,
+              style: context.runninType.bodyMd.copyWith(color: palette.text)),
+        ],
+      ),
+    );
+  }
+}
+
+// _CoachRationaleCard removido — substituído por _RationaleAccordion (acima)
+// que renderiza cada seção ## do rationale como ExpansionTile colapsável.
+
+/// Render markdown leve: headings (##, ###), bullets (- ), bold (**x**),
+/// itálico (*x*). Suficiente pra o output do nosso prompt sem dep externa.
+class _MarkdownText extends StatelessWidget {
+  final String text;
+  const _MarkdownText(this.text);
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    final lines = text.split('\n');
+    final widgets = <Widget>[];
+    for (final raw in lines) {
+      final line = raw.trimRight();
+      if (line.isEmpty) {
+        widgets.add(const SizedBox(height: 8));
+        continue;
+      }
+      if (line.startsWith('### ')) {
+        widgets.add(Padding(
+          padding: const EdgeInsets.only(top: 8, bottom: 4),
+          child: Text(line.substring(4),
+              style: context.runninType.labelMd.copyWith(color: palette.text, fontSize: 13)),
+        ));
+      } else if (line.startsWith('## ')) {
+        widgets.add(Padding(
+          padding: const EdgeInsets.only(top: 14, bottom: 6),
+          child: Text(line.substring(3),
+              style: context.runninType.bodyMd.copyWith(color: palette.primary, fontWeight: FontWeight.w500, letterSpacing: 0.3)),
+        ));
+      } else if (line.startsWith('- ')) {
+        widgets.add(Padding(
+          padding: const EdgeInsets.only(left: 4, top: 2, bottom: 2),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(top: 7, right: 8),
+                child: Container(width: 4, height: 4, color: palette.primary),
+              ),
+              Expanded(
+                child: Text(_stripInlineMarks(line.substring(2)),
+                    style: context.runninType.bodyMd),
+              ),
+            ],
+          ),
+        ));
+      } else {
+        // Parágrafos do rationale podem ser longos (1-2 parágrafos por
+        // seção). Wrap explícito + maxLines:null garante que cresçam
+        // verticalmente em vez de truncar quando o card é estreito.
+        widgets.add(Text(_stripInlineMarks(line),
+            softWrap: true,
+            overflow: TextOverflow.visible,
+            maxLines: null,
+            style: context.runninType.bodyMd.copyWith(color: palette.text)));
+      }
+    }
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: widgets);
+  }
+
+  static String _stripInlineMarks(String s) =>
+      s.replaceAll(RegExp(r'\*\*'), '').replaceAll(RegExp(r'(?<!\w)\*(?!\w)'), '');
+}
+
+int? _computeAge(String? birthDate) {
+  if (birthDate == null || birthDate.isEmpty) return null;
+  final d = DateTime.tryParse(birthDate);
+  if (d == null) return null;
+  final now = DateTime.now();
+  var age = now.year - d.year;
+  if (now.month < d.month || (now.month == d.month && now.day < d.day)) age--;
+  return age > 0 && age < 120 ? age : null;
+}
+
+class _ProfileSummary extends StatelessWidget {
+  final UserProfile? profile;
+  const _ProfileSummary({this.profile});
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    final p = profile;
+    if (p == null) return const SizedBox.shrink();
+    final age = _computeAge(p.birthDate);
+    final genderLabel = switch (p.gender) {
+      'male' => 'masculino',
+      'female' => 'feminino',
+      'other' => 'outro',
+      _ => null,
+    };
+    final items = <(String, String)>[
+      ('Nível', p.level),
+      ('Objetivo', p.goal),
+      ('Frequência', '${p.frequency}x/semana'),
+      if (genderLabel != null) ('Gênero', genderLabel),
+      if (age != null) ('Idade', '$age anos'),
+      if (p.runPeriod != null) ('Período', p.runPeriod!),
+      if (p.weight != null && p.weight!.isNotEmpty) ('Peso', p.weight!),
+      if (p.height != null && p.height!.isNotEmpty) ('Altura', p.height!),
+      if (p.restingBpm != null) ('FC repouso', '${p.restingBpm} bpm'),
+      if (p.maxBpm != null) ('FC máx', '${p.maxBpm} bpm'),
+      if (p.medicalConditions.isNotEmpty)
+        ('Condições', p.medicalConditions.join(', '))
+      else
+        ('Condições', 'nenhuma informada'),
+      ('Wearable', p.hasWearable ? 'conectado' : 'sem'),
+    ];
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: palette.surface,
+        border: Border.all(color: palette.border, width: 1.0),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('DADOS CONSIDERADOS',
+              style: context.runninType.labelCaps.copyWith(fontSize: 11, color: palette.muted, letterSpacing: 1.2)),
+          const SizedBox(height: 10),
+          // crossAxisAlignment.start: quando value (Objetivo, Condições)
+          // quebra em múltiplas linhas, label fica alinhado no topo em
+          // vez de vertical-centralizado contra texto comprido. Wrap
+          // explícito + maxLines:null garante que nenhum valor é truncado
+          // — frases longas do onboarding (objetivo livre, lista de
+          // condições médicas) precisam crescer verticalmente.
+          ...items.map((e) => Padding(
+                padding: const EdgeInsets.symmetric(vertical: 3),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(
+                      width: 110,
+                      child: Text(e.$1,
+                          softWrap: true,
+                          overflow: TextOverflow.visible,
+                          maxLines: null,
+                          style: context.runninType.bodySm),
+                    ),
+                    Expanded(
+                      child: Text(e.$2,
+                          softWrap: true,
+                          overflow: TextOverflow.visible,
+                          maxLines: null,
+                          style: context.runninType.bodySm.copyWith(color: palette.text)),
+                    ),
+                  ],
+                ),
+              )),
+        ],
+      ),
+    );
+  }
+}
+
+class _StatsSection extends StatelessWidget {
+  final Plan plan;
+  const _StatsSection({required this.plan});
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    final totalKm = plan.weeks.fold<double>(
+      0, (s, w) => s + w.sessions.fold<double>(0, (ss, x) => ss + x.distanceKm));
+    final byType = <String, int>{};
+    for (final w in plan.weeks) {
+      for (final s in w.sessions) {
+        byType.update(s.type, (v) => v + 1, ifAbsent: () => 1);
+      }
+    }
+    final typeLines = byType.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: palette.surface,
+        border: Border.all(color: palette.border, width: 1.0),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('VOLUME TOTAL',
+              style: context.runninType.labelCaps.copyWith(fontSize: 11, color: palette.muted, letterSpacing: 1.2)),
+          const SizedBox(height: 6),
+          Text('${totalKm.toStringAsFixed(0)} km em ${plan.weeksCount} semanas',
+              style: context.runninType.dataSm.copyWith(color: palette.text)),
+          const SizedBox(height: 12),
+          Text('DISTRIBUIÇÃO POR TIPO',
+              style: context.runninType.labelCaps.copyWith(fontSize: 11, color: palette.muted, letterSpacing: 1.2)),
+          const SizedBox(height: 6),
+          ...typeLines.map((e) => Padding(
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                child: Row(
+                  children: [
+                    Expanded(child: Text(e.key,
+                        style: context.runninType.bodySm.copyWith(color: palette.text))),
+                    Text('${e.value}x',
+                        style: context.runninType.labelMd.copyWith(color: palette.primary)),
+                  ],
+                ),
+              )),
+        ],
+      ),
+    );
+  }
+}
+
+class _WeeksBreakdown extends StatelessWidget {
+  final Plan plan;
+  final GlobalKey Function(int weekNumber)? weekKey;
+  const _WeeksBreakdown({required this.plan, this.weekKey});
+  static const _dayNames = ['', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 4, bottom: 6),
+          child: Row(
+            children: [
+              Icon(Icons.calendar_view_week_outlined,
+                  size: 18, color: palette.primary),
+              const SizedBox(width: 8),
+              Text(
+                'PLANO SEMANA A SEMANA',
+                style: context.runninType.labelCaps.copyWith(fontSize: 11, color: palette.primary, letterSpacing: 1.2),
+              ),
+            ],
+          ),
+        ),
+        for (var i = 0; i < plan.weeks.length; i++) ...[
+          KeyedSubtree(
+            key: weekKey?.call(plan.weeks[i].weekNumber),
+            child: _WeekTile(
+              week: plan.weeks[i],
+              initiallyExpanded: i == 0,
+              dayNames: _dayNames,
+              planStartDate: plan.effectiveStartDate,
+              // Última semana ganha pílula "SEMANA DA META — DD/MM/AAAA".
+              // initialDeadlineAt == raceDate (calculado de startDate +
+              // weeksCount × 7).
+              isLastWeek: i == plan.weeks.length - 1,
+              raceDateIso: plan.initialDeadlineAt,
+              // Plan inteira só pra a última semana renderizar o
+              // PlanClosingCard com weeksCount/initialDeadlineAt/etc.
+              closingPlan: i == plan.weeks.length - 1 ? plan : null,
+            ),
+          ),
+          if (i < plan.weeks.length - 1) const SizedBox(height: 6),
+        ],
+      ],
+    );
+  }
+}
+
+/// Formata ISO YYYY-MM-DD pra "DD/MM/AAAA" (usado na pílula META).
+String _formatRaceDate(String iso) {
+  final d = DateTime.tryParse(iso);
+  if (d == null) return iso;
+  return '${d.day.toString().padLeft(2, '0')}/'
+      '${d.month.toString().padLeft(2, '0')}/'
+      '${d.year}';
+}
+
+class _WeekTile extends StatelessWidget {
+  final PlanWeek week;
+  final bool initiallyExpanded;
+  final List<String> dayNames;
+  /// D0 do plano. Usada pra calcular a data real (DD/MM) de cada
+  /// dayOfWeek dessa semana — assim o user vê "Seg 19/05" e não só "Seg".
+  final DateTime planStartDate;
+  /// true quando esta é a última semana do plano — recebe pílula
+  /// "SEMANA DA META" no header.
+  final bool isLastWeek;
+  /// ISO YYYY-MM-DD da data alvo (raceDate / initialDeadlineAt). Renderizada
+  /// na pílula da última semana.
+  final String? raceDateIso;
+  /// Plan inteira passada SOMENTE pra última semana — usada pelo
+  /// PlanClosingCard renderizado após as 7 linhas de dia.
+  final Plan? closingPlan;
+  const _WeekTile({
+    required this.week,
+    required this.initiallyExpanded,
+    required this.dayNames,
+    required this.planStartDate,
+    this.isLastWeek = false,
+    this.raceDateIso,
+    this.closingPlan,
+  });
+
+  /// Calcula a data real do dayOfWeek nessa semana.
+  /// week.weekNumber 1-indexed; dayOfWeek 1=Seg..7=Dom.
+  DateTime _dateOf(int dayOfWeek) {
+    final start = planStartDate;
+    final startDow = start.weekday; // 1=Mon..7=Sun
+    // Dia 1 da semana 1 = startDate; ajusta pra dia escolhido.
+    final daysFromStart = (week.weekNumber - 1) * 7 + (dayOfWeek - startDow);
+    return start.add(Duration(days: daysFromStart));
+  }
+
+  String _dayDateLabel(int dayOfWeek) {
+    final d = _dateOf(dayOfWeek);
+    return '${dayNames[dayOfWeek]} ${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}';
+  }
+
+  /// Range completo da semana (Mon → Sun) calculado a partir de planStartDate.
+  String _weekDateRange(DateTime start, int weekNumber) {
+    final startDow = start.weekday;
+    final weekStart = start.add(Duration(days: (weekNumber - 1) * 7 + (1 - startDow)));
+    final weekEnd = weekStart.add(const Duration(days: 6));
+    String fmt(DateTime d) =>
+        '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}';
+    return '${fmt(weekStart)} – ${fmt(weekEnd)}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    final wKm = week.sessions.fold<double>(0, (s, x) => s + x.distanceKm);
+    final sorted = [...week.sessions]
+      ..sort((a, b) => a.dayOfWeek.compareTo(b.dayOfWeek));
+    final restTipsByDay = {for (final t in week.restDayTips) t.dayOfWeek: t};
+    final sessionDays = sorted.map((s) => s.dayOfWeek).toSet();
+
+    return Theme(
+      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+      child: Container(
+        decoration: BoxDecoration(
+          color: palette.surface,
+          border: Border.all(color: palette.border, width: 1.0),
+        ),
+        child: ExpansionTile(
+          initiallyExpanded: initiallyExpanded,
+          tilePadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+          childrenPadding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+          iconColor: palette.primary,
+          collapsedIconColor: palette.muted,
+          title: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 7,
+                      vertical: 3,
+                    ),
+                    color: palette.primary.withValues(alpha: 0.15),
+                    child: Text(
+                      'SEM ${week.weekNumber}',
+                      style: context.runninType.labelCaps.copyWith(color: palette.primary),
+                    ),
+                  ),
+                  if (isLastWeek) ...[
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 7,
+                        vertical: 3,
+                      ),
+                      color: palette.primary,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.flag, size: 10, color: palette.background),
+                          const SizedBox(width: 4),
+                          Text(
+                            raceDateIso != null
+                                ? 'META · ${_formatRaceDate(raceDateIso!)}'
+                                : 'SEMANA DA META',
+                            style: context.runninType.labelCaps.copyWith(
+                              color: palette.background,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.8,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      // Nome canônico compartilhado (mesmo do mensal/detalhe).
+                      planWeekLabel(week),
+                      overflow: TextOverflow.ellipsis,
+                      style: context.runninType.labelMd.copyWith(color: palette.text, letterSpacing: 0.8),
+                    ),
+                  ),
+                  Text(
+                    '${week.sessions.length}s · ${wKm.toStringAsFixed(0)}km',
+                    style: context.runninType.labelCaps.copyWith(color: palette.muted),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                _weekDateRange(planStartDate, week.weekNumber),
+                style: context.runninType.labelCaps.copyWith(color: palette.muted),
+              ),
+            ],
+          ),
+          children: [
+            if (week.narrative != null && week.narrative!.trim().isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Text(
+                  week.narrative!.trim(),
+                  style: context.runninType.bodySm.copyWith(color: palette.text.withValues(alpha: 0.78), height: 1.5),
+                ),
+              ),
+            // Renderiza TODOS os 7 dias da semana: sessões + rest tips +
+            // dias sem nenhum dos dois (mostrados como "Descanso").
+            // Cada row é clicável → abre /training/day/:weekNumber/:d
+            // com a ficha completa do dia (hidratação, nutrição, etc).
+            for (var d = 1; d <= 7; d++) ...[
+              InkWell(
+                onTap: () => context.push(
+                  '/training/day/${week.weekNumber}/$d',
+                ),
+                child: sessionDays.contains(d)
+                    ? _SessionRow(
+                        session: sorted.firstWhere((s) => s.dayOfWeek == d),
+                        dayLabel: _dayDateLabel(d),
+                      )
+                    : restTipsByDay.containsKey(d)
+                        ? _RestDayRow(
+                            tip: restTipsByDay[d]!,
+                            dayLabel: _dayDateLabel(d),
+                          )
+                        : _PlainRestRow(dayLabel: _dayDateLabel(d)),
+              ),
+            ],
+            // Última semana ganha card de fechamento (CHEGADA / FECHAMENTO)
+            // depois das 7 linhas de dia.
+            if (isLastWeek && closingPlan != null) ...[
+              const SizedBox(height: 10),
+              PlanClosingCard(plan: closingPlan!, lastWeek: week),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SessionRow extends StatelessWidget {
+  final PlanSession session;
+  final String dayLabel;
+  const _SessionRow({required this.session, required this.dayLabel});
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    final hasDetails = session.durationMin != null ||
+        session.hydrationLiters != null ||
+        (session.nutritionPre?.isNotEmpty ?? false) ||
+        (session.nutritionPost?.isNotEmpty ?? false) ||
+        session.notes.isNotEmpty;
+
+    // Sessão-alvo (RACE) ganha borda + tint mais fortes pra destacar
+    // visualmente que ESSA é a prova/meta do plano. Server marca via
+    // `markTargetSession` na última sessão da última semana.
+    final borderColor = session.isTarget
+        ? palette.primary
+        : palette.primary.withValues(alpha: 0.25);
+    final borderWidth = session.isTarget ? 1.6 : 1.0;
+    final bg = session.isTarget
+        ? palette.primary.withValues(alpha: 0.06)
+        : palette.background;
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 3),
+      decoration: BoxDecoration(
+        color: bg,
+        border: Border.all(color: borderColor, width: borderWidth),
+      ),
+      child: hasDetails
+          ? Theme(
+              data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+              child: ExpansionTile(
+                tilePadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+                childrenPadding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+                iconColor: palette.primary,
+                collapsedIconColor: palette.muted,
+                title: _SessionHeader(session: session, dayLabel: dayLabel),
+                children: [_SessionDetails(session: session)],
+              ),
+            )
+          : Padding(
+              padding: const EdgeInsets.all(AppSpacing.md),
+              child: _SessionHeader(session: session, dayLabel: dayLabel),
+            ),
+    );
+  }
+}
+
+class _SessionHeader extends StatelessWidget {
+  final PlanSession session;
+  final String dayLabel;
+  const _SessionHeader({required this.session, required this.dayLabel});
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    final paceStr =
+        session.targetPace != null ? ' · ${session.targetPace}/km' : '';
+    final durStr = session.durationMin != null
+        ? ' · ~${session.durationMin!.round()}min'
+        : '';
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        SizedBox(
+          width: 72,
+          child: Text(
+            dayLabel,
+            style: context.runninType.labelCaps.copyWith(fontSize: 11, color: palette.primary, letterSpacing: 0.5),
+          ),
+        ),
+        Expanded(
+          child: Text(
+            '${session.type} · ${session.distanceKm.toStringAsFixed(1)}km$paceStr$durStr',
+            style: context.runninType.bodySm.copyWith(color: palette.text),
+          ),
+        ),
+        if (session.isTarget) ...[
+          const SizedBox(width: 6),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+            decoration: BoxDecoration(
+              color: palette.primary,
+              borderRadius: BorderRadius.zero,
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.flag, size: 10, color: palette.background),
+                const SizedBox(width: 3),
+                Text(
+                  'SESSÃO ALVO',
+                  style: context.runninType.labelCaps.copyWith(
+                    fontSize: 9,
+                    color: palette.background,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.8,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _SessionDetails extends StatelessWidget {
+  final PlanSession session;
+  const _SessionDetails({required this.session});
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    final rows = <Widget>[];
+    if (session.hydrationLiters != null) {
+      rows.add(_DetailLine(
+        icon: Icons.water_drop_outlined,
+        label: 'HIDRATAÇÃO',
+        value: '${session.hydrationLiters!.toStringAsFixed(1)}L no dia',
+      ));
+    }
+    if ((session.nutritionPre ?? '').isNotEmpty) {
+      rows.add(_DetailLine(
+        icon: Icons.restaurant_outlined,
+        label: 'PRÉ',
+        value: session.nutritionPre!,
+      ));
+    }
+    if ((session.nutritionPost ?? '').isNotEmpty) {
+      rows.add(_DetailLine(
+        icon: Icons.fastfood_outlined,
+        label: 'PÓS',
+        value: session.nutritionPost!,
+      ));
+    }
+    if (session.notes.isNotEmpty) {
+      rows.add(_DetailLine(
+        icon: Icons.notes_outlined,
+        label: 'NOTAS',
+        value: session.notes,
+      ));
+    }
+    if (rows.isEmpty) return const SizedBox.shrink();
+    return Container(
+      padding: const EdgeInsets.only(top: 8),
+      decoration: BoxDecoration(
+        border: Border(top: BorderSide(color: palette.border, width: 1.0)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: rows,
+      ),
+    );
+  }
+}
+
+class _DetailLine extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+  const _DetailLine({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 14, color: palette.muted),
+          const SizedBox(width: 8),
+          SizedBox(
+            width: 84,
+            child: Text(
+              label,
+              style: context.runninType.labelCaps.copyWith(color: palette.muted),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: context.runninType.bodyXs.copyWith(color: palette.text),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RestDayRow extends StatelessWidget {
+  final PlanRestDayTip tip;
+  final String dayLabel;
+  const _RestDayRow({required this.tip, required this.dayLabel});
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 3),
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: palette.background,
+        border: Border.all(color: palette.border, width: 1.0),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              SizedBox(
+                width: 72,
+                child: Text(
+                  dayLabel,
+                  style: context.runninType.labelCaps.copyWith(fontSize: 11, color: palette.muted, letterSpacing: 0.5),
+                ),
+              ),
+              Expanded(
+                child: Text(
+                  tip.focus ?? 'Descanso ativo',
+                  style: context.runninType.bodyXs,
+                ),
+              ),
+            ],
+          ),
+          if (tip.hydrationLiters != null || (tip.nutrition ?? '').isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 6, left: 36),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (tip.hydrationLiters != null)
+                    Text(
+                      '${tip.hydrationLiters!.toStringAsFixed(1)}L de hidratação',
+                      style: context.runninType.labelCaps.copyWith(color: palette.text),
+                    ),
+                  if ((tip.nutrition ?? '').isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(
+                        tip.nutrition!,
+                        style: context.runninType.bodyXs.copyWith(color: palette.text, fontSize: 11),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PlainRestRow extends StatelessWidget {
+  final String dayLabel;
+  const _PlainRestRow({required this.dayLabel});
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 72,
+            child: Text(
+              dayLabel,
+              style: context.runninType.labelCaps.copyWith(fontSize: 11, color: palette.muted, letterSpacing: 0.5),
+            ),
+          ),
+          Text(
+            'Descanso',
+            style: context.runninType.bodyXs,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Periodização clicável — chips por semana com FASE inferida do
+/// volume/foco. Clicar dispara onTapWeek que faz Scrollable.ensureVisible
+/// pra week tile correspondente lá embaixo.

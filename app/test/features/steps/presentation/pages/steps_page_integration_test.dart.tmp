@@ -1,0 +1,227 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:bloc/bloc.dart';
+import 'package:runnin/features/steps/domain/entities/step.dart';
+import 'package:runnin/features/steps/presentation/bloc/step_bloc.dart' as steps_bloc;
+import 'package:runnin/features/steps/presentation/pages/steps_page.dart';
+import 'package:runnin/core/theme/app_theme.dart';
+import 'package:runnin/core/theme/app_palette.dart';
+
+void main() {
+  group('StepsPage Integration Tests', () {
+    late steps_bloc.StepBloc bloc;
+    late List<AppStep> steps;
+
+    setUp(() {
+      bloc = steps_bloc.StepBloc();
+      steps = [
+        AppStep(
+          id: '1',
+          title: 'Passo 1',
+          description: 'Primeiro passo do fluxo',
+          content: const _TestStepContent(stepId: '1'),
+          validationRules: [
+            StepValidationRule(
+              field: 'test_field',
+              message: 'Este campo é obrigatório',
+              validate: (value) => value != null && value.toString().isNotEmpty,
+            ),
+          ],
+        ),
+        AppStep(
+          id: '2',
+          title: 'Passo 2',
+          description: 'Segundo passo do fluxo',
+          content: const _TestStepContent(stepId: '2'),
+        ),
+        AppStep(
+          id: '3',
+          title: 'Passo 3',
+          description: 'Passo final',
+          isLastStep: true,
+          content: const _TestStepContent(stepId: '3'),
+        ),
+      ];
+    });
+
+    tearDown(() {
+      bloc.close();
+    });
+
+      testWidgets('builds with multiple steps', (WidgetTester tester) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: AppTheme.build(RunninSkin.artico.palette),
+            home: StepsPage(flowId: 'test-flow', steps: steps),
+          ),
+        );
+
+        expect(find.text('PASSO 1 DE 3'), findsOneWidget);
+        expect(find.text('Passo 1'), findsOneWidget);
+        expect(find.text('Passo 2'), findsOneWidget);
+        expect(find.text('Passo 3'), findsOneWidget);
+
+        await tester.pump();
+      });
+
+      testWidgets('navigates to next step', (WidgetTester tester) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: AppTheme.build(RunninSkin.artico.palette),
+            home: StepsPage(flowId: 'test-flow', steps: steps),
+          ),
+        );
+
+        expect(find.text('AVANÇAR'), findsOneWidget);
+        
+        await tester.tap(find.text('AVANÇAR'));
+        await tester.pump();
+
+        expect(find.text('PASSO 2 DE 3'), findsOneWidget);
+
+        await tester.pump();
+      });
+
+    testWidgets('navigates to previous step', (WidgetTester tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.build(RunninSkin.artico.palette),
+          home: StepsPage(flowId: 'test-flow', steps: steps),
+        ),
+      );
+
+       await tester.tap(find.text('AVANÇAR'));
+       await tester.pump();
+
+       expect(find.text('PASSO 2 DE 3'), findsOneWidget);
+
+       await tester.tap(find.text('VOLTAR'));
+       await tester.pump();
+
+       expect(find.text('PASSO 1 DE 3'), findsOneWidget);
+       
+       await tester.pump();
+    });
+
+testWidgets('displays validation errors correctly', (WidgetTester tester) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: AppTheme.build(RunninSkin.artico.palette),
+            home: StepsPage(flowId: 'test-flow', steps: steps),
+          ),
+        );
+
+        await tester.tap(find.text('AVANÇAR'));
+        await tester.pump();
+
+        expect(find.text('Este campo é obrigatório'), findsOneWidget);
+        
+        await tester.pump();
+      });
+
+    testWidgets('completes flow when last step is reached', (WidgetTester tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.build(RunninSkin.artico.palette),
+          home: StepsPage(flowId: 'test-flow', steps: steps),
+        ),
+      );
+
+       await tester.tap(find.text('AVANÇAR'));
+       await tester.pump();
+
+       await tester.tap(find.text('AVANÇAR'));
+       await tester.pump();
+
+       expect(find.text('FINALIZAR'), findsOneWidget);
+       
+       await tester.pump();
+     });
+
+    testWidgets('jumps to specific step via tap', (WidgetTester tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.build(RunninSkin.artico.palette),
+          home: StepsPage(flowId: 'test-flow', steps: steps),
+        ),
+      );
+
+       await tester.tap(find.text('Passo 3'));
+        await tester.pump();
+
+      expect(find.text('PASSO 3 DE 3'), findsOneWidget);
+       
+       await tester.pump();
+     });
+
+    testWidgets('shows error state when validation fails', (WidgetTester tester) async {
+      final failingSteps = [
+        AppStep(
+          id: '1',
+          title: 'Passo 1',
+          content: const _TestStepContent(stepId: '1'),
+          validationRules: [
+            StepValidationRule(
+              field: 'email',
+              message: 'Email inválido',
+              validate: (value) => value == null,
+            ),
+          ],
+        ),
+      ];
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.build(RunninSkin.artico.palette),
+          home: StepsPage(flowId: 'test-flow', steps: failingSteps),
+        ),
+      );
+
+       await tester.tap(find.text('AVANÇAR'));
+       await tester.pumpAndStealFrame();
+
+       expect(find.byIcon(Icons.error_outline_rounded), findsOneWidget);
+       
+       await tester.pumpAndStealFrame();
+     });
+
+    testWidgets('enables navigation between all steps', (WidgetTester tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.build(RunninSkin.artico.palette),
+          home: StepsPage(flowId: 'test-flow', steps: steps),
+        ),
+      );
+
+      bool hasNextButton = true;
+      bool hasPreviousButton = false;
+
+       for (int i = 0; i < steps.length; i++) {
+         expect(find.text('AVANÇAR'), findsOneWidget);
+         
+         if (i < steps.length - 1) {
+           await tester.tap(find.text('AVANÇAR'));
+           await tester.pumpAndStealFrame();
+         }
+       }
+
+       expect(find.text('FINALIZAR'), findsOneWidget);
+       
+       await tester.pumpAndStealFrame();
+     });
+  });
+}
+
+class _TestStepContent extends StatelessWidget {
+  final String stepId;
+
+  const _TestStepContent({required this.stepId});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: Key('step-content-$stepId'),
+      child: const Text('Conteúdo do step'),
+    );
+  }
+}

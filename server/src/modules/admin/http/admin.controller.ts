@@ -1,0 +1,828 @@
+import { Request, Response, NextFunction } from 'express';
+import { z } from 'zod';
+import { getAsyncLLM } from '@shared/infra/llm/llm.factory';
+import {
+  buildPlanInitPrompt,
+  buildPlanRevisionPrompt,
+  buildLiveCoachPrompt,
+  buildPostRunReportPrompt,
+  buildPeriodAnalysisPrompt,
+  buildCoachChatPrompt,
+  buildExamAnalysisPrompt,
+  getDefaultsSnapshot,
+  invalidatePromptsCache,
+  type BuiltPrompt,
+} from '@shared/infra/llm/prompts';
+
+const PreviewSchema = z.object({
+  builder: z.enum([
+    'plan-init',
+    'plan-revision',
+    'live-coach',
+    'post-run-report',
+    'period-analysis',
+    'coach-chat',
+    'exam-analysis',
+  ]),
+  /** When true, runs the LLM with the compiled prompt and returns its output too. */
+  runLlm: z.boolean().optional().default(false),
+  /** Optional fixture override; otherwise uses canonical fixture. */
+  fixture: z.record(z.string(), z.any()).optional(),
+});
+
+const FIXTURE_PROFILE = {
+  name: 'João Atleta',
+  level: 'intermediario' as const,
+  goal: 'Sub 50min nos 10K',
+  frequency: 4,
+  hasWearable: true,
+  gender: 'male' as const,
+  birthDate: '1990-05-12',
+  weight: '72kg',
+  height: '178cm',
+  runPeriod: 'manha' as const,
+  restingBpm: 55,
+  maxBpm: 188,
+  medicalConditions: [],
+  coachPersonality: 'motivador' as const,
+  coachMessageFrequency: 'per_km' as const,
+  coachFeedbackEnabled: { pace: true, bpm: true, motivation: true },
+};
+
+async function buildByName(builder: string, _fixture: Record<string, unknown> | undefined): Promise<BuiltPrompt> {
+  const ragContext = '[KB1] Treino aeróbico em zona 2 prioriza adaptação cardiovascular.\n[KB2] Recuperação ativa acelera resposta neuromuscular.';
+  switch (builder) {
+    case 'plan-init':
+      return buildPlanInitPrompt({
+        profile: FIXTURE_PROFILE,
+        input: { goal: 'Sub 50min nos 10K', level: 'intermediario', frequency: 4, weeksCount: 8 },
+        ragContext,
+      });
+    case 'plan-revision':
+      return buildPlanRevisionPrompt({
+        profile: FIXTURE_PROFILE,
+        plan: { goal: 'Sub 50min nos 10K', level: 'intermediario', weeksCount: 8, weeks: [] },
+        revision: { type: 'more_load', subOption: '+5km/semana', freeText: '' },
+        ragContext,
+      });
+    case 'live-coach':
+      return buildLiveCoachPrompt({
+        profile: FIXTURE_PROFILE,
+        runtimeContextJson: '{"plan":"semana 3 / Easy Run"}',
+        ctx: { event: 'km_reached', runType: 'Easy Run', currentPaceMinKm: 5.4, targetPaceMinKm: 5.5, distanceM: 3000, elapsedS: 970, bpm: 152, kmReached: 3 },
+        ragContext,
+      });
+    case 'post-run-report':
+      return buildPostRunReportPrompt({
+        profile: FIXTURE_PROFILE,
+        run: { summary: '- Tipo: Easy Run\n- Distância: 8.00km\n- Duração: 45 minutos\n- Pace médio: 5:38/km' },
+        planContext: 'Plano: Sub 50min nos 10K (intermediario, semana atual 3)',
+        recentRunsContext: 'Easy Run 6km em 34min; Long Run 12km em 1h12min',
+        ragContext,
+      });
+    case 'period-analysis':
+      return buildPeriodAnalysisPrompt({
+        profile: FIXTURE_PROFILE,
+        period: {
+          range: '10 corridas (62 km totais)',
+          metrics: '- Quantidade: 10\n- Distância: 62km\n- BPM médio: 148',
+          runs: '- 2026-05-01: 8km em 45min\n- 2026-05-04: 5km em 28min',
+        },
+        ragContext,
+      });
+    case 'coach-chat':
+      return buildCoachChatPrompt({
+        profile: FIXTURE_PROFILE,
+        question: 'Posso correr hoje mesmo com a perna um pouco dolorida?',
+        planContext: 'Plano: Sub 50min nos 10K, semana 3',
+        recentRunsContext: 'Easy 6km ontem',
+        ragContext,
+      });
+    case 'exam-analysis':
+      return buildExamAnalysisPrompt({
+        profile: FIXTURE_PROFILE,
+        schema: '{ "summary": string, ... }',
+      });
+    default:
+      throw new Error(`Unknown builder: ${builder}`);
+  }
+}
+
+export async function postPromptPreview(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const input = PreviewSchema.parse(req.body);
+    // Always invalidate before preview so admin sees latest Firestore overrides immediately
+    invalidatePromptsCache();
+
+    const built = await buildByName(input.builder, input.fixture);
+
+    let llmOutput: string | undefined;
+    if (input.runLlm) {
+      const llm = getAsyncLLM();
+      llmOutput = await llm.generate(built.userPrompt, {
+        systemPrompt: built.systemPrompt,
+        maxTokens: Math.min(built.maxTokens, 800),
+        temperature: built.temperature,
+      });
+    }
+
+    res.json({
+      systemPrompt: built.systemPrompt,
+      userPrompt: built.userPrompt,
+      maxTokens: built.maxTokens,
+      temperature: built.temperature,
+      version: built.version,
+      source: built.source,
+      llmOutput,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function getPromptDefaults(_req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    res.json(getDefaultsSnapshot());
+  } catch (err) {
+    next(err);
+  }
+}
+
+export function postInvalidateCache(_req: Request, res: Response): void {
+  invalidatePromptsCache();
+  res.json({ ok: true });
+}
+
+// === Admin: roteiro templates (Dossiê 4) ===
+// Editáveis sem deploy. O admin lê os defaults daqui, escreve o override
+// direto no Firestore (app_config/roteiro_templates.templates) e invalida o
+// cache do servidor pra refletir na próxima geração de plano.
+import {
+  getRoteiroTemplatesDefault,
+  invalidateRoteiroTemplatesCache,
+} from '@shared/knowledge/running/roteiro-templates.store';
+
+export function getRoteiroTemplatesDefaults(_req: Request, res: Response): void {
+  res.json({ templates: getRoteiroTemplatesDefault() });
+}
+
+export function postInvalidateRoteiroCache(_req: Request, res: Response): void {
+  invalidateRoteiroTemplatesCache();
+  res.json({ ok: true });
+}
+
+// === Admin: gerenciamento de plano de usuário ===
+import { FirestoreUserRepository } from '@modules/users/infra/firestore-user.repository';
+import { getAuth, getFirestore, getStorageBucket } from '@shared/infra/firebase/firebase.client';
+import { logger } from '@shared/logger/logger';
+import { SeedTesterUseCase } from '../use-cases/seed-tester.use-case';
+import {
+  invalidateRunningKnowledgeStorageCache,
+  getRunningKnowledgeCorpusWithStorage,
+} from '@shared/knowledge/running/running-knowledge';
+
+const userRepo = new FirestoreUserRepository();
+const seedTester = new SeedTesterUseCase();
+
+const SeedTesterSchema = z.object({
+  phone: z.string().optional(),
+  email: z.string().email().optional(),
+  uid: z.string().optional(),
+}).refine(v => v.phone || v.email || v.uid, {
+  message: 'phone, email ou uid obrigatório',
+});
+
+/**
+ * POST /admin/diagnose/reset-journey?email=X — apaga planos, reseta
+ * onboarded=false (mantém dados do perfil) e revoga refresh tokens pra
+ * forçar re-login. User vai passar por: login → onboarding (campos pré
+ * preenchidos) → paywall → plan-loading → plano gerado com prompt atual.
+ */
+export async function postDiagnoseResetJourney(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const email = (req.query.email as string | undefined)?.trim();
+    if (!email) {
+      res.status(400).json({ error: 'email query param required' });
+      return;
+    }
+    const auth = getAuth();
+    const db = getFirestore();
+    const user = await auth.getUserByEmail(email);
+
+    // 1. Apaga planos
+    const plansCol = db.collection(`users/${user.uid}/plans`);
+    const plansSnap = await plansCol.get();
+    const batch = db.batch();
+    plansSnap.docs.forEach(d => batch.delete(d.ref));
+    await batch.commit();
+
+    // 2. Reset onboarded + planRevisions quota
+    await db.collection('users').doc(user.uid).set({
+      onboarded: false,
+      planRevisions: { usedThisWeek: 0, max: 1, resetAt: new Date().toISOString() },
+      updatedAt: new Date().toISOString(),
+    }, { merge: true });
+
+    // 3. Revoga refresh tokens (força re-auth no próximo request)
+    await auth.revokeRefreshTokens(user.uid);
+
+    res.json({
+      ok: true,
+      uid: user.uid,
+      plansDeleted: plansSnap.size,
+      onboardedReset: true,
+      tokensRevoked: true,
+      note: 'User precisa fechar app + abrir de novo (ou hard refresh no web) pra cair em /login.',
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * POST /admin/diagnose/regenerate-plan?email=X — força regerar o plano do
+ * user com o prompt atual. Bypassa cooldown. Útil pra testar mudanças no
+ * prompt em produção. Protegido por X-Cron-Token.
+ */
+export async function postDiagnoseRegeneratePlan(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const email = (req.query.email as string | undefined)?.trim();
+    if (!email) {
+      res.status(400).json({ error: 'email query param required' });
+      return;
+    }
+    const auth = getAuth();
+    const db = getFirestore();
+    const user = await auth.getUserByEmail(email);
+    const profileSnap = await db.collection('users').doc(user.uid).get();
+    const profile = profileSnap.data();
+    if (!profile?.goal || !profile?.level) {
+      res.status(400).json({ error: 'user has incomplete profile (no goal/level)' });
+      return;
+    }
+    // Apaga plano atual pra evitar checagem de cooldown
+    const plansCol = db.collection(`users/${user.uid}/plans`);
+    const existing = await plansCol.get();
+    const batch = db.batch();
+    existing.docs.forEach(d => batch.delete(d.ref));
+    await batch.commit();
+
+    // Importa lazy pra evitar circular
+    const { GeneratePlanUseCase } = await import(
+      '@modules/plans/use-cases/generate-plan.use-case'
+    );
+    const { FirestorePlanRepository } = await import(
+      '@modules/plans/infra/firestore-plan.repository'
+    );
+    const { FirestoreUserRepository } = await import(
+      '@modules/users/infra/firestore-user.repository'
+    );
+    const repo = new FirestorePlanRepository();
+    const userRepoLocal = new FirestoreUserRepository();
+    const uc = new GeneratePlanUseCase(repo, userRepoLocal);
+    // Pega TODOS os campos do assessment persistidos no profile pra
+    // exercitar o pipeline real (não só os 4 mínimos). Esses campos
+    // foram salvos pelo GeneratePlanUseCase na geração anterior.
+    // weeksCount não é persistido no profile → deriva do raceDate quando
+    // RACE; fallback 8 weeks (caso flow sem data).
+    const computeWeeksFromRaceDate = (raceDate?: string): number | undefined => {
+      if (!raceDate) return undefined;
+      const r = new Date(`${raceDate}T00:00:00`);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const days = Math.ceil((r.getTime() - today.getTime()) / 86_400_000);
+      if (days < 7) return undefined;
+      return Math.ceil(days / 7);
+    };
+    const weeksCount = computeWeeksFromRaceDate(profile.raceDate) ?? 8;
+    const plan = await uc.execute(user.uid, {
+      goal: profile.goal,
+      level: profile.level,
+      frequency: profile.frequency,
+      weeksCount,
+      levelHint: profile.levelHint,
+      currentWeeklyKm: profile.currentWeeklyKm,
+      currentPaceMinKm: profile.currentPaceMinKm,
+      capacityDistanceKm: profile.capacityDistanceKm,
+      availableDays: profile.availableDays,
+      goalKind: profile.goalKind,
+      flowSubgoal: profile.flowSubgoal,
+      raceDistanceKm: profile.raceDistanceKm,
+      raceMode: profile.raceMode,
+      targetPaceMinKm: profile.targetPaceMinKm,
+      raceDate: profile.raceDate,
+      longRunDayOfWeek: profile.longRunDayOfWeek,
+      longRunMaxMinutes: profile.longRunMaxMinutes,
+    });
+    res.json({
+      ok: true,
+      planId: plan.id,
+      status: plan.status,
+      note: 'Generation kicked off async. Polling /admin/diagnose/user em ~15-30s pra ver resultado.',
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * POST /admin/diagnose/weekly-revise?email=X — dispara manualmente a
+ * revisão semanal do plano do user. Útil pra testar o flow antes do
+ * cron semanal estar wired no Cloud Scheduler.
+ */
+export async function postDiagnoseWeeklyRevise(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const email = (req.query.email as string | undefined)?.trim();
+    if (!email) {
+      res.status(400).json({ error: 'email query param required' });
+      return;
+    }
+    const auth = getAuth();
+    const user = await auth.getUserByEmail(email);
+
+    const { container } = await import('@shared/container');
+    const result = await container.useCases.adaptPlan.executeWeeklyRevision(user.uid);
+    res.json({ ok: true, userId: user.uid, ...result });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * POST /admin/cron/weekly-proposals — cron de DOMINGO. Percorre os usuários
+ * ativos premium e gera propostas de revisão pendentes (próximas 2 semanas).
+ * Protegido por X-Cron-Token. Idempotente (não duplica proposta pendente).
+ */
+export async function postCronWeeklyProposals(_req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { container } = await import('@shared/container');
+    const result = await container.useCases.runWeeklyProposals.execute();
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * POST /admin/cron/weekly-proposals/trigger — disparo MANUAL que simula o
+ * cron de domingo. Mesma lógica do `postCronWeeklyProposals`, mas autenticado
+ * via Firebase ID token + custom claim admin (não X-Cron-Token), pra ser
+ * chamado do admin panel da app sem expor o token do scheduler no cliente.
+ */
+export async function postAdminWeeklyProposalsTrigger(_req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { container } = await import('@shared/container');
+    const result = await container.useCases.runWeeklyProposals.execute();
+    res.json({ ok: true, triggeredAt: new Date().toISOString(), ...result });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * POST /admin/cron/weekly-proposals/user — WORKER do fan-out. Chamado por cada
+ * Cloud Task (1 usuário). Gera a proposta pendente desse usuário. Protegido
+ * por X-Cron-Token. Body: { userId }.
+ */
+export async function postCronWeeklyProposalUser(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const userId = (req.body?.userId as string | undefined)?.trim();
+    if (!userId) {
+      res.status(400).json({ error: 'userId required' });
+      return;
+    }
+    const { container } = await import('@shared/container');
+    const result = await container.useCases.processUserProposal.execute(userId);
+    res.json({ ok: true, userId, ...result });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * GET /admin/diagnose/user?email=X — devolve profile + último plano + stats
+ * pra debug rápido sem precisar de ADC local. Protegido por X-Cron-Token.
+ */
+export async function getDiagnoseUser(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const email = (req.query.email as string | undefined)?.trim();
+    if (!email) {
+      res.status(400).json({ error: 'email query param required' });
+      return;
+    }
+    const auth = getAuth();
+    const db = getFirestore();
+    const user = await auth.getUserByEmail(email);
+    const profileSnap = await db.collection('users').doc(user.uid).get();
+    const profile = profileSnap.exists ? profileSnap.data() : null;
+
+    const plansSnap = await db
+      .collection(`users/${user.uid}/plans`)
+      .orderBy('createdAt', 'desc')
+      .limit(1)
+      .get();
+    let planDigest: Record<string, unknown> | null = null;
+    if (!plansSnap.empty) {
+      const planData = plansSnap.docs[0].data() ?? {};
+      const weeks = (planData.weeks ?? []) as Array<{
+        weekNumber: number;
+        narrative?: string;
+        sessions?: Array<{ dayOfWeek: number; type: string; distanceKm: number; targetPace?: string; notes?: string }>;
+      }>;
+      const counts: Record<string, number> = {};
+      for (const w of weeks) {
+        for (const s of w.sessions ?? []) {
+          counts[s.type] = (counts[s.type] ?? 0) + 1;
+        }
+      }
+      planDigest = {
+        id: plansSnap.docs[0].id,
+        goal: planData.goal,
+        level: planData.level,
+        weeksCount: planData.weeksCount,
+        status: planData.status,
+        createdAt: planData.createdAt,
+        sessionTypeCounts: counts,
+        hasMesocycleNarrative: !!planData.mesocycleNarrative,
+        hasCoachRationale: !!planData.coachRationale,
+        mesocycleNarrative: planData.mesocycleNarrative ?? null,
+        coachRationaleSnippet: planData.coachRationale
+          ? String(planData.coachRationale).slice(0, 600)
+          : null,
+        firstWeek: weeks[0] ? {
+          narrative: weeks[0].narrative,
+          sessions: weeks[0].sessions,
+        } : null,
+      };
+    }
+
+    res.json({
+      uid: user.uid,
+      email: user.email,
+      phone: user.phoneNumber,
+      profile,
+      lastPlan: planDigest,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function postSeedTester(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const input = SeedTesterSchema.parse(req.body);
+    const result = await seedTester.execute(input);
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    next(err);
+  }
+}
+
+const ListUsersQuery = z.object({
+  search: z.string().trim().optional(),
+  limit: z.coerce.number().int().min(1).max(200).optional().default(50),
+});
+
+// Catálogo aberto: aceita qualquer id de plano (validado contra Firestore
+// depois). Limita string pra evitar abuse.
+const SetUserPlanSchema = z.object({
+  plan: z.string().min(2).max(40),
+});
+
+export async function getUsersList(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { search, limit } = ListUsersQuery.parse(req.query);
+    const all = await userRepo.list(limit);
+    // Enriquece com email do Firebase Auth (perfil só guarda dados de treino).
+    const ids = all.map(u => u.id).filter(Boolean);
+    const emailById = new Map<string, string | undefined>();
+    if (ids.length > 0) {
+      try {
+        const auth = getAuth();
+        const chunks: string[][] = [];
+        for (let i = 0; i < ids.length; i += 100) chunks.push(ids.slice(i, i + 100));
+        for (const chunk of chunks) {
+          const result = await auth.getUsers(chunk.map(uid => ({ uid })));
+          for (const u of result.users) emailById.set(u.uid, u.email ?? undefined);
+        }
+      } catch (_) {/* enrichment best-effort */}
+    }
+    const term = (search ?? '').toLowerCase();
+    const filtered = term
+      ? all.filter(u =>
+          (u.id ?? '').toLowerCase().includes(term) ||
+          (emailById.get(u.id) ?? '').toLowerCase().includes(term) ||
+          (u.name ?? '').toLowerCase().includes(term),
+        )
+      : all;
+    res.json({
+      users: filtered.map(u => ({
+        id: u.id,
+        email: emailById.get(u.id) ?? null,
+        name: u.name ?? null,
+        subscriptionPlanId: u.subscriptionPlanId ?? 'freemium',
+        onboarded: u.onboarded ?? false,
+        updatedAt: u.updatedAt ?? null,
+      })),
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * POST /admin/rag/reindex — força re-leitura do bucket Storage + reindex
+ * de embeddings. Chamar quando subir/remover arquivo .md no painel admin
+ * (base é quase estática, então invalidação é manual).
+ */
+export async function postRagReindex(_req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    invalidateRunningKnowledgeStorageCache();
+    // Força a próxima query a rebuildar imediatamente — pra admin ver feedback
+    const chunks = await getRunningKnowledgeCorpusWithStorage();
+    res.json({
+      ok: true,
+      totalChunks: chunks.length,
+      withEmbedding: chunks.filter(c => c.embedding && c.embedding.length > 0).length,
+      fromStorage: chunks.filter(c => c.storagePath).length,
+      fromCorpus: chunks.filter(c => !c.storagePath).length,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * POST /admin/rag/purge — APAGA toda a base RAG operacional: zera as
+ * collections rag_chunks e rag_documents e remove os uploads em
+ * Storage (rag/uploads/). Em seguida re-seed + reindex a partir do corpus
+ * canônico (Doc 1) pra base voltar limpa. Operação destrutiva — usada na
+ * troca total da base.
+ */
+export async function postRagPurge(_req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const db = getFirestore();
+    const deletedChunks = await deleteAllDocs(db.collection('rag_chunks'));
+    const deletedDocs = await deleteAllDocs(db.collection('rag_documents'));
+
+    let deletedFiles = 0;
+    try {
+      const [files] = await getStorageBucket().getFiles({ prefix: 'rag/uploads/' });
+      await Promise.all(files.map(f => f.delete().then(() => { deletedFiles += 1; }).catch(() => undefined)));
+    } catch (err) {
+      logger.warn('admin.rag.purge.storage_failed', {
+        err: err instanceof Error ? err.message : String(err),
+      });
+    }
+
+    // Limpa caches e força reindex do corpus canônico (Doc 1).
+    invalidateRunningKnowledgeStorageCache();
+    const chunks = await getRunningKnowledgeCorpusWithStorage();
+    res.json({
+      ok: true,
+      purged: { ragChunks: deletedChunks, ragDocuments: deletedDocs, storageFiles: deletedFiles },
+      reindexed: {
+        totalChunks: chunks.length,
+        withEmbedding: chunks.filter(c => c.embedding && c.embedding.length > 0).length,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * Apaga todos os documentos de uma collection. Deleta POR DOCUMENTO (em
+ * ondas de 25) em vez de batch — chunks de RAG carregam embeddings de 3072
+ * floats e um batch de centenas estoura "Transaction too big" no Firestore.
+ */
+async function deleteAllDocs(
+  col: FirebaseFirestore.CollectionReference,
+): Promise<number> {
+  let total = 0;
+  for (;;) {
+    const snap = await col.limit(300).get();
+    if (snap.empty) break;
+    for (let i = 0; i < snap.docs.length; i += 25) {
+      await Promise.all(snap.docs.slice(i, i + 25).map(doc => doc.ref.delete()));
+    }
+    total += snap.size;
+    if (snap.size < 300) break;
+  }
+  return total;
+}
+
+/**
+ * GET /admin/rag/status — lista documentos da base RAG com status indexed/
+ * pending, contagem de chunks por doc e timestamps.
+ */
+export async function getRagStatus(_req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const db = getFirestore();
+    const snap = await db.collection('rag_documents').limit(200).get();
+    const docs = snap.docs.map(d => {
+      const data = d.data();
+      return {
+        id: d.id,
+        originalName: data.originalName ?? null,
+        storagePath: data.storagePath ?? null,
+        ragStatus: data.ragStatus ?? 'unknown',
+        chunkCount: data.chunkCount ?? 0,
+        uploadedAt: data.uploadedAt ?? null,
+        indexedAt: data.indexedAt ?? null,
+        uploadedByEmail: data.uploadedByEmail ?? null,
+        size: data.size ?? null,
+      };
+    });
+    // Lista os chunks da base (Doc 1 + uploads) com os metadados v3 pro
+    // admin inspecionar seção/vinculante/encaminhamento.
+    const chunks = await getRunningKnowledgeCorpusWithStorage();
+    const chunkList = chunks.map(c => ({
+      id: c.id,
+      secao: c.secao ?? null,
+      title: c.title,
+      tema: c.tema ?? null,
+      categoria: c.categoria ?? [],
+      vinculante: c.vinculante === true,
+      encaminhamento: c.encaminhamento ?? [],
+      hasEmbedding: Boolean(c.embedding && c.embedding.length > 0),
+      fromStorage: Boolean(c.storagePath),
+    }));
+    res.json({
+      documents: docs,
+      chunks: chunkList,
+      summary: {
+        adminDocs: docs.length,
+        indexed: docs.filter(d => d.ragStatus === 'indexed').length,
+        pending: docs.filter(d => d.ragStatus === 'pending').length,
+        totalChunksInUse: chunks.length,
+        chunksWithEmbedding: chunks.filter(c => c.embedding && c.embedding.length > 0).length,
+        vinculanteChunks: chunks.filter(c => c.vinculante).length,
+        builtinCorpusChunks: chunks.filter(c => !c.storagePath).length,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * POST /admin/users/:userId/reset?mode=plan|full — apaga dados do user e
+ * força nova jornada. Auth admin.
+ *  - mode=plan: zera só planos + onboarded=false. Histórico (runs) preserva.
+ *  - mode=full: zera planos + runs + biometric_samples + coach_messages +
+ *    reports + period-analysis + rag_chunks per-user. onboarded=false.
+ * Sempre revoga refresh tokens pro user re-logar.
+ */
+export async function postUserReset(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const userId = req.params.userId;
+    const mode = (req.query.mode as string | undefined) === 'full' ? 'full' : 'plan';
+    if (!userId || typeof userId !== 'string') {
+      res.status(400).json({ error: 'userId required' });
+      return;
+    }
+    const auth = getAuth();
+    const db = getFirestore();
+    await auth.getUser(userId); // valida que existe
+
+    const counts: Record<string, number> = {};
+
+    // Apaga planos sempre
+    const plansCol = db.collection(`users/${userId}/plans`);
+    const plansSnap = await plansCol.get();
+    let batch = db.batch();
+    let opsInBatch = 0;
+    const commitIfNeeded = async () => {
+      if (opsInBatch >= 400) {
+        await batch.commit();
+        batch = db.batch();
+        opsInBatch = 0;
+      }
+    };
+    for (const d of plansSnap.docs) {
+      batch.delete(d.ref);
+      opsInBatch++;
+      await commitIfNeeded();
+    }
+    counts.plans = plansSnap.size;
+
+    if (mode === 'full') {
+      // Subcollections que apagamos: runs (e nested gps_points/coach_messages/
+      // reports), biometric_samples, period-analysis, rag_chunks, devices.
+      const userScopedCols = [
+        'runs',
+        'biometric_samples',
+        'period-analysis',
+        'rag_chunks',
+        'devices',
+        'onboarding_history',
+      ];
+      for (const col of userScopedCols) {
+        const snap = await db.collection(`users/${userId}/${col}`).get();
+        for (const d of snap.docs) {
+          // pra runs, também apaga nested subcollections
+          if (col === 'runs') {
+            const subCols = ['gps_points', 'coach_messages', 'reports'];
+            for (const sc of subCols) {
+              const subSnap = await d.ref.collection(sc).get();
+              for (const sd of subSnap.docs) {
+                batch.delete(sd.ref);
+                opsInBatch++;
+                await commitIfNeeded();
+              }
+            }
+          }
+          batch.delete(d.ref);
+          opsInBatch++;
+          await commitIfNeeded();
+        }
+        counts[col] = snap.size;
+      }
+    }
+    if (opsInBatch > 0) await batch.commit();
+
+    // Marca onboarded=false (mantém dados do perfil — user só re-passa UI)
+    await db.collection('users').doc(userId).set({
+      onboarded: false,
+      planRevisions: { usedThisWeek: 0, max: 1, resetAt: new Date().toISOString() },
+      updatedAt: new Date().toISOString(),
+    }, { merge: true });
+
+    // Revoga refresh tokens
+    await auth.revokeRefreshTokens(userId);
+
+    res.json({
+      ok: true,
+      userId,
+      mode,
+      deletedCounts: counts,
+      onboardedReset: true,
+      tokensRevoked: true,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function patchUserPlan(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const userId = req.params.userId;
+    if (!userId || typeof userId !== 'string') throw new Error('userId required');
+    const { plan } = SetUserPlanSchema.parse(req.body);
+    const existing = await userRepo.findById(userId);
+    if (!existing) {
+      res.status(404).json({ error: 'user_not_found' });
+      return;
+    }
+    await userRepo.upsert({ ...existing, subscriptionPlanId: plan });
+    res.json({ ok: true, userId, plan });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ─── Registry endpoints (read-only discovery) ────────────────────────────
+
+export async function getPromptsRegistry(_req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { PROMPTS_REGISTRY } = await import('./admin-registries');
+    res.json({ prompts: PROMPTS_REGISTRY });
+  } catch (err) { next(err); }
+}
+
+export async function getCoachAiMoments(_req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { COACH_AI_MOMENTS } = await import('./admin-registries');
+    res.json({ moments: COACH_AI_MOMENTS });
+  } catch (err) { next(err); }
+}
+
+export async function getCronsList(_req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { CRONS_REGISTRY } = await import('./admin-registries');
+    res.json({ crons: CRONS_REGISTRY });
+  } catch (err) { next(err); }
+}
+
+export async function getPlansCatalog(_req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { PLANS_CATALOG } = await import('./admin-registries');
+    res.json({ plans: PLANS_CATALOG });
+  } catch (err) { next(err); }
+}
+
+export async function getPlanRules(_req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { getPlanRulesSnapshot } = await import('./admin-registries');
+    res.json(getPlanRulesSnapshot());
+  } catch (err) { next(err); }
+}
+
+export async function getAdminWiringStatus(_req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { getWiringStatus } = await import('./wiring-status');
+    const payload = await getWiringStatus();
+    res.json(payload);
+  } catch (err) { next(err); }
+}

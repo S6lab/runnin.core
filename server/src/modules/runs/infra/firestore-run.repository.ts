@@ -47,6 +47,11 @@ export class FirestoreRunRepository implements RunRepository {
     await batch.commit();
   }
 
+  async listGpsPoints(runId: string, userId: string, limit = 5000): Promise<GpsPoint[]> {
+    const snap = await this.gpscol(userId, runId).orderBy('ts', 'asc').limit(limit).get();
+    return snap.docs.map(d => d.data() as GpsPoint);
+  }
+
   async findByUser(userId: string, limit: number, cursor?: string): Promise<{ runs: Run[]; nextCursor?: string }> {
     let query = this.col(userId).orderBy('createdAt', 'desc').limit(limit + 1);
     if (cursor) query = query.startAfter(cursor);
@@ -56,5 +61,19 @@ export class FirestoreRunRepository implements RunRepository {
     const hasMore = docs.length > limit;
     const runs = docs.slice(0, limit).map(d => ({ id: d.id, userId, ...d.data() }) as Run);
     return { runs, nextCursor: hasMore ? runs[runs.length - 1].createdAt : undefined };
+  }
+
+  async findByDateRange(userId: string, from: Date, to: Date): Promise<Run[]> {
+    // Só range em createdAt + orderBy (single-field, auto-indexado). Filtrar
+    // status='completed' em MEMÓRIA — combinar where(status==) com range exige
+    // índice composto que não existe em staging (gerava 500 em /stats/*).
+    const snap = await this.col(userId)
+      .where('createdAt', '>=', from.toISOString())
+      .where('createdAt', '<=', to.toISOString())
+      .orderBy('createdAt', 'asc')
+      .get();
+    return snap.docs
+      .map(d => ({ id: d.id, userId, ...d.data() }) as Run)
+      .filter(r => r.status === 'completed');
   }
 }

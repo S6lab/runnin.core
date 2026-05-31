@@ -1,0 +1,29 @@
+{
+  "files.watcherExclude": {
+    "**/node_modules/**": true,
+    "**/build/**": true,
+    "**/.dart_tool/**": true,
+    "**/dist/**": true,
+    "**/coverage/**": true,
+    "**/.git/objects/**": true,
+    "**/.git/subtree-cache/**": true
+  },
+  "files.exclude": {
+    "**/node_modules": true,
+    "**/.dart_tool": true,
+    "**/build": true,
+    "**/dist": true,
+    "**/coverage": true,
+    "**/.DS_Store": true
+  },
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/.dart_tool": true,
+    "**/build": true,
+    "**/dist": true,
+    "**/coverage": true,
+    "**/*.lock": true,
+    "**/pubspec.lock": true,
+    "**/package-lock.json": true
+  }
+}

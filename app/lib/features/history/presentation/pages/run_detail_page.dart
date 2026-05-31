@@ -1,0 +1,475 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:runnin/core/network/api_client.dart';
+import 'package:runnin/core/theme/app_palette.dart';
+import 'package:runnin/core/theme/design_system_tokens.dart';
+import 'package:runnin/features/run/data/datasources/run_remote_datasource.dart';
+import 'package:runnin/features/run/domain/entities/run.dart';
+import 'package:runnin/shared/widgets/figma/figma_split_row.dart';
+import 'package:runnin/shared/widgets/metric_card.dart';
+
+class RunDetailPage extends StatefulWidget {
+  final String runId;
+  const RunDetailPage({super.key, required this.runId});
+
+  @override
+  State<RunDetailPage> createState() => _RunDetailPageState();
+}
+
+class _RunDetailPageState extends State<RunDetailPage> {
+  final _remote = RunRemoteDatasource();
+  Run? _run;
+  List<GpsPoint> _gpsPoints = const [];
+  String? _summary;
+  bool _loadingRun = true;
+  bool _loadingReport = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadRun();
+    _loadReport();
+  }
+
+  Future<void> _loadRun() async {
+    try {
+      final run = await _remote.getRun(widget.runId);
+      // Pontos GPS salvos da corrida → mesmo mapa da tela de compartilhar.
+      final points =
+          await _remote.getGpsPoints(widget.runId).catchError((_) => <GpsPoint>[]);
+      if (mounted) {
+        setState(() {
+          _run = run;
+          _gpsPoints = points;
+          _loadingRun = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _loadingRun = false);
+    }
+  }
+
+  Future<void> _loadReport() async {
+    try {
+      final res = await apiClient.get('/coach/report/${widget.runId}');
+      final data = res.data as Map<String, dynamic>;
+      if (data['status'] == 'ready') {
+        if (mounted) setState(() { _summary = data['summary'] as String?; _loadingReport = false; });
+      } else {
+        if (mounted) setState(() => _loadingReport = false);
+      }
+    } catch (_) {
+      if (mounted) setState(() => _loadingReport = false);
+    }
+  }
+
+  String _fmtDate(String iso) {
+    try {
+      return DateFormat("dd 'de' MMMM, yyyy", 'pt_BR').format(DateTime.parse(iso).toLocal());
+    } catch (_) {
+      return iso.substring(0, 10);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    final type = context.runninType;
+
+    return Scaffold(
+      backgroundColor: palette.background,
+      body: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+              child: Row(
+                children: [
+                  GestureDetector(
+                    onTap: () => context.pop(),
+                    child: Container(
+                      width: FigmaDimensions.backButton,
+                      height: FigmaDimensions.backButton,
+                      decoration: BoxDecoration(
+                        border: Border.all(color: FigmaColors.borderBackBtn, width: FigmaDimensions.borderUniversal),
+                      ),
+                      child: Icon(Icons.arrow_back, size: 18, color: palette.text),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Text('DETALHE DA CORRIDA', style: type.labelCaps),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            Expanded(
+              child: _loadingRun
+                  ? Center(child: CircularProgressIndicator(color: palette.primary, strokeWidth: 2))
+                  : _run == null
+                      ? Center(child: Text('Corrida não encontrada.', style: type.bodySm.copyWith(color: palette.muted)))
+                      : SingleChildScrollView(
+                          padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Date & type
+                              Text(
+                                _fmtDate(_run!.createdAt).toUpperCase(),
+                                style: type.bodyXs.copyWith(
+                                  letterSpacing: 1.1,
+                                  color: FigmaColors.textMuted,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.xs),
+                                color: palette.primary.withValues(alpha: 0.15),
+                                child: Text(
+                                  _run!.type.toUpperCase(),
+                                  style: type.labelCaps.copyWith(color: palette.primary),
+                                ),
+                              ),
+                              const SizedBox(height: 20),
+
+                              // 1 ── MAPA: trajeto salvo da corrida (mesmo mapa
+                              //      do compartilhar, em altura contida).
+                              _RunRouteMap(points: _gpsPoints),
+                              const SizedBox(height: 24),
+
+                              // 2 ── DADOS DA CORRIDA: grid 2×2 de MetricCard
+                              //      (mesmo padrão da periodização).
+                              _SectionLabel('DADOS DA CORRIDA'),
+                              const SizedBox(height: 12),
+                              _RunDataGrid(run: _run!),
+                              const SizedBox(height: 24),
+
+                              // 3 ── SPLITS
+                              _SectionLabel('SPLITS'),
+                              const SizedBox(height: 12),
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: FigmaColors.surfaceCard,
+                                  border: Border.all(color: palette.border),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    if (_run!.splits.isEmpty)
+                                      Text(
+                                        'Sem splits por km registrados nesta corrida.',
+                                        style: type.bodySm.copyWith(color: FigmaColors.textMuted),
+                                      )
+                                    else
+                                      ..._buildSplitRows(_run!.splits),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 24),
+
+                              // 4 ── ANÁLISE DO COACH
+                              _SectionLabel('ANÁLISE DO COACH'),
+                              const SizedBox(height: 12),
+                              Container(
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  border: Border(left: BorderSide(color: palette.secondary, width: 3)),
+                                  color: palette.secondary.withValues(alpha: 0.05),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'COACH.AI',
+                                      style: type.labelCaps.copyWith(color: palette.secondary),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    _loadingReport
+                                        ? Row(children: [
+                                            SizedBox(
+                                              width: 12, height: 12,
+                                              child: CircularProgressIndicator(strokeWidth: 1.5, color: palette.muted),
+                                            ),
+                                            const SizedBox(width: 10),
+                                            Text('Carregando análise...', style: type.bodySm),
+                                          ])
+                                        : Text(
+                                            _summary ?? 'Relatório não disponível para esta corrida.',
+                                            style: type.bodyMd.copyWith(height: 1.6),
+                                          ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 32),
+
+                              // CTAs — ambos no padrão do design system
+                              // (quadrado, cores da skin via palette).
+                              SizedBox(
+                                width: double.infinity,
+                                child: OutlinedButton.icon(
+                                  onPressed: () => context.push('/share', extra: {'runId': widget.runId}),
+                                  icon: Icon(Icons.share_outlined, size: 16, color: palette.primary),
+                                  label: Text('COMPARTILHAR', style: type.labelCaps.copyWith(color: palette.primary)),
+                                  style: OutlinedButton.styleFrom(
+                                    side: BorderSide(color: palette.primary.withValues(alpha: 0.4)),
+                                    padding: const EdgeInsets.symmetric(vertical: 14),
+                                    shape: const RoundedRectangleBorder(),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 10),
+                              SizedBox(
+                                width: double.infinity,
+                                child: ElevatedButton.icon(
+                                  onPressed: () => context.push('/history/run/${widget.runId}/conversa'),
+                                  icon: Icon(Icons.chat_bubble_outline, size: 16, color: palette.background),
+                                  label: Text(
+                                    'VER CONVERSA COM COACH',
+                                    style: type.labelCaps.copyWith(color: palette.background),
+                                  ),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: palette.secondary,
+                                    foregroundColor: palette.background,
+                                    elevation: 0,
+                                    padding: const EdgeInsets.symmetric(vertical: 14),
+                                    shape: const RoundedRectangleBorder(),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Monta uma lista de FigmaSplitRow. Best split (menor pace numérico) fica
+  /// destacado em cyan via isBest; demais em dim. barRatio = pace/maxPace
+  /// (split mais lento ocupa toda a largura, mais rápido proporcionalmente
+  /// menos — leitura visual de "mais curto = mais rápido").
+  List<Widget> _buildSplitRows(List<KmSplit> splits) {
+    final sorted = [...splits]..sort((a, b) => a.kmIndex.compareTo(b.kmIndex));
+    final paceMins = sorted.map(_paceToMin).toList();
+    final validPaces = paceMins.where((p) => p != null).cast<double>().toList();
+    if (validPaces.isEmpty) {
+      return sorted
+          .map((s) => Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: FigmaSplitRow(
+                  kmLabel: 'KM${s.kmIndex + 1}',
+                  time: _formatDuration(s.durationS),
+                  barRatio: 0,
+                  isBest: false,
+                  bpm: s.avgBpm,
+                  calories: s.calories,
+                ),
+              ))
+          .toList();
+    }
+    final maxPace = validPaces.reduce((a, b) => a > b ? a : b);
+    final bestIdx = paceMins.indexWhere((p) => p != null && p == validPaces.reduce((a, b) => a < b ? a : b));
+
+    return List.generate(sorted.length, (i) {
+      final s = sorted[i];
+      final p = paceMins[i];
+      final ratio = (p != null && maxPace > 0) ? p / maxPace : 0.0;
+      return Padding(
+        padding: EdgeInsets.only(bottom: i == sorted.length - 1 ? 0 : 6),
+        child: FigmaSplitRow(
+          kmLabel: 'KM${s.kmIndex + 1}',
+          time: s.avgPaceMinKm ?? _formatDuration(s.durationS),
+          barRatio: ratio,
+          isBest: i == bestIdx,
+          bpm: s.avgBpm,
+          calories: s.calories,
+          elevationGainM: s.elevationGain,
+        ),
+      );
+    });
+  }
+
+  double? _paceToMin(KmSplit s) {
+    final p = s.avgPaceMinKm;
+    if (p == null) return null;
+    final parts = p.split(':');
+    if (parts.length != 2) return null;
+    final min = int.tryParse(parts[0]);
+    final sec = int.tryParse(parts[1]);
+    if (min == null || sec == null) return null;
+    return min + sec / 60.0;
+  }
+
+  String _formatDuration(int s) {
+    final m = (s ~/ 60).toString();
+    final r = (s % 60).toString().padLeft(2, '0');
+    return '$m:$r';
+  }
+}
+
+/// Título de seção (DADOS DA CORRIDA / SPLITS / ANÁLISE DO COACH) na mesma
+/// escala dos headers de painel do app (displaySm 14).
+class _SectionLabel extends StatelessWidget {
+  final String text;
+  const _SectionLabel(this.text);
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      text,
+      style: context.runninType.displaySm.copyWith(
+        color: context.runninPalette.text,
+        fontSize: 14,
+      ),
+    );
+  }
+}
+
+/// Mapa do trajeto da corrida — mesma renderização do compartilhar (tiles
+/// OSM + rota em cyan), em altura contida. Usa os pontos GPS salvos da
+/// corrida; sem GPS suficiente, mostra um placeholder neutro.
+class _RunRouteMap extends StatelessWidget {
+  final List<GpsPoint> points;
+  const _RunRouteMap({required this.points});
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    final latLng =
+        points.map((p) => LatLng(p.lat, p.lng)).toList(growable: false);
+    final hasRoute = latLng.length >= 2;
+
+    if (!hasRoute) {
+      return Container(
+        height: 180,
+        width: double.infinity,
+        decoration: BoxDecoration(
+          color: palette.surface,
+          border: Border.all(color: palette.border),
+        ),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.map_outlined, size: 28, color: palette.muted),
+              const SizedBox(height: 8),
+              Text(
+                'Sem trajeto GPS nesta corrida',
+                style: context.runninType.bodySm.copyWith(color: palette.muted),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final bounds = LatLngBounds.fromPoints(latLng);
+    return Container(
+      height: 260,
+      decoration: BoxDecoration(border: Border.all(color: palette.border)),
+      clipBehavior: Clip.hardEdge,
+      child: FlutterMap(
+        options: MapOptions(
+          initialCenter: bounds.center,
+          initialZoom: 14,
+          initialCameraFit: CameraFit.bounds(
+            bounds: bounds,
+            padding: const EdgeInsets.all(36),
+          ),
+          interactionOptions:
+              const InteractionOptions(flags: InteractiveFlag.none),
+        ),
+        children: [
+          TileLayer(
+            urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+            userAgentPackageName: 'com.runnin.app',
+          ),
+          PolylineLayer(
+            polylines: [
+              Polyline(
+                points: latLng,
+                color: palette.primary,
+                strokeWidth: 4,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Dados da corrida em grid de 2 por linha (MetricCard), mesmo padrão da
+/// periodização. Métricas biométricas só aparecem quando há dado.
+class _RunDataGrid extends StatelessWidget {
+  final Run run;
+  const _RunDataGrid({required this.run});
+
+  static String _fmtDur(int s) {
+    final h = s ~/ 3600;
+    final m = (s % 3600) ~/ 60;
+    final sec = s % 60;
+    return h > 0
+        ? '$h:${m.toString().padLeft(2, '0')}:${sec.toString().padLeft(2, '0')}'
+        : '${m.toString().padLeft(2, '0')}:${sec.toString().padLeft(2, '0')}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final entries = <(String, String, String?)>[
+      ('DISTÂNCIA', (run.distanceM / 1000).toStringAsFixed(2), 'km'),
+      ('TEMPO', _fmtDur(run.durationS), null),
+      ('PACE MÉD', run.avgPace ?? '--:--', '/km'),
+    ];
+    if (run.avgBpm != null && run.avgBpm! > 0) {
+      entries.add(('BPM MÉD', '${run.avgBpm}', 'bpm'));
+    }
+    if (run.maxBpm != null && run.maxBpm! > 0) {
+      entries.add(('BPM MÁX', '${run.maxBpm}', 'bpm'));
+    }
+    if (run.calories != null && run.calories! > 0) {
+      entries.add(('CALORIAS', '${run.calories}', 'kcal'));
+    }
+    // Ganho de elevação capturado via GPS/altímetro durante a corrida.
+    if (run.elevationGain != null && run.elevationGain! > 0) {
+      entries.add(('ELEVAÇÃO', '+${run.elevationGain!.round()}', 'm'));
+    }
+    if (run.xpEarned != null && run.xpEarned! > 0) {
+      entries.add(('XP', '+${run.xpEarned}', null));
+    }
+
+    Widget cardFor((String, String, String?) e) =>
+        MetricCard(label: e.$1, value: e.$2, unit: e.$3);
+
+    final rows = <Widget>[];
+    for (var i = 0; i < entries.length; i += 2) {
+      final hasSecond = i + 1 < entries.length;
+      // IntrinsicHeight dá altura FINITA pro stretch (sem ele, num
+      // SingleChildScrollView o cross-axis é infinito e o layout estoura,
+      // sumindo com tudo abaixo do mapa).
+      rows.add(IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(child: cardFor(entries[i])),
+            const SizedBox(width: 8),
+            Expanded(
+              child: hasSecond ? cardFor(entries[i + 1]) : const SizedBox(),
+            ),
+          ],
+        ),
+      ));
+      if (i + 2 < entries.length) rows.add(const SizedBox(height: 8));
+    }
+    return Column(children: rows);
+  }
+}

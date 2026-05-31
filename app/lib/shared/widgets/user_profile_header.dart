@@ -1,0 +1,169 @@
+import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:runnin/core/theme/app_palette.dart';
+
+class UserProfileHeader extends StatelessWidget {
+  final String userName;
+  final int levelNumber;
+  final bool isPremium;
+  final int totalRuns;
+  final double totalDistanceKm;
+  final String? city;
+
+  const UserProfileHeader({
+    super.key,
+    required this.userName,
+    required this.levelNumber,
+    this.isPremium = false,
+    required this.totalRuns,
+    required this.totalDistanceKm,
+    this.city,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(17.7, 20, 17.7, 20),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _Avatar(userName: userName, palette: palette),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  userName.toUpperCase(),
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w500,
+                    letterSpacing: 0.48,
+                    color: palette.text,
+                  ),
+                ),
+                if (city != null && city!.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.place_outlined, size: 12, color: palette.muted),
+                      const SizedBox(width: 4),
+                      Flexible(
+                        child: Text(
+                          city!,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            letterSpacing: 0.48,
+                            color: palette.muted,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+                const SizedBox(height: 4),
+                Text(
+                  'Nível $levelNumber · · ',
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    letterSpacing: 0.48,
+                    color: palette.muted,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '${totalRuns.toString().toUpperCase()} CORRIDAS · ${totalDistanceKm.toStringAsFixed(1)}km total',
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    letterSpacing: 0.48,
+                    color: palette.muted,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                _PlanTag(isPremium: isPremium, palette: palette),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Avatar extends StatelessWidget {
+  final String userName;
+  final RunninPalette palette;
+
+  const _Avatar({required this.userName, required this.palette});
+
+  @override
+  Widget build(BuildContext context) {
+    final initial = userName.isNotEmpty ? userName.characters.first.toUpperCase() : 'R';
+
+    return Container(
+      width: 56,
+      height: 56,
+      decoration: BoxDecoration(
+        color: palette.primary,
+        borderRadius: BorderRadius.zero,
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        initial,
+        style: GoogleFonts.jetBrainsMono(
+          fontSize: 22,
+          fontWeight: FontWeight.w500,
+          color: palette.background,
+        ),
+      ),
+    );
+  }
+}
+
+class _PlanTag extends StatelessWidget {
+  final bool isPremium;
+  final RunninPalette palette;
+
+  const _PlanTag({required this.isPremium, required this.palette});
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = isPremium ? palette.primary : palette.muted;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: isPremium
+            ? palette.primary.withValues(alpha: 0.08)
+            : palette.surface,
+        border: Border.all(color: accent.withValues(alpha: 0.55), width: 1),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 6,
+            height: 6,
+            color: accent,
+          ),
+          const SizedBox(width: 6),
+          Text(
+            isPremium ? 'PLANO · PREMIUM' : 'PLANO · FREEMIUM',
+            style: GoogleFonts.jetBrainsMono(
+              fontSize: 10,
+              fontWeight: FontWeight.w500,
+              color: accent,
+              letterSpacing: 1.0,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

@@ -1,0 +1,15 @@
+# Terraform state e cache local — nunca commitar.
+# OBS: .terraform.lock.hcl É commitado (garante versão consistente do
+# provider entre máquinas); só o diretório .terraform/ é ignorado.
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+
+# Vars sensíveis (tokens do cronTokenMiddleware).
+terraform.tfvars
+*.auto.tfvars
+
+# Logs/plan files locais.
+*.tfplan
+crash.log

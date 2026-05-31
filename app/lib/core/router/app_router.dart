@@ -4,24 +4,56 @@ import 'package:go_router/go_router.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:runnin/features/admin/presentation/pages/admin_page.dart';
+import 'package:runnin/features/admin/presentation/pages/prompts_admin_page.dart';
+import 'package:runnin/features/admin/presentation/pages/coach_ai_admin_page.dart';
+import 'package:runnin/features/admin/presentation/pages/plan_rules_admin_page.dart';
+import 'package:runnin/features/admin/presentation/pages/roteiro_templates_admin_page.dart';
+import 'package:runnin/features/intro/presentation/pages/intro_page.dart';
+import 'package:runnin/features/paywall/presentation/pages/paywall_page.dart';
+import 'package:runnin/features/subscriptions/presentation/pages/benefit_activation_page.dart';
+import 'package:runnin/features/subscriptions/presentation/pages/benefits_page.dart';
+import 'package:runnin/features/coach_live/presentation/pages/coach_live_page.dart';
 import 'package:runnin/features/auth/presentation/pages/login_page.dart';
+import 'package:runnin/features/coach_intro/presentation/pages/coach_intro_page.dart';
 import 'package:runnin/features/home/presentation/pages/home_page.dart';
 import 'package:runnin/features/onboarding/presentation/pages/onboarding_page.dart';
 import 'package:runnin/features/run/presentation/bloc/run_bloc.dart';
 import 'package:runnin/features/run/presentation/pages/prep_page.dart';
 import 'package:runnin/features/run/presentation/pages/active_run_page.dart';
 import 'package:runnin/features/run/presentation/pages/report_page.dart';
+import 'package:runnin/features/run/presentation/pages/share_page.dart';
+import 'package:runnin/features/run/presentation/pages/plan_loading_page.dart';
 import 'package:runnin/features/training/presentation/pages/training_page.dart';
-import 'package:runnin/features/coach/presentation/pages/coach_chat_page.dart';
+import 'package:runnin/features/training/presentation/pages/plan_detail_page.dart';
+import 'package:runnin/features/training/presentation/pages/day_detail_page.dart';
+import 'package:runnin/features/training/presentation/pages/plan_report_page.dart';
+import 'package:runnin/features/training/presentation/pages/plan_setup_page.dart';
 import 'package:runnin/features/history/presentation/pages/history_page.dart';
+import 'package:runnin/features/history/presentation/pages/run_detail_page.dart';
+import 'package:runnin/features/history/presentation/pages/coach_conversation_replay_page.dart';
 import 'package:runnin/features/profile/presentation/pages/account_page.dart';
 import 'package:runnin/features/profile/presentation/pages/account_access_page.dart';
+import 'package:runnin/features/profile/presentation/pages/health_exams_page.dart';
+import 'package:runnin/features/profile/presentation/pages/health/devices_page.dart';
+import 'package:runnin/features/profile/presentation/pages/health/health_zones_page.dart';
 import 'package:runnin/features/profile/presentation/pages/profile_page.dart';
+import 'package:runnin/features/profile/presentation/pages/settings/settings_index_page.dart';
+import 'package:runnin/features/profile/presentation/pages/settings/coach_settings_page.dart';
+import 'package:runnin/features/profile/presentation/pages/settings/notifications_settings_page.dart';
+import 'package:runnin/features/profile/presentation/pages/terms_page.dart';
+import 'package:runnin/features/notifications/presentation/pages/notifications_page.dart';
 import 'package:runnin/features/dashboard/presentation/pages/dashboard_page.dart';
+import 'package:runnin/features/profile/presentation/pages/health/health_index_page.dart';
+import 'package:runnin/features/profile/presentation/pages/health/health_trends_page.dart';
 import 'package:runnin/features/gamification/presentation/pages/gamification_page.dart';
+import 'package:runnin/features/splash/presentation/pages/splash_page.dart';
 import 'package:runnin/shared/widgets/main_layout.dart';
+import 'package:runnin/features/training/presentation/pages/weekly_report_detail_page.dart';
 
-final _rootNavigatorKey = GlobalKey<NavigatorState>();
+/// Exposto pra que push handlers (FCM) consigam navegar via
+/// `rootNavigatorKey.currentState?.context` quando o tap acontece fora do
+/// widget tree (background/cold start).
+final rootNavigatorKey = GlobalKey<NavigatorState>();
 final _shellNavigatorKey = GlobalKey<NavigatorState>();
 final _runFlowNavigatorKey = GlobalKey<NavigatorState>();
 
@@ -64,10 +96,14 @@ void clearOnboardingCache() {
 }
 
 final appRouter = GoRouter(
-  navigatorKey: _rootNavigatorKey,
+  navigatorKey: rootNavigatorKey,
   initialLocation: _initialLocation(),
   redirect: (context, state) {
-    final loggedIn = FirebaseAuth.instance.currentUser != null;
+    final user = FirebaseAuth.instance.currentUser;
+    // Anônimo NÃO conta como logado — desde a remoção do auto-anonymous,
+    // qualquer leftover de sessão anônima deve ser tratado como logged-out
+    // pra empurrar pro /login.
+    final loggedIn = user != null && !user.isAnonymous;
     final loc = state.matchedLocation;
     final path = state.uri.path;
     final onboardingStatus = onboardingCacheStatus();
@@ -76,13 +112,29 @@ final appRouter = GoRouter(
       return null;
     }
 
-    if (!loggedIn) {
-      if (loc != '/onboarding' && loc != '/login') return '/onboarding';
+    // Public routes (no auth needed). SplashPage advances itself.
+    const publicRoutes = {'/splash', '/login'};
+    if (publicRoutes.contains(loc)) {
+      // Logado + onboarding concluído cai em /login → manda direto pra home.
+      // Logado mid-onboarding fica em /login normalmente (o login_page
+      // navega pra /onboarding após autenticar).
+      if (loggedIn && loc == '/login' && onboardingStatus == true) {
+        return '/home';
+      }
       return null;
     }
 
-    // Logado mas ainda não fez onboarding
-    if (onboardingStatus == false && loc != '/onboarding') {
+    // Daqui em diante, rotas privadas: precisa estar logado.
+    if (!loggedIn) {
+      // Logout ou acesso direto sem auth → manda pra login (não pra onboarding).
+      return '/login';
+    }
+
+    // Logado mas ainda não fez onboarding → assessment
+    if (onboardingStatus == false &&
+        loc != '/onboarding' &&
+        loc != '/plan-loading' &&
+        loc != '/paywall') {
       return '/onboarding';
     }
 
@@ -92,18 +144,61 @@ final appRouter = GoRouter(
       return '/home';
     }
 
-    if (loc == '/login') return '/home';
     return null;
   },
   refreshListenable: _AuthChangeNotifier(),
   routes: [
+    GoRoute(path: '/splash', builder: (_, _) => const SplashPage()),
     GoRoute(path: '/admin', builder: (_, _) => const AdminPage()),
+    GoRoute(path: '/admin/prompts', builder: (_, _) => const PromptsAdminPage()),
+    GoRoute(path: '/admin/coach-ai', builder: (_, _) => const CoachAiAdminPage()),
+    GoRoute(path: '/admin/plan-rules', builder: (_, _) => const PlanRulesAdminPage()),
+    GoRoute(path: '/admin/roteiro-templates', builder: (_, _) => const RoteiroTemplatesAdminPage()),
+    GoRoute(path: '/intro', builder: (_, _) => const IntroPage()),
+    GoRoute(
+      path: '/coach-live',
+      builder: (_, state) => CoachLivePage(
+        runId: state.uri.queryParameters['runId'],
+      ),
+    ),
+    GoRoute(
+      path: '/paywall',
+      builder: (_, state) => PaywallPage(
+        nextRoute: state.uri.queryParameters['next'] ?? '/home',
+        startDate: state.uri.queryParameters['startDate'],
+      ),
+    ),
     GoRoute(path: '/login', builder: (_, _) => const LoginPage()),
     GoRoute(path: '/onboarding', builder: (_, _) => const OnboardingPage()),
+    GoRoute(
+      path: '/plan-loading',
+      builder: (_, state) => PlanLoadingPage(
+        startDate: state.uri.queryParameters['startDate'],
+      ),
+    ),
+    GoRoute(
+      path: '/benefit-activation',
+      builder: (_, state) => BenefitActivationPage(
+        startDate: state.uri.queryParameters['startDate'],
+      ),
+    ),
+    GoRoute(
+      path: '/profile/benefits',
+      builder: (_, _) => const BenefitsPage(),
+    ),
+    GoRoute(path: '/coach-intro', builder: (_, _) => const CoachIntroPage()),
+    GoRoute(
+      path: '/share',
+      parentNavigatorKey: rootNavigatorKey,
+      builder: (_, state) {
+        final extra = state.extra as Map<String, dynamic>? ?? {};
+        return SharePage(runId: extra['runId'] as String? ?? '');
+      },
+    ),
 
     // Fluxo de corrida — RunBloc compartilhado entre prep → run → report
     ShellRoute(
-      parentNavigatorKey: _rootNavigatorKey,
+      parentNavigatorKey: rootNavigatorKey,
       navigatorKey: _runFlowNavigatorKey,
       builder: (context, state, child) =>
           BlocProvider(create: (_) => RunBloc(), child: child),
@@ -111,8 +206,35 @@ final appRouter = GoRouter(
         GoRoute(path: '/prep', builder: (_, _) => const PrepPage()),
         GoRoute(
           path: '/run',
-          builder: (_, state) =>
-              ActiveRunPage(runId: state.extra as String? ?? ''),
+          // extra pode ser String (tipo da corrida) ou Map com
+          // {type, planSessionId} quando vier de TREINO (sessão do plano).
+          // Map mantém backwards-compat com callers antigos que passam só
+          // o tipo. ActiveRunPage entra em modo IDLE — só dispara StartRun
+          // quando user pressionar INICIAR.
+          builder: (_, state) {
+            final extra = state.extra;
+            String type = 'Free Run';
+            String? planSessionId;
+            Map<String, bool>? alertPrefs;
+            bool? isPremium;
+            if (extra is String && extra.isNotEmpty) {
+              type = extra;
+            } else if (extra is Map<String, dynamic>) {
+              type = (extra['type'] as String?) ?? 'Free Run';
+              planSessionId = extra['planSessionId'] as String?;
+              final ap = extra['alertPrefs'];
+              if (ap is Map) {
+                alertPrefs = ap.map((k, v) => MapEntry(k.toString(), v == true));
+              }
+              isPremium = extra['isPremium'] as bool?;
+            }
+            return ActiveRunPage(
+              initialType: type,
+              planSessionId: planSessionId,
+              alertPrefs: alertPrefs,
+              isPremium: isPremium,
+            );
+          },
         ),
         GoRoute(
           path: '/report',
@@ -129,12 +251,80 @@ final appRouter = GoRouter(
       routes: [
         GoRoute(path: '/home', builder: (_, _) => const HomePage()),
         GoRoute(path: '/training', builder: (_, _) => const TrainingPage()),
-        GoRoute(path: '/coach', builder: (_, _) => const CoachChatPage()),
+        GoRoute(
+          path: '/training/criar-plano',
+          builder: (_, _) => const PlanSetupPage(),
+        ),
+        GoRoute(
+          path: '/training/plan-detail',
+          builder: (_, state) => PlanDetailPage(
+            focusWeek: int.tryParse(
+              state.uri.queryParameters['focusWeek'] ?? '',
+            ),
+          ),
+        ),
+        GoRoute(
+          path: '/training/day/:weekNumber/:dayOfWeek',
+          builder: (_, state) => DayDetailPage(
+            weekNumber: int.parse(state.pathParameters['weekNumber']!),
+            dayOfWeek: int.parse(state.pathParameters['dayOfWeek']!),
+          ),
+        ),
+        GoRoute(
+          path: '/training/report/:weekStart',
+          builder: (_, state) => WeeklyReportDetailPage(
+            weekStart: state.pathParameters['weekStart']!,
+          ),
+        ),
+        GoRoute(
+          path: '/training/plan-report/:planId',
+          builder: (_, state) => PlanReportPage(
+            planId: state.pathParameters['planId']!,
+          ),
+        ),
         GoRoute(path: '/history', builder: (_, _) => const HistoryPage()),
+        GoRoute(
+          path: '/history/run/:runId',
+          builder: (_, state) =>
+              RunDetailPage(runId: state.pathParameters['runId']!),
+        ),
+        GoRoute(
+          path: '/history/run/:runId/conversa',
+          builder: (_, state) =>
+              CoachConversationReplayPage(runId: state.pathParameters['runId']!),
+        ),
         GoRoute(path: '/profile', builder: (_, _) => const AccountPage()),
         GoRoute(
           path: '/profile/access',
           builder: (_, _) => const AccountAccessPage(),
+        ),
+        GoRoute(
+          path: '/profile/health/exams',
+          builder: (_, _) => const HealthExamsPage(),
+        ),
+        GoRoute(
+          path: '/profile/edit',
+          builder: (_, _) => const ProfilePage(initialEditing: true),
+        ),
+        GoRoute(
+          path: '/profile/settings',
+          builder: (_, _) => const SettingsIndexPage(),
+        ),
+        GoRoute(
+          path: '/profile/settings/coach',
+          builder: (_, _) => const CoachSettingsPage(),
+        ),
+        GoRoute(
+          path: '/profile/settings/notifications',
+          builder: (_, _) => const NotificationsSettingsPage(),
+        ),
+        GoRoute(
+          path: '/profile/terms',
+          builder: (_, _) => const TermsPage(),
+        ),
+        GoRoute(
+          path: '/notifications',
+          builder: (_, _) => const NotificationsPage(),
         ),
         GoRoute(
           path: '/profile/edit',
@@ -142,6 +332,19 @@ final appRouter = GoRouter(
         ),
         GoRoute(path: '/dashboard', builder: (_, _) => const DashboardPage()),
         GoRoute(path: '/gamification', builder: (_, _) => const GamificationPage()),
+        GoRoute(path: '/profile/health', builder: (_, _) => const HealthIndexPage()),
+        GoRoute(
+          path: '/profile/health/devices',
+          builder: (_, _) => const HealthDevicesPage(),
+        ),
+        GoRoute(
+          path: '/profile/health/trends',
+          builder: (_, _) => const HealthTrendsPage(),
+        ),
+        GoRoute(
+          path: '/profile/health/zones',
+          builder: (_, _) => const HealthZonesPage(),
+        ),
       ],
     ),
   ],
@@ -150,7 +353,9 @@ final appRouter = GoRouter(
 String _initialLocation() {
   final path = Uri.base.path;
   if (path == '/admin' || path.startsWith('/admin/')) return '/admin';
-  return '/home';
+  // Deep links (anything beyond '/') skip the splash and go to that path.
+  if (path.length > 1) return path;
+  return '/splash';
 }
 
 class _AuthChangeNotifier extends ChangeNotifier {

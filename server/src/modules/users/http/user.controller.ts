@@ -5,6 +5,8 @@ import { UpsertProfileUseCase, UpsertProfileSchema } from '../domain/use-cases/u
 import { CompleteOnboardingUseCase, CompleteOnboardingSchema } from '../domain/use-cases/complete-onboarding.use-case';
 import { ProvisionUserSchema, ProvisionUserUseCase } from '../domain/use-cases/provision-user.use-case';
 import { ActivateTrialUseCase } from '../domain/use-cases/activate-trial.use-case';
+import { ResetPlanRevisionsQuotaUseCase } from '../domain/use-cases/reset-plan-revisions-quota.use-case';
+import { UpsertLocationUseCase, UpsertLocationSchema } from '../domain/use-cases/upsert-location.use-case';
 
 const repo = new FirestoreUserRepository();
 const getProfile = new GetProfileUseCase(repo);
@@ -12,6 +14,8 @@ const upsertProfile = new UpsertProfileUseCase(repo);
 const completeOnboarding = new CompleteOnboardingUseCase(repo);
 const provisionUser = new ProvisionUserUseCase(repo);
 const activateTrial = new ActivateTrialUseCase(repo);
+const resetPlanRevisionsQuota = new ResetPlanRevisionsQuotaUseCase(repo);
+const upsertLocation = new UpsertLocationUseCase(repo);
 
 export async function getMe(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
@@ -32,12 +36,106 @@ export async function patchMe(req: Request, res: Response, next: NextFunction): 
   }
 }
 
+/**
+ * DELETE /users/me — exclui a conta do user requisitante.
+ *  - Apaga subcollections (plans, runs, biometrics, devices, etc).
+ *  - Apaga o doc do user em users/{uid}.
+ *  - Apaga o user Firebase Auth (deleteUser).
+ * Tudo é irreversível. Sem dialog de segundo fator aqui (frontend já
+ * exige confirmação dupla via dialog).
+ */
+export async function deleteMe(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const uid = req.uid;
+    const { getAuth, getFirestore } = await import('@shared/infra/firebase/firebase.client');
+    const auth = getAuth();
+    const db = getFirestore();
+
+    const userScopedCols = [
+      'plans',
+      'runs',
+      'biometric_samples',
+      'period-analysis',
+      'rag_chunks',
+      'devices',
+      'onboarding_history',
+      'exams',
+    ];
+    let batch = db.batch();
+    let opsInBatch = 0;
+    const commitIfNeeded = async () => {
+      if (opsInBatch >= 400) {
+        await batch.commit();
+        batch = db.batch();
+        opsInBatch = 0;
+      }
+    };
+    for (const col of userScopedCols) {
+      const snap = await db.collection(`users/${uid}/${col}`).get();
+      for (const d of snap.docs) {
+        if (col === 'runs') {
+          const subCols = ['gps_points', 'coach_messages', 'reports'];
+          for (const sc of subCols) {
+            const subSnap = await d.ref.collection(sc).get();
+            for (const sd of subSnap.docs) {
+              batch.delete(sd.ref);
+              opsInBatch++;
+              await commitIfNeeded();
+            }
+          }
+        }
+        batch.delete(d.ref);
+        opsInBatch++;
+        await commitIfNeeded();
+      }
+    }
+    // doc raiz do user
+    batch.delete(db.collection('users').doc(uid));
+    opsInBatch++;
+    if (opsInBatch > 0) await batch.commit();
+
+    // Auth user — IRREVERSÍVEL
+    try {
+      await auth.deleteUser(uid);
+    } catch (_) {
+      // Se já estiver deletado, ignora — Firestore foi limpo.
+    }
+
+    res.status(204).send();
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function postOnboarding(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const input = CompleteOnboardingSchema.parse(req.body);
     const result = await completeOnboarding.execute(req.uid, input);
     res.status(201).json(result);
   } catch (err) {
+    // Surfaçar erro Zod com nome do campo que falhou — antes voltava 500
+    // genérico pelo middleware e ninguém sabia qual campo o app mandou
+    // errado. Agora app pode mostrar "Campo X é obrigatório" pro user.
+    if (err instanceof Error && err.name === 'ZodError') {
+      const issues = (err as Error & { issues?: Array<{ path: (string | number)[]; message: string }> }).issues;
+      const missingFields = (issues ?? []).map(i => ({
+        field: i.path.join('.'),
+        message: i.message,
+      }));
+      // Log estruturado pro Cloud Run: precisamos saber EXATAMENTE o que o
+      // app mandou pra debug. Antes víamos só "422" sem detalhe.
+      (await import('@shared/logger/logger')).logger.warn('users.onboarding.validation_failed', {
+        uid: req.uid,
+        fields: missingFields,
+        receivedKeys: Object.keys((req.body ?? {}) as object),
+      });
+      res.status(422).json({
+        error: 'ONBOARDING_VALIDATION_FAILED',
+        message: 'Alguns campos do onboarding estão inválidos ou faltando.',
+        fields: missingFields,
+      });
+      return;
+    }
     next(err);
   }
 }
@@ -56,6 +154,21 @@ export async function postActivateTrial(req: Request, res: Response, next: NextF
   try {
     const user = await activateTrial.execute(req.uid);
     res.json(user);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function postResetPlanRevisionsQuota(_req: Request, res: Response): Promise<void> {
+  const result = await resetPlanRevisionsQuota.execute();
+  res.json(result);
+}
+
+export async function postMyLocation(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const input = UpsertLocationSchema.parse(req.body);
+    const result = await upsertLocation.execute(req.uid, input);
+    res.json(result);
   } catch (err) {
     next(err);
   }

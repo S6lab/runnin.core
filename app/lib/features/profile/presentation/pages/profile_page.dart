@@ -2,12 +2,134 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:runnin/core/theme/app_palette.dart';
-import 'package:runnin/core/theme/theme_controller.dart';
+import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
+import 'package:runnin/features/biometrics/data/health_sync_service.dart';
 import 'package:runnin/features/run/data/datasources/run_remote_datasource.dart';
 import 'package:runnin/features/run/domain/entities/run.dart';
-import 'package:runnin/shared/widgets/app_page_header.dart';
+import 'package:runnin/features/location_weather/data/location_weather_controller.dart';
+import 'package:runnin/features/subscriptions/presentation/subscription_controller.dart';
 import 'package:runnin/shared/widgets/app_panel.dart';
+import 'package:runnin/shared/widgets/figma/figma_coach_ai_block.dart';
+import 'package:runnin/shared/widgets/figma/figma_form_field_label.dart';
+import 'package:runnin/shared/widgets/figma/figma_form_text_field.dart';
+import 'package:runnin/shared/widgets/figma/figma_selection_button.dart';
+import 'package:runnin/shared/widgets/figma/figma_top_nav.dart';
+import 'package:runnin/shared/widgets/gamification_stats_row.dart';
+import 'package:runnin/shared/widgets/user_profile_header.dart';
+
+class _ProfileCoachAICard extends StatefulWidget {
+  const _ProfileCoachAICard();
+
+  @override
+  State<_ProfileCoachAICard> createState() => _ProfileCoachAICardState();
+}
+
+class _ProfileCoachAICardState extends State<_ProfileCoachAICard> {
+  bool _expanded = false;
+
+  String _monthName(int month) {
+    const months = [
+      'Janeiro',
+      'Fevereiro',
+      'Março',
+      'Abril',
+      'Maio',
+      'Junho',
+      'Julho',
+      'Agosto',
+      'Setembro',
+      'Outubro',
+      'Novembro',
+      'Dezembro'
+    ];
+    return months[month - 1];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () => setState(() => _expanded = !_expanded),
+      behavior: HitTestBehavior.opaque,
+      child: AnimatedSize(
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeInOut,
+        alignment: Alignment.topCenter,
+        child: FigmaCoachAIBlock(
+          variant: CoachAIBlockVariant.appGeneral,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const FigmaCoachAIBreadcrumb(action: 'FECHAMENTO MENSAL'),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Como foi o seu mês de treino?',
+                          maxLines: _expanded ? null : 1,
+                          overflow: _expanded ? null : TextOverflow.ellipsis,
+                          style: context.runninType.labelCaps.copyWith(
+                            fontSize: 11,
+                            height: 16.5 / 11,
+                            color: FigmaColors.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  AnimatedRotation(
+                    turns: _expanded ? 0.5 : 0.0,
+                    duration: const Duration(milliseconds: 220),
+                    child: Text(
+                      '▼',
+                      style: context.runninType.labelCaps.copyWith(
+                        height: 1,
+                        color: FigmaColors.textSecondary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              if (_expanded) ...[
+                const SizedBox(height: 14),
+                Text(
+                  'Você completou ${DateTime.now().month == 1 ? 'Janeiro' : _monthName(DateTime.now().month - 1)}. O Coach.AI preparou um resumo com suas métricas, zonas de esforço e evolução. Deseja ver o fechamento completo?',
+                  style: context.runninType.bodyXs.copyWith(
+                    height: 18 / 11,
+                    color: FigmaColors.textSecondary,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: FigmaSelectionButton(
+                        label: 'VER RESUMO',
+                        selected: true,
+                        onTap: () => context.push('/training'),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    FigmaSelectionButton(
+                      label: 'IGNORAR',
+                      selected: false,
+                      onTap: () => setState(() => _expanded = false),
+                    ),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 class ProfilePage extends StatefulWidget {
   final bool initialEditing;
@@ -26,6 +148,8 @@ class _ProfilePageState extends State<ProfilePage> {
   final _birthDateCtrl = TextEditingController();
   final _weightCtrl = TextEditingController();
   final _heightCtrl = TextEditingController();
+  final _restingBpmCtrl = TextEditingController();
+  final _maxBpmCtrl = TextEditingController();
 
   List<Run>? _runs;
   UserProfile? _profile;
@@ -36,25 +160,12 @@ class _ProfilePageState extends State<ProfilePage> {
   String _goal = 'Completar 10K';
   int _frequency = 4;
   bool _hasWearable = false;
+  String _gender = 'na';
+  String _runPeriod = 'manha';
+  String? _wakeTime;
+  String? _sleepTime;
   String? _error;
   String? _saveMessage;
-
-  static const _levels = [
-    ('iniciante', 'Iniciante'),
-    ('intermediario', 'Intermediário'),
-    ('avancado', 'Avançado'),
-  ];
-
-  static const _goals = [
-    'Saúde e bem-estar',
-    'Perder peso',
-    'Completar 5K',
-    'Completar 10K',
-    'Meia maratona (21K)',
-    'Maratona (42K)',
-  ];
-
-  static const _frequencyOptions = [2, 3, 4, 5, 6];
 
   @override
   void initState() {
@@ -69,6 +180,8 @@ class _ProfilePageState extends State<ProfilePage> {
     _birthDateCtrl.dispose();
     _weightCtrl.dispose();
     _heightCtrl.dispose();
+    _restingBpmCtrl.dispose();
+    _maxBpmCtrl.dispose();
     super.dispose();
   }
 
@@ -111,10 +224,16 @@ class _ProfilePageState extends State<ProfilePage> {
     _birthDateCtrl.text = profile?.birthDate ?? '';
     _weightCtrl.text = profile?.weight ?? '';
     _heightCtrl.text = profile?.height ?? '';
+    _restingBpmCtrl.text = profile?.restingBpm?.toString() ?? '';
+    _maxBpmCtrl.text = profile?.maxBpm?.toString() ?? '';
     _level = profile?.level ?? 'iniciante';
     _goal = profile?.goal ?? 'Completar 10K';
     _frequency = profile?.frequency ?? 4;
     _hasWearable = profile?.hasWearable ?? false;
+    _gender = profile?.gender ?? 'na';
+    _runPeriod = profile?.runPeriod ?? 'manha';
+    _wakeTime = profile?.wakeTime;
+    _sleepTime = profile?.sleepTime;
   }
 
   Future<void> _saveProfile() async {
@@ -123,6 +242,23 @@ class _ProfilePageState extends State<ProfilePage> {
       _saveMessage = null;
       _error = null;
     });
+
+    final resting = int.tryParse(_restingBpmCtrl.text.trim());
+    final maxBpm = int.tryParse(_maxBpmCtrl.text.trim());
+    if (resting != null && maxBpm != null && maxBpm <= resting) {
+      setState(() {
+        _saving = false;
+        _error = 'FC máxima deve ser maior que FC repouso.';
+      });
+      return;
+    }
+    if (_wakeTime != null && _wakeTime == _sleepTime) {
+      setState(() {
+        _saving = false;
+        _error = 'Horário de acordar e dormir não podem ser iguais.';
+      });
+      return;
+    }
 
     try {
       final updated = await _userDatasource.patchMe(
@@ -136,6 +272,12 @@ class _ProfilePageState extends State<ProfilePage> {
         goal: _goal,
         frequency: _frequency,
         hasWearable: _hasWearable,
+        gender: _gender,
+        runPeriod: _runPeriod,
+        wakeTime: _wakeTime,
+        sleepTime: _sleepTime,
+        restingBpm: resting,
+        maxBpm: maxBpm,
         onboarded: true,
       );
 
@@ -164,33 +306,6 @@ class _ProfilePageState extends State<ProfilePage> {
     });
   }
 
-  Future<void> _activateTrial() async {
-    setState(() {
-      _saving = true;
-      _saveMessage = null;
-      _error = null;
-    });
-    try {
-      final updated = await _userDatasource.activateTrial();
-      if (!mounted) return;
-      setState(() {
-        _profile = updated;
-        _saving = false;
-        _saveMessage = 'Trial Pro de 7 dias ativado.';
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _saving = false;
-        _error = 'Não foi possível ativar o trial agora.';
-      });
-    }
-  }
-
-  void _redoOnboarding() {
-    context.push('/onboarding?redo=1');
-  }
-
   @override
   Widget build(BuildContext context) {
     final palette = context.runninPalette;
@@ -203,23 +318,50 @@ class _ProfilePageState extends State<ProfilePage> {
         _runs?.fold(0, (sum, run) => sum + (run.xpEarned ?? 0)) ?? 0;
     final levelNumber = (totalXp / 500).floor() + 1;
 
+    int calculateStreak(List<Run> runs) {
+      if (runs.isEmpty) return 0;
+
+      final sortedRuns = runs..sort((a, b) {
+        final dateA = DateTime.parse(a.createdAt);
+        final dateB = DateTime.parse(b.createdAt);
+        return dateB.compareTo(dateA);
+      });
+
+      if (sortedRuns.isEmpty) return 0;
+
+      final lastRunDate = DateTime.parse(sortedRuns.first.createdAt);
+      int streak = 1;
+      var currentCheckDate =
+          DateTime(lastRunDate.year, lastRunDate.month, lastRunDate.day - 1);
+
+      for (int i = 1; i < sortedRuns.length; i++) {
+        final runDate =
+            DateTime.parse(sortedRuns[i].createdAt).toLocal();
+        currentCheckDate = currentCheckDate.toLocal();
+
+        if (runDate.year == currentCheckDate.year &&
+            runDate.month == currentCheckDate.month &&
+            runDate.day == currentCheckDate.day) {
+          streak++;
+          currentCheckDate = DateTime(
+              currentCheckDate.year, currentCheckDate.month, currentCheckDate.day - 1);
+        } else if (runDate.isBefore(currentCheckDate)) {
+          break;
+        }
+      }
+
+      return streak;
+    }
+
+    final streak = calculateStreak(_runs ?? []);
+
     return Scaffold(
       backgroundColor: palette.background,
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            AppPageHeader(
-              title: 'PERFIL',
-              trailing: _loading
-                  ? null
-                  : TextButton(
-                      onPressed: _editing
-                          ? _cancelEdit
-                          : () => setState(() => _editing = true),
-                      child: Text(_editing ? 'CANCELAR' : 'EDITAR'),
-                    ),
-            ),
+            const FigmaTopNav(breadcrumb: 'EDITAR PERFIL', showBackButton: true),
             const SizedBox(height: 24),
             Expanded(
               child: _loading
@@ -234,7 +376,7 @@ class _ProfilePageState extends State<ProfilePage> {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text(_error!, style: TextStyle(color: palette.muted)),
+                          Text(_error!, style: context.runninType.bodySm),
                           const SizedBox(height: 16),
                           TextButton(
                             onPressed: _loadProfile,
@@ -244,70 +386,88 @@ class _ProfilePageState extends State<ProfilePage> {
                       ),
                     )
                   : SingleChildScrollView(
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxl),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _ProfileHero(
-                            firebaseUser: firebaseUser,
-                            profile: _profile,
-                            isAnonymous: firebaseUser?.isAnonymous ?? true,
-                            levelNumber: levelNumber,
-                            totalRuns: totalRuns,
-                            totalDistanceKm: totalDistKm,
+                          // isPremium vem do subscriptionController (canônico
+                          // pra todo o app). profile.isPro também é fonte
+                          // válida; o controller é cached e listenado em
+                          // outros lugares — single source of truth.
+                          ListenableBuilder(
+                            listenable: Listenable.merge(
+                              [subscriptionController, locationWeatherController],
+                            ),
+                            builder: (context, _) => UserProfileHeader(
+                              userName: _profile?.name.isNotEmpty == true
+                                  ? _profile!.name
+                                  : (firebaseUser?.displayName ?? 'Corredor'),
+                              levelNumber: levelNumber,
+                              isPremium: subscriptionController.isPro,
+                              totalRuns: totalRuns,
+                              totalDistanceKm: totalDistKm,
+                              city: locationWeatherController.city,
+                            ),
                           ),
+                          if (firebaseUser?.isAnonymous ?? false) ...[
+                            const SizedBox(height: 12),
+                            _AnonPromoBanner(onTap: () => context.push('/profile/access')),
+                          ],
                           const SizedBox(height: 8),
+                          // Destaque: métricas de EXECUÇÃO (corridas + km) em
+                          // cards grandes. Gamification (streak/xp/nível) desce
+                          // pra linha-subtítulo abaixo.
                           Row(
                             children: [
                               Expanded(
                                 child: _StatCard(
                                   label: 'CORRIDAS',
                                   value: '$totalRuns',
+                                  big: true,
                                 ),
                               ),
                               const SizedBox(width: 8),
                               Expanded(
                                 child: _StatCard(
-                                  label: 'DISTÂNCIA',
+                                  label: 'KM TOTAIS',
                                   value: totalDistKm >= 1
-                                      ? '${totalDistKm.toStringAsFixed(1)} km'
+                                      ? totalDistKm.toStringAsFixed(1)
                                       : '${(totalDistKm * 1000).toStringAsFixed(0)} m',
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: _StatCard(
-                                  label: 'NÍVEL',
-                                  value: '$levelNumber',
-                                  accent: true,
+                                  big: true,
                                 ),
                               ),
                             ],
                           ),
+                          const SizedBox(height: 12),
+                          GamificationStatsRow(
+                            streak: StatData(
+                              label: 'STREAK',
+                              value: '$streak',
+                            ),
+                            xp: StatData(
+                              label: 'XP',
+                              value: '$totalXp',
+                            ),
+                            badges: StatData(
+                              label: 'NÍVEL',
+                              value: '$levelNumber',
+                              accent: true,
+                            ),
+                          ),
                           const SizedBox(height: 24),
-                          _SectionLabel(label: 'PERFIL'),
+                          const _FieldLabel(label: 'INFORMAÇÕES PESSOAIS'),
                           const SizedBox(height: 8),
-                          _ProfileEditor(
+                          // Editor enxuto: só nome, peso, altura, telefone, email.
+                          // Demais campos (nível, objetivo, freq, gênero, BPM,
+                          // wearable, rotina) ficam em /onboarding (redo=1)
+                          // pra refazer a personalização completa do plano.
+                          _ProfileEditorMinimal(
                             nameController: _nameCtrl,
-                            birthDateController: _birthDateCtrl,
                             weightController: _weightCtrl,
                             heightController: _heightCtrl,
-                            selectedLevel: _level,
-                            selectedGoal: _goal,
-                            frequency: _frequency,
-                            hasWearable: _hasWearable,
-                            levels: _levels,
-                            goals: _goals,
-                            frequencyOptions: _frequencyOptions,
+                            phone: FirebaseAuth.instance.currentUser?.phoneNumber,
+                            email: FirebaseAuth.instance.currentUser?.email,
                             enabled: _editing,
-                            onLevelChanged: (value) =>
-                                setState(() => _level = value),
-                            onGoalChanged: (value) =>
-                                setState(() => _goal = value),
-                            onFrequencyChanged: (value) =>
-                                setState(() => _frequency = value),
-                            onWearableChanged: (value) =>
-                                setState(() => _hasWearable = value),
                           ),
                           if (_saveMessage != null ||
                               (_error != null && _profile != null)) ...[
@@ -326,11 +486,10 @@ class _ProfilePageState extends State<ProfilePage> {
                                       .withValues(alpha: 0.35),
                               child: Text(
                                 _saveMessage ?? _error ?? '',
-                                style: TextStyle(
+                                style: context.runninType.bodySm.copyWith(
                                   color: _saveMessage != null
                                       ? palette.primary
                                       : palette.error,
-                                  fontSize: 12,
                                 ),
                               ),
                             ),
@@ -364,117 +523,10 @@ class _ProfilePageState extends State<ProfilePage> {
                               ],
                             ),
                           ],
-                          const SizedBox(height: 32),
-                          _SectionLabel(label: 'PLANO'),
-                          const SizedBox(height: 8),
-                          _PlanCard(
-                            profile: _profile,
-                            saving: _saving,
-                            onActivateTrial: _activateTrial,
-                            onRedoOnboarding: _redoOnboarding,
-                          ),
-                          const SizedBox(height: 32),
-                          _SectionLabel(label: 'SKIN'),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Escolha a paleta principal inspirada no protótipo.',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: palette.muted,
-                              height: 1.5,
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          AnimatedBuilder(
-                            animation: themeController,
-                            builder: (context, _) {
-                              return Column(
-                                children: [
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: _SkinCard(
-                                          skin: RunninSkin.sangue,
-                                          isActive:
-                                              themeController.skin ==
-                                              RunninSkin.sangue,
-                                          onTap: () => themeController.setSkin(
-                                            RunninSkin.sangue,
-                                          ),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Expanded(
-                                        child: _SkinCard(
-                                          skin: RunninSkin.magenta,
-                                          isActive:
-                                              themeController.skin ==
-                                              RunninSkin.magenta,
-                                          onTap: () => themeController.setSkin(
-                                            RunninSkin.magenta,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: _SkinCard(
-                                          skin: RunninSkin.volt,
-                                          isActive:
-                                              themeController.skin ==
-                                              RunninSkin.volt,
-                                          onTap: () => themeController.setSkin(
-                                            RunninSkin.volt,
-                                          ),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Expanded(
-                                        child: _SkinCard(
-                                          skin: RunninSkin.artico,
-                                          isActive:
-                                              themeController.skin ==
-                                              RunninSkin.artico,
-                                          onTap: () => themeController.setSkin(
-                                            RunninSkin.artico,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              );
-                            },
-                          ),
-                          const SizedBox(height: 32),
-                          _SectionLabel(label: 'CONTA'),
-                          const SizedBox(height: 8),
-                          GestureDetector(
-                            onTap: () => FirebaseAuth.instance.signOut(),
-                            child: AppPanel(
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    Icons.logout,
-                                    size: 16,
-                                    color: palette.error,
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Text(
-                                    'SAIR',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w700,
-                                      color: palette.error,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
+                          // Conta+acesso, sair e excluir conta vivem em
+                          // /profile/access. Wearable + dados de treino
+                          // foram tirados daqui (ficam em onboarding ou
+                          // settings dedicadas).
                           const SizedBox(height: 24),
                         ],
                       ),
@@ -487,379 +539,92 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 }
 
-class _ProfileHero extends StatelessWidget {
-  final User? firebaseUser;
-  final UserProfile? profile;
-  final bool isAnonymous;
-  final int levelNumber;
-  final int totalRuns;
-  final double totalDistanceKm;
-
-  const _ProfileHero({
-    required this.firebaseUser,
-    required this.profile,
-    required this.isAnonymous,
-    required this.levelNumber,
-    required this.totalRuns,
-    required this.totalDistanceKm,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.runninPalette;
-    final name = profile?.name.isNotEmpty == true
-        ? profile!.name
-        : (firebaseUser?.displayName ?? 'Corredor');
-    final goal = profile?.goal.isNotEmpty == true
-        ? profile!.goal
-        : 'Meta em definição';
-    final level = profile?.level ?? 'iniciante';
-    final statusLabel = isAnonymous ? 'MODO ANONIMO' : 'CONTA CONECTADA';
-
-    return AppPanel(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              if (firebaseUser?.photoURL != null)
-                Container(
-                  width: 56,
-                  height: 56,
-                  decoration: BoxDecoration(
-                    border: Border.all(color: palette.border),
-                    image: DecorationImage(
-                      image: NetworkImage(firebaseUser!.photoURL!),
-                      fit: BoxFit.cover,
-                    ),
-                  ),
-                )
-              else
-                Container(
-                  width: 56,
-                  height: 56,
-                  alignment: Alignment.center,
-                  color: palette.primary,
-                  child: Text(
-                    name.isNotEmpty ? name.characters.first.toUpperCase() : 'R',
-                    style: TextStyle(
-                      fontSize: 26,
-                      fontWeight: FontWeight.w900,
-                      color: palette.background,
-                    ),
-                  ),
-                ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      name,
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w900,
-                        color: palette.text,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Nível $levelNumber · ${_formatRunnerLevel(level)}',
-                      style: TextStyle(color: palette.muted),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          Text(
-            statusLabel,
-            style: TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.w800,
-              color: isAnonymous ? palette.secondary : palette.primary,
-              letterSpacing: 0.12,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            goal,
-            style: TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w700,
-              color: palette.text.withValues(alpha: 0.92),
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            '$totalRuns corridas · ${totalDistanceKm.toStringAsFixed(1)}km total',
-            style: TextStyle(color: palette.muted),
-          ),
-          if (isAnonymous) ...[
-            const SizedBox(height: 6),
-            Text(
-              'Conecte sua conta em Acesso da conta para salvar tudo na nuvem.',
-              style: TextStyle(color: palette.secondary, fontSize: 12),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  String _formatRunnerLevel(String level) {
-    switch (level) {
-      case 'intermediario':
-        return 'Intermediário';
-      case 'avancado':
-        return 'Avançado';
-      default:
-        return 'Iniciante';
-    }
-  }
-}
-
-class _ProfileEditor extends StatelessWidget {
-  final TextEditingController nameController;
-  final TextEditingController birthDateController;
-  final TextEditingController weightController;
-  final TextEditingController heightController;
-  final String selectedLevel;
-  final String selectedGoal;
-  final int frequency;
+/// Status + atalho pra /profile/health/devices, que é onde mora o flow real
+/// de conexão Apple Health / Health Connect (plugin `health`).
+class _WearableConnectRow extends StatefulWidget {
   final bool hasWearable;
-  final List<(String, String)> levels;
-  final List<String> goals;
-  final List<int> frequencyOptions;
-  final bool enabled;
-  final ValueChanged<String> onLevelChanged;
-  final ValueChanged<String> onGoalChanged;
-  final ValueChanged<int> onFrequencyChanged;
   final ValueChanged<bool> onWearableChanged;
-
-  const _ProfileEditor({
-    required this.nameController,
-    required this.birthDateController,
-    required this.weightController,
-    required this.heightController,
-    required this.selectedLevel,
-    required this.selectedGoal,
-    required this.frequency,
+  const _WearableConnectRow({
     required this.hasWearable,
-    required this.levels,
-    required this.goals,
-    required this.frequencyOptions,
-    required this.enabled,
-    required this.onLevelChanged,
-    required this.onGoalChanged,
-    required this.onFrequencyChanged,
     required this.onWearableChanged,
   });
 
   @override
-  Widget build(BuildContext context) {
-    final palette = context.runninPalette;
-
-    return AppPanel(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            enabled ? 'MODO EDIÇÃO' : 'VISÃO GERAL',
-            style: TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.w800,
-              color: enabled ? palette.primary : palette.muted,
-              letterSpacing: 0.12,
-            ),
-          ),
-          const SizedBox(height: 14),
-          _FieldLabel(label: 'NOME'),
-          const SizedBox(height: 8),
-          _ProfileTextField(controller: nameController, enabled: enabled),
-          const SizedBox(height: 16),
-          _FieldLabel(label: 'DATA DE NASCIMENTO'),
-          const SizedBox(height: 8),
-          _ProfileTextField(
-            controller: birthDateController,
-            enabled: enabled,
-            keyboardType: TextInputType.datetime,
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _FieldLabel(label: 'PESO (KG)'),
-                    const SizedBox(height: 8),
-                    _ProfileTextField(
-                      controller: weightController,
-                      enabled: enabled,
-                      keyboardType: TextInputType.number,
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _FieldLabel(label: 'ALTURA (CM)'),
-                    const SizedBox(height: 8),
-                    _ProfileTextField(
-                      controller: heightController,
-                      enabled: enabled,
-                      keyboardType: TextInputType.number,
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          _FieldLabel(label: 'NÍVEL'),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: levels
-                .map(
-                  (level) => _SelectChip(
-                    label: level.$2,
-                    selected: selectedLevel == level.$1,
-                    enabled: enabled,
-                    onTap: () => onLevelChanged(level.$1),
-                  ),
-                )
-                .toList(),
-          ),
-          const SizedBox(height: 16),
-          _FieldLabel(label: 'OBJETIVO'),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: goals
-                .map(
-                  (goal) => _SelectChip(
-                    label: goal,
-                    selected: selectedGoal == goal,
-                    enabled: enabled,
-                    onTap: () => onGoalChanged(goal),
-                  ),
-                )
-                .toList(),
-          ),
-          const SizedBox(height: 16),
-          _FieldLabel(label: 'FREQUÊNCIA'),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: frequencyOptions
-                .map(
-                  (option) => _SelectChip(
-                    label: '${option}x',
-                    selected: frequency == option,
-                    enabled: enabled,
-                    onTap: () => onFrequencyChanged(option),
-                  ),
-                )
-                .toList(),
-          ),
-          const SizedBox(height: 16),
-          _FieldLabel(label: 'WEARABLE'),
-          const SizedBox(height: 8),
-          SwitchListTile(
-            value: hasWearable,
-            onChanged: enabled ? onWearableChanged : null,
-            activeThumbColor: palette.primary,
-            activeTrackColor: palette.primary.withValues(alpha: 0.35),
-            contentPadding: EdgeInsets.zero,
-            title: Text(
-              hasWearable ? 'Tenho/pretendo conectar' : 'Depois',
-              style: TextStyle(color: palette.text),
-            ),
-            subtitle: Text(
-              'Isso ainda nao confirma dados conectados. Health Connect / HealthKit sera usado na proxima fase.',
-              style: TextStyle(color: palette.muted),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  State<_WearableConnectRow> createState() => _WearableConnectRowState();
 }
 
-class _ProfileTextField extends StatelessWidget {
-  final TextEditingController controller;
-  final bool enabled;
-  final TextInputType? keyboardType;
+class _WearableConnectRowState extends State<_WearableConnectRow> {
+  bool _checking = true;
+  bool _connected = false;
 
-  const _ProfileTextField({
-    required this.controller,
-    required this.enabled,
-    this.keyboardType,
-  });
+  @override
+  void initState() {
+    super.initState();
+    _refresh();
+  }
+
+  Future<void> _refresh() async {
+    if (!healthSyncService.isSupported) {
+      if (mounted) setState(() { _checking = false; _connected = false; });
+      return;
+    }
+    try {
+      final ok = await healthSyncService.hasPermissions();
+      if (mounted) setState(() { _checking = false; _connected = ok; });
+      // Espelha estado real no perfil persistido (campo hasWearable).
+      if (ok && !widget.hasWearable) widget.onWearableChanged(true);
+    } catch (_) {
+      if (mounted) setState(() { _checking = false; _connected = false; });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final palette = context.runninPalette;
-
-    return TextField(
-      controller: controller,
-      enabled: enabled,
-      keyboardType: keyboardType,
-      style: TextStyle(color: palette.text),
-      decoration: InputDecoration(
-        filled: true,
-        fillColor: enabled ? palette.surface : palette.surfaceAlt,
-      ),
-    );
-  }
-}
-
-class _SelectChip extends StatelessWidget {
-  final String label;
-  final bool selected;
-  final bool enabled;
-  final VoidCallback onTap;
-
-  const _SelectChip({
-    required this.label,
-    required this.selected,
-    required this.enabled,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.runninPalette;
-
+    final platformSupported = healthSyncService.isSupported;
+    final statusText = !platformSupported
+        ? 'Sincronização de saúde só está disponível em iOS/Android.'
+        : _checking
+            ? 'Checando conexão…'
+            : _connected
+                ? 'Conectado · Apple Health / Google Health Connect ativo.'
+                : 'Não conectado. Toque pra sincronizar com sua plataforma de saúde.';
     return GestureDetector(
-      onTap: enabled ? onTap : null,
+      onTap: () async {
+        await context.push('/profile/health/devices');
+        if (mounted) await _refresh();
+      },
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        padding: const EdgeInsets.all(AppSpacing.xl),
         decoration: BoxDecoration(
-          color: selected
-              ? palette.primary.withValues(alpha: 0.1)
-              : palette.surface,
-          border: Border.all(
-            color: selected ? palette.primary : palette.border,
-          ),
+          color: palette.surface,
+          border: Border.all(color: palette.border),
         ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-            color: selected ? palette.primary : palette.muted,
-          ),
+        child: Row(
+          children: [
+            Icon(
+              _connected ? Icons.check_circle_outline : Icons.watch_outlined,
+              size: 20,
+              color: _connected ? palette.primary : palette.muted,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _connected ? 'SAÚDE CONECTADA' : 'CONECTAR APPLE/GOOGLE HEALTH',
+                    style: context.runninType.labelMd.copyWith(
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(statusText, style: context.runninType.bodyXs),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right, color: palette.muted, size: 18),
+          ],
         ),
       ),
     );
@@ -877,30 +642,8 @@ class _FieldLabel extends StatelessWidget {
 
     return Text(
       label,
-      style: TextStyle(
-        fontSize: 9,
-        fontWeight: FontWeight.w700,
-        color: palette.muted,
-        letterSpacing: 0.1,
-      ),
-    );
-  }
-}
-
-class _SectionLabel extends StatelessWidget {
-  final String label;
-
-  const _SectionLabel({required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.runninPalette;
-
-    return Text(
-      label,
-      style: TextStyle(
-        fontSize: 9,
-        fontWeight: FontWeight.w700,
+      style: context.runninType.labelCaps.copyWith(
+        fontSize: 10,
         color: palette.muted,
         letterSpacing: 0.1,
       ),
@@ -911,12 +654,14 @@ class _SectionLabel extends StatelessWidget {
 class _StatCard extends StatelessWidget {
   final String label;
   final String value;
-  final bool accent;
+  // `big`: card de destaque (métrica de execução — corridas/distância). Valor
+  // maior e mais respiro, prevalecendo sobre gamification (decisão de produto).
+  final bool big;
 
   const _StatCard({
     required this.label,
     required this.value,
-    this.accent = false,
+    this.big = false,
   });
 
   @override
@@ -924,29 +669,25 @@ class _StatCard extends StatelessWidget {
     final palette = context.runninPalette;
 
     return AppPanel(
-      padding: const EdgeInsets.all(16),
-      borderColor: accent
-          ? palette.primary.withValues(alpha: 0.4)
-          : palette.border,
+      padding: EdgeInsets.all(big ? 20 : 16),
+      borderColor: palette.border,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             label,
-            style: TextStyle(
-              fontSize: 9,
-              fontWeight: FontWeight.w700,
+            style: context.runninType.labelCaps.copyWith(
+              fontSize: big ? 11 : 10,
               color: palette.muted,
               letterSpacing: 0.1,
             ),
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: big ? 10 : 8),
           Text(
             value,
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.w900,
-              color: accent ? palette.primary : palette.text,
+            style: (big ? context.runninType.displayLg : context.runninType.displaySm)
+                .copyWith(
+              color: palette.text,
               letterSpacing: -0.02,
             ),
           ),
@@ -956,289 +697,175 @@ class _StatCard extends StatelessWidget {
   }
 }
 
-class _SkinCard extends StatelessWidget {
-  final RunninSkin skin;
-  final bool isActive;
+class _AnonPromoBanner extends StatelessWidget {
   final VoidCallback onTap;
+  const _AnonPromoBanner({required this.onTap});
 
-  const _SkinCard({
-    required this.skin,
-    required this.isActive,
-    required this.onTap,
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
+        decoration: BoxDecoration(
+          color: palette.primary.withValues(alpha: 0.08),
+          border: Border.all(color: palette.primary, width: 1.041),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.account_circle_outlined, color: context.runninPalette.primary, size: 22),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'CRIE SUA CONTA',
+                    style: context.runninType.labelCaps.copyWith(
+                      fontSize: 11,
+                      color: palette.primary,
+                      letterSpacing: 1.0,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Você está como visitante. Conecte e-mail, telefone ou Google para não perder seus dados.',
+                    style: context.runninType.bodyXs.copyWith(
+                      color: palette.text.withValues(alpha: 0.75),
+                      height: 1.5,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(Icons.arrow_forward, color: palette.text.withValues(alpha: 0.5), size: 18),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+
+/// Editor enxuto de perfil — só dados pessoais (nome, peso, altura) +
+/// telefone e email (read-only, gerenciados em /profile/access).
+class _ProfileEditorMinimal extends StatelessWidget {
+  final TextEditingController nameController;
+  final TextEditingController weightController;
+  final TextEditingController heightController;
+  final String? phone;
+  final String? email;
+  final bool enabled;
+
+  const _ProfileEditorMinimal({
+    required this.nameController,
+    required this.weightController,
+    required this.heightController,
+    this.phone,
+    this.email,
+    this.enabled = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    final palette = skin.palette;
-
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: palette.surface,
-          border: Border.all(
-            color: isActive ? palette.primary : palette.border,
-          ),
-        ),
+    final palette = context.runninPalette;
+    Widget readOnlyRow(String label, String? value, String hint) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: palette.previewBars
-                  .map(
-                    (color) => Container(
-                      width: 14,
-                      height: 14,
-                      margin: const EdgeInsets.only(right: 6),
-                      color: color,
+            FigmaFormFieldLabel(text: label),
+            const SizedBox(height: 6),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+              decoration: BoxDecoration(
+                color: palette.surface,
+                border: Border.all(color: palette.border, width: 1.041),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      value?.isNotEmpty == true ? value! : hint,
+                      style: context.runninType.bodyMd.copyWith(
+                        color: value?.isNotEmpty == true
+                            ? palette.text
+                            : palette.muted,
+                        fontSize: 13,
+                      ),
                     ),
-                  )
-                  .toList(),
-            ),
-            const SizedBox(height: 18),
-            Center(
-              child: Text(
-                skin.palette.label.toUpperCase(),
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 0.08,
-                  color: palette.text,
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(child: Container(height: 4, color: palette.primary)),
-                Expanded(child: Container(height: 4, color: palette.secondary)),
-                Expanded(child: Container(height: 4, color: palette.tertiary)),
-              ],
-            ),
-            if (isActive) ...[
-              const SizedBox(height: 12),
-              Align(
-                alignment: Alignment.centerRight,
-                child: Text(
-                  'ATIVA',
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 0.12,
-                    color: palette.primary,
                   ),
-                ),
+                  Icon(Icons.lock_outline, size: 14, color: palette.muted),
+                ],
               ),
-            ],
+            ),
           ],
         ),
-      ),
-    );
-  }
-}
+      );
+    }
 
-class _PlanCard extends StatelessWidget {
-  final UserProfile? profile;
-  final bool saving;
-  final VoidCallback onActivateTrial;
-  final VoidCallback onRedoOnboarding;
-
-  const _PlanCard({
-    required this.profile,
-    required this.saving,
-    required this.onActivateTrial,
-    required this.onRedoOnboarding,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.runninPalette;
-    final isPro = profile?.isPro ?? false;
-    return AppPanel(
-      color: isPro
-          ? palette.primary.withValues(alpha: 0.06)
-          : palette.surfaceAlt,
-      borderColor: isPro
-          ? palette.primary.withValues(alpha: 0.45)
-          : palette.border,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(
-                isPro ? Icons.workspace_premium_outlined : Icons.lock_outline,
-                size: 16,
-                color: isPro ? palette.primary : palette.muted,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const FigmaFormFieldLabel(text: 'NOME'),
+        const SizedBox(height: 6),
+        FigmaFormTextField(
+          controller: nameController,
+          enabled: enabled,
+          placeholder: 'Seu nome',
+          textCapitalization: TextCapitalization.words,
+        ),
+        const SizedBox(height: 14),
+        Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const FigmaFormFieldLabel(text: 'PESO (kg)'),
+                  const SizedBox(height: 6),
+                  FigmaFormTextField(
+                    controller: weightController,
+                    enabled: enabled,
+                    keyboardType: TextInputType.number,
+                    placeholder: '70',
+                  ),
+                ],
               ),
-              const SizedBox(width: 8),
-              Text(
-                isPro ? 'PLANO PRO' : 'PLANO FREE',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 0.12,
-                  color: isPro ? palette.primary : palette.text,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          if (isPro) ..._buildProBody(context, palette) else ..._buildFreeBody(context, palette),
-        ],
-      ),
-    );
-  }
-
-  List<Widget> _buildProBody(BuildContext context, RunninPalette palette) {
-    final until = profile?.premiumUntil;
-    final untilLabel = until == null
-        ? '—'
-        : '${until.day.toString().padLeft(2, '0')}/${until.month.toString().padLeft(2, '0')}/${until.year}';
-    final remaining = until?.difference(DateTime.now());
-    final remainingLabel = remaining == null
-        ? null
-        : remaining.inDays > 0
-            ? '${remaining.inDays} dia(s) restantes'
-            : remaining.inHours > 0
-                ? '${remaining.inHours} hora(s) restantes'
-                : 'Expira em breve';
-
-    return [
-      Text(
-        'Coach AI completo, plano vivo e refazer onboarding semanal.',
-        style: TextStyle(color: palette.text, height: 1.5, fontSize: 13),
-      ),
-      const SizedBox(height: 12),
-      Row(
-        children: [
-          Text(
-            'Válido até $untilLabel',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              color: palette.text,
             ),
-          ),
-          if (remainingLabel != null) ...[
-            const SizedBox(width: 8),
-            Text(
-              '· $remainingLabel',
-              style: TextStyle(fontSize: 11, color: palette.muted),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const FigmaFormFieldLabel(text: 'ALTURA (cm)'),
+                  const SizedBox(height: 6),
+                  FigmaFormTextField(
+                    controller: heightController,
+                    enabled: enabled,
+                    keyboardType: TextInputType.number,
+                    placeholder: '175',
+                  ),
+                ],
+              ),
             ),
           ],
-        ],
-      ),
-      const SizedBox(height: 12),
-      _RedoOnboardingRow(
-        profile: profile,
-        saving: saving,
-        onTap: onRedoOnboarding,
-      ),
-    ];
-  }
-
-  List<Widget> _buildFreeBody(BuildContext context, RunninPalette palette) {
-    return [
-      Text(
-        'Você está no plano gratuito. Pode usar o app normalmente, mas o Coach AI fica reservado para o plano Pro.',
-        style: TextStyle(color: palette.text, height: 1.5, fontSize: 13),
-      ),
-      const SizedBox(height: 12),
-      _PlanBenefitRow(text: 'Coach AI por voz e em chat', palette: palette),
-      _PlanBenefitRow(text: 'Plano que se ajusta a cada corrida', palette: palette),
-      _PlanBenefitRow(text: 'Refazer onboarding 1× por semana', palette: palette),
-      const SizedBox(height: 14),
-      SizedBox(
-        width: double.infinity,
-        height: 46,
-        child: ElevatedButton(
-          onPressed: saving ? null : onActivateTrial,
-          child: saving
-              ? SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: palette.background,
-                  ),
-                )
-              : const Text('ATIVAR TRIAL 7 DIAS'),
         ),
-      ),
-    ];
-  }
-}
-
-class _PlanBenefitRow extends StatelessWidget {
-  final String text;
-  final RunninPalette palette;
-  const _PlanBenefitRow({required this.text, required this.palette});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(top: 5),
-            child: Icon(Icons.check, size: 12, color: palette.primary),
+        readOnlyRow('TELEFONE', phone, 'sem telefone — altere em conta & acesso'),
+        readOnlyRow('EMAIL', email, 'sem email — altere em conta & acesso'),
+        const SizedBox(height: 12),
+        Text(
+          'Outras informações que afetam seu plano (objetivo, frequência, condições médicas, horários) ficam no onboarding — refazer ali se quiser mudar.',
+          style: context.runninType.bodySm.copyWith(
+            color: palette.muted,
+            height: 1.5,
           ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              text,
-              style: TextStyle(fontSize: 12, color: palette.text, height: 1.4),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _RedoOnboardingRow extends StatelessWidget {
-  final UserProfile? profile;
-  final bool saving;
-  final VoidCallback onTap;
-  const _RedoOnboardingRow({
-    required this.profile,
-    required this.saving,
-    required this.onTap,
-  });
-
-  static const _cooldownDays = 7;
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.runninPalette;
-    final last = profile?.lastOnboardingAt;
-    final next = last?.add(const Duration(days: _cooldownDays));
-    final canRedo = next == null || next.isBefore(DateTime.now());
-    final daysLeft = next == null
-        ? 0
-        : next.difference(DateTime.now()).inDays + 1;
-
-    return SizedBox(
-      width: double.infinity,
-      height: 46,
-      child: OutlinedButton(
-        onPressed: (saving || !canRedo) ? null : onTap,
-        style: OutlinedButton.styleFrom(
-          side: BorderSide(
-            color: canRedo ? palette.primary : palette.border,
-          ),
-          foregroundColor: canRedo ? palette.primary : palette.muted,
         ),
-        child: Text(
-          canRedo
-              ? 'REFAZER ONBOARDING'
-              : 'REFAZER EM $daysLeft DIA${daysLeft == 1 ? '' : 'S'}',
-        ),
-      ),
+      ],
     );
   }
 }

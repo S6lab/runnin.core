@@ -16,11 +16,13 @@ echo "→ Lendo variáveis de $ENV_FILE..."
 # PORT é reservado no Cloud Run; variáveis vazias são ignoradas.
 # Stripa comentários inline (`# ...`) e trailing whitespace, pra valores
 # limparem mesmo quando a linha tem comentário (ex: `FOO=bar  # default: bar`).
+# X_CRON_TOKEN vem do Secret Manager (--set-secrets abaixo) — excluído daqui.
 ENV_VARS=$(grep -v '^#' "$ENV_FILE" \
   | sed -E 's/[[:space:]]*#.*$//' \
   | sed -E 's/[[:space:]]+$//' \
   | grep -v '^$' \
   | grep -v '^PORT=' \
+  | grep -v '^X_CRON_TOKEN=' \
   | grep -v '=$' \
   | tr '\n' ',' \
   | sed 's/,$//')
@@ -32,13 +34,14 @@ gcloud run deploy "$SERVICE_NAME" \
   --project="$PROJECT_ID" \
   --service-account="$SA" \
   --set-env-vars="$ENV_VARS" \
+  --set-secrets="X_CRON_TOKEN=cron-token-prod:latest" \
   --allow-unauthenticated \
   --port=8080 \
   --memory=512Mi \
   --cpu=1 \
   --min-instances=0 \
   --max-instances=10 \
-  --timeout=60 \
+  --timeout=300 \
   --quiet
 
 echo "✓ Deploy concluído!"

@@ -35,8 +35,13 @@ export class ElevenLabsTtsService {
       const url = new URL(`${API_BASE_URL}/text-to-speech/${options.voiceId}`);
       url.searchParams.set('output_format', options.outputFormat);
 
+      // AbortController + 6s timeout: sem isso, fetch pode pendurar
+      // indefinidamente (já causou 504 de 299s no Cloud Run).
+      const ctrl = new AbortController();
+      const to = setTimeout(() => ctrl.abort(), 6000);
       const res = await fetch(url, {
         method: 'POST',
+        signal: ctrl.signal,
         headers: {
           'Content-Type': 'application/json',
           'xi-api-key': apiKey,
@@ -52,7 +57,7 @@ export class ElevenLabsTtsService {
             use_speaker_boost: true,
           },
         }),
-      });
+      }).finally(() => clearTimeout(to));
 
       if (!res.ok) {
         const body = await res.text().catch(() => '');

@@ -64,3 +64,7 @@ export function getStorageBucket(): ReturnType<admin.storage.Storage['bucket']> 
     .storage()
     .bucket(process.env.FIREBASE_STORAGE_BUCKET ?? 'runnin-494520.firebasestorage.app');
 }
+
+export function getMessaging(): admin.messaging.Messaging {
+  return getFirebaseApp().messaging();
+}

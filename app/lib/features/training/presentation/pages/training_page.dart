@@ -1,28 +1,41 @@
 import 'dart:async';
 
+import 'package:go_router/go_router.dart';
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:runnin/features/coach/data/datasources/coach_report_remote_datasource.dart';
 import 'package:runnin/core/theme/app_palette.dart';
+import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 import 'package:runnin/features/run/data/datasources/run_remote_datasource.dart';
 import 'package:runnin/features/run/domain/entities/run.dart';
 import 'package:runnin/features/training/data/datasources/plan_remote_datasource.dart';
+import 'package:runnin/features/training/data/weekly_report_remote_datasource.dart';
 import 'package:runnin/features/training/domain/entities/plan.dart';
-import 'package:runnin/shared/widgets/app_page_header.dart';
+import 'package:runnin/features/training/presentation/widgets/plan_closing_card.dart';
+import 'package:runnin/features/training/domain/week_phase_label.dart';
+import 'package:runnin/features/training/domain/entities/weekly_report.dart';
+import 'package:runnin/features/subscriptions/presentation/subscription_controller.dart';
+import 'package:runnin/features/subscriptions/presentation/widgets/premium_locked_card.dart';
+import 'package:runnin/shared/widgets/figma/figma_top_nav.dart';
+import 'package:runnin/shared/widgets/figma/figma_coach_ai_block.dart';
 import 'package:runnin/shared/widgets/app_panel.dart';
 import 'package:runnin/shared/widgets/app_tag.dart';
 import 'package:runnin/shared/widgets/coach_narrative_card.dart';
 import 'package:runnin/shared/widgets/metric_card.dart';
+import 'package:runnin/features/training/presentation/pages/adjustments_history_page.dart';
 
-enum _TrainingTab { plan, reports, adjustments }
+/// RELATÓRIOS saiu daqui — relatório de uma corrida vive em
+/// /history/run/:id (user clica na corrida). TREINO foca em plano +
+/// histórico de ajustes do mesociclo (checkpoints).
+enum _TrainingTab { plan, adjustments }
 
 enum _PlanMode { weekly, monthly }
 
 const _settingsBoxName = 'runnin_settings';
 const _pendingPlanIdKey = 'pending_training_plan_id';
-const _planPollInterval = Duration(seconds: 15);
+const _planPollInterval = Duration(seconds: 3);
 
 class TrainingPage extends StatefulWidget {
   const TrainingPage({super.key});
@@ -36,6 +49,8 @@ class _TrainingPageState extends State<TrainingPage> {
   final _runDs = RunRemoteDatasource();
   final _reportDs = CoachReportRemoteDatasource();
   final _userDs = UserRemoteDatasource();
+  final _weeklyReportDs = WeeklyReportRemoteDatasource();
+  List<WeeklyReport> _weeklyReports = const [];
   UserProfile? _profile;
   Plan? _plan;
   List<_RunFeedback> _reports = const [];
@@ -48,8 +63,14 @@ class _TrainingPageState extends State<TrainingPage> {
   DateTime? _lastPlanCheckAt;
   Timer? _planPollTimer;
   int _selectedWeek = 0;
+  // Garante que a semana atual (calculada via createdAt vs hoje) seja
+  // selecionada na PRIMEIRA carga do plano. Depois disso, respeitamos a
+  // navegação manual do usuário — não reescrevemos por cima da escolha dele.
+  bool _weekAutoSelected = false;
   _TrainingTab _selectedTab = _TrainingTab.plan;
-  _PlanMode _planMode = _PlanMode.weekly;
+  // Mensal abre por padrão pra atleta ver mesociclo (visão macro) antes
+  // do detalhe da semana corrente.
+  _PlanMode _planMode = _PlanMode.monthly;
 
   @override
   void initState() {
@@ -75,10 +96,12 @@ class _TrainingPageState extends State<TrainingPage> {
         _userDs.getMe(),
         _ds.getCurrentPlan(),
         _loadRunFeedback(),
+        _loadWeeklyReports(),
       ]);
       final profile = results[0] as UserProfile?;
       var plan = results[1] as Plan?;
       final reports = results[2] as List<_RunFeedback>;
+      _weeklyReports = results[3] as List<WeeklyReport>;
 
       if (plan == null && savedPendingPlanId != null) {
         try {
@@ -101,6 +124,13 @@ class _TrainingPageState extends State<TrainingPage> {
           _generating = plan?.isGenerating ?? false;
           _pendingPlanId = pendingPlanId;
           _loading = false;
+          if (plan != null &&
+              !(plan.isGenerating) &&
+              !_weekAutoSelected &&
+              plan.weeks.isNotEmpty) {
+            _selectedWeek = _currentPlanWeekIndex(plan);
+            _weekAutoSelected = true;
+          }
         });
       }
       if (pendingPlanId != null) {
@@ -129,8 +159,13 @@ class _TrainingPageState extends State<TrainingPage> {
     return value is String && value.trim().isNotEmpty ? value : null;
   }
 
-  Future<void> _savePendingPlanId(String planId) async {
-    await (await _settingsBox()).put(_pendingPlanIdKey, planId);
+
+  Future<List<WeeklyReport>> _loadWeeklyReports() async {
+    try {
+      return await _weeklyReportDs.getWeeklyReports();
+    } catch (_) {
+      return [];
+    }
   }
 
   Future<void> _clearPendingPlanId() async {
@@ -197,6 +232,12 @@ class _TrainingPageState extends State<TrainingPage> {
         _generating = plan.isGenerating;
         _pendingPlanId = plan.isGenerating ? plan.id : null;
         _lastPlanCheckAt = DateTime.now();
+        if (!plan.isGenerating &&
+            !_weekAutoSelected &&
+            plan.weeks.isNotEmpty) {
+          _selectedWeek = _currentPlanWeekIndex(plan);
+          _weekAutoSelected = true;
+        }
       });
 
       if (plan.isGenerating) return;
@@ -226,60 +267,11 @@ class _TrainingPageState extends State<TrainingPage> {
     }
   }
 
-  Future<void> _generate() async {
-    setState(() {
-      _generating = true;
-      _error = null;
-      _planCheckError = null;
-    });
-    try {
-      final profile = await _userDs.getMe();
-      final goal = profile?.goal.trim();
-      final level = profile?.level.trim();
-
-      if (profile == null ||
-          goal == null ||
-          goal.isEmpty ||
-          level == null ||
-          level.isEmpty) {
-        throw Exception('Perfil incompleto');
-      }
-
-      final planId = await _ds.generatePlan(
-        goal: goal,
-        level: level,
-        frequency: profile.frequency,
-      );
-      await _savePendingPlanId(planId);
-      if (!mounted) return;
-      setState(() {
-        _pendingPlanId = planId;
-        _lastPlanCheckAt = null;
-        _plan = Plan(
-          id: planId,
-          goal: goal,
-          level: level,
-          weeksCount: _estimatePlanWeeks(
-            goal: goal,
-            level: level,
-            frequency: profile.frequency,
-          ),
-          status: 'generating',
-          weeks: const [],
-          createdAt: DateTime.now().toIso8601String(),
-        );
-      });
-      _startPlanPolling(planId);
-    } catch (_) {
-      if (mounted) {
-        setState(() {
-          _generating = false;
-          _pendingPlanId = null;
-          _error =
-              'Nao foi possivel gerar seu plano agora. Confira se seu perfil e objetivo estao preenchidos.';
-        });
-      }
-    }
+  /// Plano agora é criado na jornada /training/criar-plano (nível→meta→dias→
+  /// pace→início), que faz o gate premium, a geração e a confirmação de
+  /// substituição. Aqui só navegamos pra lá.
+  void _openPlanSetup() {
+    context.push('/training/criar-plano');
   }
 
   @override
@@ -293,7 +285,7 @@ class _TrainingPageState extends State<TrainingPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const AppPageHeader(title: 'TREINO'),
+              const FigmaTopNav(breadcrumb: 'TREINO'),
               const SizedBox(height: 20),
               _buildBody(context),
             ],
@@ -306,6 +298,34 @@ class _TrainingPageState extends State<TrainingPage> {
   Widget _buildBody(BuildContext context) {
     final palette = context.runninPalette;
 
+    // Gate freemium: plano + treino guiado são features Premium.
+    // Em vez de carregar plano e mostrar empty state genérico, mostra
+    // o card de paywall logo no topo da tela. Listenable rebuild quando
+    // o user volta do paywall (subscriptionController.notifyListeners).
+    return ListenableBuilder(
+      listenable: subscriptionController,
+      builder: (context, _) {
+        if (!subscriptionController.isPro) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+            child: PremiumLockedCard(
+              title: 'TREINO PERSONALIZADO',
+              description:
+                  'O módulo de treino com plano gerado pelo coach AI, '
+                  'distribuição semanal, ajustes automáticos e relatórios '
+                  'é exclusivo do Premium. Suas corridas livres seguem '
+                  'liberadas na home.',
+              icon: Icons.fitness_center_outlined,
+              next: '/training',
+            ),
+          );
+        }
+        return _buildAuthenticatedBody(context, palette);
+      },
+    );
+  }
+
+  Widget _buildAuthenticatedBody(BuildContext context, RunninPalette palette) {
     if (_loading) {
       return Center(
         child: CircularProgressIndicator(
@@ -320,7 +340,7 @@ class _TrainingPageState extends State<TrainingPage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(_error!, style: TextStyle(color: palette.muted)),
+            Text(_error!, style: context.runninType.bodySm),
             const SizedBox(height: 16),
             TextButton(onPressed: _load, child: const Text('TENTAR NOVAMENTE')),
           ],
@@ -329,7 +349,25 @@ class _TrainingPageState extends State<TrainingPage> {
     }
 
     if (_plan == null) {
-      return _EmptyState(generating: _generating, onGenerate: _generate);
+      return _EmptyState(generating: _generating, onGenerate: _openPlanSetup);
+    }
+
+    // Plano concluído → banner com 2 CTAs (relatório + novo plano) seguido
+    // do estado "sem plano" (reusa _EmptyState). Aparece quando o server
+    // detecta mesocycleEndDate < hoje (status lazy = completed).
+    if (_plan!.isCompleted) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _PlanCompletedBanner(
+            planId: _plan!.id,
+            onSeeReport: () =>
+                context.push('/training/plan-report/${_plan!.id}'),
+            onNewPlan: _openPlanSetup,
+          ),
+          _EmptyState(generating: _generating, onGenerate: _openPlanSetup),
+        ],
+      );
     }
 
     if (_plan!.isGenerating) {
@@ -343,15 +381,16 @@ class _TrainingPageState extends State<TrainingPage> {
     }
 
     if (_plan!.status == 'failed') {
-      return _PlanFailedState(generating: _generating, onGenerate: _generate);
+      return _PlanFailedState(generating: _generating, onGenerate: _openPlanSetup);
     }
 
-    return _TrainingWorkspace(
+    final workspace = _TrainingWorkspace(
       plan: _plan!,
       profile: _profile,
       reports: _reports,
+      weeklyReports: _weeklyReports,
       generating: _generating,
-      onRegenerate: _generate,
+      onRegenerate: _openPlanSetup,
       selectedWeek: _selectedWeek,
       selectedTab: _selectedTab,
       planMode: _planMode,
@@ -359,53 +398,9 @@ class _TrainingPageState extends State<TrainingPage> {
       onTabChanged: (tab) => setState(() => _selectedTab = tab),
       onPlanModeChanged: (mode) => setState(() => _planMode = mode),
     );
+
+    return workspace;
   }
-}
-
-int _estimatePlanWeeks({
-  required String goal,
-  required String level,
-  int? frequency,
-}) {
-  final normalizedGoal = goal
-      .toLowerCase()
-      .replaceAll(RegExp(r'[áàãâä]'), 'a')
-      .replaceAll(RegExp(r'[éèêë]'), 'e')
-      .replaceAll(RegExp(r'[íìîï]'), 'i')
-      .replaceAll(RegExp(r'[óòõôö]'), 'o')
-      .replaceAll(RegExp(r'[úùûü]'), 'u')
-      .replaceAll('ç', 'c');
-  final freq = (frequency ?? 3).clamp(1, 7);
-  final isBeginner = level == 'iniciante';
-  final isAdvanced = level == 'avancado';
-
-  var weeks = switch (normalizedGoal) {
-    final value when value.contains('maratona') || value.contains('42') =>
-      isAdvanced ? 14 : 16,
-    final value
-        when value.contains('meia') ||
-            value.contains('21') ||
-            value.contains('half') =>
-      isBeginner ? 14 : (isAdvanced ? 10 : 12),
-    final value when value.contains('10k') || value.contains('10 km') =>
-      isBeginner ? 10 : 8,
-    final value when value.contains('5k') || value.contains('5 km') =>
-      isBeginner ? 8 : 6,
-    final value
-        when value.contains('emagrec') ||
-            value.contains('saude') ||
-            value.contains('condicion') =>
-      isAdvanced ? 6 : 8,
-    _ => isBeginner ? 8 : (isAdvanced ? 10 : 8),
-  };
-
-  if (freq <= 2) {
-    weeks += 2;
-  } else if (freq >= 5 && !isBeginner && weeks > 8) {
-    weeks -= 2;
-  }
-
-  return weeks.clamp(4, 16);
 }
 
 class _EmptyState extends StatelessWidget {
@@ -437,11 +432,7 @@ class _EmptyState extends StatelessWidget {
               Text(
                 'Gere seu plano de treino personalizado com IA. Leva em conta seu nível e objetivo.',
                 textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: palette.muted,
-                  fontSize: 13,
-                  height: 1.5,
-                ),
+                style: context.runninType.bodyMd.copyWith(color: palette.muted),
               ),
               const SizedBox(height: 24),
               SizedBox(
@@ -519,29 +510,21 @@ class _PlanGeneratingState extends StatelessWidget {
               Text(
                 'A criacao esta em progresso e pode levar alguns minutos.',
                 textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: palette.muted,
-                  fontSize: 13,
-                  height: 1.5,
-                ),
+                style: context.runninType.bodyMd.copyWith(color: palette.muted),
               ),
               const SizedBox(height: 14),
               AppTag(label: 'ID $shortPlanId', color: palette.primary),
               const SizedBox(height: 12),
               Text(
                 lastCheckedLabel,
-                style: TextStyle(color: palette.border, fontSize: 12),
+                style: context.runninType.bodySm.copyWith(color: palette.border),
               ),
               if (error != null) ...[
                 const SizedBox(height: 10),
                 Text(
                   error!,
                   textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: palette.secondary,
-                    fontSize: 12,
-                    height: 1.4,
-                  ),
+                  style: context.runninType.bodySm.copyWith(color: palette.secondary),
                 ),
               ],
               const SizedBox(height: 24),
@@ -603,11 +586,7 @@ class _PlanFailedState extends StatelessWidget {
               Text(
                 'A geracao falhou e nao vamos preencher com mock. Tente gerar novamente para buscar um plano real.',
                 textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: palette.muted,
-                  fontSize: 13,
-                  height: 1.5,
-                ),
+                style: context.runninType.bodyMd.copyWith(color: palette.muted),
               ),
               const SizedBox(height: 24),
               SizedBox(
@@ -638,6 +617,7 @@ class _TrainingWorkspace extends StatelessWidget {
   final ValueChanged<int> onWeekChanged;
   final ValueChanged<_TrainingTab> onTabChanged;
   final ValueChanged<_PlanMode> onPlanModeChanged;
+  final List<WeeklyReport> weeklyReports;
 
   const _TrainingWorkspace({
     required this.plan,
@@ -651,12 +631,14 @@ class _TrainingWorkspace extends StatelessWidget {
     required this.onWeekChanged,
     required this.onTabChanged,
     required this.onPlanModeChanged,
+    required this.weeklyReports,
   });
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
+      // Padronizado em xxl (~24) — bate com padding horizontal da home.
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxl),
       child: Column(
         children: [
           _PlanContextCard(
@@ -668,8 +650,7 @@ class _TrainingWorkspace extends StatelessWidget {
           const SizedBox(height: 12),
           _TopTabs(
             selectedTab: selectedTab,
-            reportsCount: reports.length,
-            adjustmentsCount: 0,
+            adjustmentsCount: plan.revisions.length,
             onChanged: onTabChanged,
           ),
           const SizedBox(height: 16),
@@ -681,8 +662,7 @@ class _TrainingWorkspace extends StatelessWidget {
               onWeekChanged: onWeekChanged,
               onPlanModeChanged: onPlanModeChanged,
             ),
-            _TrainingTab.reports => _ReportsTab(reports: reports),
-            _TrainingTab.adjustments => const _AdjustmentsTab(),
+            _TrainingTab.adjustments => AdjustmentsHistoryPage(planId: plan.id),
           },
         ],
       ),
@@ -724,18 +704,20 @@ class _PlanContextCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              AppTag(label: 'PLANO REAL', color: palette.primary),
+              AppTag(label: 'PLANO BASE', color: palette.primary),
               const SizedBox(width: 8),
               Text(
                 'Gerado em $planDateLabel',
-                style: TextStyle(color: palette.muted, fontSize: 11),
+                style: context.runninType.bodyXs,
               ),
             ],
           ),
           const SizedBox(height: 8),
           Text(
-            'Plano pronto: $planSummary. Agora é executar com constância e ajustar quando o corpo pedir.',
-            style: TextStyle(
+            'PLANO PRONTO: ${planSummary.toUpperCase()}. AGORA É EXECUTAR COM CONSTÂNCIA E AJUSTAR QUANDO O CORPO PEDIR.',
+            style: context.runninType.labelCaps.copyWith(
+              fontSize: 12,
+              letterSpacing: 0.4,
               color: palette.text.withValues(alpha: 0.86),
               height: 1.4,
             ),
@@ -743,7 +725,7 @@ class _PlanContextCard extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             'Perfil usado para gerar: $profileSummary',
-            style: TextStyle(
+            style: context.runninType.bodyMd.copyWith(
               color: palette.text.withValues(alpha: 0.86),
               height: 1.4,
             ),
@@ -751,13 +733,22 @@ class _PlanContextCard extends StatelessWidget {
           const SizedBox(height: 8),
           SizedBox(
             width: double.infinity,
-            child: OutlinedButton(
-              onPressed: generating ? null : onRegenerate,
-              child: Text(
-                generating ? 'GERANDO NOVO PLANO...' : 'GERAR NOVO PLANO',
+            child: ElevatedButton.icon(
+              onPressed: () => context.push('/training/plan-detail'),
+              icon: Icon(Icons.menu_book_outlined, size: 16, color: palette.background),
+              label: const Text('VER PLANO BASE'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: palette.primary,
+                foregroundColor: palette.background,
+                shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+                padding: const EdgeInsets.symmetric(vertical: 12),
               ),
             ),
           ),
+          // "GERAR NOVO PLANO" removido — regenerar plano vira ação restrita
+          // (cooldown 1×/semana). Mantém só "VER PLANO COMPLETO" pra mostrar
+          // o plano que o coach montou. Pra ajustes pontuais existe a aba
+          // AJUSTES (revisão semanal) e auto-adapt pós-corrida.
         ],
       ),
     );
@@ -766,13 +757,11 @@ class _PlanContextCard extends StatelessWidget {
 
 class _TopTabs extends StatelessWidget {
   final _TrainingTab selectedTab;
-  final int reportsCount;
   final int adjustmentsCount;
   final ValueChanged<_TrainingTab> onChanged;
 
   const _TopTabs({
     required this.selectedTab,
-    required this.reportsCount,
     required this.adjustmentsCount,
     required this.onChanged,
   });
@@ -786,15 +775,6 @@ class _TopTabs extends StatelessWidget {
             label: 'PLANO',
             selected: selectedTab == _TrainingTab.plan,
             onTap: () => onChanged(_TrainingTab.plan),
-          ),
-        ),
-        const SizedBox(width: 1),
-        Expanded(
-          child: _TabButton(
-            label: 'RELATÓRIOS',
-            count: reportsCount,
-            selected: selectedTab == _TrainingTab.reports,
-            onTap: () => onChanged(_TrainingTab.reports),
           ),
         ),
         const SizedBox(width: 1),
@@ -836,6 +816,7 @@ class _TabButton extends StatelessWidget {
           color: selected ? palette.primary : palette.surface,
           border: Border.all(
             color: selected ? palette.primary : palette.border,
+            width: 1.041,
           ),
         ),
         child: Row(
@@ -843,9 +824,8 @@ class _TabButton extends StatelessWidget {
           children: [
             Text(
               label,
-              style: TextStyle(
+              style: context.runninType.labelCaps.copyWith(
                 fontSize: 11,
-                fontWeight: FontWeight.w800,
                 letterSpacing: 0.08,
                 color: selected ? palette.background : palette.muted,
               ),
@@ -859,9 +839,8 @@ class _TabButton extends StatelessWidget {
                     : palette.primary,
                 child: Text(
                   '$count',
-                  style: TextStyle(
+                  style: context.runninType.labelCaps.copyWith(
                     fontSize: 9,
-                    fontWeight: FontWeight.w900,
                     color: selected ? palette.background : palette.background,
                   ),
                 ),
@@ -895,11 +874,14 @@ class _PlanTab extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _DualModeToggle(
-          leftLabel: 'SEMANAL',
-          rightLabel: 'MENSAL',
-          leftSelected: planMode == _PlanMode.weekly,
-          onLeftTap: () => onPlanModeChanged(_PlanMode.weekly),
-          onRightTap: () => onPlanModeChanged(_PlanMode.monthly),
+          // Mensal primeiro: o atleta entende o mesociclo (visão macro)
+          // antes de mergulhar na semana atual. Inversão é só visual; o
+          // default _planMode continua weekly pra coerência com legado.
+          leftLabel: 'MENSAL',
+          rightLabel: 'SEMANAL',
+          leftSelected: planMode == _PlanMode.monthly,
+          onLeftTap: () => onPlanModeChanged(_PlanMode.monthly),
+          onRightTap: () => onPlanModeChanged(_PlanMode.weekly),
         ),
         const SizedBox(height: 16),
         switch (planMode) {
@@ -908,7 +890,15 @@ class _PlanTab extends StatelessWidget {
             selectedWeek: selectedWeek,
             onWeekChanged: onWeekChanged,
           ),
-          _PlanMode.monthly => _MonthlyPlanView(plan: plan),
+          _PlanMode.monthly => _MonthlyPlanView(
+            plan: plan,
+            onWeekTap: (weekNumber) {
+              // Volta pra visão SEMANAL com a semana clicada selecionada.
+              // weekNumber é 1-based; selectedWeek é 0-based.
+              onWeekChanged((weekNumber - 1).clamp(0, plan.weeks.length - 1));
+              onPlanModeChanged(_PlanMode.weekly);
+            },
+          ),
         },
       ],
     );
@@ -979,14 +969,14 @@ class _ModeButton extends StatelessWidget {
             color: selected
                 ? palette.primary.withValues(alpha: 0.5)
                 : palette.border,
+            width: 1.041,
           ),
         ),
         alignment: Alignment.center,
         child: Text(
           label,
-          style: TextStyle(
+          style: context.runninType.labelCaps.copyWith(
             fontSize: 11,
-            fontWeight: FontWeight.w800,
             letterSpacing: 0.08,
             color: selected ? palette.primary : palette.muted,
           ),
@@ -1029,9 +1019,17 @@ class _WeeklyPlanView extends StatelessWidget {
             itemCount: plan.weeks.length,
             itemBuilder: (_, index) {
               final isSelected = index == selectedWeek;
+              final isCurrent = index == plan.currentWeekIndex();
+              // Última semana é a SEMANA DA META quando o plano tem
+              // sessão-alvo marcada (RACE). Mostra label "META" abaixo.
+              final isLastWeek = index == plan.weeks.length - 1;
+              final hasTarget = isLastWeek &&
+                  plan.weeks[index].sessions.any((s) => s.isTarget);
               return _WeekChip(
                 weekNumber: index + 1,
                 selected: isSelected,
+                isCurrent: isCurrent,
+                isTargetWeek: hasTarget,
                 onTap: () => onWeekChanged(index),
               );
             },
@@ -1071,20 +1069,146 @@ class _WeeklyPlanView extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 12),
-        ...List.generate(7, (index) {
-          final day = index + 1;
-          final sessionForDay = orderedSessions
-              .where((session) => session.dayOfWeek == day)
-              .firstOrNull;
-          final isToday = day == DateTime.now().weekday;
-          final isDone = day < DateTime.now().weekday && sessionForDay != null;
-          return _WeeklySessionRow(
-            dayOfWeek: day,
-            session: sessionForDay,
-            isToday: isToday,
-            isDone: isDone,
+        if (week?.isSkeleton ?? false) ...[
+          _SkeletonWeekNotice(),
+          const SizedBox(height: 12),
+        ],
+        ...() {
+          // Datas reais por sessão: cada semana começa na segunda anterior
+          // ao startDate (ou no próprio startDate se ele cair numa segunda).
+          // Week 1 alinha com a semana civil do startDate; semanas seguintes
+          // somam +7 dias.
+          final today = DateTime.now();
+          final todayDateOnly = DateTime(today.year, today.month, today.day);
+          final planStart = plan.effectiveStartDate;
+          final week1Monday = planStart.subtract(
+            Duration(days: (planStart.weekday - 1) % 7),
           );
-        }),
+          final weekStartMonday = DateTime(
+            week1Monday.year,
+            week1Monday.month,
+            week1Monday.day,
+          ).add(Duration(days: selectedWeek * 7));
+          final weekIsLocked = week?.isSkeleton ?? false;
+          return List.generate(7, (index) {
+            final day = index + 1;
+            final dayDate = weekStartMonday.add(Duration(days: index));
+            final isToday = dayDate.isAtSameMomentAs(todayDateOnly);
+            final isPast = dayDate.isBefore(todayDateOnly);
+            final sessionForDay = orderedSessions
+                .where((s) => s.dayOfWeek == day)
+                .firstOrNull;
+            return _WeeklySessionRow(
+              weekNumber: selectedWeek + 1,
+              dayOfWeek: day,
+              dayDate: dayDate,
+              session: sessionForDay,
+              isToday: isToday,
+              isPast: isPast,
+              isLocked: weekIsLocked,
+              plan: plan,
+            );
+          });
+        }(),
+        // Última semana: card de fechamento (CHEGADA pra race, FECHAMENTO
+        // pra flow). Aparece DEPOIS dos 7 dias pra fechar visualmente
+        // a semana com o objetivo atingido.
+        if (week != null && selectedWeek == plan.weeks.length - 1) ...[
+          const SizedBox(height: 12),
+          PlanClosingCard(plan: plan, lastWeek: week),
+        ],
+        const SizedBox(height: 16),
+        // Volume da semana em barras (km por dia), similar ao mensal.
+        _WeeklyVolumeBars(
+          sessions: orderedSessions,
+          todayDow: selectedWeek == _currentPlanWeekIndex(plan)
+              ? DateTime.now().weekday
+              : 0,
+        ),
+      ],
+    );
+  }
+}
+
+/// Barras de VOLUME por dia da semana (km de cada sessão). Dia de HOJE em cyan
+/// sólido; demais dias com sessão em cyan suave; descanso fica vazio. Espelha o
+/// gráfico de carga do mensal, mas no recorte diário.
+class _WeeklyVolumeBars extends StatelessWidget {
+  final List<PlanSession> sessions;
+  final int todayDow; // 1..7 se HOJE está nesta semana; 0 caso contrário.
+  const _WeeklyVolumeBars({required this.sessions, required this.todayDow});
+
+  static const _dayShort = ['', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB', 'DOM'];
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    final type = context.runninType;
+    final byDay = <int, double>{};
+    for (final s in sessions) {
+      byDay[s.dayOfWeek] = (byDay[s.dayOfWeek] ?? 0) + s.distanceKm;
+    }
+    final loads = List.generate(7, (i) => byDay[i + 1] ?? 0.0);
+    final maxLoad = loads.fold<double>(1, (m, l) => l > m ? l : m);
+    const maxBarH = 80.0;
+    const minBarH = 14.0;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'VOLUME DA SEMANA',
+          style: type.labelCaps.copyWith(
+            color: palette.muted,
+            fontSize: 11,
+            letterSpacing: 1.2,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: List.generate(7, (i) {
+            final dow = i + 1;
+            final load = loads[i];
+            final isToday = dow == todayDow;
+            final hasRun = load > 0;
+            final barColor = !hasRun
+                ? palette.border
+                : isToday
+                    ? palette.primary
+                    : palette.primary.withValues(alpha: 0.3);
+            final h = hasRun ? minBarH + (load / maxLoad) * (maxBarH - minBarH) : 6.0;
+            return Expanded(
+              child: Padding(
+                padding: EdgeInsets.only(right: i < 6 ? 6 : 0),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      hasRun ? '${load.toStringAsFixed(0)}K' : '·',
+                      style: type.labelCaps.copyWith(
+                        color: isToday ? palette.primary : palette.muted,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 10,
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    Container(height: h, color: barColor),
+                    const SizedBox(height: 5),
+                    Text(
+                      _dayShort[dow],
+                      style: type.labelCaps.copyWith(
+                        color: isToday ? palette.primary : palette.muted,
+                        fontSize: 9,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }),
+        ),
       ],
     );
   }
@@ -1092,8 +1216,9 @@ class _WeeklyPlanView extends StatelessWidget {
 
 class _MonthlyPlanView extends StatelessWidget {
   final Plan plan;
+  final ValueChanged<int> onWeekTap;
 
-  const _MonthlyPlanView({required this.plan});
+  const _MonthlyPlanView({required this.plan, required this.onWeekTap});
 
   @override
   Widget build(BuildContext context) {
@@ -1108,6 +1233,9 @@ class _MonthlyPlanView extends StatelessWidget {
           subtitle: 'Mesociclo 1 · Objetivo: ${plan.goal}',
         ),
         const SizedBox(height: 12),
+        // Grid 2×2: numa única linha de 4, os labels longos (VOL TOTAL,
+        // DIAS TREINO, DESCANSO) não cabiam e quebravam/cortavam. 2 por linha
+        // dá largura suficiente — mesmo padrão do Histórico/DADOS.
         Row(
           children: [
             Expanded(
@@ -1123,7 +1251,11 @@ class _MonthlyPlanView extends StatelessWidget {
                 value: '${stats.totalSessions}',
               ),
             ),
-            const SizedBox(width: 8),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
             Expanded(
               child: MetricCard(
                 label: 'DIAS TREINO',
@@ -1137,79 +1269,137 @@ class _MonthlyPlanView extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 12),
+        // Mostra TODAS as semanas do mesociclo. As que ainda não foram
+        // detalhadas (skeleton) aparecem com cadeado e dialog ao tocar; a
+        // regra D+15 é entregue pelo server via detailLevel + enrichTwoTier
+        // a cada checkpoint aceito.
         ...plan.weeks.asMap().entries.map((entry) {
           final weekIndex = entry.key;
           final week = entry.value;
-          final weekDistance = week.sessions.fold<double>(
-            0,
-            (sum, session) => sum + session.distanceKm,
-          );
           final currentWeekIndex = _currentPlanWeekIndex(plan);
-          final isCompleted = weekIndex < currentWeekIndex;
+          // "COMPLETA" vem da execução real (executedRunId), não da data.
+          final executed = week.sessions.where((s) => s.isExecuted).length;
+          final allDone =
+              week.sessions.isNotEmpty && executed == week.sessions.length;
           final isCurrent = weekIndex == currentWeekIndex;
-          final status = isCompleted
+          final isPast = weekIndex < currentWeekIndex;
+          final status = allDone
               ? 'COMPLETA'
               : isCurrent
               ? 'ATUAL'
+              : isPast
+              ? 'PARCIAL'
               : 'PRÓXIMA';
+          final statusColor = allDone
+              ? context.runninPalette.primary // COMPLETA = cyan
+              : isCurrent
+              ? context.runninPalette.text // ATUAL = claro (destaque neutro)
+              : isPast
+              ? context.runninPalette.warning
+              : context.runninPalette.muted; // PRÓXIMA = apagado
           return _MonthlyWeekCard(
-            weekNumber: week.weekNumber,
-            focus: _deriveWeekFocus(week),
-            summary: _buildMonthSummary(week),
-            totalDistance: weekDistance,
+            plan: plan,
+            week: week,
             status: status,
-            statusColor: isCompleted
-                ? context.runninPalette.primary
-                : isCurrent
-                ? context.runninPalette.secondary
-                : context.runninPalette.muted,
+            statusColor: statusColor,
+            onTap: () => onWeekTap(week.weekNumber),
           );
         }),
-      ],
-    );
-  }
-}
-
-class _ReportsTab extends StatelessWidget {
-  final List<_RunFeedback> reports;
-
-  const _ReportsTab({required this.reports});
-
-  @override
-  Widget build(BuildContext context) {
-    if (reports.isEmpty) {
-      return const _TabEmptyState(
-        title: 'Nenhum feedback de IA ainda',
-        body:
-            'Os feedbacks reais aparecem aqui depois que voce conclui corridas com relatorio tecnico gerado pelo Coach.AI.',
-      );
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _SectionTitle(
-          title: 'FEEDBACKS DA IA',
-          indexLabel: '01',
-          subtitle:
-              'Analises tecnicas geradas a partir das suas corridas reais',
+        const SizedBox(height: 8),
+        // Resumo de carga (km projetados) das 4 primeiras semanas, em barras.
+        // Limitamos a 4 aqui pra o gráfico não virar uma fileira ilegível em
+        // planos longos — a leitura semana-a-semana acontece nos cards acima.
+        _CargaBars(
+          weeks: plan.weeks.take(4).toList(),
+          currentWeekIndex: _currentPlanWeekIndex(plan),
         ),
-        const SizedBox(height: 12),
-        ...reports.map((report) => _ReportCard(report: report)),
+        const SizedBox(height: 16),
+        // Box estática explicando a regra do detalhe progressivo (D+15).
+        FigmaCoachAIBlock(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const FigmaCoachAIBreadcrumb(action: 'PERIODIZAÇÃO'),
+              const SizedBox(height: 10),
+              Text(
+                'O coach detalha sempre as duas próximas semanas (≈ 15 dias). '
+                'As demais aparecem com cadeado — ele evolui a partir dos seus '
+                'números reais, então o detalhe é liberado a cada checkpoint '
+                'semanal, sem prometer o que ainda vai depender da sua semana.',
+                style: context.runninType.bodySm.copyWith(
+                  color: context.runninPalette.text.withValues(alpha: 0.85),
+                  height: 1.5,
+                ),
+              ),
+            ],
+          ),
+        ),
       ],
     );
   }
 }
 
-class _AdjustmentsTab extends StatelessWidget {
-  const _AdjustmentsTab();
+/// Barras de carga (km projetados) por semana, conforme o PNG da periodização.
+/// A semana ATUAL fica em cyan sólido; as demais em cyan suave. Label de km
+/// em cima e "S{n}" embaixo.
+class _CargaBars extends StatelessWidget {
+  final List<PlanWeek> weeks;
+  final int currentWeekIndex;
+  const _CargaBars({required this.weeks, required this.currentWeekIndex});
 
   @override
   Widget build(BuildContext context) {
-    return const _TabEmptyState(
-      title: 'Nenhum ajuste real ainda',
-      body:
-          'Quando o fluxo de revisao de plano estiver conectado a execucao real, o historico aparecera aqui. Por enquanto, nao exibimos ajustes simulados.',
+    final palette = context.runninPalette;
+    final type = context.runninType;
+    if (weeks.isEmpty) return const SizedBox.shrink();
+    final loads = weeks
+        .map((w) =>
+            w.projectedLoadKm ??
+            w.sessions.fold<double>(0, (s, x) => s + x.distanceKm))
+        .toList();
+    final maxLoad = loads.fold<double>(1, (m, l) => l > m ? l : m);
+    const maxBarH = 90.0;
+    const minBarH = 18.0;
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: List.generate(weeks.length, (i) {
+        final w = weeks[i];
+        final load = loads[i];
+        final isCurrent = i == currentWeekIndex;
+        final barColor =
+            isCurrent ? palette.primary : palette.primary.withValues(alpha: 0.3);
+        final h = minBarH + (load / maxLoad) * (maxBarH - minBarH);
+        return Expanded(
+          child: Padding(
+            padding: EdgeInsets.only(right: i < weeks.length - 1 ? 10 : 0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  '${load.toStringAsFixed(0)}K',
+                  style: type.labelCaps.copyWith(
+                    color: isCurrent ? palette.primary : palette.muted,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 11,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Container(height: h, color: barColor),
+                const SizedBox(height: 6),
+                Text(
+                  'S${w.weekNumber}',
+                  style: type.labelCaps.copyWith(
+                    color: isCurrent ? palette.primary : palette.muted,
+                    fontSize: 10,
+                    letterSpacing: 0.8,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      }),
     );
   }
 }
@@ -1217,36 +1407,71 @@ class _AdjustmentsTab extends StatelessWidget {
 class _WeekChip extends StatelessWidget {
   final int weekNumber;
   final bool selected;
+  /// true pra a semana corrente do plano (calculada por civil-week). Quando
+  /// não selecionada, renderiza outline em palette.primary pra indicar
+  /// "você está aqui" mesmo navegando pra outra semana.
+  final bool isCurrent;
+  /// true quando essa semana contém a meta (última do plano RACE).
+  /// Renderiza label "META" abaixo do número.
+  final bool isTargetWeek;
   final VoidCallback onTap;
 
   const _WeekChip({
     required this.weekNumber,
     required this.selected,
     required this.onTap,
+    this.isCurrent = false,
+    this.isTargetWeek = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final palette = context.runninPalette;
+    final Color borderColor;
+    final double borderWidth;
+    if (selected) {
+      borderColor = palette.primary;
+      borderWidth = 1.041;
+    } else if (isCurrent) {
+      borderColor = palette.primary;
+      borderWidth = 1.5;
+    } else {
+      borderColor = palette.border;
+      borderWidth = 1.041;
+    }
 
     return GestureDetector(
       onTap: onTap,
       child: Container(
         margin: const EdgeInsets.only(right: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.md),
         decoration: BoxDecoration(
           color: selected ? palette.primary : palette.surface,
-          border: Border.all(
-            color: selected ? palette.primary : palette.border,
-          ),
+          border: Border.all(color: borderColor, width: borderWidth),
         ),
-        child: Text(
-          'S$weekNumber',
-          style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-            color: selected ? palette.background : palette.muted,
-          ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'S$weekNumber',
+              style: context.runninType.labelCaps.copyWith(
+                fontSize: 11,
+                color: selected ? palette.background : palette.muted,
+              ),
+            ),
+            if (isTargetWeek) ...[
+              const SizedBox(height: 2),
+              Text(
+                'META',
+                style: context.runninType.labelCaps.copyWith(
+                  fontSize: 8,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.0,
+                  color: selected ? palette.background : palette.primary,
+                ),
+              ),
+            ],
+          ],
         ),
       ),
     );
@@ -1255,6 +1480,7 @@ class _WeekChip extends StatelessWidget {
 
 class _SectionTitle extends StatelessWidget {
   final String title;
+  // Mantém na assinatura por compat com call sites; ignorado no render.
   final String indexLabel;
   final String subtitle;
 
@@ -1266,83 +1492,37 @@ class _SectionTitle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final palette = context.runninPalette;
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Text(title, style: context.runninType.displayMd),
-            const SizedBox(width: 6),
-            Text(
-              indexLabel,
-              style: TextStyle(
-                color: palette.primary,
-                fontWeight: FontWeight.w800,
-                fontSize: 10,
-              ),
-            ),
-          ],
-        ),
+        Text(title, style: context.runninType.displayMd),
         const SizedBox(height: 6),
-        Text(subtitle, style: TextStyle(color: palette.muted)),
+        Text(subtitle, style: context.runninType.bodySm),
       ],
     );
   }
 }
-
-class _TabEmptyState extends StatelessWidget {
-  final String title;
-  final String body;
-
-  const _TabEmptyState({required this.title, required this.body});
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.runninPalette;
-
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: AppPanel(
-          color: palette.surfaceAlt,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.inbox_outlined, size: 40, color: palette.border),
-              const SizedBox(height: 16),
-              Text(
-                title,
-                textAlign: TextAlign.center,
-                style: context.runninType.displaySm,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                body,
-                textAlign: TextAlign.center,
-                style: TextStyle(color: palette.muted, height: 1.5),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _WeeklySessionRow extends StatelessWidget {
+  final int weekNumber;
   final int dayOfWeek;
+  final DateTime dayDate;
   final PlanSession? session;
   final bool isToday;
-  final bool isDone;
+  final bool isPast;
+  /// true quando a semana selecionada está em skeleton (detailLevel != 'full').
+  /// Renderiza cadeado + tap abre dialog em vez de navegar pro day_detail.
+  final bool isLocked;
+  final Plan plan;
 
   const _WeeklySessionRow({
+    required this.weekNumber,
     required this.dayOfWeek,
+    required this.dayDate,
     required this.session,
     required this.isToday,
-    required this.isDone,
+    required this.isPast,
+    required this.plan,
+    this.isLocked = false,
   });
 
   static const _dayNames = [
@@ -1360,81 +1540,213 @@ class _WeeklySessionRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final palette = context.runninPalette;
     final isRest = session == null;
+    final hasPlanned = !isRest;
+    // "Concluído" vem da corrida real vinculada (executedRunId), não da data.
+    final isExecuted = hasPlanned && (session?.isExecuted ?? false);
+    final missedPast = hasPlanned && isPast && !isExecuted;
+    final dd = dayDate.day.toString().padLeft(2, '0');
+    final mm = dayDate.month.toString().padLeft(2, '0');
+    final dayShort = _dayNames[dayOfWeek].substring(0, 3).toUpperCase();
 
-    return AppPanel(
+    // 4 estados visualmente distintos:
+    //  HOJE              → border PRIMARY grossa + bg primary 0.18 + ícone alvo
+    //  CORRIDA FUTURA    → border SECONDARY 1.5 + bg surface + ícone correr
+    //  CORRIDA PASSADA   → bg primary forte + label OK em background color
+    //  DESCANSO          → border DASHED muted + bg surface + ícone moon
+    //  PASSADO/DESCANSO  → tudo cinza apagado
+    final Color cellBg;
+    final Color cellFg;
+    final Color rowBg;
+    final Color rowBorder;
+    final double rowBorderWidth;
+    final IconData? statusIcon;
+    final String cellLabel;
+    if (isToday) {
+      cellBg = palette.primary;
+      cellFg = palette.background;
+      cellLabel = 'HOJE';
+      rowBg = palette.primary.withValues(alpha: 0.10);
+      rowBorder = palette.primary;
+      rowBorderWidth = 1.5;
+      statusIcon = hasPlanned ? Icons.gps_fixed : Icons.bedtime_outlined;
+    } else if (isExecuted) {
+      // sessão concluída (corrida real vinculada)
+      cellBg = palette.primary.withValues(alpha: 0.85);
+      cellFg = palette.background;
+      cellLabel = 'OK';
+      rowBg = palette.surface;
+      rowBorder = palette.primary.withValues(alpha: 0.30);
+      rowBorderWidth = 1.0;
+      statusIcon = Icons.check_circle_outline;
+    } else if (missedPast) {
+      // sessão planejada que passou sem ser feita
+      cellBg = palette.surfaceAlt;
+      cellFg = palette.muted.withValues(alpha: 0.7);
+      cellLabel = dayShort;
+      rowBg = palette.surface.withValues(alpha: 0.7);
+      rowBorder = palette.warning.withValues(alpha: 0.3);
+      rowBorderWidth = 1.0;
+      statusIcon = Icons.remove_circle_outline;
+    } else if (isPast) {
+      // descanso passado
+      cellBg = palette.surfaceAlt;
+      cellFg = palette.muted.withValues(alpha: 0.5);
+      cellLabel = dayShort;
+      rowBg = palette.surface.withValues(alpha: 0.6);
+      rowBorder = palette.border.withValues(alpha: 0.5);
+      rowBorderWidth = 1.0;
+      statusIcon = null;
+    } else if (hasPlanned) {
+      // corrida futura
+      cellBg = palette.surface;
+      cellFg = palette.secondary;
+      cellLabel = dayShort;
+      rowBg = palette.surface;
+      rowBorder = palette.secondary.withValues(alpha: 0.55);
+      rowBorderWidth = 1.3;
+      statusIcon = Icons.directions_run;
+    } else {
+      // descanso futuro
+      cellBg = palette.surfaceAlt.withValues(alpha: 0.5);
+      cellFg = palette.muted;
+      cellLabel = dayShort;
+      rowBg = palette.surface.withValues(alpha: 0.5);
+      rowBorder = palette.border;
+      rowBorderWidth = 1.0;
+      statusIcon = Icons.nightlight_outlined;
+    }
+
+    return InkWell(
+      onTap: isLocked
+          ? () => _showCheckpointLockDialog(context, plan, weekNumber)
+          : () => context.push('/training/day/$weekNumber/$dayOfWeek'),
+      child: Container(
       margin: const EdgeInsets.only(bottom: 8),
-      color: isToday ? palette.surfaceAlt : palette.surface,
-      borderColor: isToday
-          ? palette.primary.withValues(alpha: 0.4)
-          : palette.border,
+      decoration: BoxDecoration(
+        color: rowBg,
+        border: Border.all(color: rowBorder, width: rowBorderWidth),
+      ),
+      padding: const EdgeInsets.all(AppSpacing.lg),
       child: Row(
         children: [
           Container(
-            width: 42,
-            height: 42,
+            width: 56,
+            height: 56,
             alignment: Alignment.center,
-            color: isDone
-                ? palette.primary
-                : isToday
-                ? palette.primary.withValues(alpha: 0.15)
-                : palette.surfaceAlt,
-            child: Text(
-              isDone
-                  ? 'OK'
-                  : (isToday
-                        ? 'HOJE'
-                        : _dayNames[dayOfWeek].substring(0, 3).toUpperCase()),
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 9,
-                fontWeight: FontWeight.w900,
-                color: isDone
-                    ? palette.background
-                    : (isToday ? palette.primary : palette.muted),
-              ),
+            color: cellBg,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  cellLabel,
+                  style: context.runninType.labelCaps.copyWith(
+                    fontSize: 11,
+                    fontWeight: isToday || isExecuted
+                        ? FontWeight.w700
+                        : FontWeight.w500,
+                    color: cellFg,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '$dd/$mm',
+                  style: context.runninType.bodyXs.copyWith(
+                    fontSize: 9,
+                    color: cellFg.withValues(alpha: 0.85),
+                    letterSpacing: 0.3,
+                  ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  _dayNames[dayOfWeek],
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w800,
-                    color: palette.text,
-                  ),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                  textBaseline: TextBaseline.alphabetic,
+                  children: [
+                    if (statusIcon != null) ...[
+                      Icon(statusIcon, size: 14, color: cellFg),
+                      const SizedBox(width: 6),
+                    ],
+                    Text(
+                      _dayNames[dayOfWeek],
+                      style: context.runninType.displaySm.copyWith(
+                        fontSize: 18,
+                        color: isPast && !isToday ? palette.muted : palette.text,
+                      ),
+                    ),
+                    if (isExecuted || (isPast && !isToday)) ...[
+                      const SizedBox(width: 8),
+                      Text(
+                        isExecuted
+                            ? '· concluído'
+                            : (missedPast ? '· perdido' : '· passado'),
+                        style: context.runninType.bodyXs.copyWith(
+                          fontSize: 10,
+                          color: palette.muted.withValues(alpha: 0.7),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
                 const SizedBox(height: 4),
+                // Só o tipo da sessão (sem hidratação/nutrição/duração — vide PNG).
+                // Sessão já executada → tipo aparece SOBRETACHADO (riscado).
                 Text(
                   isRest ? 'Descanso' : session!.type,
-                  style: TextStyle(color: palette.muted),
+                  style: context.runninType.bodyMd.copyWith(
+                    color: palette.muted,
+                    decoration:
+                        isExecuted ? TextDecoration.lineThrough : null,
+                    decorationColor: palette.muted,
+                  ),
                 ),
               ],
             ),
           ),
           if (!isRest)
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
+            // Quando a semana é skeleton (locked), o bloco distância/pace
+            // fica esmaecido e ganha um cadeado discreto à direita. Comunica
+            // visualmente que esses valores ainda são "esqueleto" e abrem o
+            // dialog ao invés do day_detail.
+            Row(
               children: [
-                Text(
-                  _distanceLabel(session!),
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.w900,
-                    color: palette.secondary,
+                Opacity(
+                  opacity: isLocked ? 0.45 : 1.0,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        _distanceLabel(session!),
+                        style: context.runninType.dataXs.copyWith(
+                          fontSize: 26,
+                          fontWeight: FontWeight.w600,
+                          color: palette.secondary,
+                        ),
+                      ),
+                      if (session!.targetPace != null)
+                        Text(
+                          '${session!.targetPace!}/km',
+                          style: context.runninType.bodySm.copyWith(
+                            color: palette.muted,
+                          ),
+                        ),
+                    ],
                   ),
                 ),
-                if (session!.targetPace != null)
-                  Text(
-                    session!.targetPace!,
-                    style: TextStyle(color: palette.muted),
-                  ),
+                if (isLocked) ...[
+                  const SizedBox(width: 8),
+                  Icon(Icons.lock_outline, size: 16, color: palette.muted),
+                ],
               ],
             ),
         ],
+      ),
       ),
     );
   }
@@ -1451,205 +1763,274 @@ class _WeeklySessionRow extends StatelessWidget {
 }
 
 class _MonthlyWeekCard extends StatelessWidget {
-  final int weekNumber;
-  final String focus;
-  final String summary;
-  final double totalDistance;
-  final String status;
+  final Plan plan;
+  final PlanWeek week;
+  final String status; // COMPLETA | PARCIAL | ATUAL | PRÓXIMA
   final Color statusColor;
+  /// Disparado quando o user clica num card NÃO bloqueado (skeleton trata
+  /// tap internamente com dialog de checkpoint).
+  final VoidCallback onTap;
 
   const _MonthlyWeekCard({
-    required this.weekNumber,
-    required this.focus,
-    required this.summary,
-    required this.totalDistance,
+    required this.plan,
+    required this.week,
     required this.status,
     required this.statusColor,
+    required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
     final palette = context.runninPalette;
 
-    return AppPanel(
-      margin: const EdgeInsets.only(bottom: 8),
-      borderColor: status == 'ATUAL'
-          ? palette.primary.withValues(alpha: 0.45)
-          : palette.border,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Column(
+    // Conteúdo didático vem do BE (blockName/objective/projectedLoadKm/targets).
+    // Nome da semana: usa o MESMO label canônico do Plano Base.
+    final blockName = planWeekLabel(week);
+    final objective = (week.objective?.trim().isNotEmpty ?? false)
+        ? week.objective!.trim()
+        : null;
+    final loadKm = week.projectedLoadKm ??
+        week.sessions.fold<double>(0, (s, x) => s + x.distanceKm);
+    // Resumo por TIPO (ex.: "3 x EASY RUN") em vez de listar dia a dia.
+    final byType = <String, int>{};
+    for (final s in week.sessions) {
+      final t = s.type.trim().toUpperCase();
+      if (t.isEmpty) continue;
+      byType[t] = (byType[t] ?? 0) + 1;
+    }
+    final restCount =
+        7 - week.sessions.map((s) => s.dayOfWeek).toSet().length;
+    final summaryLines = <String>[
+      for (final e in (byType.entries.toList()
+            ..sort((a, b) => b.value.compareTo(a.value))))
+        '${e.value} x ${e.key}',
+      if (restCount > 0) '$restCount x DESCANSO',
+    ];
+    final isCompleted = status == 'COMPLETA';
+    final isCurrent = status == 'ATUAL';
+    final isLocked = week.isSkeleton;
+
+    // O bloco de conteúdo didático (objetivo + targets + resumo por tipo)
+    // fica esmaecido quando o card está locked — comunica visualmente que
+    // não tem informação real ali ainda.
+    final detailedContent = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (objective != null) ...[
+          const SizedBox(height: 8),
+          Text(
+            objective,
+            style: context.runninType.bodySm.copyWith(
+              color: palette.text.withValues(alpha: 0.85),
+              fontSize: 12.5,
+            ),
+          ),
+        ],
+        if (week.targets.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          ...week.targets.map((t) => _BulletLine(text: t)),
+        ],
+        if (summaryLines.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          ...summaryLines.map(
+            (line) => Padding(
+              padding: const EdgeInsets.only(bottom: 2),
+              child: Text(
+                line,
+                style: context.runninType.bodyXs.copyWith(color: palette.muted),
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+
+    return InkWell(
+      onTap: isLocked
+          ? () => _showCheckpointLockDialog(context, plan, week.weekNumber)
+          : onTap,
+      child: AppPanel(
+        margin: const EdgeInsets.only(bottom: 8),
+        // Semana ATUAL em destaque: borda cyan + fundo levemente tingido.
+        color: isCurrent ? palette.primary.withValues(alpha: 0.06) : null,
+        borderColor: isCurrent ? palette.primary : palette.border,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'Sem $weekNumber  Foco: $focus',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800,
-                    color: palette.text,
+                Expanded(
+                  child: Wrap(
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 8,
+                    runSpacing: 4,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 7,
+                          vertical: 3,
+                        ),
+                        color: palette.primary.withValues(alpha: 0.15),
+                        child: Text(
+                          'SEM ${week.weekNumber}',
+                          style: context.runninType.labelCaps.copyWith(
+                            color: palette.primary,
+                            letterSpacing: 1.0,
+                          ),
+                        ),
+                      ),
+                      Text(
+                        blockName,
+                        style: context.runninType.bodyMd.copyWith(
+                          fontWeight: FontWeight.w500,
+                          color: palette.text,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                      if (isLocked) _LockedChip(),
+                      if (isCompleted)
+                        Icon(Icons.check_circle,
+                            size: 15, color: palette.primary),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  summary,
-                  style: TextStyle(color: palette.muted, height: 1.5),
+                const SizedBox(width: 12),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      '${loadKm.toStringAsFixed(0)}K',
+                      style: context.runninType.dataMd.copyWith(
+                        fontWeight: FontWeight.w600,
+                        // Distância em CYAN na semana atual; laranja nas demais.
+                        color: isCurrent ? palette.primary : palette.secondary,
+                      ),
+                    ),
+                    Text(
+                      status,
+                      style: context.runninType.labelCaps.copyWith(
+                        color: statusColor,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 1.0,
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
-          ),
-          const SizedBox(width: 16),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                '${totalDistance.toStringAsFixed(0)}K',
-                style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.w900,
-                  color: palette.secondary,
-                ),
-              ),
-              Text(
-                status,
-                style: TextStyle(
-                  color: statusColor,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 0.08,
-                ),
-              ),
-            ],
-          ),
-        ],
+            // No locked, o bloco de detalhe vira fantasma (opacity 0.4) — não
+            // engana o user achando que aquilo é o conteúdo final, mas mantém
+            // a estrutura da grade.
+            isLocked
+                ? Opacity(opacity: 0.4, child: detailedContent)
+                : detailedContent,
+          ],
+        ),
       ),
     );
   }
+
 }
 
-class _ReportCard extends StatelessWidget {
-  final _RunFeedback report;
-
-  const _ReportCard({required this.report});
-
+/// Chip "BLOQUEADA" com ícone de cadeado — usado no header do
+/// _MonthlyWeekCard quando week.isSkeleton (substitui o badge discreto
+/// anterior por uma sinalização visual mais forte).
+class _LockedChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final palette = context.runninPalette;
-
-    return AppPanel(
-      margin: const EdgeInsets.only(bottom: 8),
-      color: report.isLatest ? palette.surfaceAlt : null,
-      borderColor: report.isLatest
-          ? palette.primary.withValues(alpha: 0.4)
-          : null,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(
+        color: palette.primary.withValues(alpha: 0.16),
+        border: Border.all(color: palette.primary.withValues(alpha: 0.45)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  report.title,
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w900,
-                    color: palette.text,
-                  ),
-                ),
-              ),
-              if (report.isLatest)
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 4,
-                  ),
-                  color: palette.primary,
-                  child: Text(
-                    'MAIS RECENTE',
-                    style: TextStyle(
-                      fontSize: 9,
-                      fontWeight: FontWeight.w900,
-                      color: palette.background,
-                    ),
-                  ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: _MetricColumn(label: 'DATA', value: report.dateLabel),
-              ),
-              Expanded(
-                child: _MetricColumn(
-                  label: 'KM',
-                  value: report.totalKm.toStringAsFixed(2),
-                ),
-              ),
-              Expanded(
-                child: _MetricColumn(
-                  label: 'TEMPO',
-                  value: report.durationLabel,
-                ),
-              ),
-              Expanded(
-                child: _MetricColumn(label: 'PACE', value: report.paceLabel),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
+          Icon(Icons.lock_outline, size: 11, color: palette.primary),
+          const SizedBox(width: 4),
           Text(
-            report.coachSummary,
-            style: TextStyle(
-              color: palette.text.withValues(alpha: 0.8),
-              height: 1.5,
+            'BLOQUEADA',
+            style: context.runninType.labelCaps.copyWith(
+              color: palette.primary,
+              letterSpacing: 1.0,
+              fontSize: 9.5,
             ),
           ),
-          const SizedBox(height: 12),
-          AppTag(label: 'RELATORIO REAL', color: palette.primary),
         ],
       ),
     );
   }
 }
 
-class _MetricColumn extends StatelessWidget {
-  final String label;
-  final String value;
-
-  const _MetricColumn({required this.label, required this.value});
-
+/// Bullet "▸ texto" pros objetivos da semana na periodização.
+class _BulletLine extends StatelessWidget {
+  final String text;
+  const _BulletLine({required this.text});
   @override
   Widget build(BuildContext context) {
     final palette = context.runninPalette;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 9,
-            fontWeight: FontWeight.w700,
-            color: palette.muted,
-            letterSpacing: 0.08,
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 3),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('▸ ',
+              style: context.runninType.bodySm
+                  .copyWith(color: palette.primary, fontSize: 12.5)),
+          Expanded(
+            child: Text(
+              text,
+              style: context.runninType.bodySm.copyWith(
+                color: palette.text.withValues(alpha: 0.82),
+                fontSize: 12.5,
+                height: 1.4,
+              ),
+            ),
           ),
-        ),
-        const SizedBox(height: 6),
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: 24,
-            fontWeight: FontWeight.w900,
-            color: palette.secondary,
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
 
+/// Badge "ESQUELETO" pras semanas ainda não detalhadas (liberadas no
+/// checkpoint da semana anterior).
+/// Aviso na visão semanal quando a semana ainda é esqueleto: volume e pace
+/// já estão definidos; nutrição, hidratação e roteiro km-a-km são liberados
+/// no checkpoint da semana anterior.
+class _SkeletonWeekNotice extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      decoration: BoxDecoration(
+        color: palette.surface,
+        border: Border.all(color: palette.border, width: 1.0),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.lock_clock_outlined, size: 16, color: palette.muted),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Volume e pace já definidos. O detalhe completo (roteiro, nutrição, '
+              'hidratação) é liberado no checkpoint da semana anterior — assim o '
+              'coach ajusta pela sua evolução real.',
+              style: context.runninType.bodyXs.copyWith(
+                color: palette.muted,
+                height: 1.4,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 class _MonthlyStats {
   final double totalKm;
   final int totalSessions;
@@ -1713,17 +2094,7 @@ _MonthlyStats _buildMonthlyStats(Plan plan) {
   );
 }
 
-int _currentPlanWeekIndex(Plan plan) {
-  if (plan.weeks.isEmpty) return 0;
-
-  final createdAt = DateTime.tryParse(plan.createdAt);
-  if (createdAt == null) return 0;
-
-  final elapsedDays = DateTime.now().difference(createdAt).inDays;
-  if (elapsedDays <= 0) return 0;
-
-  return (elapsedDays ~/ 7).clamp(0, plan.weeks.length - 1);
-}
+int _currentPlanWeekIndex(Plan plan) => plan.currentWeekIndex();
 
 String _buildWeekHeadline(PlanWeek? week) {
   if (week == null) return 'Semana sem sessoes planejadas';
@@ -1734,25 +2105,44 @@ String _buildWeekHeadline(PlanWeek? week) {
   return 'Semana ${week.weekNumber} · ${week.sessions.length} sessoes · ${totalKm.toStringAsFixed(1)} km';
 }
 
+/// Summary per-week — prioriza narrative gerada pela IA (personalizada pelo
+/// perfil do user) se disponível; senão fallback determinístico com volume +
+/// sessão-chave + foco.
 String _buildWeekSummary(PlanWeek? week) {
   if (week == null || week.sessions.isEmpty) {
-    return 'Semana livre no plano. Use para recuperar bem e chegar inteiro no proximo bloco.';
+    return 'Sem sessões nesta semana — descanso ativo recomendado.';
   }
-
+  // Se LLM já preencheu narrativa personalizada, usa essa
+  if (week.narrative != null && week.narrative!.trim().isNotEmpty) {
+    return week.narrative!.trim();
+  }
   final ordered = [...week.sessions]
     ..sort((a, b) => a.dayOfWeek.compareTo(b.dayOfWeek));
-  final sessionTypes = ordered.map((item) => item.type).toSet().join(', ');
-  final notes = ordered
-      .map((item) => item.notes.trim())
-      .where((item) => item.isNotEmpty)
-      .take(3)
-      .join(' ');
-
-  if (notes.isEmpty) {
-    return 'Nesta semana vamos combinar $sessionTypes. Mantem constancia, respeita os dias leves e chega forte no treino-chave.';
+  final totalKm = ordered.fold<double>(0, (s, x) => s + x.distanceKm);
+  // Sessão-chave: a mais longa (geralmente o long run da semana).
+  final keySession = [...ordered]
+    ..sort((a, b) => b.distanceKm.compareTo(a.distanceKm));
+  final key = keySession.first;
+  final focus = _deriveWeekFocus(week).toLowerCase();
+  final restDays = 7 - ordered.length;
+  // Conta tipos pra mensagem específica.
+  final typeCounts = <String, int>{};
+  for (final s in ordered) {
+    typeCounts.update(s.type, (v) => v + 1, ifAbsent: () => 1);
   }
+  final dominantType = typeCounts.entries.toList()
+    ..sort((a, b) => b.value.compareTo(a.value));
+  final dominant = dominantType.first.key;
 
-  return 'Nesta semana vamos combinar $sessionTypes. $notes';
+  return 'Semana ${week.weekNumber} · foco em $focus. '
+      'Volume: ${totalKm.toStringAsFixed(1)}km em ${ordered.length} sessões + '
+      '$restDays descanso. Sessão-chave: ${key.type} de ${key.distanceKm.toStringAsFixed(1)}km '
+      'na ${_dayNamePt(key.dayOfWeek)}. Predomínio: $dominant.';
+}
+
+String _dayNamePt(int d) {
+  const names = ['', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado', 'domingo'];
+  return names[d.clamp(1, 7)];
 }
 
 String _deriveWeekFocus(PlanWeek week) {
@@ -1771,27 +2161,161 @@ String _deriveWeekFocus(PlanWeek week) {
   return 'Base';
 }
 
-String _buildMonthSummary(PlanWeek week) {
-  final ordered = [...week.sessions]
-    ..sort((a, b) => a.dayOfWeek.compareTo(b.dayOfWeek));
-  final summaryParts = ordered
-      .map((session) => '${_shortDayName(session.dayOfWeek)} ${session.type}')
-      .join(' · ');
-  final note = ordered
-      .map((session) => session.notes.trim())
-      .firstWhere((item) => item.isNotEmpty, orElse: () => '');
-
-  if (note.isEmpty) return summaryParts;
-  return '$summaryParts. $note';
-}
-
-String _shortDayName(int dayOfWeek) {
-  const names = ['', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab', 'Dom'];
-  return names[dayOfWeek];
-}
-
 String _formatDuration(int durationS) {
   final minutes = durationS ~/ 60;
   final seconds = durationS % 60;
   return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+}
+
+/// Banner mostrado quando o plano ativo foi marcado como completed pelo
+/// server (mesocycleEndDate passou). Convida o user a ver o relatório
+/// final E/OU gerar um novo plano. O resto da tela cai em _EmptyState.
+class _PlanCompletedBanner extends StatelessWidget {
+  final String planId;
+  final VoidCallback onSeeReport;
+  final VoidCallback onNewPlan;
+  const _PlanCompletedBanner({
+    required this.planId,
+    required this.onSeeReport,
+    required this.onNewPlan,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    return Container(
+      margin: const EdgeInsets.fromLTRB(20, 6, 20, 14),
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+      decoration: BoxDecoration(
+        color: palette.primary.withValues(alpha: 0.10),
+        border: Border.all(color: palette.primary.withValues(alpha: 0.45)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.flag, color: palette.primary, size: 18),
+              const SizedBox(width: 8),
+              Text(
+                'PLANO CONCLUÍDO!',
+                style: context.runninType.labelMd.copyWith(
+                  color: palette.primary,
+                  fontWeight: FontWeight.w500,
+                  letterSpacing: 1.2,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Seu mesociclo terminou. Veja o relatório com o resumo (prazo inicial × real, ajustes feitos no caminho) ou gere um novo plano.',
+            style: context.runninType.bodySm.copyWith(
+              color: palette.text,
+              height: 1.45,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: onSeeReport,
+                  style: OutlinedButton.styleFrom(
+                    side: BorderSide(color: palette.primary, width: 1.041),
+                    shape: const RoundedRectangleBorder(
+                      borderRadius: BorderRadius.zero,
+                    ),
+                    minimumSize: const Size(0, 42),
+                  ),
+                  child: Text(
+                    'VER RELATÓRIO',
+                    style: context.runninType.labelMd.copyWith(
+                      color: palette.primary,
+                      letterSpacing: 1.0,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: onNewPlan,
+                  style: ElevatedButton.styleFrom(
+                    minimumSize: const Size(0, 42),
+                    shape: const RoundedRectangleBorder(
+                      borderRadius: BorderRadius.zero,
+                    ),
+                  ),
+                  child: const Text('GERAR NOVO PLANO'),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Data em que o checkpoint da semana M-1 deve rodar (Sunday cron + user
+/// aceitar a proposta) e promover a semana [weekNumber] de skeleton pra full.
+/// Regra: cada checkpoint enriquece as 2 próximas semanas (ver
+/// server/checkpoint-shared.ts:enrichTwoTier), então a semana M só é
+/// detalhada no final da semana M-1.
+/// Retorna label tipo "segunda, 12/07". Se já passou, retorna
+/// "no próximo checkpoint" (raro — server propaga rápido).
+///
+/// NOTA: weekday em PT-BR é computado manualmente em vez de via
+/// DateFormat('EEEE', 'pt_BR'), porque `initializeDateFormatting('pt_BR')`
+/// não é chamado no boot — usar locale custom no DateFormat lança
+/// LocaleDataException e quebra o dialog (tela branca).
+String _checkpointUnlockLabel(Plan plan, int weekNumber) {
+  final startDate = plan.effectiveStartDate;
+  // M=1: nunca skeleton, mas tratamos como "hoje" se chegar aqui.
+  // M=2: nunca skeleton (criado full), idem.
+  // M>=3: liberado em startDate + (M-1)*7 - 1 dias = último dia da semana M-1.
+  final unlockDate = startDate.add(Duration(days: (weekNumber - 1) * 7 - 1));
+  final today = DateTime.now();
+  final todayDateOnly = DateTime(today.year, today.month, today.day);
+  if (unlockDate.isBefore(todayDateOnly)) return 'no próximo checkpoint';
+  const weekdays = <String>[
+    '', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado', 'domingo',
+  ];
+  final wd = weekdays[unlockDate.weekday];
+  final dd = unlockDate.day.toString().padLeft(2, '0');
+  final mm = unlockDate.month.toString().padLeft(2, '0');
+  return 'em $wd, $dd/$mm';
+}
+
+/// Diálogo único compartilhado por MENSAL e SEMANAL quando o user toca numa
+/// semana / dia skeleton. Explica a regra D+15 e mostra a data prevista de
+/// liberação do detalhe.
+Future<void> _showCheckpointLockDialog(
+  BuildContext context,
+  Plan plan,
+  int weekNumber,
+) {
+  final palette = context.runninPalette;
+  return showDialog<void>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      backgroundColor: palette.surface,
+      title: Text('Semana $weekNumber · bloqueada'),
+      content: Text(
+        'O coach detalha as duas próximas semanas a cada checkpoint, usando '
+        'seus números reais.\n\n'
+        'O detalhe completo desta semana é liberado '
+        '${_checkpointUnlockLabel(plan, weekNumber)} — antes disso, ele só '
+        'conhece o esqueleto (tipo de sessão, distância e pace alvo).',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(ctx).pop(),
+          child: const Text('ENTENDI'),
+        ),
+      ],
+    ),
+  );
 }

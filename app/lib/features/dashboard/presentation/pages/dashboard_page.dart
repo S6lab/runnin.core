@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/features/dashboard/domain/dashboard_stats.dart';
 import 'package:runnin/features/dashboard/presentation/cubit/dashboard_cubit.dart';
+import 'package:runnin/shared/widgets/figma/figma_top_nav.dart';
 
 class DashboardPage extends StatelessWidget {
   const DashboardPage({super.key});
@@ -26,16 +27,26 @@ class _DashboardView extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: palette.background,
-      body: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-              child: Text('ANALYTICS', style: type.displaySm),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const FigmaTopNav(
+            breadcrumb: 'ANALYTICS',
+            showBackButton: true,
+          ),
+          const SizedBox(height: 16),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+            child: Text(
+              'Métricas, evolução e plano',
+              style: type.bodySm.copyWith(
+                color: palette.muted,
+                height: 1.5,
+              ),
             ),
-            const SizedBox(height: 20),
-            Expanded(child: BlocBuilder<DashboardCubit, DashboardState>(
+          ),
+          Expanded(
+            child: BlocBuilder<DashboardCubit, DashboardState>(
               builder: (context, state) {
                 if (state is DashboardLoading) {
                   return Center(
@@ -60,9 +71,9 @@ class _DashboardView extends StatelessWidget {
                 }
                 return const SizedBox.shrink();
               },
-            )),
-          ],
-        ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -200,7 +211,7 @@ class _LevelCard extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: palette.surface,
-        border: Border.all(color: palette.border),
+        border: Border.all(color: palette.border, width: 1.041),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -245,7 +256,7 @@ class _PlanProgressCard extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: palette.surface,
-        border: Border.all(color: palette.border),
+        border: Border.all(color: palette.border, width: 1.041),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -286,7 +297,7 @@ class _WeeklyChart extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(12, 16, 12, 12),
       decoration: BoxDecoration(
         color: palette.surface,
-        border: Border.all(color: palette.border),
+        border: Border.all(color: palette.border, width: 1.041),
       ),
       child: Column(
         children: [

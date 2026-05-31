@@ -1,0 +1,310 @@
+import 'package:dio/dio.dart';
+import 'package:flutter/material.dart';
+import 'package:hive_flutter/hive_flutter.dart';
+import 'package:runnin/core/network/api_client.dart';
+import 'package:runnin/core/theme/app_palette.dart';
+import 'package:runnin/core/theme/design_system_tokens.dart';
+import 'package:runnin/features/auth/data/user_remote_datasource.dart';
+import 'package:runnin/shared/widgets/feedback_toggle.dart';
+import 'package:runnin/shared/widgets/figma/figma_selection_button.dart';
+import 'package:runnin/shared/widgets/figma/figma_top_nav.dart';
+import 'package:runnin/shared/widgets/section_heading.dart';
+
+const _hiveBox = 'runnin_settings';
+const _hiveKeyPersonality = 'coach_personality';
+const _hiveKeyFrequency = 'coach_message_frequency';
+const _hiveKeyFeedback = 'coach_feedback_enabled';
+const _hiveKeyAllowCriticalInSilent = 'coach_allow_critical_in_silent';
+
+class CoachSettingsPage extends StatefulWidget {
+  const CoachSettingsPage({super.key});
+
+  @override
+  State<CoachSettingsPage> createState() => _CoachSettingsPageState();
+}
+
+class _CoachSettingsPageState extends State<CoachSettingsPage> {
+  String _personality = 'motivador';
+  String _frequency = 'per_km';
+  // Quando frequency=silent, deixa pace_alert/segment_pace_off/finish furarem
+  // o silêncio. Default true (silêncio é pra ruído, não pra risco).
+  // UI esconde toggle se frequency != silent — sem efeito nas outras.
+  bool _allowCriticalInSilent = true;
+  Map<String, bool> _feedback = {
+    'pre_training': true,
+    'pace_alerts': true,
+    'bpm_alerts': true,
+    'live_splits': true,
+    'post_training': true,
+    'daily_notifications': true,
+  };
+
+  bool _saving = false;
+
+  final _remote = UserRemoteDatasource();
+
+  @override
+  void initState() {
+    super.initState();
+    _loadFromHive();
+    _loadFromRemote();
+  }
+
+  void _loadFromHive() {
+    if (!Hive.isBoxOpen(_hiveBox)) return;
+    final box = Hive.box<dynamic>(_hiveBox);
+    setState(() {
+      _personality = box.get(_hiveKeyPersonality, defaultValue: 'motivador') as String;
+      _frequency = box.get(_hiveKeyFrequency, defaultValue: 'per_km') as String;
+      _allowCriticalInSilent = box.get(_hiveKeyAllowCriticalInSilent, defaultValue: true) as bool;
+      final stored = box.get(_hiveKeyFeedback);
+      if (stored is Map) {
+        _feedback = Map<String, bool>.from(stored.map(
+          (k, v) => MapEntry(k.toString(), v as bool? ?? true),
+        ));
+      }
+    });
+  }
+
+  Future<void> _loadFromRemote() async {
+    try {
+      final profile = await _remote.getMe();
+      if (profile == null || !mounted) return;
+      setState(() {
+        if (profile.coachPersonality != null) _personality = profile.coachPersonality!;
+        if (profile.coachMessageFrequency != null) _frequency = profile.coachMessageFrequency!;
+        if (profile.allowCriticalAlertsInSilent != null) {
+          _allowCriticalInSilent = profile.allowCriticalAlertsInSilent!;
+        }
+        if (profile.coachFeedbackEnabled != null) {
+          _feedback = Map<String, bool>.from(profile.coachFeedbackEnabled!);
+        }
+      });
+      // Update Hive cache with remote values
+      if (Hive.isBoxOpen(_hiveBox)) {
+        final box = Hive.box<dynamic>(_hiveBox);
+        await box.put(_hiveKeyPersonality, _personality);
+        await box.put(_hiveKeyFrequency, _frequency);
+        await box.put(_hiveKeyAllowCriticalInSilent, _allowCriticalInSilent);
+        await box.put(_hiveKeyFeedback, _feedback);
+      }
+    } catch (_) {
+      // Remote load is best-effort; Hive values remain
+    }
+  }
+
+  Future<void> _saveToHive() async {
+    if (!Hive.isBoxOpen(_hiveBox)) return;
+    final box = Hive.box<dynamic>(_hiveBox);
+    await box.put(_hiveKeyPersonality, _personality);
+    await box.put(_hiveKeyFrequency, _frequency);
+    await box.put(_hiveKeyAllowCriticalInSilent, _allowCriticalInSilent);
+    await box.put(_hiveKeyFeedback, _feedback);
+  }
+
+  Future<void> _save() async {
+    setState(() => _saving = true);
+    try {
+      await apiClient.patch('/users/me', data: {
+        'coachPersonality': _personality,
+        'coachMessageFrequency': _frequency,
+        'allowCriticalAlertsInSilent': _allowCriticalInSilent,
+        'coachFeedbackEnabled': _feedback,
+      });
+      await _saveToHive();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Preferências do Coach salvas.'),
+            duration: Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } on DioException catch (e) {
+      if (mounted) {
+        final msg = e.response?.statusCode == 422
+            ? 'Erro 422: dados inválidos.'
+            : 'Erro ao salvar. Tente novamente.';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(msg),
+            backgroundColor: context.runninPalette.secondary,
+            duration: const Duration(seconds: 3),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: FigmaColors.bgBase,
+      body: Column(
+        children: [
+          const FigmaTopNav(
+            breadcrumb: 'COACH',
+            showBackButton: true,
+          ),
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(20, 24, 20, 100),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // §1 Personalidade
+                  const SectionHeading(label: 'PERSONALIDADE DO COACH'),
+                  const SizedBox(height: 12),
+                  FigmaSelectionButton(
+                    label: 'Motivador — "Vamos lá! Você consegue."',
+                    selected: _personality == 'motivador',
+                    onTap: () => setState(() => _personality = 'motivador'),
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  FigmaSelectionButton(
+                    label: 'Técnico — "Pace 5:30/km, BPM 165, zona 3."',
+                    selected: _personality == 'tecnico',
+                    onTap: () => setState(() => _personality = 'tecnico'),
+                  ),
+
+                  const SizedBox(height: AppSpacing.xxl),
+
+                  // §2 Frequência
+                  const SectionHeading(label: 'FREQUÊNCIA DURANTE CORRIDA'),
+                  const SizedBox(height: 12),
+                  FigmaSelectionButton(
+                    label: 'A cada km',
+                    selected: _frequency == 'per_km',
+                    onTap: () => setState(() => _frequency = 'per_km'),
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  FigmaSelectionButton(
+                    label: 'A cada 2km',
+                    selected: _frequency == 'per_2km',
+                    onTap: () => setState(() => _frequency = 'per_2km'),
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  FigmaSelectionButton(
+                    label: 'Só em alertas (pace/BPM)',
+                    selected: _frequency == 'alerts_only',
+                    onTap: () => setState(() => _frequency = 'alerts_only'),
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  FigmaSelectionButton(
+                    label: 'Silencioso',
+                    selected: _frequency == 'silent',
+                    onTap: () => setState(() => _frequency = 'silent'),
+                  ),
+
+                  // Sub-controle do modo silencioso: permitir furo pra
+                  // alertas críticos (pace fora do alvo, fim de run).
+                  // Aparece só quando frequency=silent — nas outras a flag
+                  // não tem efeito e a UI sumir reduz ruído.
+                  if (_frequency == 'silent') ...[
+                    const SizedBox(height: AppSpacing.sm),
+                    FeedbackToggle(
+                      label: 'Permitir alertas críticos (pace fora do alvo / fim)',
+                      feedbackKey: 'allow_critical_in_silent',
+                      value: _allowCriticalInSilent,
+                      onChanged: (v) => setState(() => _allowCriticalInSilent = v),
+                    ),
+                  ],
+
+                  const SizedBox(height: AppSpacing.xxl),
+
+                  // §4 Tipos de feedback
+                  const SectionHeading(label: 'TIPOS DE FEEDBACK ATIVOS'),
+                  const SizedBox(height: 12),
+                  FeedbackToggle(
+                    label: 'Análise pré-treino',
+                    feedbackKey: 'pre_training',
+                    value: _feedback['pre_training'] ?? true,
+                    onChanged: (v) => setState(() => _feedback['pre_training'] = v),
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  FeedbackToggle(
+                    label: 'Alertas de pace',
+                    feedbackKey: 'pace_alerts',
+                    value: _feedback['pace_alerts'] ?? true,
+                    onChanged: (v) => setState(() => _feedback['pace_alerts'] = v),
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  FeedbackToggle(
+                    label: 'Alertas de BPM',
+                    feedbackKey: 'bpm_alerts',
+                    value: _feedback['bpm_alerts'] ?? true,
+                    onChanged: (v) => setState(() => _feedback['bpm_alerts'] = v),
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  FeedbackToggle(
+                    label: 'Splits ao vivo',
+                    feedbackKey: 'live_splits',
+                    value: _feedback['live_splits'] ?? true,
+                    onChanged: (v) => setState(() => _feedback['live_splits'] = v),
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  FeedbackToggle(
+                    label: 'Relatório pós-treino',
+                    feedbackKey: 'post_training',
+                    value: _feedback['post_training'] ?? true,
+                    onChanged: (v) => setState(() => _feedback['post_training'] = v),
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  FeedbackToggle(
+                    label: 'Notificações diárias',
+                    feedbackKey: 'daily_notifications',
+                    value: _feedback['daily_notifications'] ?? true,
+                    onChanged: (v) => setState(() => _feedback['daily_notifications'] = v),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+      bottomNavigationBar: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+          child: SizedBox(
+            height: 48,
+            width: double.infinity,
+            child: GestureDetector(
+              onTap: _saving ? null : _save,
+              child: Container(
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: context.runninPalette.primary,
+                  border: Border.all(color: context.runninPalette.primary, width: 1.041),
+                ),
+                child: _saving
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation(Colors.black),
+                        ),
+                      )
+                    : Text(
+                        'SALVAR',
+                        style: context.runninType.bodyMd.copyWith(
+                          color: FigmaColors.bgBase,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          letterSpacing: 1.5,
+                        ),
+                      ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+

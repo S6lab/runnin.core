@@ -1,9 +1,20 @@
-import 'package:flutter/foundation.dart';
+import 'dart:async';
+
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:go_router/go_router.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:intl_phone_field/intl_phone_field.dart';
+import 'package:runnin/core/router/app_router.dart';
+import 'package:runnin/shared/widgets/runnin_app_bar.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
+import 'package:runnin/features/subscriptions/presentation/subscription_controller.dart';
+import 'package:runnin/features/subscriptions/presentation/benefit_controller.dart';
+import 'package:runnin/features/training/data/datasources/plan_remote_datasource.dart';
+import 'package:runnin/features/onboarding/presentation/steps/onboarding_shared.dart';
+import 'package:runnin/shared/widgets/figma/export.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -13,125 +24,409 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
+  final TextEditingController _phoneController = TextEditingController();
+  final TextEditingController _smsCodeController = TextEditingController();
+
+  /// Número completo em E.164 (ex: +5511999999999) montado pelo IntlPhoneField
+  /// com o código do país selecionado (Brasil = default).
+  String _completePhone = '';
+
   bool _loading = false;
   String? _error;
+  bool _phoneMode = false;
+  bool _postAuthRunning = false;
+  StreamSubscription<User?>? _authSub;
 
-  Future<void> _signInWithGoogle() async {
-    setState(() { _loading = true; _error = null; });
-    try {
-      if (kIsWeb) {
-        await FirebaseAuth.instance.signInWithPopup(GoogleAuthProvider());
-      } else {
-        final googleUser = await GoogleSignIn().signIn();
-        if (googleUser == null) {
-          if (mounted) setState(() => _loading = false);
-          return;
-        }
-        final googleAuth = await googleUser.authentication;
-        final credential = GoogleAuthProvider.credential(
-          accessToken: googleAuth.accessToken,
-          idToken: googleAuth.idToken,
-        );
-        await FirebaseAuth.instance.signInWithCredential(credential);
-      }
-      await UserRemoteDatasource().provisionMe();
-    } catch (e) {
-      setState(() {
-        _error = 'Erro ao fazer login. Tente novamente.';
-        _loading = false;
-      });
+  @override
+  void initState() {
+    super.initState();
+    // 1) Se o user já está autenticado quando a página monta (cenário típico
+    //    do redirect do Google que volta direto pra /login), dispara o flow.
+    final current = FirebaseAuth.instance.currentUser;
+    if (current != null) {
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _handlePostAuth(source: 'currentUser'),
+      );
     }
-  }
 
-  Future<void> _signInAnonymously() async {
-    setState(() { _loading = true; _error = null; });
-    try {
-      await FirebaseAuth.instance.signInAnonymously();
-      await UserRemoteDatasource().provisionMe();
-    } catch (_) {
-      setState(() {
-        _error = 'Não foi possível entrar no modo anônimo.';
-        _loading = false;
+    // 2) Escuta mudanças de auth (caso o sign-in resolva depois que a página
+    //    montou). getRedirectResult é one-shot e nem sempre dispara — esse
+    //    listener cobre o caso.
+    _authSub = FirebaseAuth.instance.authStateChanges().listen((user) {
+      if (user != null) _handlePostAuth(source: 'authStateChanges');
+    });
+
+    // 3) Best-effort no getRedirectResult pra capturar erros do redirect do
+    //    Google (popup blocked, account mismatch, etc).
+    if (kIsWeb) {
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        try {
+          await FirebaseAuth.instance.getRedirectResult();
+        } on FirebaseAuthException catch (e) {
+          if (!mounted) return;
+          setState(() {
+            _error = 'Erro no login Google: ${e.code}';
+            _loading = false;
+          });
+        } catch (_) {
+          // sem redirect pendente — no-op
+        }
       });
     }
   }
 
   @override
+  void dispose() {
+    _authSub?.cancel();
+    _phoneController.dispose();
+    _smsCodeController.dispose();
+    super.dispose();
+  }
+
+  /// Após login bem-sucedido: provisiona o user no backend (best-effort) e
+  /// decide a rota.
+  /// - onboarded == true → /home
+  /// - onboarded == false (ou null/erro) → /onboarding
+  /// Reentrant-safe: o flag _postAuthRunning evita disparar 2x quando o
+  /// currentUser inicial e o authStateChanges acontecem juntos.
+  Future<void> _handlePostAuth({required String source}) async {
+    if (_postAuthRunning) return;
+    _postAuthRunning = true;
+    if (!mounted) return;
+    setState(() => _loading = true);
+
+    try {
+      try {
+        await UserRemoteDatasource().provisionMe();
+      } catch (_) {
+        // Se provision falhar, segue mesmo assim — onboarding pode reprovision.
+      }
+      if (!mounted) return;
+
+      bool onboarded = false;
+      try {
+        final profile = await UserRemoteDatasource().getMe();
+        onboarded = profile?.onboarded ?? false;
+      } catch (_) {
+        onboarded = false;
+      }
+      if (!mounted) return;
+
+      // Carrega o billing plan central (features/permissões) já no login.
+      try {
+        await subscriptionController.refresh();
+      } catch (_) {}
+
+      // Busca SILENCIOSA de benefícios de parceiro (pelo telefone). Se houver,
+      // a jornada de fim de onboarding troca o paywall do Pro pela ativação.
+      try {
+        await benefitController.lookup();
+      } catch (_) {}
+
+      // Recupera o plano de treino no login e cacheia. Se já existe um plano,
+      // o usuário é tratado como onboarded mesmo se a flag vier inconsistente
+      // — evita reenviar pro onboarding (que gera um plano NOVO no servidor).
+      try {
+        final plan = await PlanRemoteDatasource().getCurrentPlan();
+        if (plan != null) onboarded = true;
+      } catch (_) {
+        // Falha ao buscar plano não bloqueia o login.
+      }
+      if (!mounted) return;
+
+      if (onboarded) {
+        markOnboardingDone();
+        context.go('/home');
+      } else {
+        markOnboardingPending();
+        context.go('/onboarding');
+      }
+    } finally {
+      _postAuthRunning = false;
+    }
+  }
+
+  Future<void> _signInWithGoogle() async {
+    setState(() { _loading = true; _error = null; });
+    try {
+      if (kIsWeb) {
+        // Popup em vez de redirect: redirect quebra em preview channels do
+        // Firebase Hosting por causa do cross-origin handshake com authDomain
+        // (credencial perdida no caminho de volta → user fica deslogado em
+        // /login). Popup completa na mesma janela.
+        final provider = GoogleAuthProvider()
+          ..addScope('email')
+          ..addScope('profile');
+        await FirebaseAuth.instance.signInWithPopup(provider);
+        // authStateChanges listener cuida do provisionMe + navigate.
+        return;
+      }
+      final googleUser = await GoogleSignIn().signIn();
+      if (googleUser == null) {
+        if (mounted) setState(() => _loading = false);
+        return;
+      }
+      final googleAuth = await googleUser.authentication;
+      final credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+      await FirebaseAuth.instance.signInWithCredential(credential);
+      // authStateChanges listener cuida do provisionMe + navigate.
+    } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = 'Login Google: ${e.code}';
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = 'Erro ao fazer login: $e';
+        _loading = false;
+      });
+    }
+  }
+
+  Future<void> _beginPhoneAuth() async {
+    setState(() { _loading = true; _error = null; });
+    // O IntlPhoneField já entrega o número em E.164 com o código do país.
+    final phoneNumber = _completePhone.trim();
+    final digits = phoneNumber.replaceAll(RegExp(r'[^0-9]'), '');
+    if (phoneNumber.isEmpty || digits.length < 10) {
+      setState(() {
+        _error = 'Informe um telefone válido com DDD.';
+        _loading = false;
+      });
+      return;
+    }
+
+    try {
+      final auth = FirebaseAuth.instance;
+      if (kIsWeb) {
+        // Guarda o ConfirmationResult (usado em _confirmPhoneCode) E muda pro
+        // modo OTP — sem isso a tela ficava travada em loading no web.
+        final confirmation = await auth.signInWithPhoneNumber(phoneNumber);
+        if (!mounted) return;
+        setState(() {
+          _phoneConfirmationResult = confirmation;
+          _phoneMode = true;
+          _loading = false;
+          _error = null;
+        });
+      } else {
+        await auth.verifyPhoneNumber(
+          phoneNumber: phoneNumber,
+          verificationCompleted: (credential) async {
+            try {
+              await auth.signInWithCredential(credential);
+              // authStateChanges listener cuida do resto.
+            } catch (_) {}
+          },
+          verificationFailed: (e) {
+            if (!mounted) return;
+            setState(() {
+              _error = _friendlyAuthError(e);
+              _loading = false;
+            });
+          },
+          codeSent: (verificationId, resendToken) {
+            if (!mounted) return;
+            setState(() {
+              _phoneMode = true;
+              _loading = false;
+              _error = null;
+            });
+          },
+          codeAutoRetrievalTimeout: (verificationId) {
+            _phoneVerificationId = verificationId;
+          },
+        );
+      }
+    } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = _friendlyAuthError(e);
+        _loading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _error = 'Não foi possível enviar o código agora.';
+        _loading = false;
+      });
+    }
+  }
+
+  Future<void> _confirmPhoneCode() async {
+    final code = _smsCodeController.text.trim();
+    if (code.length < 6) {
+      setState(() {
+        _error = 'Digite o código de 6 dígitos recebido por SMS.';
+      });
+      return;
+    }
+
+    setState(() { _loading = true; _error = null; });
+
+    try {
+      final auth = FirebaseAuth.instance;
+      if (kIsWeb) {
+        final confirmation = _phoneConfirmationResult;
+        if (confirmation == null) {
+          throw FirebaseAuthException(code: 'invalid-verification-id');
+        }
+        await confirmation.confirm(code);
+      } else {
+        final verificationId = _phoneVerificationId;
+        if (verificationId == null) {
+          throw FirebaseAuthException(code: 'invalid-verification-id');
+        }
+        final credential = PhoneAuthProvider.credential(
+          verificationId: verificationId,
+          smsCode: code,
+        );
+        await auth.signInWithCredential(credential);
+      }
+      // authStateChanges listener cuida do provisionMe + navigate.
+    } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = _friendlyAuthError(e);
+        _loading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _error = 'Não foi possível validar o código agora.';
+        _loading = false;
+      });
+    }
+  }
+
+  String _friendlyAuthError(FirebaseAuthException e) {
+    final code = e.code;
+    if (code == 'invalid-verification-code') return 'Código inválido.';
+    if (code == 'expired-verification-code') return 'Código expirado.';
+    if (code == 'invalid-phone-number') return 'Número de telefone inválido.';
+    if (code == 'quota-exceeded') return 'Cota excedida. Tente novamente mais tarde.';
+    if (code == 'session-expired') return 'Sessão expirada.';
+    return 'Erro ao autenticar. Tente novamente.';
+  }
+
+  String? _phoneVerificationId;
+  dynamic _phoneConfirmationResult;
+
+  @override
   Widget build(BuildContext context) {
     final palette = context.runninPalette;
-    final type = context.runninType;
 
     return Scaffold(
       backgroundColor: palette.background,
+      // Sem back: /login é o ponto de entrada autenticado. Não há tela
+      // anterior significativa pra voltar (/splash é redirector, /intro
+      // é o slide de welcome só na primeira sessão). Firebase Auth via
+      // Google/anonymous/phone faz cria-ou-loga no mesmo botão — sem
+      // tela de "criar conta" separada.
+      appBar: const RunninAppBar(title: 'ENTRAR', showBack: false),
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Spacer(),
-              // Logo
-              Row(children: [
-                Text('RUNIN', style: type.displayMd),
-                const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  color: palette.primary,
-                  child: Text(
-                    '.AI',
-                    style: type.labelMd.copyWith(
-                      color: palette.background,
-                      fontWeight: FontWeight.w800,
+          padding: const EdgeInsets.all(23.992),
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SizedBox(height: 12),
+                Text(
+                  '// LOGIN',
+                  style: context.runninType.labelMd.copyWith(color: palette.primary),
+                ),
+                const SizedBox(height: 14),
+                Text('Entre na corrida', style: context.runninType.displayMd),
+                const SizedBox(height: 28),
+                if (_error != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 16),
+                    child: OnboardingInlineNotice(
+                      text: _error!,
+                      color: palette.error,
                     ),
                   ),
-                ),
-              ]),
-              const SizedBox(height: 8),
-              Text(
-                'Seu coach de corrida com IA.',
-                style: type.bodyMd.copyWith(color: palette.muted),
-              ),
-              const Spacer(flex: 2),
-              if (_error != null)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 16),
-                  child: Text(
-                    _error!,
-                    style: type.bodySm.copyWith(color: palette.error),
+                if (!_phoneMode) ...[
+                  FigmaGoogleSignInButton(
+                    onPressed: _loading ? null : _signInWithGoogle,
                   ),
-                ),
-              SizedBox(
-                width: double.infinity,
-                height: 52,
-                child: ElevatedButton(
-                  onPressed: _loading ? null : _signInWithGoogle,
-                  child: _loading
-                      ? SizedBox(
-                          width: 20, height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: palette.background,
-                          ),
-                        )
-                      : const Text('ENTRAR COM GOOGLE'),
-                ),
-              ),
-              const SizedBox(height: 12),
-              SizedBox(
-                width: double.infinity,
-                height: 52,
-                child: OutlinedButton(
-                  onPressed: _loading ? null : _signInAnonymously,
-                  child: const Text('CONTINUAR ANONIMAMENTE'),
-                ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                'Você pode começar anônimo e conectar sua conta depois.',
-                style: type.bodySm,
-              ),
-              const SizedBox(height: 32),
-            ],
+                  const SizedBox(height: 28),
+                  const FigmaFormFieldLabel(text: 'OU DIGITE SEU TELEFONE'),
+                  const SizedBox(height: 8),
+                  IntlPhoneField(
+                    controller: _phoneController,
+                    initialCountryCode: 'BR',
+                    languageCode: 'pt',
+                    style: TextStyle(color: palette.text),
+                    dropdownTextStyle: TextStyle(color: palette.text),
+                    dropdownIcon: Icon(Icons.arrow_drop_down, color: palette.muted),
+                    invalidNumberMessage: 'Número inválido',
+                    decoration: InputDecoration(
+                      hintText: '11 99999-9999',
+                      hintStyle: TextStyle(color: palette.muted),
+                      filled: true,
+                      fillColor: palette.surface,
+                      counterText: '',
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.zero,
+                        borderSide: BorderSide(color: palette.border),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.zero,
+                        borderSide: BorderSide(color: palette.primary),
+                      ),
+                    ),
+                    onChanged: (phone) => _completePhone = phone.completeNumber,
+                  ),
+                  const SizedBox(height: 18),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 52,
+                    child: ElevatedButton(
+                      onPressed: _loading ? null : _beginPhoneAuth,
+                      child: const Text('ENVIAR CÓDIGO POR SMS'),
+                    ),
+                  ),
+                ] else ...[
+                  const FigmaFormFieldLabel(text: 'TELEFONE'),
+                  const SizedBox(height: 8),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                    decoration: BoxDecoration(
+                      color: palette.surface,
+                      border: Border.all(color: palette.border),
+                    ),
+                    child: Text(
+                      _completePhone,
+                      style: TextStyle(color: palette.text),
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  const FigmaFormFieldLabel(text: 'CODIGO OTP'),
+                  const SizedBox(height: 8),
+                  FigmaOtpTextField(
+                    controller: _smsCodeController,
+                    enabled: true,
+                  ),
+                  const SizedBox(height: 18),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 52,
+                    child: ElevatedButton(
+                      onPressed: _loading ? null : _confirmPhoneCode,
+                      child: const Text('ENTRAR'),
+                    ),
+                  ),
+                ],
+              ],
+            ),
           ),
         ),
       ),

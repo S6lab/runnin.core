@@ -1,4 +1,6 @@
-export type CoachVoiceId = 'coach-bruno' | 'coach-clara' | 'coach-luna';
+// Voz ÚNICA do Coach (decisão de produto / Doc 5): uma voz masculina pt-BR.
+// O atleta escolhe só a PERSONA (Motivador/Técnico), não a voz.
+export type CoachVoiceId = 'coach-bruno';
 
 export interface CoachVoicePreset {
   id: CoachVoiceId;
@@ -16,23 +18,9 @@ export const COACH_VOICE_PRESETS: Record<CoachVoiceId, CoachVoicePreset> = {
     languageCode: 'pt-BR',
     speakingRate: 1.08,
   },
-  'coach-clara': {
-    id: 'coach-clara',
-    label: 'Clara',
-    googleVoiceName: 'pt-BR-Neural2-A',
-    languageCode: 'pt-BR',
-    speakingRate: 1.06,
-  },
-  'coach-luna': {
-    id: 'coach-luna',
-    label: 'Luna',
-    googleVoiceName: 'pt-BR-Neural2-C',
-    languageCode: 'pt-BR',
-    speakingRate: 1.08,
-  },
 };
 
-export function resolveCoachVoicePreset(value: unknown): CoachVoicePreset | undefined {
-  if (typeof value !== 'string') return undefined;
-  return COACH_VOICE_PRESETS[value as CoachVoiceId];
+/** Sempre resolve a voz única (defensivo contra ids legados clara/luna). */
+export function resolveCoachVoicePreset(_value?: unknown): CoachVoicePreset {
+  return COACH_VOICE_PRESETS['coach-bruno'];
 }

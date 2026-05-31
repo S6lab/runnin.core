@@ -46,7 +46,7 @@ class PaletteCard extends StatelessWidget {
               skinPalette.label.toUpperCase(),
               style: type.labelCaps.copyWith(
                 color: isSelected ? palette.primary : palette.text,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w500,
               ),
             ),
             if (isSelected) ...[

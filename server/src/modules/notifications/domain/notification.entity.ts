@@ -7,6 +7,7 @@ export type NotificationType =
   | 'bpm_real'
   | 'fechamento_mensal'
   | 'plan_ready'
+  | 'plan_updated'
   | 'coach_message';
 
 export interface Notification {

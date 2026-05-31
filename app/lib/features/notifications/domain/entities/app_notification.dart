@@ -29,6 +29,24 @@ class AppNotification {
     required this.dismissedAt,
   });
 
+  AppNotification copyWith({
+    DateTime? readAt,
+    DateTime? dismissedAt,
+  }) => AppNotification(
+        id: id,
+        type: type,
+        title: title,
+        body: body,
+        iconName: iconName,
+        timeLabel: timeLabel,
+        ctaLabel: ctaLabel,
+        ctaRoute: ctaRoute,
+        data: data,
+        createdAt: createdAt,
+        readAt: readAt ?? this.readAt,
+        dismissedAt: dismissedAt ?? this.dismissedAt,
+      );
+
   factory AppNotification.fromJson(Map<String, dynamic> j) => AppNotification(
         id: j['id'] as String,
         type: j['type'] as String,

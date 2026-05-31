@@ -1,0 +1,34 @@
+name: Deploy Server Staging (Cloud Run)
+
+# Homologação: push na branch `homologation` faz deploy do server pro
+# Cloud Run de staging (runnin-api-staging) via deploy-server-staging.sh.
+on:
+  push:
+    branches: [homologation]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      # server/.env.staging é gitignored — recriado a partir do secret pra o
+      # script montar o --set-env-vars (sem isso as envs do serviço seriam
+      # apagadas). X_CRON_TOKEN não precisa estar aqui (vem do Secret Manager).
+      - name: Materialize server/.env.staging
+        run: printf '%s' "$ENV_CONTENT" > server/.env.staging
+        env:
+          ENV_CONTENT: ${{ secrets.ENV_STAGING }}
+
+      - name: Deploy to Cloud Run (staging)
+        run: bash deploy-server-staging.sh

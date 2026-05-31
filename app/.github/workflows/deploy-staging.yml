@@ -1,0 +1,34 @@
+name: Deploy Staging
+
+on:
+  push:
+    branches:
+      - staging
+  workflow_dispatch:
+
+jobs:
+  deploy-staging:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.19.x'
+          channel: 'stable'
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build web for staging
+        run: flutter build web --dart-define=FLAVOR=staging
+
+      - name: Deploy to Firebase Hosting
+        uses: firebase-actions/deploy@v4
+        with:
+          firebase_token: ${{ secrets.FIREBASE_STAGING_TOKEN }}
+          project_dir: .
+          hosting_site: runnin-staging-494520

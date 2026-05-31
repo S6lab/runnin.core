@@ -1,19 +1,39 @@
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 
 import 'app_palette.dart';
 
 const _settingsBoxName = 'runnin_settings';
 const _skinPreferenceKey = 'selected_skin';
+const _textScalePreferenceKey = 'text_scale';
+
+/// 3 níveis de acessibilidade de fonte. Multiplica todo o TextScaler do app
+/// (ver main.dart). Factors calibrados pra somar ~+1pt e ~+2pt na fonte
+/// média do app (12-14pt), com efeito proporcionalmente maior nas fontes
+/// menores (labels/captions de 10-11pt).
+enum AppTextScale {
+  normal(1.0, 'A', 'Padrão'),
+  plus1(1.12, 'A+', 'Maior'),
+  plus2(1.28, 'A++', 'Bem maior');
+
+  final double factor;
+  final String label;
+  final String description;
+  const AppTextScale(this.factor, this.label, this.description);
+}
 
 final themeController = ThemeController();
 
 class ThemeController extends ChangeNotifier {
   RunninSkin _skin = RunninSkin.artico;
+  AppTextScale _textScale = AppTextScale.normal;
   Box<dynamic>? _box;
 
   RunninSkin get skin => _skin;
   RunninPalette get palette => _skin.palette;
+  AppTextScale get textScale => _textScale;
+  double get textScaleFactor => _textScale.factor;
 
   Future<void> load() async {
     _box = await Hive.openBox<dynamic>(_settingsBoxName);
@@ -22,13 +42,31 @@ class ThemeController extends ChangeNotifier {
       (candidate) => candidate.palette.id == savedId,
       orElse: () => RunninSkin.artico,
     );
+    final savedScale = _box?.get(_textScalePreferenceKey) as String?;
+    _textScale = AppTextScale.values.firstWhere(
+      (c) => c.name == savedScale,
+      orElse: () => AppTextScale.normal,
+    );
     notifyListeners();
   }
 
-  Future<void> setSkin(RunninSkin skin) async {
+  Future<void> setSkin(RunninSkin skin, {bool sync = true}) async {
     if (_skin == skin) return;
     _skin = skin;
     await _box?.put(_skinPreferenceKey, skin.palette.id);
     notifyListeners();
+    if (sync) {
+      UserRemoteDatasource().patchMe(uiSkin: skin.palette.id).ignore();
+    }
+  }
+
+  Future<void> setTextScale(AppTextScale scale, {bool sync = true}) async {
+    if (_textScale == scale) return;
+    _textScale = scale;
+    await _box?.put(_textScalePreferenceKey, scale.name);
+    notifyListeners();
+    if (sync) {
+      UserRemoteDatasource().patchMe(textScale: scale.name).ignore();
+    }
   }
 }

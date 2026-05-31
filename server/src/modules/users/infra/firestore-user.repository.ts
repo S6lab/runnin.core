@@ -1,3 +1,4 @@
+import { FieldPath } from 'firebase-admin/firestore';
 import { getFirestore } from '@shared/infra/firebase/firebase.client';
 import { UserProfile } from '../domain/user.entity';
 import { UserRepository } from '../domain/user.repository';
@@ -16,6 +17,13 @@ export class FirestoreUserRepository implements UserRepository {
     await this.col().doc(id).set({ ...data, updatedAt: new Date().toISOString() }, { merge: true });
   }
 
+  async updatePartial(id: string, patch: Partial<UserProfile>): Promise<void> {
+    await this.col().doc(id).set(
+      { ...patch, updatedAt: new Date().toISOString() },
+      { merge: true },
+    );
+  }
+
   async archiveOnboarding(userId: string, snapshot: UserProfile): Promise<void> {
     const archivedAt = new Date().toISOString();
     const { id: _id, ...data } = snapshot;
@@ -23,5 +31,20 @@ export class FirestoreUserRepository implements UserRepository {
       .collection(`users/${userId}/onboarding_history`)
       .doc(archivedAt)
       .set({ ...data, archivedAt });
+  }
+
+  async list(limit?: number, startAfterId?: string): Promise<UserProfile[]> {
+    let query = this.col()
+      .orderBy(FieldPath.documentId())
+      .limit(limit || 100);
+    if (startAfterId) {
+      query = query.startAfter(startAfterId);
+    }
+    const snapshot = await query.get();
+    const users: UserProfile[] = [];
+    snapshot.forEach(doc => {
+      users.push({ id: doc.id, ...doc.data() } as UserProfile);
+    });
+    return users;
   }
 }

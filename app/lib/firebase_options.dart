@@ -48,7 +48,7 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions android = FirebaseOptions(
     apiKey: 'AIzaSyDnJ9D5glmXQ29o4gwiUF5MBhelgalLw4I',
-    appId: '1:506126899076:android:dad670e264e4523b4b6fd1',
+    appId: '1:506126899076:android:9bbb474eb65e655c4b6fd1',
     messagingSenderId: '506126899076',
     projectId: 'runnin-494520',
     storageBucket: 'runnin-494520.firebasestorage.app',
@@ -56,11 +56,82 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'AIzaSyDyYL_V3a-BMckWDXDasYmhWJqqaJGogz4',
-    appId: '1:506126899076:ios:9176f04cb7a9be694b6fd1',
+    appId: '1:506126899076:ios:968144101ba52a864b6fd1',
     messagingSenderId: '506126899076',
     projectId: 'runnin-494520',
     storageBucket: 'runnin-494520.firebasestorage.app',
-    iosBundleId: 'com.reniuslab.runnin',
+    iosClientId: '506126899076-vrt53k0kh9us2rq193jvspac0hhjnl44.apps.googleusercontent.com',
+    iosBundleId: 'com.s6lab.runnin',
+  );
+
+  static const FirebaseOptions web = FirebaseOptions(
+    apiKey: 'AIzaSyBK8Cpb9qnW__VhzqkCqi9wf-rcIYj3a9o',
+    appId: '1:506126899076:web:d4fd630dc0d2b9364b6fd1',
+    messagingSenderId: '506126899076',
+    projectId: 'runnin-494520',
+    authDomain: 'runnin-494520.firebaseapp.com',
+    storageBucket: 'runnin-494520.firebasestorage.app',
+    measurementId: 'G-D0CG03CYC9',
+  );
+
+}
+
+/// Staging Environment [FirebaseOptions] for use with your Firebase apps.
+class StagingFirebaseOptions {
+  static FirebaseOptions get currentPlatform {
+    if (kIsWeb) {
+      return web;
+    }
+    switch (defaultTargetPlatform) {
+      case TargetPlatform.android:
+        return android;
+      case TargetPlatform.iOS:
+        return ios;
+      case TargetPlatform.macOS:
+        throw UnsupportedError(
+          'StagingFirebaseOptions have not been configured for macos - '
+          'you can reconfigure this by running the FlutterFire CLI again.',
+        );
+      case TargetPlatform.windows:
+        throw UnsupportedError(
+          'StagingFirebaseOptions have not been configured for windows - '
+          'you can reconfigure this by running the FlutterFire CLI again.',
+        );
+      case TargetPlatform.linux:
+        throw UnsupportedError(
+          'StagingFirebaseOptions have not been configured for linux - '
+          'you can reconfigure this by running the FlutterFire CLI again.',
+        );
+      default:
+        throw UnsupportedError(
+          'StagingFirebaseOptions are not supported for this platform.',
+        );
+    }
+  }
+
+  // Consolidado em 1 projeto Firebase: usa o mesmo `runnin-494520`
+  // do DefaultFirebaseOptions. Não existe projeto Firebase staging
+  // separado — `runnin-staging-494520` era placeholder herdado de
+  // setup nunca finalizado (appIds eram literais 'STAGING_APP_ID').
+  // A separação staging vs prod fica só no backend (Cloud Run URL via
+  // --dart-define=API_BASE_URL) e no site Firebase Hosting
+  // (`runnin-staging.web.app` vs `runnin-494520.web.app`).
+  static const FirebaseOptions android = FirebaseOptions(
+    apiKey: 'AIzaSyDnJ9D5glmXQ29o4gwiUF5MBhelgalLw4I',
+    appId: '1:506126899076:android:9bbb474eb65e655c4b6fd1',
+    messagingSenderId: '506126899076',
+    projectId: 'runnin-494520',
+    storageBucket: 'runnin-494520.firebasestorage.app',
+  );
+
+  static const FirebaseOptions ios = FirebaseOptions(
+    apiKey: 'AIzaSyDyYL_V3a-BMckWDXDasYmhWJqqaJGogz4',
+    appId: '1:506126899076:ios:968144101ba52a864b6fd1',
+    messagingSenderId: '506126899076',
+    projectId: 'runnin-494520',
+    storageBucket: 'runnin-494520.firebasestorage.app',
+    iosClientId: '506126899076-vrt53k0kh9us2rq193jvspac0hhjnl44.apps.googleusercontent.com',
+    iosBundleId: 'com.s6lab.runnin',
   );
 
   static const FirebaseOptions web = FirebaseOptions(

@@ -1,6 +1,9 @@
 import { z } from 'zod';
 import { getAsyncLLM } from '@shared/infra/llm/llm.factory';
 import { formatRunningKnowledgeContext } from '@shared/knowledge/running/running-knowledge';
+import { buildCoachChatPrompt } from '@shared/infra/llm/prompts';
+import { CoachRuntimeContextService } from './coach-runtime-context.service';
+import { logger } from '@shared/logger/logger';
 
 export const CoachChatSchema = z.object({
   message: z.string().min(1, 'message is required'),
@@ -8,28 +11,39 @@ export const CoachChatSchema = z.object({
 
 export type CoachChatInput = z.infer<typeof CoachChatSchema>;
 
-const SYSTEM_PROMPT = `Você é o Coach.AI do runnin: um personal trainer de corrida experiente, presente e direto.
-Responda sempre em português brasileiro, falando diretamente com o corredor.
-Use tom humano de treino: motivador, firme, pratico e cuidadoso com risco de lesao.
-Dê orientação aplicada para treino, recuperação, ritmo e consistência.
-Prefira frases como um treinador falaria no treino: "vamos ajustar", "segura o pace", "hoje o foco e recuperar".
-Máximo 4 frases curtas. Sem emojis.`;
-
 export class CoachChatUseCase {
   private llm = getAsyncLLM();
+  private runtime = new CoachRuntimeContextService();
 
-  async execute(input: CoachChatInput): Promise<string> {
+  async execute(input: CoachChatInput, userId: string): Promise<string> {
+    const runtime = await this.runtime.getContext(userId);
     const knowledgeContext = await formatRunningKnowledgeContext(input.message, 3);
-    const prompt = `Mensagem do corredor: "${input.message}".
-Responda como personal trainer de corrida com proximos passos claros e aplicaveis agora.
 
-Base de conhecimento:
-${knowledgeContext}`;
+    const planContext = runtime.currentPlan
+      ? `Plano atual: ${runtime.currentPlan.goal} (${runtime.currentPlan.level}, ${runtime.currentPlan.weeksCount} semanas, status ${runtime.currentPlan.status})`
+      : 'Sem plano ativo.';
 
-    return this.llm.generate(prompt, {
-      systemPrompt: SYSTEM_PROMPT,
-      maxTokens: 220,
-      temperature: 0.7,
+    const recentRunsContext = runtime.recentRuns.length > 0
+      ? runtime.recentRuns
+          .slice(0, 3)
+          .map(r => `${r.type} ${r.distanceKm}km em ${r.durationMin}min${r.avgPace ? ` (pace ${r.avgPace})` : ''}`)
+          .join('; ')
+      : 'Sem corridas recentes.';
+
+    const built = await buildCoachChatPrompt({
+      profile: runtime.profile,
+      question: input.message,
+      planContext,
+      recentRunsContext,
+      ragContext: knowledgeContext,
+    });
+
+    logger.info('coach.chat.prompt', { version: built.version, source: built.source });
+
+    return this.llm.generate(built.userPrompt, {
+      systemPrompt: built.systemPrompt,
+      maxTokens: built.maxTokens,
+      temperature: built.temperature,
     });
   }
 }

@@ -1,0 +1,20 @@
+{
+  "projects": {
+    "default": "runnin-494520",
+    "production": "runnin-494520",
+    "staging": "runnin-494520"
+  },
+  "targets": {
+    "runnin-494520": {
+      "hosting": {
+        "production": [
+          "runnin-494520"
+        ],
+        "staging": [
+          "runnin-staging"
+        ]
+      }
+    }
+  },
+  "etags": {}
+}

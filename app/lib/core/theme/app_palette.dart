@@ -18,6 +18,15 @@ abstract final class HeartZoneColors {
   };
 }
 
+// Cores de notificação (HOME.md Section 02)
+abstract final class NotificationColors {
+  static const notification1 = Color(0xFF00D4FF); // MELHOR HORÁRIO
+  static const notification2 = Color(0xFFEAB308); // PREPARO NUTRICIONAL
+  static const notification3 = Color(0xFF3B82F6); // HIDRATAÇÃO
+  static const notification4 = Color(0xFFFF6B35); // CHECKLIST PRÉ-EASY RUN
+  static const notification5 = Color(0xFF8B5CF6); // SONO → PERFORMANCE
+}
+
 @immutable
 class RunninTypography {
   // Display — headers de seção, títulos de página (all-caps, peso alto)
@@ -29,10 +38,17 @@ class RunninTypography {
   final TextStyle dataXl;
   final TextStyle dataMd;
   final TextStyle dataSm;
+  /// Data secundário (22px, w500) — pra _BigHeading da home (SEMANA,
+  /// PERFORMANCE, etc). Antes só existia em AppTextStyles; promovido
+  /// pra cá pra ser usado universalmente via context.runninType.
+  final TextStyle dataXs;
 
   // Body — textos narrativos do Coach, descrições
   final TextStyle bodyMd;
   final TextStyle bodySm;
+  /// Body compacto (11px, w400) — pra captions, sub-labels, timestamps.
+  /// Antes só existia em AppTextStyles.
+  final TextStyle bodyXs;
 
   // Label — microcopy, tags, nav labels
   final TextStyle labelCaps;
@@ -45,38 +61,40 @@ class RunninTypography {
     required this.dataXl,
     required this.dataMd,
     required this.dataSm,
+    required this.dataXs,
     required this.bodyMd,
     required this.bodySm,
+    required this.bodyXs,
     required this.labelCaps,
     required this.labelMd,
   });
 
   static RunninTypography build(Color textColor, Color mutedColor) {
     return RunninTypography(
-      displayLg: GoogleFonts.barlow(
+      displayLg: GoogleFonts.jetBrainsMono(
         fontSize: 52,
-        fontWeight: FontWeight.w800,
+        fontWeight: FontWeight.w500,
         letterSpacing: -0.5,
         height: 1.0,
         color: textColor,
       ),
-      displayMd: GoogleFonts.barlow(
+      displayMd: GoogleFonts.jetBrainsMono(
         fontSize: 32,
-        fontWeight: FontWeight.w700,
+        fontWeight: FontWeight.w500,
         letterSpacing: -0.2,
         height: 1.1,
         color: textColor,
       ),
-      displaySm: GoogleFonts.barlow(
+      displaySm: GoogleFonts.jetBrainsMono(
         fontSize: 20,
-        fontWeight: FontWeight.w700,
+        fontWeight: FontWeight.w500,
         letterSpacing: 0.0,
         height: 1.2,
         color: textColor,
       ),
       dataXl: GoogleFonts.jetBrainsMono(
         fontSize: 48,
-        fontWeight: FontWeight.w700,
+        fontWeight: FontWeight.w500,
         letterSpacing: -1.0,
         height: 1.0,
         color: textColor,
@@ -95,28 +113,42 @@ class RunninTypography {
         height: 1.2,
         color: textColor,
       ),
-      bodyMd: GoogleFonts.inter(
+      dataXs: GoogleFonts.jetBrainsMono(
+        fontSize: 22,
+        fontWeight: FontWeight.w500,
+        letterSpacing: -0.44,
+        height: 1.1,
+        color: textColor,
+      ),
+      bodyMd: GoogleFonts.jetBrainsMono(
         fontSize: 14,
         fontWeight: FontWeight.w400,
         letterSpacing: 0.0,
         height: 1.5,
         color: textColor,
       ),
-      bodySm: GoogleFonts.inter(
+      bodySm: GoogleFonts.jetBrainsMono(
         fontSize: 12,
         fontWeight: FontWeight.w400,
         letterSpacing: 0.0,
         height: 1.4,
         color: mutedColor,
       ),
-      labelCaps: GoogleFonts.inter(
+      bodyXs: GoogleFonts.jetBrainsMono(
+        fontSize: 11,
+        fontWeight: FontWeight.w400,
+        letterSpacing: 0.0,
+        height: 1.4,
+        color: mutedColor,
+      ),
+      labelCaps: GoogleFonts.jetBrainsMono(
         fontSize: 10,
-        fontWeight: FontWeight.w700,
+        fontWeight: FontWeight.w500,
         letterSpacing: 0.12,
         height: 1.2,
         color: mutedColor,
       ),
-      labelMd: GoogleFonts.inter(
+      labelMd: GoogleFonts.jetBrainsMono(
         fontSize: 12,
         fontWeight: FontWeight.w600,
         letterSpacing: 0.04,
@@ -164,11 +196,23 @@ class RunninPalette {
   List<Color> get previewBars => [primary, secondary, tertiary];
 }
 
+// Fundo de card NEUTRO (cinza/preto) — igual em todas as skins, pra não ter
+// "película" tingida. As cores de skin (primary/secondary/text/border) seguem
+// por skin; só o preenchimento de card (surface/surfaceAlt) é padronizado.
+const Color _kCardSurface = Color(0xFF0E0E12);
+const Color _kCardSurfaceAlt = Color(0xFF15151A);
+
+// Texto NEUTRO (branco/cinza) — igual em todas as skins, pra fontes (sobretudo
+// as pequenas) não terem "película" tingida. A identidade da skin fica nos
+// acentos (primary/secondary), não no texto.
+const Color _kTextNeutral = Color(0xFFF2F4F7); // branco neutro
+const Color _kMutedNeutral = Color(0xFF8A909C); // cinza neutro
+
 enum RunninSkin {
   artico,
   magenta,
-  sangue,
-  volt;
+  volt,
+  matrix;
 
   RunninPalette get palette {
     switch (this) {
@@ -177,13 +221,15 @@ enum RunninSkin {
           id: 'artico',
           label: 'Artico',
           background: Color(0xFF060814),
-          surface: Color(0xFF0C1220),
-          surfaceAlt: Color(0xFF10192A),
-          border: Color(0xFF1B2638),
-          text: Color(0xFFF5F7FB),
-          muted: Color(0xFF8C97AD),
-          primary: Color(0xFF2ECDF3),
-          secondary: Color(0xFFFF6E40),
+          surface: _kCardSurface,
+          surfaceAlt: _kCardSurfaceAlt,
+          border: Color(0xFF1A1D28),
+          text: _kTextNeutral,
+          muted: _kMutedNeutral,
+          // Alinhado aos hex de FigmaColors.brandCyan/brandOrange (dominantes no
+          // app) pra o skin artico ficar idêntico após a migração brand->palette.
+          primary: Color(0xFF00D4FF),
+          secondary: Color(0xFFFF6B35),
           tertiary: Color(0xFF4D7DFF),
           success: Color(0xFF25C56B),
           warning: Color(0xFFF3BF31),
@@ -194,11 +240,11 @@ enum RunninSkin {
           id: 'magenta',
           label: 'Magenta',
           background: Color(0xFF080511),
-          surface: Color(0xFF130C1E),
-          surfaceAlt: Color(0xFF1A1028),
-          border: Color(0xFF311642),
-          text: Color(0xFFF8F5FF),
-          muted: Color(0xFFA893BF),
+          surface: _kCardSurface,
+          surfaceAlt: _kCardSurfaceAlt,
+          border: Color(0xFF1F1A28),
+          text: _kTextNeutral,
+          muted: _kMutedNeutral,
           primary: Color(0xFFFF0E7A),
           secondary: Color(0xFF2CE0F0),
           tertiary: Color(0xFF8A56FF),
@@ -206,39 +252,41 @@ enum RunninSkin {
           warning: Color(0xFFFFB800),
           error: Color(0xFFFF5574),
         );
-      case RunninSkin.sangue:
-        return const RunninPalette(
-          id: 'sangue',
-          label: 'Sangue',
-          background: Color(0xFF0A0509),
-          surface: Color(0xFF180B12),
-          surfaceAlt: Color(0xFF211018),
-          border: Color(0xFF3A1826),
-          text: Color(0xFFF9F3F5),
-          muted: Color(0xFFB89AA7),
-          primary: Color(0xFFFF3B46),
-          secondary: Color(0xFF66B5FF),
-          tertiary: Color(0xFFFF7B56),
-          success: Color(0xFF35C46F),
-          warning: Color(0xFFFFB23D),
-          error: Color(0xFFFF3B46),
-        );
       case RunninSkin.volt:
         return const RunninPalette(
           id: 'volt',
           label: 'Volt',
           background: Color(0xFF070A10),
-          surface: Color(0xFF10131B),
-          surfaceAlt: Color(0xFF141A24),
-          border: Color(0xFF262E3A),
-          text: Color(0xFFF4F8F2),
-          muted: Color(0xFF9DA4AF),
+          surface: _kCardSurface,
+          surfaceAlt: _kCardSurfaceAlt,
+          border: Color(0xFF1B1E26),
+          text: _kTextNeutral,
+          muted: _kMutedNeutral,
           primary: Color(0xFFD7FF3C),
           secondary: Color(0xFF8B66FF),
           tertiary: Color(0xFF39D5FF),
           success: Color(0xFF32D17C),
           warning: Color(0xFFFFC93C),
           error: Color(0xFFFF5B66),
+        );
+      case RunninSkin.matrix:
+        // Inspirada em terminal MS-DOS / fósforo verde: fundo quase preto,
+        // texto cinza-claro (CRT), acento verde (0/204/92) e cinza.
+        return const RunninPalette(
+          id: 'matrix',
+          label: 'Matrix',
+          background: Color(0xFF010601),
+          surface: _kCardSurface,
+          surfaceAlt: _kCardSurfaceAlt,
+          border: Color(0xFF193823),
+          text: _kTextNeutral,
+          muted: _kMutedNeutral,
+          primary: Color(0xFF00CC5C), // verde solicitado (RGB 0/204/92)
+          secondary: Color(0xFF9AA39A), // cinza
+          tertiary: Color(0xFF00A84B), // verde mais escuro
+          success: Color(0xFF00CC5C),
+          warning: Color(0xFFCBB300),
+          error: Color(0xFFE05050),
         );
     }
   }

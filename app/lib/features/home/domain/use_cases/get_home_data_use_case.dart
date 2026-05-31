@@ -15,6 +15,9 @@ class HomeData {
   final int completedSessions;
   final int plannedSessions;
   final int streakDays;
+  /// Número da semana do PLANO em curso (1-based, vem de PlanWeek.weekNumber).
+  /// Null quando não há plano ativo. Não confundir com a semana ISO do ano.
+  final int? currentPlanWeekNumber;
 
   const HomeData({
     required this.profile,
@@ -27,6 +30,7 @@ class HomeData {
     required this.completedSessions,
     required this.plannedSessions,
     required this.streakDays,
+    this.currentPlanWeekNumber,
   });
 }
 
@@ -70,7 +74,9 @@ class GetHomeDataUseCase {
   Future<HomeData> execute() async {
     final results = await Future.wait([
       _userDs.getMe(),
-      _planDs.getCurrentPlan(),
+      // Cache-first: o plano foi recuperado/cacheado no login; invalida só ao
+      // gerar novo, aplicar checkpoint/revisão, ou cruzar domingo.
+      _planDs.getCurrentPlan(cacheFirst: true),
       _runDs.listRuns(limit: 21),
     ]);
 
@@ -94,17 +100,7 @@ class GetHomeDataUseCase {
 
     PlanWeek? currentPlanWeek;
     if (plan != null && plan.weeks.isNotEmpty) {
-      final created = DateTime.tryParse(plan.createdAt);
-      if (created != null) {
-        final daysSinceCreation = today.difference(created).inDays;
-        final weekIndex = (daysSinceCreation / 7).floor().clamp(
-          0,
-          plan.weeks.length - 1,
-        );
-        currentPlanWeek = plan.weeks[weekIndex];
-      } else {
-        currentPlanWeek = plan.weeks.first;
-      }
+      currentPlanWeek = plan.weeks[plan.currentWeekIndex(now: today)];
     }
 
     PlanSession? todaySession;
@@ -129,10 +125,15 @@ class GetHomeDataUseCase {
         }
       }
 
-      final doneOnDay = runsThisWeek.any((run) {
-        final createdAt = DateTime.tryParse(run.createdAt);
-        return createdAt != null && createdAt.weekday == dayOfWeek;
-      });
+      // "Concluída" = a sessão planejada do dia foi executada (server seta
+      // executedRunId no complete da run vinculada). Fallback: dia sem sessão
+      // mas com corrida registrada (corrida livre) continua marcado como feito.
+      final doneOnDay = (session?.isExecuted ?? false) ||
+          (session == null &&
+              runsThisWeek.any((run) {
+                final createdAt = DateTime.tryParse(run.createdAt);
+                return createdAt != null && createdAt.weekday == dayOfWeek;
+              }));
 
       return WeekDayData(
         dayOfWeek: dayOfWeek,
@@ -161,6 +162,7 @@ class GetHomeDataUseCase {
       completedSessions: completedSessions,
       plannedSessions: plannedSessions,
       streakDays: _calculateStreakDays(completedRuns),
+      currentPlanWeekNumber: currentPlanWeek?.weekNumber,
     );
   }
 

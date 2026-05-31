@@ -1,0 +1,20 @@
+{
+  "projectId": "runnin-staging",
+  "appId": "1:STAGING_APP_ID",
+  "messageSenderId": "STAGING_SENDER_ID",
+  "storageBucket": "runnin-staging.firebasestorage.app",
+  "hosting": {
+    "public": "app/build/web",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  }
+}
