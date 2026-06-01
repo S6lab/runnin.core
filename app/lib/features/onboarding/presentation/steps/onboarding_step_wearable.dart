@@ -1,9 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
+import 'package:runnin/features/biometrics/data/health_sync_service.dart';
 import 'package:runnin/shared/widgets/figma/export.dart';
 
-class OnboardingStepWearable extends StatelessWidget {
+/// Step do onboarding que oferece sincronizar dados de saúde.
+///
+/// "Sim (conectar agora)" dispara `requestPermissions` + `syncSince`,
+/// confirmando a conexão real (antes só salvava um boolean sem nunca abrir o
+/// diálogo de permissão). Quando o permission grant volta true, marcamos
+/// hasWearable=true; o `syncSince` em background promove resting_bpm/max_bpm
+/// pro perfil (server-side em IngestSamplesUseCase) — esses dados vão alimentar
+/// a geração do plano em seguida.
+///
+/// "Depois" mantém comportamento atual: hasWearable=false, sem conexão. User
+/// pode conectar depois em Perfil → Saúde → Dispositivos.
+class OnboardingStepWearable extends StatefulWidget {
   final bool selected;
   final ValueChanged<bool> onSelect;
 
@@ -12,6 +24,68 @@ class OnboardingStepWearable extends StatelessWidget {
     required this.selected,
     required this.onSelect,
   });
+
+  @override
+  State<OnboardingStepWearable> createState() => _OnboardingStepWearableState();
+}
+
+class _OnboardingStepWearableState extends State<OnboardingStepWearable> {
+  bool _connecting = false;
+  bool _connected = false;
+  int? _syncedCount;
+  String? _error;
+
+  bool get _isSupported => healthSyncService.isSupported;
+
+  Future<void> _onConnectTap() async {
+    if (_connecting) return;
+    if (!_isSupported) {
+      setState(() {
+        _error = 'Sincronização de saúde está disponível só em iOS e Android.';
+      });
+      return;
+    }
+    setState(() {
+      _connecting = true;
+      _error = null;
+    });
+
+    final granted = await healthSyncService.requestPermissions();
+    if (!mounted) return;
+
+    if (!granted) {
+      setState(() {
+        _connecting = false;
+        _error =
+            'Permissão negada. Você pode liberar depois em Ajustes do iPhone > Saúde > runnin (ou em Health Connect no Android).';
+      });
+      widget.onSelect(false);
+      return;
+    }
+
+    // Permission OK — registra hasWearable=true imediatamente e dispara o sync
+    // em background. O resultado do sync (samples_saved) chega em segundos e
+    // atualiza o feedback visual. Server-side promote já joga restingBpm /
+    // maxBpm no perfil pra alimentar a geração do plano.
+    widget.onSelect(true);
+    setState(() {
+      _connecting = false;
+      _connected = true;
+    });
+
+    final count = await healthSyncService.syncSince().catchError((_) => 0);
+    if (!mounted) return;
+    setState(() => _syncedCount = count);
+  }
+
+  void _onSkipTap() {
+    setState(() {
+      _connected = false;
+      _syncedCount = null;
+      _error = null;
+    });
+    widget.onSelect(false);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -29,17 +103,27 @@ class OnboardingStepWearable extends StatelessWidget {
                 'envia pra essas plataformas. Não conectamos ao dispositivo direto.',
           ),
           const SizedBox(height: 24),
-          FigmaSelectionButton(
-            label: 'Sim (recomendado)',
-            selected: selected == true,
-            onTap: () => onSelect(true),
-          ),
-          const SizedBox(height: 8),
-          FigmaSelectionButton(
-            label: 'Depois',
-            selected: selected == false,
-            onTap: () => onSelect(false),
-          ),
+          if (_connected)
+            _ConnectedCard(syncedCount: _syncedCount)
+          else ...[
+            FigmaSelectionButton(
+              label: _connecting
+                  ? 'Conectando…'
+                  : 'Sim, conectar agora (recomendado)',
+              selected: widget.selected && !_connecting,
+              onTap: _connecting ? () {} : _onConnectTap,
+            ),
+            const SizedBox(height: 8),
+            FigmaSelectionButton(
+              label: 'Depois',
+              selected: !widget.selected && !_connecting,
+              onTap: _connecting ? () {} : _onSkipTap,
+            ),
+          ],
+          if (_error != null) ...[
+            const SizedBox(height: 12),
+            _ErrorBanner(message: _error!),
+          ],
           const SizedBox(height: 24),
           FigmaCoachAIBlock(
             variant: CoachAIBlockVariant.assessment,
@@ -65,7 +149,9 @@ class OnboardingStepWearable extends StatelessWidget {
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  'Tenho tudo que preciso — incluindo sua rotina de sono e horário preferido. Vou calcular a janela metabólica ideal para cada tipo de treino, enviar lembretes de hidratação e preparo nutricional, e sugerir o melhor horário com base no seu padrão de sono.',
+                  _connected
+                      ? 'Recebi seus dados. Vou usar BPM em repouso e padrão de sono pra calibrar zonas cardíacas reais (Karvonen) e ajustar a intensidade dos treinos ao seu estado atual.'
+                      : 'Tenho tudo que preciso — incluindo sua rotina de sono e horário preferido. Vou calcular a janela metabólica ideal para cada tipo de treino, enviar lembretes de hidratação e preparo nutricional, e sugerir o melhor horário com base no seu padrão de sono.',
                   style: context.runninType.bodyMd.copyWith(
                     height: 23.1 / 14,
                     color: const Color(0xCCFFFFFF),
@@ -106,6 +192,88 @@ class OnboardingStepWearable extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _ConnectedCard extends StatelessWidget {
+  final int? syncedCount;
+
+  const _ConnectedCard({required this.syncedCount});
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    final statusLine = syncedCount == null
+        ? 'Sincronizando seus dados…'
+        : syncedCount! > 0
+            ? '$syncedCount amostras dos últimos 7 dias importadas.'
+            : 'Sem amostras novas. Coach.AI vai usar valores padrão pelo perfil.';
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppSpacing.xl),
+      decoration: BoxDecoration(
+        color: FigmaColors.surfaceCard,
+        border: Border.all(
+          color: palette.primary.withValues(alpha: 0.5),
+          width: 1.041,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.check_circle_outline, color: palette.primary, size: 20),
+              const SizedBox(width: 8),
+              Text(
+                'CONECTADO',
+                style: context.runninType.labelMd.copyWith(
+                  fontWeight: FontWeight.w500,
+                  letterSpacing: 1.0,
+                  color: palette.primary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Text(
+            statusLine,
+            style: context.runninType.bodySm.copyWith(
+              height: 1.5,
+              color: FigmaColors.textSecondary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ErrorBanner extends StatelessWidget {
+  final String message;
+
+  const _ErrorBanner({required this.message});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: FigmaColors.surfaceCard,
+        border: Border.all(
+          color: FigmaColors.borderDefault,
+          width: 1.041,
+        ),
+      ),
+      child: Text(
+        message,
+        style: context.runninType.bodySm.copyWith(
+          height: 1.5,
+          color: FigmaColors.textSecondary,
+        ),
       ),
     );
   }
