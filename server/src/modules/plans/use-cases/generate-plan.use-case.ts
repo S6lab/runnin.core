@@ -1776,7 +1776,72 @@ ${repaired}`,
     return value;
   }
 
+  /**
+   * Garante a regra two-tier em qualquer array de semanas que vá pro plano
+   * final. Weeks 1-2 ficam 'full' (todos os campos detalhados); weeks 3+
+   * viram 'skeleton' — strip dos campos hydrationLiters/nutritionPre/
+   * nutritionPost/durationMin/executionSegments das sessions e remoção
+   * dos restDayTips da week. O detalhe é liberado no checkpoint ao fim da
+   * semana anterior (LlmCheckpointAnalysisStrategy).
+   *
+   * Centralizado aqui porque o _normalizeWeeks aplicava só nas semanas
+   * vindas direto do LLM. Caminhos de fallback (_expandWeeksDeterministically
+   * clonando a última semana, weeks rebalanceadas, etc) bypassavam a regra
+   * e produziam semanas 3+ com detalhe completo do clone source — o user
+   * via o plano "sem limitação" porque a semana 16 mostrava tudo igual à 1.
+   */
+  private _applyTwoTier(weeks: PlanWeek[]): PlanWeek[] {
+    let stripped = 0;
+    const result = weeks.map((w, idx) => {
+      const isFull = idx < 2;
+      if (isFull) {
+        return { ...w, detailLevel: 'full' as const };
+      }
+      // Skeleton: sessions só com id/dayOfWeek/type/distanceKm/targetPace/notes.
+      const skeletonSessions: PlanSession[] = w.sessions.map((s) => {
+        const wasDetailed =
+          s.hydrationLiters != null ||
+          s.nutritionPre != null ||
+          s.nutritionPost != null ||
+          s.durationMin != null ||
+          (s.executionSegments?.length ?? 0) > 0;
+        if (wasDetailed) stripped++;
+        return {
+          id: s.id,
+          dayOfWeek: s.dayOfWeek,
+          type: s.type,
+          distanceKm: s.distanceKm,
+          ...(s.targetPace ? { targetPace: s.targetPace } : {}),
+          notes: s.notes ?? '',
+          ...(s.executedRunId ? { executedRunId: s.executedRunId } : {}),
+          ...(s.executedAt ? { executedAt: s.executedAt } : {}),
+          ...(s.isTarget ? { isTarget: s.isTarget } : {}),
+        } satisfies PlanSession;
+      });
+      // Skeleton não tem restDayTips (liberado no checkpoint).
+      const { restDayTips, ...rest } = w;
+      void restDayTips;
+      return {
+        ...rest,
+        sessions: skeletonSessions,
+        detailLevel: 'skeleton' as const,
+      };
+    });
+    if (stripped > 0) {
+      logger.warn('plan.two_tier.stripped_skeleton_detail', {
+        sessionsStripped: stripped,
+        weeksTotal: weeks.length,
+      });
+    }
+    return result;
+  }
+
   private async _ensureWeeksCount(weeks: PlanWeek[], weeksCount: number, startDate: string): Promise<PlanWeek[]> {
+    const result = await this._ensureWeeksCountRaw(weeks, weeksCount, startDate);
+    return this._applyTwoTier(result);
+  }
+
+  private async _ensureWeeksCountRaw(weeks: PlanWeek[], weeksCount: number, startDate: string): Promise<PlanWeek[]> {
     const normalizedWeeks = this._renumberWeeks(weeks);
     if (normalizedWeeks.length === weeksCount) return normalizedWeeks;
     if (normalizedWeeks.length > weeksCount) {
