@@ -78,7 +78,7 @@ export const container = {
     getUserFeatures: new GetUserFeaturesUseCase(userRepo, subscriptionPlanRepo),
     lookupBenefits: new LookupBenefitsUseCase(partnerSubscriptionRepo, subscriptionPlanRepo),
     activateBenefit: new ActivateBenefitUseCase(partnerSubscriptionRepo, userRepo, subscriptionPlanRepo),
-    ingestBiometricSamples: new IngestSamplesUseCase(biometricSampleRepo),
+    ingestBiometricSamples: new IngestSamplesUseCase(biometricSampleRepo, userRepo),
     getBiometricSummary: new GetSummaryUseCase(biometricSampleRepo),
     seedBiometricTestUser: new SeedTestUserUseCase(biometricSampleRepo),
     requestRevision,

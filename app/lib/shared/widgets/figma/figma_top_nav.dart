@@ -18,40 +18,48 @@ class FigmaTopNav extends StatelessWidget {
     final palette = context.runninPalette;
     const double heightWithoutBack = 54.71;
     const double heightWithBack = 73.712;
+    // SafeArea só no topo: preserva a borda inferior do nav sem ser empurrada
+    // pelo home indicator do iOS, mas evita o overlap com status bar / Dynamic
+    // Island. background da SafeArea casa com o do nav pra não criar gap.
+    final topInset = MediaQuery.viewPaddingOf(context).top;
 
     return Container(
-      height: showBackButton ? heightWithBack : heightWithoutBack,
-      padding: EdgeInsets.fromLTRB(24, 16, 20, showBackButton ? 17.355 : 17.735),
-      decoration: BoxDecoration(
-        color: palette.background,
-        border: Border(
-          bottom: BorderSide(
-            color: palette.border,
-            width: 1.041,
+      color: palette.background,
+      padding: EdgeInsets.only(top: topInset),
+      child: Container(
+        height: showBackButton ? heightWithBack : heightWithoutBack,
+        padding: EdgeInsets.fromLTRB(24, 16, 20, showBackButton ? 17.355 : 17.735),
+        decoration: BoxDecoration(
+          color: palette.background,
+          border: Border(
+            bottom: BorderSide(
+              color: palette.border,
+              width: 1.041,
+            ),
           ),
         ),
-      ),
-      child: Row(
-        children: [
-          if (showBackButton) ...[
-            _BackButton(
-              color: palette.text,
-              onPressed: onBack ?? () => Navigator.maybePop(context),
+        child: Row(
+          children: [
+            if (showBackButton) ...[
+              _BackButton(
+                color: palette.text,
+                onPressed: onBack ?? () => Navigator.maybePop(context),
+              ),
+              const SizedBox(width: 10.97),
+            ],
+            _LogoLockup(palette),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                breadcrumb,
+                style: _getBreadcrumbStyle(context, palette),
+                overflow: TextOverflow.fade,
+                softWrap: false,
+                maxLines: 1,
+              ),
             ),
-            const SizedBox(width: 10.97),
           ],
-          _LogoLockup(palette),
-          const SizedBox(width: 8),
-          Flexible(
-            child: Text(
-              breadcrumb,
-              style: _getBreadcrumbStyle(context, palette),
-              overflow: TextOverflow.fade,
-              softWrap: false,
-              maxLines: 1,
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
