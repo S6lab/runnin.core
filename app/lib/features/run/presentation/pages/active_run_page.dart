@@ -1224,11 +1224,13 @@ class _ActiveStatsLayout extends StatefulWidget {
 }
 
 class _ActiveStatsLayoutState extends State<_ActiveStatsLayout> {
-  // Pull do BPM mais recente do Apple Health / Health Connect a cada 15s
-  // enquanto a tela ativa. Best-effort — se não tiver wearable conectado,
-  // permanece null e a célula mostra '—'. 15s casa com a cadência típica
-  // de samples do Apple Watch (1 leitura por intervalo curto).
-  static const _bpmPollInterval = Duration(seconds: 15);
+  // Pull do BPM mais recente do Apple Health / Health Connect a cada 10s
+  // enquanto a tela ativa. 10s é o sweet spot: cobre o ciclo de sync
+  // típico Watch → iPhone (~5-15s) e reduz lag percebido vs polling de 15s
+  // sem 3× mais queries (que 5s exigiria). Pra eliminar o lag por completo
+  // o caminho é observer query / Health Connect subscribe — plugin atual
+  // (health 13.x) não expõe, então mantemos polling até upgrade.
+  static const _bpmPollInterval = Duration(seconds: 10);
   Timer? _bpmTimer;
   int? _liveBpm;
 
