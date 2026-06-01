@@ -28,6 +28,8 @@ import {
   getPlansCatalog,
   getPlanRules,
   getAdminWiringStatus,
+  postSetAdminClaim,
+  postDevLogin,
 } from './admin.controller';
 
 export const adminRouter = Router();
@@ -42,6 +44,17 @@ adminRouter.post('/diagnose/reset-journey', cronTokenMiddleware, postDiagnoseRes
 adminRouter.post('/diagnose/weekly-revise', cronTokenMiddleware, postDiagnoseWeeklyRevise);
 adminRouter.post('/cron/weekly-proposals', cronTokenMiddleware, postCronWeeklyProposals);
 adminRouter.post('/cron/weekly-proposals/user', cronTokenMiddleware, postCronWeeklyProposalUser);
+
+// Bootstrap admin claim. X-Cron-Token (não admin auth) porque é a rota
+// usada pra promover o PRIMEIRO admin — chicken-and-egg se exigíssemos
+// claim admin pra setar claim admin. Aceita email ou phone (E.164).
+adminRouter.post('/users/admin-claim', cronTokenMiddleware, postSetAdminClaim);
+
+// Dev/Postman login: proxy pra Identity Toolkit signInWithPassword. Devolve
+// idToken+refreshToken prontos pra usar nas rotas autenticadas. Protegido
+// por X-Cron-Token pra não virar proxy de brute-force. Exige
+// FIREBASE_WEB_API_KEY no env do server.
+adminRouter.post('/dev/login', cronTokenMiddleware, postDevLogin);
 
 adminRouter.use(authMiddleware);
 adminRouter.use(requireAdmin);

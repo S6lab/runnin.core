@@ -1,0 +1,439 @@
+{
+  "info": {
+    "name": "runnin API",
+    "description": "Coleção das rotas HTTP do server runnin.core (Express). Snapshot gerado em 2026-06-01 a partir de `server/src/server.ts` + `*.routes.ts`.\n\n**Variáveis (Environment):**\n- `baseUrl` — `https://runnin-api-rogiz7losq-rj.a.run.app` (prod) ou `https://runnin-api-staging-rogiz7losq-rj.a.run.app` (staging)\n- `idToken` — Firebase ID Token do usuário logado (Bearer)\n- `cronToken` — Valor do header `X-Cron-Token` (Cloud Scheduler)\n\n**Auth:** Bearer `{{idToken}}` (rotas autenticadas) — collection-level. Rotas de cron usam header `X-Cron-Token: {{cronToken}}` (sobrescrevem auth).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_postman_id": "runnin-core-collection"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      { "key": "token", "value": "{{idToken}}", "type": "string" }
+    ]
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "https://runnin-api-rogiz7losq-rj.a.run.app", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "Health Checks",
+      "item": [
+        {
+          "name": "GET /health",
+          "request": {
+            "method": "GET",
+            "auth": { "type": "noauth" },
+            "url": { "raw": "{{baseUrl}}/health", "host": ["{{baseUrl}}"], "path": ["health"] }
+          }
+        },
+        {
+          "name": "GET /healthz",
+          "request": {
+            "method": "GET",
+            "auth": { "type": "noauth" },
+            "url": { "raw": "{{baseUrl}}/healthz", "host": ["{{baseUrl}}"], "path": ["healthz"] }
+          }
+        },
+        {
+          "name": "GET /readyz",
+          "request": {
+            "method": "GET",
+            "auth": { "type": "noauth" },
+            "url": { "raw": "{{baseUrl}}/readyz", "host": ["{{baseUrl}}"], "path": ["readyz"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Users (/v1/users)",
+      "item": [
+        {
+          "name": "GET /me",
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/v1/users/me", "host": ["{{baseUrl}}"], "path": ["v1","users","me"] } }
+        },
+        {
+          "name": "POST /provision",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{}" },
+            "description": "Schema: ProvisionUserSchema (server/src/modules/users/use-cases/provision-user.use-case.ts)",
+            "url": { "raw": "{{baseUrl}}/v1/users/provision", "host": ["{{baseUrl}}"], "path": ["v1","users","provision"] }
+          }
+        },
+        {
+          "name": "PATCH /me",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{}" },
+            "description": "Schema: UpsertProfileSchema",
+            "url": { "raw": "{{baseUrl}}/v1/users/me", "host": ["{{baseUrl}}"], "path": ["v1","users","me"] }
+          }
+        },
+        {
+          "name": "DELETE /me",
+          "request": { "method": "DELETE", "url": { "raw": "{{baseUrl}}/v1/users/me", "host": ["{{baseUrl}}"], "path": ["v1","users","me"] } }
+        },
+        {
+          "name": "POST /onboarding",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{}" },
+            "description": "Schema: CompleteOnboardingSchema",
+            "url": { "raw": "{{baseUrl}}/v1/users/onboarding", "host": ["{{baseUrl}}"], "path": ["v1","users","onboarding"] }
+          }
+        },
+        {
+          "name": "POST /me/trial",
+          "request": { "method": "POST", "url": { "raw": "{{baseUrl}}/v1/users/me/trial", "host": ["{{baseUrl}}"], "path": ["v1","users","me","trial"] } }
+        },
+        {
+          "name": "POST /me/location",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{}" },
+            "description": "Schema: UpsertLocationSchema",
+            "url": { "raw": "{{baseUrl}}/v1/users/me/location", "host": ["{{baseUrl}}"], "path": ["v1","users","me","location"] }
+          }
+        },
+        {
+          "name": "POST /internal/reset-plan-revision-quota (cron)",
+          "request": {
+            "method": "POST",
+            "auth": { "type": "noauth" },
+            "header": [{ "key": "X-Cron-Token", "value": "{{cronToken}}" }],
+            "url": { "raw": "{{baseUrl}}/v1/users/internal/reset-plan-revision-quota", "host": ["{{baseUrl}}"], "path": ["v1","users","internal","reset-plan-revision-quota"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Runs (/v1/runs)",
+      "item": [
+        {
+          "name": "POST /",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{}" },
+            "description": "Schema: CreateRunSchema",
+            "url": { "raw": "{{baseUrl}}/v1/runs", "host": ["{{baseUrl}}"], "path": ["v1","runs"] }
+          }
+        },
+        {
+          "name": "GET / (list)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/v1/runs?limit=20",
+              "host": ["{{baseUrl}}"], "path": ["v1","runs"],
+              "query": [
+                { "key": "limit", "value": "20" },
+                { "key": "cursor", "value": "", "disabled": true }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /:id",
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/v1/runs/:id", "host": ["{{baseUrl}}"], "path": ["v1","runs",":id"], "variable": [{ "key": "id", "value": "" }] } }
+        },
+        {
+          "name": "GET /:id/gps",
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/v1/runs/:id/gps", "host": ["{{baseUrl}}"], "path": ["v1","runs",":id","gps"], "variable": [{ "key": "id", "value": "" }] } }
+        },
+        {
+          "name": "PATCH /:id/gps",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{}" },
+            "description": "Schema: AddGpsBatchSchema",
+            "url": { "raw": "{{baseUrl}}/v1/runs/:id/gps", "host": ["{{baseUrl}}"], "path": ["v1","runs",":id","gps"], "variable": [{ "key": "id", "value": "" }] }
+          }
+        },
+        {
+          "name": "PATCH /:id/complete",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{}" },
+            "description": "Schema: CompleteRunSchema",
+            "url": { "raw": "{{baseUrl}}/v1/runs/:id/complete", "host": ["{{baseUrl}}"], "path": ["v1","runs",":id","complete"], "variable": [{ "key": "id", "value": "" }] }
+          }
+        },
+        {
+          "name": "PATCH /:id/feedback",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{}" },
+            "description": "Schema: SubmitRunFeedbackSchema",
+            "url": { "raw": "{{baseUrl}}/v1/runs/:id/feedback", "host": ["{{baseUrl}}"], "path": ["v1","runs",":id","feedback"], "variable": [{ "key": "id", "value": "" }] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Biometrics (/v1/biometrics)",
+      "item": [
+        {
+          "name": "POST /samples",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"samples\": [\n    {\n      \"type\": \"bpm\",\n      \"value\": 72,\n      \"unit\": \"bpm\",\n      \"source\": \"apple_health\",\n      \"recordedAt\": \"2026-06-01T10:00:00Z\"\n    }\n  ]\n}" },
+            "description": "Schema: IngestSamplesSchema (server/src/modules/biometrics/use-cases/ingest-samples.use-case.ts)",
+            "url": { "raw": "{{baseUrl}}/v1/biometrics/samples", "host": ["{{baseUrl}}"], "path": ["v1","biometrics","samples"] }
+          }
+        },
+        {
+          "name": "GET /latest/:type",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/v1/biometrics/latest/:type",
+              "host": ["{{baseUrl}}"], "path": ["v1","biometrics","latest",":type"],
+              "variable": [{ "key": "type", "value": "bpm", "description": "bpm | resting_bpm | hrv | sleep_hours | steps | spo2 | weight | calories_burned | respiratory_rate" }]
+            }
+          }
+        },
+        {
+          "name": "GET /summary",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/v1/biometrics/summary?windowDays=7",
+              "host": ["{{baseUrl}}"], "path": ["v1","biometrics","summary"],
+              "query": [{ "key": "windowDays", "value": "7" }]
+            }
+          }
+        },
+        {
+          "name": "POST /seed-test-user (admin)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"nalin@s6lab.com\"\n}" },
+            "url": { "raw": "{{baseUrl}}/v1/biometrics/seed-test-user", "host": ["{{baseUrl}}"], "path": ["v1","biometrics","seed-test-user"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Plans (/v1/plans)",
+      "item": [
+        { "name": "GET /knowledge/corpus", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/v1/plans/knowledge/corpus", "host": ["{{baseUrl}}"], "path": ["v1","plans","knowledge","corpus"] } } },
+        { "name": "GET /current", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/v1/plans/current", "host": ["{{baseUrl}}"], "path": ["v1","plans","current"] } } },
+        { "name": "GET /:id", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/v1/plans/:id", "host": ["{{baseUrl}}"], "path": ["v1","plans",":id"], "variable": [{ "key": "id", "value": "" }] } } },
+        { "name": "GET /:id/revisions", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/v1/plans/:id/revisions", "host": ["{{baseUrl}}"], "path": ["v1","plans",":id","revisions"], "variable": [{ "key": "id", "value": "" }] } } },
+        { "name": "GET /:id/revisions/:revisionId", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/v1/plans/:id/revisions/:revisionId", "host": ["{{baseUrl}}"], "path": ["v1","plans",":id","revisions",":revisionId"], "variable": [{ "key": "id", "value": "" }, { "key": "revisionId", "value": "" }] } } },
+        { "name": "GET /:id/weekly-reports", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/v1/plans/:id/weekly-reports", "host": ["{{baseUrl}}"], "path": ["v1","plans",":id","weekly-reports"], "variable": [{ "key": "id", "value": "" }] } } },
+        { "name": "GET /:id/weekly-reports/:weekNumber", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/v1/plans/:id/weekly-reports/:weekNumber", "host": ["{{baseUrl}}"], "path": ["v1","plans",":id","weekly-reports",":weekNumber"], "variable": [{ "key": "id", "value": "" }, { "key": "weekNumber", "value": "1" }] } } },
+        { "name": "GET /:id/checkpoints", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/v1/plans/:id/checkpoints", "host": ["{{baseUrl}}"], "path": ["v1","plans",":id","checkpoints"], "variable": [{ "key": "id", "value": "" }] } } },
+        { "name": "GET /:id/checkpoints/:weekNumber", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/v1/plans/:id/checkpoints/:weekNumber", "host": ["{{baseUrl}}"], "path": ["v1","plans",":id","checkpoints",":weekNumber"], "variable": [{ "key": "id", "value": "" }, { "key": "weekNumber", "value": "1" }] } } },
+        {
+          "name": "POST /generate (feature: generatePlan)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{}" },
+            "url": { "raw": "{{baseUrl}}/v1/plans/generate", "host": ["{{baseUrl}}"], "path": ["v1","plans","generate"] }
+          }
+        },
+        {
+          "name": "POST /:id/request-revision (feature: planRevisions)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{}" },
+            "url": { "raw": "{{baseUrl}}/v1/plans/:id/request-revision", "host": ["{{baseUrl}}"], "path": ["v1","plans",":id","request-revision"], "variable": [{ "key": "id", "value": "" }] }
+          }
+        },
+        {
+          "name": "POST /:id/weekly-reports/:weekNumber/generate (feature: weeklyReports)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{}" },
+            "url": { "raw": "{{baseUrl}}/v1/plans/:id/weekly-reports/:weekNumber/generate", "host": ["{{baseUrl}}"], "path": ["v1","plans",":id","weekly-reports",":weekNumber","generate"], "variable": [{ "key": "id", "value": "" }, { "key": "weekNumber", "value": "1" }] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Weekly Reports (/v1/weekly-reports)",
+      "item": [
+        { "name": "GET /", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/v1/weekly-reports", "host": ["{{baseUrl}}"], "path": ["v1","weekly-reports"] } } },
+        { "name": "GET /:weekStart", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/v1/weekly-reports/:weekStart", "host": ["{{baseUrl}}"], "path": ["v1","weekly-reports",":weekStart"], "variable": [{ "key": "weekStart", "value": "2026-05-26", "description": "ISO date (segunda da semana)" }] } } }
+      ]
+    },
+    {
+      "name": "Coach (/v1/coach)",
+      "item": [
+        { "name": "POST /live-token (feature: coachVoiceDuringRun)", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{}" }, "url": { "raw": "{{baseUrl}}/v1/coach/live-token", "host": ["{{baseUrl}}"], "path": ["v1","coach","live-token"] } } },
+        { "name": "POST /live-diag", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{}" }, "url": { "raw": "{{baseUrl}}/v1/coach/live-diag", "host": ["{{baseUrl}}"], "path": ["v1","coach","live-diag"] } } },
+        { "name": "POST /live-turn (feature: coachVoiceDuringRun)", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{}" }, "url": { "raw": "{{baseUrl}}/v1/coach/live-turn", "host": ["{{baseUrl}}"], "path": ["v1","coach","live-turn"] } } },
+        { "name": "POST /message (feature: coachVoiceDuringRun)", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{}" }, "url": { "raw": "{{baseUrl}}/v1/coach/message", "host": ["{{baseUrl}}"], "path": ["v1","coach","message"] } } },
+        { "name": "POST /chat (feature: coachChat)", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{}" }, "url": { "raw": "{{baseUrl}}/v1/coach/chat", "host": ["{{baseUrl}}"], "path": ["v1","coach","chat"] } } },
+        { "name": "GET /report/:runId (feature: weeklyReports)", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/v1/coach/report/:runId", "host": ["{{baseUrl}}"], "path": ["v1","coach","report",":runId"], "variable": [{ "key": "runId", "value": "" }] } } },
+        { "name": "POST /report/:runId/generate (feature: weeklyReports)", "request": { "method": "POST", "url": { "raw": "{{baseUrl}}/v1/coach/report/:runId/generate", "host": ["{{baseUrl}}"], "path": ["v1","coach","report",":runId","generate"], "variable": [{ "key": "runId", "value": "" }] } } },
+        { "name": "GET /messages/:runId (feature: coachVoiceDuringRun)", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/v1/coach/messages/:runId", "host": ["{{baseUrl}}"], "path": ["v1","coach","messages",":runId"], "variable": [{ "key": "runId", "value": "" }] } } },
+        { "name": "GET /period-analysis (feature: weeklyReports)", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/v1/coach/period-analysis", "host": ["{{baseUrl}}"], "path": ["v1","coach","period-analysis"] } } }
+      ]
+    },
+    {
+      "name": "Notifications (/v1/notifications)",
+      "item": [
+        { "name": "GET /", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/v1/notifications", "host": ["{{baseUrl}}"], "path": ["v1","notifications"] } } },
+        { "name": "POST /clear", "request": { "method": "POST", "url": { "raw": "{{baseUrl}}/v1/notifications/clear", "host": ["{{baseUrl}}"], "path": ["v1","notifications","clear"] } } },
+        { "name": "POST /:id/dismiss", "request": { "method": "POST", "url": { "raw": "{{baseUrl}}/v1/notifications/:id/dismiss", "host": ["{{baseUrl}}"], "path": ["v1","notifications",":id","dismiss"], "variable": [{ "key": "id", "value": "" }] } } },
+        { "name": "POST /:id/read", "request": { "method": "POST", "url": { "raw": "{{baseUrl}}/v1/notifications/:id/read", "host": ["{{baseUrl}}"], "path": ["v1","notifications",":id","read"], "variable": [{ "key": "id", "value": "" }] } } },
+        { "name": "POST /devices", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{}" }, "url": { "raw": "{{baseUrl}}/v1/notifications/devices", "host": ["{{baseUrl}}"], "path": ["v1","notifications","devices"] } } },
+        {
+          "name": "POST /ensure-daily (cron)",
+          "request": {
+            "method": "POST",
+            "auth": { "type": "noauth" },
+            "header": [{ "key": "X-Cron-Token", "value": "{{cronToken}}" }],
+            "url": { "raw": "{{baseUrl}}/v1/notifications/ensure-daily", "host": ["{{baseUrl}}"], "path": ["v1","notifications","ensure-daily"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Health Zones (/v1/health)",
+      "item": [
+        { "name": "GET /zones (feature: healthZones)", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/v1/health/zones", "host": ["{{baseUrl}}"], "path": ["v1","health","zones"] } } }
+      ]
+    },
+    {
+      "name": "Exams (/v1/exams)",
+      "item": [
+        { "name": "GET /", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/v1/exams", "host": ["{{baseUrl}}"], "path": ["v1","exams"] } } },
+        { "name": "POST /upload-url (feature: examsOCR)", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{}" }, "url": { "raw": "{{baseUrl}}/v1/exams/upload-url", "host": ["{{baseUrl}}"], "path": ["v1","exams","upload-url"] } } },
+        { "name": "POST /:examId/finalize (feature: examsOCR)", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{}" }, "url": { "raw": "{{baseUrl}}/v1/exams/:examId/finalize", "host": ["{{baseUrl}}"], "path": ["v1","exams",":examId","finalize"], "variable": [{ "key": "examId", "value": "" }] } } },
+        { "name": "DELETE /:examId (feature: examsOCR)", "request": { "method": "DELETE", "url": { "raw": "{{baseUrl}}/v1/exams/:examId", "host": ["{{baseUrl}}"], "path": ["v1","exams",":examId"], "variable": [{ "key": "examId", "value": "" }] } } }
+      ]
+    },
+    {
+      "name": "Subscriptions (/v1/subscriptions)",
+      "item": [
+        { "name": "GET /plans (public)", "request": { "method": "GET", "auth": { "type": "noauth" }, "url": { "raw": "{{baseUrl}}/v1/subscriptions/plans", "host": ["{{baseUrl}}"], "path": ["v1","subscriptions","plans"] } } },
+        { "name": "GET /me", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/v1/subscriptions/me", "host": ["{{baseUrl}}"], "path": ["v1","subscriptions","me"] } } },
+        { "name": "GET /benefits", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/v1/subscriptions/benefits", "host": ["{{baseUrl}}"], "path": ["v1","subscriptions","benefits"] } } },
+        { "name": "POST /benefits/:id/activate", "request": { "method": "POST", "url": { "raw": "{{baseUrl}}/v1/subscriptions/benefits/:id/activate", "host": ["{{baseUrl}}"], "path": ["v1","subscriptions","benefits",":id","activate"], "variable": [{ "key": "id", "value": "" }] } } },
+        { "name": "POST /benefits", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{}" }, "url": { "raw": "{{baseUrl}}/v1/subscriptions/benefits", "host": ["{{baseUrl}}"], "path": ["v1","subscriptions","benefits"] } } },
+        { "name": "POST /seed (public, idempotente)", "request": { "method": "POST", "auth": { "type": "noauth" }, "url": { "raw": "{{baseUrl}}/v1/subscriptions/seed", "host": ["{{baseUrl}}"], "path": ["v1","subscriptions","seed"] } } }
+      ]
+    },
+    {
+      "name": "Stats (/v1/stats)",
+      "item": [
+        { "name": "GET /aggregate", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/v1/stats/aggregate", "host": ["{{baseUrl}}"], "path": ["v1","stats","aggregate"] } } },
+        { "name": "GET /breakdown", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/v1/stats/breakdown", "host": ["{{baseUrl}}"], "path": ["v1","stats","breakdown"] } } },
+        { "name": "GET /totals", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/v1/stats/totals", "host": ["{{baseUrl}}"], "path": ["v1","stats","totals"] } } }
+      ]
+    },
+    {
+      "name": "Weather (/v1/weather)",
+      "item": [
+        { "name": "GET /current", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/v1/weather/current", "host": ["{{baseUrl}}"], "path": ["v1","weather","current"] } } }
+      ]
+    },
+    {
+      "name": "Admin — Cron (X-Cron-Token)",
+      "item": [
+        { "name": "POST /v1/admin/tester/seed", "request": { "method": "POST", "auth": { "type": "noauth" }, "header": [{ "key": "X-Cron-Token", "value": "{{cronToken}}" }], "url": { "raw": "{{baseUrl}}/v1/admin/tester/seed", "host": ["{{baseUrl}}"], "path": ["v1","admin","tester","seed"] } } },
+        { "name": "GET /v1/admin/diagnose/user", "request": { "method": "GET", "auth": { "type": "noauth" }, "header": [{ "key": "X-Cron-Token", "value": "{{cronToken}}" }], "url": { "raw": "{{baseUrl}}/v1/admin/diagnose/user", "host": ["{{baseUrl}}"], "path": ["v1","admin","diagnose","user"] } } },
+        { "name": "POST /v1/admin/diagnose/regenerate-plan", "request": { "method": "POST", "auth": { "type": "noauth" }, "header": [{ "key": "X-Cron-Token", "value": "{{cronToken}}" }], "url": { "raw": "{{baseUrl}}/v1/admin/diagnose/regenerate-plan", "host": ["{{baseUrl}}"], "path": ["v1","admin","diagnose","regenerate-plan"] } } },
+        { "name": "POST /v1/admin/diagnose/reset-journey", "request": { "method": "POST", "auth": { "type": "noauth" }, "header": [{ "key": "X-Cron-Token", "value": "{{cronToken}}" }], "url": { "raw": "{{baseUrl}}/v1/admin/diagnose/reset-journey", "host": ["{{baseUrl}}"], "path": ["v1","admin","diagnose","reset-journey"] } } },
+        { "name": "POST /v1/admin/diagnose/weekly-revise", "request": { "method": "POST", "auth": { "type": "noauth" }, "header": [{ "key": "X-Cron-Token", "value": "{{cronToken}}" }], "url": { "raw": "{{baseUrl}}/v1/admin/diagnose/weekly-revise", "host": ["{{baseUrl}}"], "path": ["v1","admin","diagnose","weekly-revise"] } } },
+        { "name": "POST /v1/admin/cron/weekly-proposals", "request": { "method": "POST", "auth": { "type": "noauth" }, "header": [{ "key": "X-Cron-Token", "value": "{{cronToken}}" }], "url": { "raw": "{{baseUrl}}/v1/admin/cron/weekly-proposals", "host": ["{{baseUrl}}"], "path": ["v1","admin","cron","weekly-proposals"] } } },
+        { "name": "POST /v1/admin/cron/weekly-proposals/user", "request": { "method": "POST", "auth": { "type": "noauth" }, "header": [{ "key": "X-Cron-Token", "value": "{{cronToken}}" }], "url": { "raw": "{{baseUrl}}/v1/admin/cron/weekly-proposals/user", "host": ["{{baseUrl}}"], "path": ["v1","admin","cron","weekly-proposals","user"] } } },
+        {
+          "name": "POST /v1/admin/users/admin-claim",
+          "request": {
+            "method": "POST",
+            "auth": { "type": "noauth" },
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Cron-Token", "value": "{{cronToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"nalin@s6lab.com\",\n  \"admin\": true\n}"
+            },
+            "description": "Set/unset claim admin do user (lookup por email OU phone E.164). Body: { email?, phone?, admin? = true }. Bootstrap-friendly (não exige admin atual). Revoga refresh tokens — user precisa reabrir o app pra pegar o novo ID token. Schema: SetAdminClaimSchema (server/src/modules/admin/http/admin.controller.ts).",
+            "url": { "raw": "{{baseUrl}}/v1/admin/users/admin-claim", "host": ["{{baseUrl}}"], "path": ["v1","admin","users","admin-claim"] }
+          }
+        },
+        {
+          "name": "POST /v1/admin/dev/login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Extrai idToken da response e seta como collection variable —",
+                  "// próximos requests autenticados herdam Bearer {{idToken}} automaticamente.",
+                  "if (pm.response.code === 200) {",
+                  "  const json = pm.response.json();",
+                  "  if (json.idToken) {",
+                  "    pm.collectionVariables.set('idToken', json.idToken);",
+                  "    console.log('idToken setado (uid=' + json.uid + ', expira em ' + json.expiresIn + 's)');",
+                  "    if (json.customClaims && json.customClaims.admin) {",
+                  "      console.log('user é admin ✓');",
+                  "    }",
+                  "  }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": { "type": "noauth" },
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Cron-Token", "value": "{{cronToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"nalin@s6lab.com\",\n  \"password\": \"\"\n}"
+            },
+            "description": "Login email/senha via proxy Identity Toolkit. Devolve { idToken, refreshToken, uid, email, expiresIn, customClaims }. O test script anexado seta {{idToken}} automaticamente na collection — depois desse request, todas as rotas autenticadas funcionam. Exige FIREBASE_WEB_API_KEY no env do server. Schema: DevLoginSchema (server/src/modules/admin/http/admin.controller.ts).",
+            "url": { "raw": "{{baseUrl}}/v1/admin/dev/login", "host": ["{{baseUrl}}"], "path": ["v1","admin","dev","login"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin — Auth + requireAdmin",
+      "item": [
+        { "name": "POST /v1/admin/prompts/preview", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{}" }, "url": { "raw": "{{baseUrl}}/v1/admin/prompts/preview", "host": ["{{baseUrl}}"], "path": ["v1","admin","prompts","preview"] } } },
+        { "name": "GET /v1/admin/prompts/defaults", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/v1/admin/prompts/defaults", "host": ["{{baseUrl}}"], "path": ["v1","admin","prompts","defaults"] } } },
+        { "name": "POST /v1/admin/prompts/invalidate-cache", "request": { "method": "POST", "url": { "raw": "{{baseUrl}}/v1/admin/prompts/invalidate-cache", "host": ["{{baseUrl}}"], "path": ["v1","admin","prompts","invalidate-cache"] } } },
+        { "name": "GET /v1/admin/users", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/v1/admin/users", "host": ["{{baseUrl}}"], "path": ["v1","admin","users"] } } },
+        { "name": "PATCH /v1/admin/users/:userId/plan", "request": { "method": "PATCH", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{}" }, "url": { "raw": "{{baseUrl}}/v1/admin/users/:userId/plan", "host": ["{{baseUrl}}"], "path": ["v1","admin","users",":userId","plan"], "variable": [{ "key": "userId", "value": "" }] } } },
+        { "name": "POST /v1/admin/users/:userId/reset", "request": { "method": "POST", "url": { "raw": "{{baseUrl}}/v1/admin/users/:userId/reset", "host": ["{{baseUrl}}"], "path": ["v1","admin","users",":userId","reset"], "variable": [{ "key": "userId", "value": "" }] } } },
+        { "name": "GET /v1/admin/rag/status", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/v1/admin/rag/status", "host": ["{{baseUrl}}"], "path": ["v1","admin","rag","status"] } } },
+        { "name": "POST /v1/admin/rag/reindex", "request": { "method": "POST", "url": { "raw": "{{baseUrl}}/v1/admin/rag/reindex", "host": ["{{baseUrl}}"], "path": ["v1","admin","rag","reindex"] } } },
+        { "name": "POST /v1/admin/rag/purge", "request": { "method": "POST", "url": { "raw": "{{baseUrl}}/v1/admin/rag/purge", "host": ["{{baseUrl}}"], "path": ["v1","admin","rag","purge"] } } },
+        { "name": "GET /v1/admin/roteiro-templates/defaults", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/v1/admin/roteiro-templates/defaults", "host": ["{{baseUrl}}"], "path": ["v1","admin","roteiro-templates","defaults"] } } },
+        { "name": "POST /v1/admin/roteiro-templates/invalidate-cache", "request": { "method": "POST", "url": { "raw": "{{baseUrl}}/v1/admin/roteiro-templates/invalidate-cache", "host": ["{{baseUrl}}"], "path": ["v1","admin","roteiro-templates","invalidate-cache"] } } },
+        { "name": "POST /v1/admin/cron/weekly-proposals/trigger", "request": { "method": "POST", "url": { "raw": "{{baseUrl}}/v1/admin/cron/weekly-proposals/trigger", "host": ["{{baseUrl}}"], "path": ["v1","admin","cron","weekly-proposals","trigger"] } } },
+        { "name": "GET /v1/admin/prompts/registry", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/v1/admin/prompts/registry", "host": ["{{baseUrl}}"], "path": ["v1","admin","prompts","registry"] } } },
+        { "name": "GET /v1/admin/coach-ai/moments", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/v1/admin/coach-ai/moments", "host": ["{{baseUrl}}"], "path": ["v1","admin","coach-ai","moments"] } } },
+        { "name": "GET /v1/admin/crons", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/v1/admin/crons", "host": ["{{baseUrl}}"], "path": ["v1","admin","crons"] } } },
+        { "name": "GET /v1/admin/users/plans-catalog", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/v1/admin/users/plans-catalog", "host": ["{{baseUrl}}"], "path": ["v1","admin","users","plans-catalog"] } } },
+        { "name": "GET /v1/admin/constants/plan-rules", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/v1/admin/constants/plan-rules", "host": ["{{baseUrl}}"], "path": ["v1","admin","constants","plan-rules"] } } },
+        { "name": "GET /v1/admin/wiring-status", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/v1/admin/wiring-status", "host": ["{{baseUrl}}"], "path": ["v1","admin","wiring-status"] } } }
+      ]
+    }
+  ]
+}

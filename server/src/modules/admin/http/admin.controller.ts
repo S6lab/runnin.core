@@ -826,3 +826,132 @@ export async function getAdminWiringStatus(_req: Request, res: Response, next: N
     res.json(payload);
   } catch (err) { next(err); }
 }
+
+const SetAdminClaimSchema = z
+  .object({
+    email: z.string().email().optional(),
+    phone: z
+      .string()
+      .regex(/^\+[1-9]\d{6,14}$/, 'phone must be E.164 (e.g. +5511999999999)')
+      .optional(),
+    admin: z.boolean().default(true),
+  })
+  .refine((d) => Boolean(d.email) || Boolean(d.phone), {
+    message: 'email or phone required',
+  });
+
+/**
+ * POST /v1/admin/users/admin-claim — set/unset `admin: true` custom claim
+ * em um user (lookup por email ou phone E.164). Protegido por X-Cron-Token
+ * porque é a rota de bootstrap (não dá pra exigir admin pra promover o
+ * primeiro admin — chicken-and-egg). Merge com claims existentes pra não
+ * dropar nada e revoga refresh tokens pra forçar o cliente a pegar o novo
+ * ID token na próxima request.
+ *
+ * Body: { email?, phone?, admin? = true }
+ */
+export async function postSetAdminClaim(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const parsed = SetAdminClaimSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: 'invalid_body', issues: parsed.error.issues });
+      return;
+    }
+    const { email, phone, admin } = parsed.data;
+    const auth = getAuth();
+    const user = email
+      ? await auth.getUserByEmail(email)
+      : await auth.getUserByPhoneNumber(phone as string);
+
+    const current = user.customClaims ?? {};
+    const nextClaims: Record<string, unknown> = { ...current };
+    if (admin) {
+      nextClaims.admin = true;
+    } else {
+      delete nextClaims.admin;
+    }
+    await auth.setCustomUserClaims(user.uid, nextClaims);
+    await auth.revokeRefreshTokens(user.uid);
+
+    res.json({
+      ok: true,
+      uid: user.uid,
+      email: user.email ?? null,
+      phone: user.phoneNumber ?? null,
+      claims: nextClaims,
+      note: 'Refresh tokens revogados — user precisa reabrir o app pra pegar novo ID token com a claim.',
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+const DevLoginSchema = z.object({
+  email: z.email(),
+  password: z.string().min(1),
+});
+
+/**
+ * POST /v1/admin/dev/login — proxy pra `signInWithPassword` da Identity
+ * Toolkit. Recebe email/senha e devolve idToken+refreshToken prontos pra usar
+ * nas rotas autenticadas (Postman / scripts). Protegido por X-Cron-Token
+ * porque expor login email/senha sem gate vira proxy de brute-force.
+ *
+ * Exige FIREBASE_WEB_API_KEY no env (Web API key do projeto Firebase —
+ * pública por design, mas isolar em env permite trocar prod/staging).
+ *
+ * Body: { email, password }
+ */
+export async function postDevLogin(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const parsed = DevLoginSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: 'invalid_body', issues: parsed.error.issues });
+      return;
+    }
+    const apiKey = process.env.FIREBASE_WEB_API_KEY;
+    if (!apiKey) {
+      res.status(500).json({
+        error: 'missing_api_key',
+        message: 'FIREBASE_WEB_API_KEY não configurada no env do server. Setar no Cloud Run: gcloud run services update runnin-api --set-env-vars FIREBASE_WEB_API_KEY=AIza...',
+      });
+      return;
+    }
+    const { email, password } = parsed.data;
+    const resp = await fetch(
+      `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password, returnSecureToken: true }),
+      },
+    );
+    const data = (await resp.json()) as Record<string, unknown>;
+    if (!resp.ok) {
+      const fbError = (data?.error as { message?: string; code?: number } | undefined) ?? {};
+      res.status(resp.status).json({
+        error: 'firebase_signin_failed',
+        firebaseError: fbError.message ?? 'unknown',
+        status: resp.status,
+      });
+      return;
+    }
+
+    // Anexa custom claims via Admin SDK pra o caller saber se o user é admin
+    // sem precisar decodar o ID token.
+    const auth = getAuth();
+    const user = await auth.getUser(data.localId as string);
+
+    res.json({
+      idToken: data.idToken,
+      refreshToken: data.refreshToken,
+      expiresIn: data.expiresIn,
+      uid: data.localId,
+      email: data.email,
+      displayName: data.displayName ?? null,
+      customClaims: user.customClaims ?? {},
+    });
+  } catch (err) {
+    next(err);
+  }
+}
