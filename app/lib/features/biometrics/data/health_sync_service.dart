@@ -97,6 +97,36 @@ class HealthSyncService {
     }
   }
 
+  /// Lê o BPM mais recente dos últimos [withinSeconds] segundos. Usado pra
+  /// alimentar a UI de BPM live durante a corrida (ActiveRunPage). Retorna
+  /// null se não houver leitura recente ou se o plugin falhar — caller exibe
+  /// '—' nesse caso. Erros são silenciosos (não bloqueia a UI da corrida).
+  Future<int?> latestBpm({int withinSeconds = 180}) async {
+    if (!isSupported) return null;
+    try {
+      final to = DateTime.now();
+      final from = to.subtract(Duration(seconds: withinSeconds));
+      final samples = await _health.getHealthDataFromTypes(
+        startTime: from,
+        endTime: to,
+        types: const [HealthDataType.HEART_RATE],
+      );
+      if (samples.isEmpty) return null;
+      samples.sort((a, b) => b.dateFrom.compareTo(a.dateFrom));
+      final raw = samples.first.value;
+      final numeric = raw is NumericHealthValue
+          ? raw.numericValue
+          : double.tryParse(raw.toString());
+      if (numeric == null) return null;
+      return numeric.round();
+    } catch (_) {
+      // BPM live é best-effort — não loga toda iteração de polling pra
+      // não inundar o Crashlytics; o gauge geral é capturado em
+      // wearable_fetch_failed quando o sync periódico falha.
+      return null;
+    }
+  }
+
   /// Sincroniza samples desde `since` (ou desde o último sync, ou últimos 7d
   /// se primeira vez). Retorna número de samples enviados.
   Future<int> syncSince([DateTime? since]) async {

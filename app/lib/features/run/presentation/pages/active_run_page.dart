@@ -9,6 +9,7 @@ import 'package:go_router/go_router.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:runnin/core/audio/coach_audio_player.dart';
 import 'package:runnin/core/theme/app_palette.dart';
+import 'package:runnin/features/biometrics/data/health_sync_service.dart';
 import 'package:runnin/features/run/domain/entities/run.dart' show GpsPoint;
 import 'package:runnin/features/run/presentation/bloc/run_bloc.dart';
 import 'package:runnin/features/run/presentation/widgets/gps_permission_modal.dart';
@@ -1200,7 +1201,7 @@ class _CoachTalkButtonState extends State<_CoachTalkButton> {
 /// Layout do active run conforme PNG do design: header brand + grid
 /// 2x2 (PACE/DIST/BPM/CAL) + timer central + splits row + botões.
 /// Mapa fica embaixo como background (via Stack do _ActiveRunView).
-class _ActiveStatsLayout extends StatelessWidget {
+class _ActiveStatsLayout extends StatefulWidget {
   final RunState state;
   final String initialType;
   final bool gpsOk;
@@ -1218,6 +1219,40 @@ class _ActiveStatsLayout extends StatelessWidget {
     required this.onFinish,
   });
 
+  @override
+  State<_ActiveStatsLayout> createState() => _ActiveStatsLayoutState();
+}
+
+class _ActiveStatsLayoutState extends State<_ActiveStatsLayout> {
+  // Pull do BPM mais recente do Apple Health / Health Connect a cada 15s
+  // enquanto a tela ativa. Best-effort — se não tiver wearable conectado,
+  // permanece null e a célula mostra '—'. 15s casa com a cadência típica
+  // de samples do Apple Watch (1 leitura por intervalo curto).
+  static const _bpmPollInterval = Duration(seconds: 15);
+  Timer? _bpmTimer;
+  int? _liveBpm;
+
+  @override
+  void initState() {
+    super.initState();
+    if (healthSyncService.isSupported) {
+      _pollBpm();
+      _bpmTimer = Timer.periodic(_bpmPollInterval, (_) => _pollBpm());
+    }
+  }
+
+  @override
+  void dispose() {
+    _bpmTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _pollBpm() async {
+    final bpm = await healthSyncService.latestBpm();
+    if (!mounted) return;
+    if (bpm != _liveBpm) setState(() => _liveBpm = bpm);
+  }
+
   String _bpmZone(int? bpm) {
     if (bpm == null) return 'Z—';
     if (bpm < 100) return 'Z1:WARMUP';
@@ -1231,11 +1266,14 @@ class _ActiveStatsLayout extends StatelessWidget {
   Widget build(BuildContext context) {
     final palette = context.runninPalette;
     final type = context.runninType;
+    final state = widget.state;
+    final initialType = widget.initialType;
     final runType = state.runType?.isNotEmpty == true ? state.runType! : initialType;
     final paceVal = state.formattedPace == '--:--' ? '--:--' : state.formattedPace;
-    // BPM ainda não capturado no RunState (depende de wearable). Mostra '—'.
+    // BPM live: alimentado pelo timer de _pollBpm (Apple Health / Health
+    // Connect, leitura dos últimos 3min). Null quando sem wearable → '—'.
     // Kcal estimado simples: distância (km) × 60 (média runner ~60 kcal/km).
-    final int? bpm = null;
+    final int? bpm = _liveBpm;
     final kcal = ((state.distanceM / 1000) * 60).round();
 
     // Pace ACUMULADO por km (tempo total até o km / nº de km), em mm:ss/km.
@@ -1420,11 +1458,11 @@ class _ActiveStatsLayout extends StatelessWidget {
               isStarting: state.status == RunStatus.starting,
               isPaused: state.status == RunStatus.paused,
               isCompleting: state.status == RunStatus.completing,
-              gpsOk: gpsOk,
-              onStart: onStart,
-              onRetryGps: onRetryGps,
-              onPauseResume: onPauseResume,
-              onFinish: onFinish,
+              gpsOk: widget.gpsOk,
+              onStart: widget.onStart,
+              onRetryGps: widget.onRetryGps,
+              onPauseResume: widget.onPauseResume,
+              onFinish: widget.onFinish,
             ),
           ],
         ),

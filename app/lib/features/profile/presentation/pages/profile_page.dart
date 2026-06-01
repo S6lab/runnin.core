@@ -568,13 +568,21 @@ class _WearableConnectRowState extends State<_WearableConnectRow> {
       if (mounted) setState(() { _checking = false; _connected = false; });
       return;
     }
+    // hasPermissions é unreliable em iOS — Apple não revela quais permissões
+    // foram concedidas por privacy (plugin retorna null/false mesmo após o
+    // grant real). Source primário é o profile.hasWearable (setado pelo
+    // onboarding step novo / devices_page após permission concedida); o plugin
+    // só serve pra promover o state quando ainda não foi persistido.
     try {
-      final ok = await healthSyncService.hasPermissions();
-      if (mounted) setState(() { _checking = false; _connected = ok; });
-      // Espelha estado real no perfil persistido (campo hasWearable).
-      if (ok && !widget.hasWearable) widget.onWearableChanged(true);
+      final pluginOk = await healthSyncService.hasPermissions();
+      final connected = widget.hasWearable || pluginOk;
+      if (mounted) setState(() { _checking = false; _connected = connected; });
+      // Se plugin reconhece a permission mas o profile ainda não, espelha
+      // (caso o user tenha concedido por outro caminho e voltado aqui).
+      if (pluginOk && !widget.hasWearable) widget.onWearableChanged(true);
     } catch (_) {
-      if (mounted) setState(() { _checking = false; _connected = false; });
+      // Plugin errored — confia só no profile.
+      if (mounted) setState(() { _checking = false; _connected = widget.hasWearable; });
     }
   }
 
