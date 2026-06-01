@@ -2,7 +2,7 @@ import { UserProfile } from '@modules/users/domain/user.entity';
 import { getPromptConfig } from '../config-store';
 import { renderTemplate } from '../render';
 import { resolvePersonaTone } from '../persona/resolver';
-import { formatProfileContext } from '../context/profile-context';
+import { formatProfileContext, formatBiometricContext } from '../context/profile-context';
 import { stampVersion } from '../versions';
 import { BuiltPrompt } from './types';
 
@@ -54,6 +54,20 @@ export interface PlanInitBuildInput {
     longRunMaxMinutes?: number;
   };
   ragContext: string;
+  /** Snapshot dos últimos 7 dias do wearable (saída do GetSummaryUseCase).
+   *  Quando presente + sampleCount > 0, o builder injeta a seção "DADOS
+   *  BIOMÉTRICOS" com instrução de Karvonen pra zonas e ajustes baseados
+   *  em HRV/sono. Ausente / sem amostras = seção omitida (silencioso). */
+  biometricSummary?: {
+    windowDays: number;
+    avgRestingBpm: number | null;
+    maxBpm: number | null;
+    avgSleepHours: number | null;
+    totalSteps: number | null;
+    avgHrv: number | null;
+    latestWeight: number | null;
+    sampleCount: number;
+  } | null;
 }
 
 export async function buildPlanInitPrompt(args: PlanInitBuildInput): Promise<BuiltPrompt> {
@@ -291,9 +305,16 @@ export async function buildPlanInitPrompt(args: PlanInitBuildInput): Promise<Bui
     context: journeyLines.length === 0 ? '' : `CONTEXTO DA JORNADA DE CRIAÇÃO DO PLANO (sobrepõe defaults do perfil):\n- ${journeyLines.join('\n- ')}`,
   };
 
+  const biometricContext = formatBiometricContext({
+    restingBpm: args.profile?.restingBpm,
+    maxBpm: args.profile?.maxBpm,
+    summary: args.biometricSummary ?? null,
+  });
+
   const values = {
     persona: { tone },
     profile: { context: formatProfileContext(args.profile) },
+    biometric: { context: biometricContext },
     input: args.input,
     journey,
     rag: args.ragContext,

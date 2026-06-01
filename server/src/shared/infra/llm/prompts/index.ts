@@ -20,4 +20,4 @@ export {
   type PromptConfig,
   type DecisionKnobs,
 } from './config-store';
-export { isInDndWindow, formatProfileContext, formatFeedbackFlags } from './context/profile-context';
+export { isInDndWindow, formatProfileContext, formatFeedbackFlags, formatBiometricContext } from './context/profile-context';

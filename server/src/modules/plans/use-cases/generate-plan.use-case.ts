@@ -565,8 +565,25 @@ export class GeneratePlanUseCase {
       if (r.ok) windowMode = r.matchedMode;
     }
 
+    // Telemetria do wearable (últimos 7d) — vira input estruturado pro
+    // prompt. Calibra zonas Karvonen (resting + max), ajusta deload se HRV
+    // deprimida, sinaliza sono insuficiente. Sem samples ou erro =
+    // biometricSummary fica null e o builder omite a seção (silencioso).
+    let biometricSummary: Awaited<
+      ReturnType<typeof container.useCases.getBiometricSummary.execute>
+    > | null = null;
+    try {
+      biometricSummary = await container.useCases.getBiometricSummary.execute(plan.userId, 7);
+    } catch (err) {
+      logger.warn('plan.generate.biometric_summary_failed', {
+        userId: plan.userId,
+        err: err instanceof Error ? err.message : String(err),
+      });
+    }
+
     const built = await buildPlanInitPrompt({
       profile: runtime.profile,
+      biometricSummary,
       input: {
         goal: input.goal,
         level: input.level,
