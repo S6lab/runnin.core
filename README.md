@@ -12,13 +12,15 @@ docs/    Postman, GCP, notifications, etc
 
 ## Branches = ambientes
 
-A convenção é "1 branch = 1 ambiente". Cada push numa branch protegida dispara o pipeline correspondente automaticamente, sem necessidade de tag — versão é controlada via bump em `app/pubspec.yaml` (e/ou `server/package.json`).
+A convenção é "1 branch = 1 ambiente". Cada push numa branch protegida dispara o pipeline correspondente automaticamente, sem necessidade de tag — versão é controlada via bump em `app/pubspec.yaml` (e/ou `server/package.json`). Mobile tem branches **separadas por plataforma** pra publicar iOS e Android de forma independente.
 
-| Branch         | Server (Cloud Run)              | Mobile                                              | Web (Firebase Hosting)              |
-|---             |---                              |---                                                  |---                                  |
-| `main`         | —                               | —                                                   | prod (`Deploy Production`)          |
-| `release`      | prod `runnin-api`               | TestFlight (iOS) + Play Internal (Android)          | —                                   |
-| `homologation` | staging `runnin-api-staging`    | —                                                   | staging (`Deploy Staging`)          |
+| Branch             | Server (Cloud Run)              | Mobile                              | Web (Firebase Hosting)              |
+|---                 |---                              |---                                  |---                                  |
+| `main`             | —                               | —                                   | prod (`Deploy Production`)          |
+| `release`          | prod `runnin-api`               | —                                   | —                                   |
+| `release-ios`      | —                               | TestFlight (Codemagic `ios-release`) | —                                   |
+| `release-android`  | —                               | Play Internal (Codemagic `android-release`) | —                                   |
+| `homologation`     | staging `runnin-api-staging`    | —                                   | staging (`Deploy Staging`)          |
 
 Os workflows estão configurados em:
 
@@ -47,29 +49,36 @@ O app prepende `/v1` ao `API_BASE_URL` automaticamente.
 
 ## Deploy de produção
 
-1. **Bumpar versão** em `app/pubspec.yaml` (e `server/package.json` se houver mudança server-side).
-2. **Mergear `main` em `release`** (fast-forward quando possível).
-3. **Push `release`** — dispara em sequência:
-   - GitHub Actions `Deploy Server Production` (Cloud Run prod)
-   - Codemagic `ios-release` (IPA → TestFlight)
-   - Codemagic `android-release` (AAB → Play Internal)
-4. Acompanhar nos respectivos consoles. ~3-10min total.
+Cada alvo deploya em sua branch correspondente. Você escolhe o que publicar:
 
 ```bash
-# Fluxo completo
 git checkout main && git pull
-# (edita app/pubspec.yaml pra bumpar +N)
-git add app/pubspec.yaml && git commit -m "chore: bump version"
+# (edita app/pubspec.yaml e/ou server/package.json pra bumpar)
+git add . && git commit -m "chore: bump version"
 git push origin main
-git checkout release && git merge --ff-only main && git push origin release
 ```
 
-Pra disparar um build novo no TestFlight **sem mudança de código** (rebuild com mesma versão, novo build number do Codemagic):
+Depois, dependendo do que quer publicar:
 
 ```bash
-git checkout release
+# Server prod (Cloud Run, via GitHub Actions)
+git checkout release && git merge --ff-only main && git push origin release
+
+# iOS (TestFlight, via Codemagic)
+git checkout release-ios && git merge --ff-only main && git push origin release-ios
+
+# Android (Play Internal, via Codemagic)
+git checkout release-android && git merge --ff-only main && git push origin release-android
+```
+
+Pra publicar tudo de uma vez, push as 3 branches (cada uma dispara o pipeline correspondente em paralelo).
+
+Pra disparar um build novo no TestFlight / Play Internal **sem mudança de código** (rebuild com mesma versão semver, novo build number do Codemagic):
+
+```bash
+git checkout release-ios     # ou release-android
 git commit --allow-empty -m "chore: rebuild"
-git push origin release
+git push origin release-ios
 ```
 
 ## Deploy de staging

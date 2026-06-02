@@ -1,4 +1,12 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- health-services-client declara minSdk=30 hard no manifest da lib,
+         mas o app é minSdk=26 (cobre Android 8+). Override força o merge a
+         aceitar — runtime guard (Build.VERSION.SDK_INT < R) no
+         WorkoutRealtimePlugin.kt já bloqueia uso em devices < Android 11,
+         então não há risco de NoClassDefFoundError. -->
+    <uses-sdk tools:overrideLibrary="androidx.health.services.client" />
 
     <!-- GPS permissions -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />

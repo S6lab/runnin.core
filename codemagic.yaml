@@ -5,14 +5,21 @@
 # porque essa é a localização que o Codemagic varre por padrão.
 #
 # Workflows ATIVOS:
-#  - android-release  → AAB assinado + Play Store internal em push pra branch `release`
-#  - ios-release      → IPA assinado + TestFlight em push pra branch `release` (ver pré-reqs no bloco)
+#  - android-release  → AAB assinado + Play Store internal em push pra `release-android`
+#  - ios-release      → IPA assinado + TestFlight em push pra `release-ios` (ver pré-reqs no bloco)
 #
-# Convenção do projeto: "branch = ambiente". Push em `release` deploya os
-# clients (Android Play Internal + iOS TestFlight) e o server prod (via
-# GitHub Action). Sem necessidade de tag — versão controlada via bump em
-# pubspec.yaml. Cada push em release dispara ambos os workflows; build
-# number do IPA/AAB vem de PROJECT_BUILD_NUMBER (Codemagic, incremental).
+# Convenção do projeto: "branch = ambiente". Mobile tem branches SEPARADAS
+# por plataforma — nem sempre queremos atualizar iOS e Android ao mesmo
+# tempo. Server prod continua em `release` (deploy via GitHub Actions).
+#
+# Fluxo típico:
+#   - Pra publicar só iOS:     merge main → release-ios && push
+#   - Pra publicar só Android: merge main → release-android && push
+#   - Pra publicar ambos:      push em ambas
+#   - Pra publicar server:     merge main → release && push
+#
+# Sem tag — versão controlada via bump em pubspec.yaml. Build number do
+# IPA/AAB vem de PROJECT_BUILD_NUMBER (Codemagic, incremental).
 #
 # Web foi REMOVIDO daqui (era web-staging em push pra main + web-production em
 # tag v*). Deploy do web Firebase Hosting agora é manual — usa o canal staging
@@ -60,7 +67,7 @@ workflows:
       events:
         - push
       branch_patterns:
-        - pattern: 'release'
+        - pattern: 'release-android'
           include: true
     scripts:
       - name: Pub get
@@ -137,8 +144,8 @@ workflows:
   # e não estourar o limite (2-3) da Apple. Se o grupo `ios_signing` não for
   # global do time, replique a var neste app também.
   #
-  # Dispara no MESMO push em `release` do android-release: 1 push → AAB no
-  # Play internal + IPA no TestFlight.
+  # Dispara em push em `release-ios` (independente do android-release).
+  # Pra deploy combinado, push as duas branches.
   ios-release:
     name: iOS Release (TestFlight)
     instance_type: mac_mini_m1
@@ -155,7 +162,7 @@ workflows:
       events:
         - push
       branch_patterns:
-        - pattern: 'release'
+        - pattern: 'release-ios'
           include: true
     scripts:
       - name: Pub get
