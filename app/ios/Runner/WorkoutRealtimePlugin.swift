@@ -4,26 +4,41 @@ import UIKit
 
 /// Plugin nativo iOS pra BPM realtime durante a Run ativa.
 ///
-/// Usa HKWorkoutSession + HKLiveWorkoutBuilder (iOS 17+ permite phone-only,
-/// sem Watch companion app) — quando há Apple Watch pareado, samples chegam
-/// a ~1Hz via delegate `workoutBuilder:didCollectDataOf:`. Sem Watch, a
-/// session sobe mas nenhum sample chega: timer interno emite warning
-/// `no_hr_source` após 8s.
+/// Usa HKAnchoredObjectQuery (iOS 9+) — disponível em qualquer device com
+/// deployment target 14+, sem precisar de Apple Watch dedicado mas se
+/// beneficia totalmente dele: o Watch escreve heart rate samples no
+/// HealthKit store compartilhado a ~1-2Hz e a updateHandler dispara
+/// pra cada novo sample.
 ///
-/// Critical: `session.end()` + `builder.endCollection { builder.finishWorkout }`
-/// no stop(), senão o workout fica "aberto" no HealthKit e aparece fantasma
-/// na Activity Ring.
+/// Decisão de design vs HKWorkoutSession + HKLiveWorkoutBuilder:
+///   - HKLiveWorkoutBuilder no iPhone (sem watchOS companion) só ficou
+///     disponível em iOS 26 (Apple Watch sempre teve, iPhone não).
+///   - HKWorkoutSession no iPhone exige iOS 17+.
+///   - HKAnchoredObjectQuery funciona em iOS 9+, entrega o mesmo BPM
+///     live com o Watch como source — só não cria o "workout" no
+///     Activity Ring. Pra esse PR, prioridade é compat amplo. Activity
+///     Ring fica pra um seguimento (quando bumpar deployment target).
+///
+/// Lifecycle:
+///   - start(): solicita autorização HEART_RATE; cria HKAnchoredObjectQuery
+///     com predicado start=now, anchor inicial nil, e updateHandler que
+///     emite o sample mais recente. Idempotente — chama no-op se já active.
+///   - pause(): healthStore.stop(query) preservando o anchor da última
+///     resposta. Resume cria nova query com esse anchor → não perde gap.
+///   - stop(): healthStore.stop(query), descarta anchor. Idempotente.
+///
+/// Timer de 8s ao start: se nenhum sample chegou → warning `no_hr_source`
+/// (Watch desligado, sem permission, ou esquece o relógio).
 @objc class WorkoutRealtimePlugin: NSObject, FlutterPlugin, FlutterStreamHandler {
   private static let methodChannelName = "runnin/workout_realtime"
   private static let eventChannelName = "runnin/workout_realtime/events"
 
   private let healthStore = HKHealthStore()
-  private var session: HKWorkoutSession?
-  private var builder: HKLiveWorkoutBuilder?
-  private var builderDelegate: BuilderDelegate?
-  private var sessionDelegate: SessionDelegate?
+  private var query: HKAnchoredObjectQuery?
+  private var lastAnchor: HKQueryAnchor?
   private var eventSink: FlutterEventSink?
   private var noSourceTimer: Timer?
+  private var receivedAtLeastOne = false
 
   public static func register(with registrar: FlutterPluginRegistrar) {
     let instance = WorkoutRealtimePlugin()
@@ -54,9 +69,9 @@ import UIKit
     case "start":
       start(result: result)
     case "pause":
-      pauseSession(result: result)
+      pauseQuery(result: result)
     case "resume":
-      resumeSession(result: result)
+      resumeQuery(result: result)
     case "stop":
       stop(result: result)
     default:
@@ -71,7 +86,10 @@ import UIKit
       result(["available": false, "reason": "healthkit_unavailable"])
       return
     }
-    let hrType = HKQuantityType.quantityType(forIdentifier: .heartRate)!
+    guard let hrType = HKQuantityType.quantityType(forIdentifier: .heartRate) else {
+      result(["available": false, "reason": "heart_rate_type_missing"])
+      return
+    }
     let status = healthStore.authorizationStatus(for: hrType)
     if status == .notDetermined {
       result(["available": true, "reason": "permission_required"])
@@ -81,120 +99,131 @@ import UIKit
   }
 
   private func start(result: @escaping FlutterResult) {
-    // Ainda em curso? No-op (idempotência).
-    if session != nil {
+    // Já active? No-op (idempotência).
+    if query != nil {
       result(nil)
       return
     }
-
-    let hrType = HKQuantityType.quantityType(forIdentifier: .heartRate)!
+    guard let hrType = HKQuantityType.quantityType(forIdentifier: .heartRate) else {
+      emit(["type": "error", "code": "heart_rate_type_missing"])
+      result(nil)
+      return
+    }
     healthStore.requestAuthorization(toShare: [], read: [hrType]) { [weak self] granted, error in
       guard let self = self else { return }
       if !granted || error != nil {
-        self.emit(["type": "error", "code": "permission_denied", "message": error?.localizedDescription ?? "denied"])
+        self.emit([
+          "type": "error",
+          "code": "permission_denied",
+          "message": error?.localizedDescription ?? "denied",
+        ])
         DispatchQueue.main.async { result(nil) }
         return
       }
       DispatchQueue.main.async {
-        self.startSessionInternal(result: result)
+        self.startQueryInternal(hrType: hrType, result: result)
       }
     }
   }
 
-  private func startSessionInternal(result: @escaping FlutterResult) {
-    let config = HKWorkoutConfiguration()
-    config.activityType = .running
-    config.locationType = .outdoor
+  private func startQueryInternal(hrType: HKQuantityType, result: @escaping FlutterResult) {
+    receivedAtLeastOne = false
 
-    do {
-      let newSession = try HKWorkoutSession(healthStore: healthStore, configuration: config)
-      let newBuilder = newSession.associatedWorkoutBuilder()
-      newBuilder.dataSource = HKLiveWorkoutDataSource(healthStore: healthStore, workoutConfiguration: config)
+    // Predicado: samples a partir de AGORA (não puxa histórico). Anchor inicial
+    // nil — o primeiro resultHandler vem com baseline (0 samples se nada novo).
+    let predicate = HKQuery.predicateForSamples(
+      withStart: Date(),
+      end: nil,
+      options: .strictStartDate
+    )
+    let initialAnchor = lastAnchor // reaproveita anchor do pause anterior se houver
 
-      let builderDel = BuilderDelegate { [weak self] bpm in
-        self?.onBpmSample(bpm)
-      }
-      let sessionDel = SessionDelegate { [weak self] stateText in
-        self?.emit(["type": "state", "value": stateText])
-      } onError: { [weak self] message in
-        self?.emit(["type": "error", "code": "session_failed", "message": message])
-      }
-
-      newSession.delegate = sessionDel
-      newBuilder.delegate = builderDel
-
-      self.session = newSession
-      self.builder = newBuilder
-      self.sessionDelegate = sessionDel
-      self.builderDelegate = builderDel
-
-      let start = Date()
-      newSession.startActivity(with: start)
-      newBuilder.beginCollection(withStart: start) { [weak self] success, err in
-        if !success {
-          self?.emit(["type": "error", "code": "begin_collection_failed", "message": err?.localizedDescription ?? "unknown"])
-        }
-      }
-
-      // Timer pra detectar ausência de heart rate source após 8s.
-      noSourceTimer?.invalidate()
-      noSourceTimer = Timer.scheduledTimer(withTimeInterval: 8.0, repeats: false) { [weak self] _ in
-        guard let self = self else { return }
-        if self.builderDelegate?.receivedAtLeastOne == false {
-          self.emit(["type": "warning", "code": "no_hr_source", "message": "No heart rate source detected within 8s. Pair an Apple Watch or BLE strap."])
-        }
-      }
-
-      result(nil)
-    } catch {
-      emit(["type": "error", "code": "session_create_failed", "message": error.localizedDescription])
-      result(nil)
+    let newQuery = HKAnchoredObjectQuery(
+      type: hrType,
+      predicate: predicate,
+      anchor: initialAnchor,
+      limit: HKObjectQueryNoLimit
+    ) { [weak self] _, samples, _, newAnchor, _ in
+      self?.handleSamples(samples, anchor: newAnchor)
     }
-  }
+    newQuery.updateHandler = { [weak self] _, samples, _, newAnchor, _ in
+      self?.handleSamples(samples, anchor: newAnchor)
+    }
+    healthStore.execute(newQuery)
+    query = newQuery
+    emit(["type": "state", "value": "active"])
 
-  private func pauseSession(result: @escaping FlutterResult) {
-    session?.pause()
+    // 8s pra detectar ausência de fonte de heart rate.
+    noSourceTimer?.invalidate()
+    noSourceTimer = Timer.scheduledTimer(withTimeInterval: 8.0, repeats: false) { [weak self] _ in
+      guard let self = self else { return }
+      if !self.receivedAtLeastOne {
+        self.emit([
+          "type": "warning",
+          "code": "no_hr_source",
+          "message": "No heart rate sample within 8s. Pair an Apple Watch or BLE strap.",
+        ])
+      }
+    }
+
     result(nil)
   }
 
-  private func resumeSession(result: @escaping FlutterResult) {
-    session?.resume()
+  private func pauseQuery(result: @escaping FlutterResult) {
+    if let q = query {
+      healthStore.stop(q)
+      query = nil
+    }
+    noSourceTimer?.invalidate()
+    noSourceTimer = nil
+    emit(["type": "state", "value": "paused"])
     result(nil)
+  }
+
+  private func resumeQuery(result: @escaping FlutterResult) {
+    // Resume retoma do anchor preservado (sem perder gap entre pause/resume).
+    if query != nil {
+      result(nil)
+      return
+    }
+    guard let hrType = HKQuantityType.quantityType(forIdentifier: .heartRate) else {
+      result(nil)
+      return
+    }
+    startQueryInternal(hrType: hrType, result: result)
   }
 
   private func stop(result: @escaping FlutterResult) {
     noSourceTimer?.invalidate()
     noSourceTimer = nil
-    guard let session = session, let builder = builder else {
-      result(nil)
-      return
+    if let q = query {
+      healthStore.stop(q)
+      query = nil
     }
-    session.end()
-    builder.endCollection(withEnd: Date()) { [weak self] _, _ in
-      builder.finishWorkout { _, _ in
-        DispatchQueue.main.async {
-          self?.cleanup()
-          result(nil)
-        }
-      }
-    }
-  }
-
-  private func cleanup() {
-    session = nil
-    builder = nil
-    builderDelegate = nil
-    sessionDelegate = nil
+    lastAnchor = nil
+    emit(["type": "state", "value": "ended"])
+    result(nil)
   }
 
   // MARK: Helpers
 
-  private func onBpmSample(_ bpm: Double) {
-    let value = Int(bpm.rounded())
+  private func handleSamples(_ samples: [HKSample]?, anchor: HKQueryAnchor?) {
+    if let anchor = anchor {
+      lastAnchor = anchor
+    }
+    guard let quantities = samples as? [HKQuantitySample], !quantities.isEmpty else {
+      return
+    }
+    // Pega o sample mais recente do batch.
+    let latest = quantities.max(by: { $0.endDate < $1.endDate })
+    guard let sample = latest else { return }
+    let unit = HKUnit.count().unitDivided(by: .minute())
+    let bpm = sample.quantity.doubleValue(for: unit)
+    receivedAtLeastOne = true
     emit([
       "type": "bpm",
-      "value": value,
-      "ts": Int(Date().timeIntervalSince1970 * 1000),
+      "value": Int(bpm.rounded()),
+      "ts": Int(sample.endDate.timeIntervalSince1970 * 1000),
     ])
   }
 
@@ -202,63 +231,5 @@ import UIKit
     DispatchQueue.main.async {
       self.eventSink?(payload)
     }
-  }
-}
-
-// MARK: - Delegates
-
-private final class BuilderDelegate: NSObject, HKLiveWorkoutBuilderDelegate {
-  private let onBpm: (Double) -> Void
-  fileprivate private(set) var receivedAtLeastOne = false
-
-  init(onBpm: @escaping (Double) -> Void) {
-    self.onBpm = onBpm
-  }
-
-  func workoutBuilder(_ workoutBuilder: HKLiveWorkoutBuilder, didCollectDataOf collectedTypes: Set<HKSampleType>) {
-    guard let hrType = HKQuantityType.quantityType(forIdentifier: .heartRate),
-          collectedTypes.contains(hrType),
-          let stats = workoutBuilder.statistics(for: hrType) else {
-      return
-    }
-    let unit = HKUnit.count().unitDivided(by: .minute())
-    if let mostRecent = stats.mostRecentQuantity()?.doubleValue(for: unit) {
-      receivedAtLeastOne = true
-      onBpm(mostRecent)
-    }
-  }
-
-  func workoutBuilderDidCollectEvent(_ workoutBuilder: HKLiveWorkoutBuilder) {
-    // No-op — não usamos events nesse PR (markers, pauses do builder).
-  }
-}
-
-private final class SessionDelegate: NSObject, HKWorkoutSessionDelegate {
-  private let onStateChange: (String) -> Void
-  private let onError: (String) -> Void
-
-  init(onStateChange: @escaping (String) -> Void, onError: @escaping (String) -> Void) {
-    self.onStateChange = onStateChange
-    self.onError = onError
-  }
-
-  func workoutSession(_ workoutSession: HKWorkoutSession,
-                      didChangeTo toState: HKWorkoutSessionState,
-                      from fromState: HKWorkoutSessionState,
-                      date: Date) {
-    switch toState {
-    case .running:
-      onStateChange("active")
-    case .paused:
-      onStateChange("paused")
-    case .ended:
-      onStateChange("ended")
-    default:
-      break
-    }
-  }
-
-  func workoutSession(_ workoutSession: HKWorkoutSession, didFailWithError error: Error) {
-    onError(error.localizedDescription)
   }
 }
