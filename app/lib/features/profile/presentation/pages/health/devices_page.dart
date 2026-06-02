@@ -1,7 +1,11 @@
+import 'dart:async';
+import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:runnin/core/analytics/analytics_service.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
+import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 import 'package:runnin/features/biometrics/data/health_sync_service.dart';
 import 'package:runnin/shared/widgets/figma/figma_device_card.dart';
 import 'package:runnin/shared/widgets/figma/figma_top_nav.dart';
@@ -14,8 +18,58 @@ class HealthDevicesPage extends StatefulWidget {
 }
 
 class _HealthDevicesPageState extends State<HealthDevicesPage> {
+  // Connection state local — combina:
+  //   (a) profile.hasWearable persistido no perfil (set pelo onboarding step e
+  //       pelo _connectViaHealthBridge abaixo),
+  //   (b) healthSyncService.hasPermissions() best-effort (unreliable em iOS).
+  // Quando qualquer um dos dois indica conectado, a plataforma compatível com
+  // a plataforma do device é marcada como conectada. Sem isso, o card sempre
+  // mostra "Conectar" mesmo após sync bem-sucedido.
+  bool _appleHealthConnected = false;
+  bool _googleHealthConnected = false;
+  final _userRemote = UserRemoteDatasource();
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshConnectionState();
+  }
+
+  Future<void> _refreshConnectionState() async {
+    if (kIsWeb) return;
+    try {
+      final results = await Future.wait([
+        _userRemote.getMe(),
+        healthSyncService.hasPermissions(),
+      ]);
+      final profile = results[0] as UserProfile?;
+      final pluginOk = results[1] as bool;
+      final connected = (profile?.hasWearable ?? false) || pluginOk;
+      if (!mounted) return;
+      setState(() {
+        if (Platform.isIOS) _appleHealthConnected = connected;
+        if (Platform.isAndroid) _googleHealthConnected = connected;
+      });
+    } catch (_) {
+      // Falha silenciosa — usuário ainda pode clicar em conectar.
+    }
+  }
+
+  Future<void> _persistHasWearable() async {
+    try {
+      await _userRemote.patchMe(hasWearable: true);
+    } catch (_) {/* best-effort */}
+  }
+
+  bool _providerConnected(_ProviderSpec p) {
+    if (p.name == 'Apple Health') return _appleHealthConnected;
+    if (p.name == 'Google Health Connect') return _googleHealthConnected;
+    return false;
+  }
+
   @override
   Widget build(BuildContext context) {
+    final anyConnected = _appleHealthConnected || _googleHealthConnected;
     return Scaffold(
       backgroundColor: FigmaColors.bgBase,
       body: Column(
@@ -33,14 +87,29 @@ class _HealthDevicesPageState extends State<HealthDevicesPage> {
                   const SizedBox(height: AppSpacing.xxl),
                   _FieldLabel(label: 'CONECTADAS'),
                   const SizedBox(height: AppSpacing.md),
-                  const _EmptyConnectedState(),
+                  if (anyConnected)
+                    ..._kCompatibleProviders
+                        .where(_providerConnected)
+                        .map(
+                          (p) => Padding(
+                            padding: const EdgeInsets.only(bottom: AppSpacing.md),
+                            child: FigmaCompatibleDeviceCard(
+                              icon: p.icon,
+                              deviceName: p.name,
+                              dataLabel: p.metrics,
+                              isConnected: true,
+                            ),
+                          ),
+                        )
+                  else
+                    const _EmptyConnectedState(),
                   const SizedBox(height: AppSpacing.xxl),
                   _FieldLabel(label: 'PLATAFORMAS DE SAÚDE'),
                   const SizedBox(height: AppSpacing.md),
                   const _PlatformsHelperText(),
                   const SizedBox(height: AppSpacing.md),
                   ..._kCompatibleProviders
-                      .where((p) => _isAvailableNow(p))
+                      .where((p) => _isAvailableNow(p) && !_providerConnected(p))
                       .map(
                         (p) => Padding(
                           padding: const EdgeInsets.only(bottom: AppSpacing.md),
@@ -106,6 +175,19 @@ class _HealthDevicesPageState extends State<HealthDevicesPage> {
       return;
     }
     analytics.logEvent('wearable_connect_granted', params: {'provider': p.name});
+    // State local: marca conectado imediatamente pra UI refletir antes do sync.
+    if (mounted) {
+      setState(() {
+        if (p.name == 'Apple Health') _appleHealthConnected = true;
+        if (p.name == 'Google Health Connect') _googleHealthConnected = true;
+      });
+    }
+    // Persiste hasWearable=true no perfil (PATCH /v1/users/me). Sem isso, na
+    // próxima reabertura da página o card volta pra "Conectar" porque o
+    // plugin (iOS) sempre retorna null em hasPermissions e o profile manda
+    // hasWearable=false como source de verdade. Best-effort — falha não
+    // bloqueia a UX local.
+    unawaited(_persistHasWearable());
     // Permissão OK → sincroniza últimos 7d em background.
     healthSyncService.syncSince().then((count) {
       if (context.mounted) {

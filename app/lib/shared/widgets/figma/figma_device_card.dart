@@ -125,28 +125,41 @@ class FigmaCompatibleDeviceCard extends StatelessWidget {
     required this.deviceName,
     required this.dataLabel,
     this.onConnect,
+    this.isConnected = false,
   });
 
   final IconData icon;
   final String deviceName;
   final String dataLabel; // e.g. "BPM · Sono · Passos"
   final VoidCallback? onConnect;
+  /// Quando true, mostra "✓ Conectado" em vez de "Conectar ↗" e desabilita o
+  /// tap. Source-of-truth fica fora do card (profile.hasWearable +
+  /// healthSyncService.hasPermissions()).
+  final bool isConnected;
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.runninPalette;
     return GestureDetector(
-      onTap: onConnect,
+      onTap: isConnected ? null : onConnect,
       behavior: HitTestBehavior.opaque,
       child: Container(
         padding: const EdgeInsets.all(13.718),
         decoration: BoxDecoration(
           color: FigmaColors.surfaceCard,
-          border: Border.all(color: FigmaColors.borderDefault, width: 1.041),
+          border: Border.all(
+            color: isConnected ? palette.primary.withValues(alpha: 0.5) : FigmaColors.borderDefault,
+            width: 1.041,
+          ),
           borderRadius: FigmaBorderRadius.zero,
         ),
         child: Row(
           children: [
-            Icon(icon, size: 22, color: FigmaColors.textSecondary),
+            Icon(
+              isConnected ? Icons.check_circle_outline : icon,
+              size: 22,
+              color: isConnected ? palette.primary : FigmaColors.textSecondary,
+            ),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
@@ -174,12 +187,12 @@ class FigmaCompatibleDeviceCard extends StatelessWidget {
               ),
             ),
             Text(
-              'Conectar  ↗',
+              isConnected ? '✓ Conectado' : 'Conectar  ↗',
               style: GoogleFonts.jetBrainsMono(
                 fontSize: 11,
                 letterSpacing: 0.55,
                 fontWeight: FontWeight.w500,
-                color: context.runninPalette.primary,
+                color: palette.primary,
               ),
             ),
           ],

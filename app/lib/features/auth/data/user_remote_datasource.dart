@@ -110,8 +110,11 @@ class UserProfile {
     wakeTime: j['wakeTime'] as String?,
     sleepTime: j['sleepTime'] as String?,
     coachIntroSeen: j['coachIntroSeen'] as bool?,
-    restingBpm: j['restingBpm'] as int?,
-    maxBpm: j['maxBpm'] as int?,
+    // Firestore JS SDK serializa todo Number como Double na wire — então
+    // mesmo um Math.round() server-side pode chegar como 45.0 no JSON.
+    // `as int?` estoura TypeError; (num).toInt() funciona em ambos casos.
+    restingBpm: (j['restingBpm'] as num?)?.toInt(),
+    maxBpm: (j['maxBpm'] as num?)?.toInt(),
     preRunAlerts: (j['preRunAlerts'] as Map<String, dynamic>?)
         ?.map((k, v) => MapEntry(k, v as bool)),
     coachPersonality: j['coachPersonality'] as String?,
