@@ -29,7 +29,7 @@ class CoachMessageLog {
     text: j['text'] as String,
     kmAtTime: (j['kmAtTime'] as num?)?.toDouble(),
     paceAtTime: j['paceAtTime'] as String?,
-    bpmAtTime: j['bpmAtTime'] as int?,
+    bpmAtTime: (j['bpmAtTime'] as num?)?.toInt(),
     createdAt: j['createdAt'] as String,
   );
 }

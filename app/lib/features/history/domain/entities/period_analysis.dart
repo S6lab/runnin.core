@@ -66,10 +66,10 @@ class PeriodAnalysisRun {
     return PeriodAnalysisRun(
       id: json['id'] as String,
       distanceM: (json['distanceM'] as num).toDouble(),
-      durationS: json['durationS'] as int,
+      durationS: (json['durationS'] as num).toInt(),
       avgPace: json['avgPace'] as String?,
-      avgBpm: json['avgBpm'] as int?,
-      maxBpm: json['maxBpm'] as int?,
+      avgBpm: (json['avgBpm'] as num?)?.toInt(),
+      maxBpm: (json['maxBpm'] as num?)?.toInt(),
       type: json['type'] as String,
       date: json['date'] as String,
     );

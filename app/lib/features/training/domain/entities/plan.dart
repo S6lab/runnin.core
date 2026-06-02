@@ -73,7 +73,9 @@ class PlanSession {
 
   factory PlanSession.fromJson(Map<String, dynamic> j) => PlanSession(
     id: j['id'] as String,
-    dayOfWeek: j['dayOfWeek'] as int,
+    // Firestore JS SDK serializa todo Number como Double na wire. `as int`
+    // estoura TypeError quando vem 1.0; (num).toInt() é idempotente.
+    dayOfWeek: (j['dayOfWeek'] as num).toInt(),
     type: j['type'] as String,
     distanceKm: (j['distanceKm'] as num).toDouble(),
     targetPace: j['targetPace'] as String?,
@@ -105,7 +107,7 @@ class PlanRestDayTip {
   });
 
   factory PlanRestDayTip.fromJson(Map<String, dynamic> j) => PlanRestDayTip(
-        dayOfWeek: j['dayOfWeek'] as int,
+        dayOfWeek: (j['dayOfWeek'] as num).toInt(),
         hydrationLiters: (j['hydrationLiters'] as num?)?.toDouble(),
         nutrition: j['nutrition'] as String?,
         focus: j['focus'] as String?,
@@ -131,7 +133,7 @@ class PlanRevisionLog {
   });
 
   factory PlanRevisionLog.fromJson(Map<String, dynamic> j) => PlanRevisionLog(
-        weekNumber: j['weekNumber'] as int,
+        weekNumber: (j['weekNumber'] as num).toInt(),
         revisedAt: j['revisedAt'] as String,
         trigger: j['trigger'] as String? ?? 'manual',
         summary: j['summary'] as String? ?? '',
@@ -178,7 +180,7 @@ class PlanWeek {
   bool get isSkeleton => detailLevel == 'skeleton';
 
   factory PlanWeek.fromJson(Map<String, dynamic> j) => PlanWeek(
-        weekNumber: j['weekNumber'] as int,
+        weekNumber: (j['weekNumber'] as num).toInt(),
         sessions: (j['sessions'] as List)
             .map((s) => PlanSession.fromJson(s as Map<String, dynamic>))
             .toList(),
@@ -256,7 +258,7 @@ class Plan {
         id: j['id'] as String,
         goal: j['goal'] as String,
         level: j['level'] as String,
-        weeksCount: j['weeksCount'] as int,
+        weeksCount: (j['weeksCount'] as num).toInt(),
         status: j['status'] as String,
         weeks: ((j['weeks'] as List?) ?? [])
             .map((w) => PlanWeek.fromJson(w as Map<String, dynamic>))
@@ -271,7 +273,7 @@ class Plan {
             .toList(),
         initialDeadlineAt: j['initialDeadlineAt'] as String?,
         raceDate: j['raceDate'] as String?,
-        raceDayOfWeek: j['raceDayOfWeek'] as int?,
+        raceDayOfWeek: (j['raceDayOfWeek'] as num?)?.toInt(),
         completedAt: j['completedAt'] as String?,
       );
 

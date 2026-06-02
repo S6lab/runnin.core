@@ -88,7 +88,7 @@ class UserProfile {
     name: j['name'] as String,
     level: j['level'] as String,
     goal: j['goal'] as String,
-    frequency: j['frequency'] as int,
+    frequency: (j['frequency'] as num).toInt(),
     birthDate: j['birthDate'] as String?,
     weight: j['weight'] as String?,
     height: j['height'] as String?,

@@ -318,7 +318,7 @@ class Run {
     targetPace: j['targetPace'] as String?,
     targetDistance: j['targetDistance'] as String?,
     distanceM: (j['distanceM'] as num).toDouble(),
-    durationS: j['durationS'] as int,
+    durationS: (j['durationS'] as num).toInt(),
     avgPace: j['avgPace'] as String?,
     avgBpm: (j['avgBpm'] as num?)?.toInt(),
     maxBpm: (j['maxBpm'] as num?)?.toInt(),

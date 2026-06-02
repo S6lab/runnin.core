@@ -38,7 +38,7 @@ class PlanRevision {
     freeText: j['freeText'] as String?,
     coachExplanation: j['coachExplanation'] as String,
     status: j['status'] as String,
-    weekIndex: j['weekIndex'] as int,
+    weekIndex: (j['weekIndex'] as num).toInt(),
     createdAt: j['createdAt'] as String,
     oldWeeksSnapshot: ((j['oldWeeksSnapshot'] as List?) ?? [])
         .map((w) => PlanWeek.fromJson(w as Map<String, dynamic>))

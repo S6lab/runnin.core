@@ -51,14 +51,14 @@ class BiometricSummary {
   });
 
   factory BiometricSummary.fromJson(Map<String, dynamic> j) => BiometricSummary(
-        windowDays: j['windowDays'] as int? ?? 7,
+        windowDays: (j['windowDays'] as num?)?.toInt() ?? 7,
         avgRestingBpm: j['avgRestingBpm'] as num?,
         maxBpm: j['maxBpm'] as num?,
         avgSleepHours: j['avgSleepHours'] as num?,
         totalSteps: j['totalSteps'] as num?,
         avgHrv: j['avgHrv'] as num?,
         latestWeight: j['latestWeight'] as num?,
-        sampleCount: j['sampleCount'] as int? ?? 0,
+        sampleCount: (j['sampleCount'] as num?)?.toInt() ?? 0,
       );
 }
 

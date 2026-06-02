@@ -29,14 +29,14 @@ class WeeklyReport {
 
   factory WeeklyReport.fromJson(Map<String, dynamic> j) => WeeklyReport(
     weekStart: j['weekStart'] as String,
-    sessionsPlanned: j['sessionsPlanned'] as int,
-    sessionsDone: j['sessionsDone'] as int,
+    sessionsPlanned: (j['sessionsPlanned'] as num).toInt(),
+    sessionsDone: (j['sessionsDone'] as num).toInt(),
     totalKm: (j['totalKm'] as num).toDouble(),
     plannedKm: (j['plannedKm'] as num).toDouble(),
     highlights: j['highlights'] as String?,
     coachAnalysis: j['coachAnalysis'] as String?,
     averagePace: j['averagePace'] != null ? (j['averagePace'] as num).toDouble() : null,
-    totalFreeSessions: j['totalFreeSessions'] as int? ?? 0,
+    totalFreeSessions: (j['totalFreeSessions'] as num?)?.toInt() ?? 0,
     freeKm: (j['freeKm'] as num?)?.toDouble() ?? 0.0,
     adaptationSuggestion: j['adaptationSuggestion'] as String?,
   );
