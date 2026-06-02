@@ -5,8 +5,14 @@
 # porque essa é a localização que o Codemagic varre por padrão.
 #
 # Workflows ATIVOS:
-#  - android-release  → AAB assinado + Play Store internal em tag v*
-#  - ios-release      → IPA assinado + TestFlight em tag v* (ver pré-reqs no bloco)
+#  - android-release  → AAB assinado + Play Store internal em push pra branch `release`
+#  - ios-release      → IPA assinado + TestFlight em push pra branch `release` (ver pré-reqs no bloco)
+#
+# Convenção do projeto: "branch = ambiente". Push em `release` deploya os
+# clients (Android Play Internal + iOS TestFlight) e o server prod (via
+# GitHub Action). Sem necessidade de tag — versão controlada via bump em
+# pubspec.yaml. Cada push em release dispara ambos os workflows; build
+# number do IPA/AAB vem de PROJECT_BUILD_NUMBER (Codemagic, incremental).
 #
 # Web foi REMOVIDO daqui (era web-staging em push pra main + web-production em
 # tag v*). Deploy do web Firebase Hosting agora é manual — usa o canal staging
@@ -52,9 +58,9 @@ workflows:
         - runnin_keystore
     triggering:
       events:
-        - tag
-      tag_patterns:
-        - pattern: 'v*'
+        - push
+      branch_patterns:
+        - pattern: 'release'
           include: true
     scripts:
       - name: Pub get
@@ -131,8 +137,8 @@ workflows:
   # e não estourar o limite (2-3) da Apple. Se o grupo `ios_signing` não for
   # global do time, replique a var neste app também.
   #
-  # Dispara na MESMA tag v* do android-release: uma tag → AAB no Play internal
-  # + IPA no TestFlight.
+  # Dispara no MESMO push em `release` do android-release: 1 push → AAB no
+  # Play internal + IPA no TestFlight.
   ios-release:
     name: iOS Release (TestFlight)
     instance_type: mac_mini_m1
@@ -147,9 +153,9 @@ workflows:
         <<: *shared_vars
     triggering:
       events:
-        - tag
-      tag_patterns:
-        - pattern: 'v*'
+        - push
+      branch_patterns:
+        - pattern: 'release'
           include: true
     scripts:
       - name: Pub get
