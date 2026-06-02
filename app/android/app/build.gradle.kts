@@ -67,8 +67,9 @@ flutter {
 dependencies {
     // BPM realtime via Wear OS pareado durante a Run ativa.
     // Plugin nativo (WorkoutRealtimePlugin) usa MeasureClient pra streaming
-    // 1Hz de heart rate. API estável desde 1.0. Runtime guard pra API >= 30
-    // (Android 11) no plugin — fallback silencioso em devices antigos.
-    implementation("androidx.health:health-services-client:1.1.0-alpha05")
+    // 1Hz de heart rate. RC02 é a versão mais nova publicada (Maven Google);
+    // API estável desde 1.0. Runtime guard pra API >= 30 (Android 11) no
+    // plugin — fallback silencioso em devices antigos.
+    implementation("androidx.health:health-services-client:1.1.0-rc02")
     implementation("com.google.guava:guava:33.4.0-android")
 }
