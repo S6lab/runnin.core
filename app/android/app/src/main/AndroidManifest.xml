@@ -11,6 +11,12 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- Microphone (Coach Live multimodal) -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- BPM realtime durante Run ativa (Health Services + MeasureClient).
+         BODY_SENSORS é exigido pelo MeasureClient pra heart rate live.
+         Sem BODY_SENSORS_BACKGROUND (escopo phone-only com FG service GPS
+         mantém vivo). Sem BLUETOOTH_* (Health Services abstrai BLE). -->
+    <uses-permission android:name="android.permission.BODY_SENSORS" />
+    <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
     <!-- Google Health Connect — leitura -->
     <uses-permission android:name="android.permission.health.READ_HEART_RATE" />
     <uses-permission android:name="android.permission.health.READ_RESTING_HEART_RATE" />

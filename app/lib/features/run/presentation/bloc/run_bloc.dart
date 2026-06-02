@@ -9,6 +9,7 @@ import 'package:runnin/features/run/data/datasources/run_local_datasource.dart';
 import 'package:runnin/features/run/data/datasources/run_remote_datasource.dart';
 import 'package:runnin/features/run/data/datasources/run_coach_remote_datasource.dart';
 import 'package:runnin/features/run/data/live_run_coach_session.dart';
+import 'package:runnin/features/run/data/workout_realtime_service.dart';
 import 'package:runnin/features/coach_live/data/coach_context_manager.dart';
 import 'package:runnin/features/run/domain/entities/run.dart';
 import 'package:runnin/features/training/data/datasources/plan_remote_datasource.dart';
@@ -69,6 +70,14 @@ class ResumeRun extends RunEvent {}
 /// run e marca o flag pra UI mostrar o dialog de continuar/encerrar.
 class _NoMovementDetected extends RunEvent {}
 
+/// Tick interno disparado por cada sample BPM emitido pelo
+/// [WorkoutRealtimeService] (1Hz quando há Watch/Wear OS pareado). Null
+/// quando a fonte some (Watch desligado, permission revogada).
+class _BpmTick extends RunEvent {
+  final int? value;
+  _BpmTick(this.value);
+}
+
 /// Limpa o flag do dialog de "parado" (ex: ao escolher continuar/encerrar).
 class DismissNoMovementPrompt extends RunEvent {}
 
@@ -105,6 +114,12 @@ class RunState {
   /// True quando a detecção de "parado" (sem deslocamento em 30s) pausou a
   /// run e a UI deve exibir o dialog de continuar/encerrar.
   final bool noMovementPrompt;
+  /// BPM "ao vivo" do wearable durante a corrida ativa. Alimentado pelo
+  /// [WorkoutRealtimeService] (HKWorkoutSession iOS / HealthServicesClient
+  /// Android) — null sem wearable conectado / fora da run.
+  final int? currentBpm;
+  /// BPM máximo visto durante a corrida atual. Reset em _onStart.
+  final int? maxBpmSeen;
 
   const RunState({
     this.status = RunStatus.idle,
@@ -123,6 +138,8 @@ class RunState {
     this.completedRun,
     this.splits = const [],
     this.noMovementPrompt = false,
+    this.currentBpm,
+    this.maxBpmSeen,
   });
 
   RunState copyWith({
@@ -142,6 +159,8 @@ class RunState {
     Run? completedRun,
     List<KmSplit>? splits,
     bool? noMovementPrompt,
+    int? currentBpm,
+    int? maxBpmSeen,
   }) => RunState(
     status: status ?? this.status,
     runId: runId ?? this.runId,
@@ -159,6 +178,8 @@ class RunState {
     completedRun: completedRun ?? this.completedRun,
     splits: splits ?? this.splits,
     noMovementPrompt: noMovementPrompt ?? this.noMovementPrompt,
+    currentBpm: currentBpm ?? this.currentBpm,
+    maxBpmSeen: maxBpmSeen ?? this.maxBpmSeen,
   );
 
   String get formattedDistance => '${(distanceM / 1000).toStringAsFixed(2)}km';
@@ -263,6 +284,14 @@ class RunBloc extends Bloc<RunEvent, RunState> {
   bool _stallCueFired = false;
   double? _lastKmPace; // pace médio do km anterior pra splits
 
+  // BPM realtime (workout_realtime_service). Subscription ativa durante
+  // active+paused; cancela no complete/abandon. Samples acumulados por km
+  // pra calcular kmAvgBpm que vai pro coach cue km_reached. _userMaxBpm
+  // carregado em _onStart do profile pra gatear o cue high_bpm.
+  StreamSubscription<int?>? _bpmSub;
+  final List<int> _kmBpmSamples = [];
+  int? _userMaxBpm;
+
   // Native: GPS preciso, rejeita pontos ruins.
   // Web: browser usa WiFi/IP triangulation com accuracy 100-5000m+ —
   // se rejeitarmos com base no native threshold, mapa nunca abre.
@@ -282,6 +311,7 @@ class RunBloc extends Bloc<RunEvent, RunState> {
     on<PauseRun>(_onPause);
     on<ResumeRun>(_onResume);
     on<_NoMovementDetected>(_onNoMovementDetected);
+    on<_BpmTick>(_onBpmTick);
     on<DismissNoMovementPrompt>(
       (e, emit) => emit(state.copyWith(noMovementPrompt: false)),
     );
@@ -318,8 +348,20 @@ class RunBloc extends Bloc<RunEvent, RunState> {
           }
           _alertPrefs = merged;
         }
+        // maxBpm é o threshold pro coach cue `high_bpm` (92% disso).
+        // Sem profile/maxBpm, o cue é skip silenciosamente — não estimamos
+        // por 220-age aqui pra evitar avisos errados em quem nunca testou.
+        _userMaxBpm = profile?.maxBpm;
       } catch (_) {/* mantém defaults */}
     }
+    // Reset acumuladores de BPM por km e inicia stream nativo. Idempotente —
+    // se a service estiver active de uma run anterior, é no-op.
+    _kmBpmSamples.clear();
+    _bpmSub?.cancel();
+    _bpmSub = workoutRealtimeService.bpmStream.listen(
+      (v) => add(_BpmTick(v)),
+    );
+    unawaited(workoutRealtimeService.start());
     // ignore: avoid_print
     print('coach.alert_prefs.resolved=$_alertPrefs');
     _lastCueAt.clear();
@@ -676,6 +718,14 @@ class RunBloc extends Bloc<RunEvent, RunState> {
       // "1 km em X min" + server estima calorias do km (MET × peso × tempo).
       final kmDurationS = state.elapsedS - _lastKmStartElapsedS;
       _lastKmStartElapsedS = state.elapsedS;
+      // BPM médio dos samples desse km (acumulados em _onBpmTick).
+      // Vazio quando sem wearable conectado — kmAvgBpm fica null e o coach
+      // cue omite a linha "frequência cardíaca X".
+      int? kmAvgBpm;
+      if (_kmBpmSamples.isNotEmpty) {
+        kmAvgBpm = (_kmBpmSamples.reduce((a, b) => a + b) / _kmBpmSamples.length).round();
+      }
+      _kmBpmSamples.clear();
       // Cue 1: km_reached (info imediato sobre o km que acabou).
       // _lastCoachKm já dedup (1x por km), sem cooldown adicional.
       if (_alertPrefs['kmAlert'] == true) {
@@ -688,6 +738,7 @@ class RunBloc extends Bloc<RunEvent, RunState> {
           elapsedS: state.elapsedS,
           currentPaceMinKm: smoothedPace,
           kmDurationS: kmDurationS,
+          kmAvgBpm: kmAvgBpm,
           elevationGainM:
               updatedSplits.isNotEmpty ? updatedSplits.last.elevationGain : null,
         ));
@@ -813,9 +864,9 @@ class RunBloc extends Bloc<RunEvent, RunState> {
         }
       }
     }
-    // TODO highBpm: depende de stream do wearable (Bluetooth/HealthKit).
-    // Quando stream chegar, gate similar: if (_alertPrefs['highBpm'] &&
-    // bpm > maxBpm * 0.92) _requestCoachCue(event: 'high_bpm', ...);
+    // BPM live + cue high_bpm agora vivem em _onBpmTick — alimentado pelo
+    // workoutRealtimeService (HKWorkoutSession iOS / HealthServicesClient
+    // Android). Sample chega a ~1Hz quando há wearable pareado.
 
     // Salva localmente (local-first)
     if (state.runId != null) {
@@ -844,6 +895,9 @@ class RunBloc extends Bloc<RunEvent, RunState> {
   Future<void> _onComplete(CompleteRun event, Emitter<RunState> emit) async {
     if (state.runId == null) return;
     _pendingRotationTrigger = null;
+    _bpmSub?.cancel();
+    _bpmSub = null;
+    unawaited(workoutRealtimeService.stop());
     if (state.distanceM >= stationaryDistanceThresholdM) {
       _requestCoachCue(event: 'finish');
       // Mantém a sessão Live aberta até o resumo terminar de tocar (premium).
@@ -902,8 +956,46 @@ class RunBloc extends Bloc<RunEvent, RunState> {
     }
   }
 
+  /// Cada sample BPM vindo do wearable. Acumula pro split do km (kmAvgBpm),
+  /// atualiza maxBpmSeen, emite o state pra UI consumir, e dispara o cue
+  /// high_bpm quando aplicável (substitui o TODO histórico de high_bpm
+  /// que aguardava stream do wearable).
+  void _onBpmTick(_BpmTick event, Emitter<RunState> emit) {
+    final value = event.value;
+    if (value != null && value > 0) {
+      _kmBpmSamples.add(value);
+      final newMax = (state.maxBpmSeen == null || value > state.maxBpmSeen!)
+          ? value
+          : state.maxBpmSeen!;
+      emit(state.copyWith(currentBpm: value, maxBpmSeen: newMax));
+
+      // high_bpm cue — gate por alertPref + maxBpm declarado + cooldown 90s.
+      // Sem maxBpm não dispara (evita falsos positivos com estimativa 220-age).
+      // Só roda quando run está ativa (não em paused/idle).
+      if (state.status == RunStatus.active &&
+          _alertPrefs['highBpm'] == true &&
+          _userMaxBpm != null &&
+          value > (_userMaxBpm! * 0.92) &&
+          _cooldownOk('high_bpm', seconds: 90)) {
+        // Reusa o slot `kmAvgBpm` pra passar o BPM atual; o coach
+        // telemetryText cita o valor diretamente na branch high_bpm.
+        unawaited(_requestCoachCue(
+          event: 'high_bpm',
+          kmAvgBpm: value,
+        ));
+        _lastCueAt['high_bpm'] = DateTime.now().millisecondsSinceEpoch;
+      }
+    } else {
+      // Source caiu (Watch desligado, permission revogada). Mantém o último
+      // value no state pra não piscar pra '—' por um glitch isolado.
+    }
+  }
+
   void _onAbandon(AbandonRun event, Emitter<RunState> emit) {
     _stop();
+    _bpmSub?.cancel();
+    _bpmSub = null;
+    unawaited(workoutRealtimeService.stop());
     _pendingRotationTrigger = null;
     if (_isPremium) {
       unawaited(_coachSession.close());
@@ -918,6 +1010,8 @@ class RunBloc extends Bloc<RunEvent, RunState> {
 
   /// Pause: para timer + GPS poll mas mantém runId, distância e elapsed.
   /// Status vira `paused` — UI mostra botão RETOMAR. Sem reset de state.
+  /// BPM stream do wearable é pausado nativamente (workout session segue
+  /// merged, sem fragmentar em N workouts na Activity Ring).
   void _onPause(PauseRun event, Emitter<RunState> emit) {
     _timer?.cancel();
     _gpsPollTimer?.cancel();
@@ -933,6 +1027,7 @@ class RunBloc extends Bloc<RunEvent, RunState> {
     _scheduledAnalysis = null;
     _stallCheckTimer = null;
     _coachRotationSafetyTimer = null;
+    unawaited(workoutRealtimeService.pause());
     emit(state.copyWith(status: RunStatus.paused));
   }
 
@@ -954,13 +1049,16 @@ class RunBloc extends Bloc<RunEvent, RunState> {
     _scheduledAnalysis = null;
     _stallCheckTimer = null;
     _coachRotationSafetyTimer = null;
+    unawaited(workoutRealtimeService.pause());
     emit(state.copyWith(status: RunStatus.paused, noMovementPrompt: true));
   }
 
   /// Resume: re-inicia timer + GPS poll mantendo elapsed/distância atuais.
   /// Não dispara nova saudação (coach só fala no INICIAR original).
+  /// BPM stream do wearable é retomado nativamente (mesma session HK).
   Future<void> _onResume(ResumeRun event, Emitter<RunState> emit) async {
     if (state.status != RunStatus.paused) return;
+    unawaited(workoutRealtimeService.resume());
     emit(state.copyWith(status: RunStatus.active));
     _timer = Timer.periodic(
       const Duration(seconds: 1),
@@ -1011,6 +1109,9 @@ class RunBloc extends Bloc<RunEvent, RunState> {
   Future<void> close() {
     _stop();
     _coachTranscriptSub?.cancel();
+    _bpmSub?.cancel();
+    _bpmSub = null;
+    unawaited(workoutRealtimeService.stop());
     if (_isPremium) {
       unawaited(_coachSession.close());
       _coachCtx.dispose();
@@ -1271,6 +1372,8 @@ class RunBloc extends Bloc<RunEvent, RunState> {
         return 'Coach, terminei a fase atual do roteiro. Como fui? $totals';
       case 'motivation':
         return 'Coach, como estou indo? $totals Me dá um gás pra manter a constância.';
+      case 'high_bpm':
+        return 'Coach, meu BPM tá em $kmAvgBpm — acima do meu limite confortável. Devo segurar o ritmo?';
       case 'no_movement':
         return 'Coach, apertei iniciar mas ainda não comecei a me mexer. Tudo certo pra largar?';
       case 'finish':

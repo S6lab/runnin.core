@@ -9,7 +9,6 @@ import 'package:go_router/go_router.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:runnin/core/audio/coach_audio_player.dart';
 import 'package:runnin/core/theme/app_palette.dart';
-import 'package:runnin/features/biometrics/data/health_sync_service.dart';
 import 'package:runnin/features/run/domain/entities/run.dart' show GpsPoint;
 import 'package:runnin/features/run/presentation/bloc/run_bloc.dart';
 import 'package:runnin/features/run/presentation/widgets/gps_permission_modal.dart';
@@ -1224,36 +1223,9 @@ class _ActiveStatsLayout extends StatefulWidget {
 }
 
 class _ActiveStatsLayoutState extends State<_ActiveStatsLayout> {
-  // Pull do BPM mais recente do Apple Health / Health Connect a cada 10s
-  // enquanto a tela ativa. 10s é o sweet spot: cobre o ciclo de sync
-  // típico Watch → iPhone (~5-15s) e reduz lag percebido vs polling de 15s
-  // sem 3× mais queries (que 5s exigiria). Pra eliminar o lag por completo
-  // o caminho é observer query / Health Connect subscribe — plugin atual
-  // (health 13.x) não expõe, então mantemos polling até upgrade.
-  static const _bpmPollInterval = Duration(seconds: 10);
-  Timer? _bpmTimer;
-  int? _liveBpm;
-
-  @override
-  void initState() {
-    super.initState();
-    if (healthSyncService.isSupported) {
-      _pollBpm();
-      _bpmTimer = Timer.periodic(_bpmPollInterval, (_) => _pollBpm());
-    }
-  }
-
-  @override
-  void dispose() {
-    _bpmTimer?.cancel();
-    super.dispose();
-  }
-
-  Future<void> _pollBpm() async {
-    final bpm = await healthSyncService.latestBpm();
-    if (!mounted) return;
-    if (bpm != _liveBpm) setState(() => _liveBpm = bpm);
-  }
+  // BPM live agora vem do RunBloc.state.currentBpm — alimentado pelo
+  // workoutRealtimeService (HKWorkoutSession iOS / HealthServicesClient
+  // Android) a ~1Hz. Substitui o polling de 10s ao plugin `health`.
 
   String _bpmZone(int? bpm) {
     if (bpm == null) return 'Z—';
@@ -1272,10 +1244,11 @@ class _ActiveStatsLayoutState extends State<_ActiveStatsLayout> {
     final initialType = widget.initialType;
     final runType = state.runType?.isNotEmpty == true ? state.runType! : initialType;
     final paceVal = state.formattedPace == '--:--' ? '--:--' : state.formattedPace;
-    // BPM live: alimentado pelo timer de _pollBpm (Apple Health / Health
-    // Connect, leitura dos últimos 3min). Null quando sem wearable → '—'.
+    // BPM live: vem direto do RunBloc.state.currentBpm — alimentado pelo
+    // workoutRealtimeService (~1Hz quando há Watch / Wear OS pareado). Sem
+    // wearable, fica null → célula mostra '—'.
     // Kcal estimado simples: distância (km) × 60 (média runner ~60 kcal/km).
-    final int? bpm = _liveBpm;
+    final int? bpm = state.currentBpm;
     final kcal = ((state.distanceM / 1000) * 60).round();
 
     // Pace ACUMULADO por km (tempo total até o km / nº de km), em mm:ss/km.

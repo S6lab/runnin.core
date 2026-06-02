@@ -12,5 +12,9 @@ import UIKit
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+    // Plugin custom (não vai pelo pubspec) — registra manualmente aqui.
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "WorkoutRealtimePlugin") {
+      WorkoutRealtimePlugin.register(with: registrar)
+    }
   }
 }
