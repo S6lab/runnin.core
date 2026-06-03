@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:runnin/core/logger/logger.dart';
 import 'package:runnin/core/network/api_client.dart';
 
 /// Snapshot de clima retornado pelo /v1/weather/current. Strings null
@@ -103,8 +104,11 @@ class LocationWeatherController extends ChangeNotifier {
       );
       final data = res.data as Map<String, dynamic>;
       _city = data['city'] as String?;
-    } catch (_) {
-      // Silencioso — sem cidade não quebra o header.
+    } catch (e, st) {
+      // UI fica sem cidade (header funciona normal), mas o erro vira
+      // breadcrumb pro Crashlytics — debugamos 404/401/timeout depois.
+      Logger.warn('location.fetch_city_failed', context: {'err': '$e'});
+      Logger.error('location.fetch_city_failed', e, st);
     }
   }
 
@@ -117,8 +121,9 @@ class LocationWeatherController extends ChangeNotifier {
       );
       if (res.statusCode == 204 || res.data == null) return;
       _weather = WeatherSnapshot.fromJson(res.data as Map<String, dynamic>);
-    } catch (_) {
-      // Silencioso — sem clima a strip não aparece.
+    } catch (e, st) {
+      Logger.warn('location.fetch_weather_failed', context: {'err': '$e'});
+      Logger.error('location.fetch_weather_failed', e, st);
     }
   }
 }

@@ -92,8 +92,17 @@
 	<string>O runnin usa o microfone pro Coach Live, onde você conversa por voz com o assistente AI durante e fora do treino.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Usada para que você possa definir sua foto de perfil.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>O runnin salva fotos das suas corridas (cards de share) na sua galeria pra você compartilhar quando quiser.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>O runnin abre a câmera pra você fotografar exames médicos (laudos, ergometria, sangue) e enviar pra análise do coach.</string>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>instagram-stories</string>
+		<string>whatsapp</string>
+		<string>twitter</string>
+		<string>fb</string>
+	</array>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>

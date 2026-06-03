@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
+import 'package:runnin/core/units/relative_period_label.dart';
 import 'package:runnin/features/history/data/period_analysis_remote_datasource.dart';
 import 'package:runnin/features/history/data/stats_remote_datasource.dart';
 import 'package:runnin/features/history/domain/entities/period_analysis.dart';
@@ -90,14 +91,16 @@ class _HistoryPageState extends State<HistoryPage> {
     }
   }
 
-  String _fmtBR(DateTime d) =>
-      '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
-
   String _fmtRangeLabel() {
-    final r = _periodRange();
-    // end é exclusivo — pro label mostramos o último dia inclusivo.
-    final endInclusive = r.end.subtract(const Duration(days: 1));
-    return 'DE ${_fmtBR(r.start)} ATÉ ${_fmtBR(endInclusive)}';
+    // Label relativo ("ESTA SEMANA", "MÊS PASSADO", "HÁ N TRIMESTRES")
+    // alimentado por _period + _periodCursor — fallback ao formato
+    // DE..ATÉ antigo se algo inesperado acontecer.
+    final kind = switch (_period) {
+      _Period.week => PeriodKind.week,
+      _Period.month => PeriodKind.month,
+      _Period.threeMonths => PeriodKind.threeMonths,
+    };
+    return formatRelativePeriod(kind, _periodCursor);
   }
 
   @override

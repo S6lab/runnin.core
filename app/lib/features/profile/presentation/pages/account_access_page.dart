@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl_phone_field/intl_phone_field.dart';
+import 'package:runnin/core/logger/logger.dart';
 import 'package:runnin/core/network/api_client.dart';
 import 'package:runnin/core/router/app_router.dart';
 import 'package:runnin/core/theme/app_palette.dart';
@@ -59,6 +60,7 @@ class _AccountAccessPageState extends State<AccountAccessPage> {
       _error = null;
       _message = null;
     });
+    Logger.info('account_access.send_code.start', context: {'platform': kIsWeb ? 'web' : 'native'});
     try {
       final auth = FirebaseAuth.instance;
       if (kIsWeb) {
@@ -68,6 +70,7 @@ class _AccountAccessPageState extends State<AccountAccessPage> {
         await auth.verifyPhoneNumber(
           phoneNumber: phone,
           verificationCompleted: (cred) async {
+            Logger.info('account_access.verification_completed_auto');
             try {
               await auth.currentUser?.updatePhoneNumber(cred);
               if (mounted) {
@@ -79,11 +82,13 @@ class _AccountAccessPageState extends State<AccountAccessPage> {
                   _smsCtrl.clear();
                 });
               }
-            } catch (e) {
+            } catch (e, st) {
+              Logger.error('account_access.update_phone_failed', e, st);
               if (mounted) setState(() => _error = '$e');
             }
           },
           verificationFailed: (e) {
+            Logger.error('account_access.verification_failed', e, StackTrace.current, {'code': e.code});
             if (mounted) {
               setState(() {
                 _error = 'Erro: ${e.code}';
@@ -92,6 +97,7 @@ class _AccountAccessPageState extends State<AccountAccessPage> {
             }
           },
           codeSent: (vid, _) {
+            Logger.info('account_access.code_sent');
             if (mounted) {
               setState(() {
                 _verificationId = vid;
@@ -106,9 +112,11 @@ class _AccountAccessPageState extends State<AccountAccessPage> {
         );
         return;
       }
-    } on FirebaseAuthException catch (e) {
+    } on FirebaseAuthException catch (e, st) {
+      Logger.error('account_access.firebase_auth_exception', e, st, {'code': e.code});
       if (mounted) setState(() => _error = 'Erro: ${e.code}');
-    } catch (e) {
+    } catch (e, st) {
+      Logger.error('account_access.send_code_failed', e, st);
       if (mounted) setState(() => _error = '$e');
     } finally {
       if (mounted) setState(() => _busy = false);

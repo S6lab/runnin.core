@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 import 'dart:math';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/widgets.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:runnin/core/audio/telemetry_tts.dart';
@@ -198,7 +200,7 @@ class RunState {
 }
 
 // ── BLoC ─────────────────────────────────────────────────────────────────────
-class RunBloc extends Bloc<RunEvent, RunState> {
+class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
   final _remote = RunRemoteDatasource();
   final _userRemote = UserRemoteDatasource();
   // Contexto do coach sobrevive à rotação/queda da sessão Live (source-of-truth
@@ -292,6 +294,47 @@ class RunBloc extends Bloc<RunEvent, RunState> {
   final List<int> _kmBpmSamples = [];
   int? _userMaxBpm;
 
+  // Lifecycle: true quando o app está em background (paused/inactive/hidden).
+  // Usado pra suprimir TTS/voice em bg (não brigar com Spotify) e pra logger.
+  bool _appInBackground = false;
+  bool _observerRegistered = false;
+
+  /// Settings de localização específicas pra Run ativa. iOS exige
+  /// `allowBackgroundLocationUpdates` + `pauseLocationUpdatesAutomatically:
+  /// false` + `activityType: .fitness` pra GPS continuar quando o app
+  /// minimiza (sem isso, Apple suspende em ~10s e o app trava ao voltar).
+  /// Android usa ForegroundNotificationConfig pra o service não ser morto
+  /// pelo doze mode. Web: sem suporte de background, usa settings simples.
+  LocationSettings _runLocationSettings() {
+    if (Platform.isIOS || Platform.isMacOS) {
+      return AppleSettings(
+        accuracy: LocationAccuracy.high,
+        distanceFilter: 5,
+        activityType: ActivityType.fitness,
+        pauseLocationUpdatesAutomatically: false,
+        allowBackgroundLocationUpdates: true,
+        showBackgroundLocationIndicator: true,
+      );
+    }
+    if (Platform.isAndroid) {
+      return AndroidSettings(
+        accuracy: LocationAccuracy.high,
+        distanceFilter: 5,
+        foregroundNotificationConfig: const ForegroundNotificationConfig(
+          notificationTitle: 'runnin · corrida em andamento',
+          notificationText:
+              'Mantemos o GPS ativo pra preservar seu trace mesmo com a tela bloqueada.',
+          enableWakeLock: true,
+        ),
+      );
+    }
+    // Fallback (web, desktop sem perfil específico).
+    return const LocationSettings(
+      accuracy: LocationAccuracy.high,
+      distanceFilter: 5,
+    );
+  }
+
   // Native: GPS preciso, rejeita pontos ruins.
   // Web: browser usa WiFi/IP triangulation com accuracy 100-5000m+ —
   // se rejeitarmos com base no native threshold, mapa nunca abre.
@@ -362,6 +405,14 @@ class RunBloc extends Bloc<RunEvent, RunState> {
       (v) => add(_BpmTick(v)),
     );
     unawaited(workoutRealtimeService.start());
+
+    // Lifecycle observer pra detectar app→background. Sem isso, GPS e bpmSub
+    // continuam ativos (LocationSettings já garante), mas timers UI ficariam
+    // ligados desnecessariamente — pausamos só esses na transição.
+    if (!_observerRegistered) {
+      WidgetsBinding.instance.addObserver(this);
+      _observerRegistered = true;
+    }
     // ignore: avoid_print
     print('coach.alert_prefs.resolved=$_alertPrefs');
     _lastCueAt.clear();
@@ -588,16 +639,11 @@ class RunBloc extends Bloc<RunEvent, RunState> {
         });
       } else {
         _gpsSub = Geolocator.getPositionStream(
-          locationSettings: const LocationSettings(
-            accuracy: LocationAccuracy.high,
-            distanceFilter: 5,
-          ),
+          locationSettings: _runLocationSettings(),
         ).listen((pos) => add(_GpsUpdate(pos)));
 
         Geolocator.getCurrentPosition(
-          locationSettings: const LocationSettings(
-            accuracy: LocationAccuracy.high,
-          ),
+          locationSettings: _runLocationSettings(),
         ).then((pos) {
           if (!isClosed) add(_GpsUpdate(pos));
         }).catchError((_) {});
@@ -1078,10 +1124,7 @@ class RunBloc extends Bloc<RunEvent, RunState> {
       });
     } else {
       _gpsSub = Geolocator.getPositionStream(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high,
-          distanceFilter: 5,
-        ),
+        locationSettings: _runLocationSettings(),
       ).listen((pos) => add(_GpsUpdate(pos)));
     }
   }
@@ -1103,6 +1146,42 @@ class RunBloc extends Bloc<RunEvent, RunState> {
     _scheduledAnalysis = null;
     _stallCheckTimer = null;
     _coachRotationSafetyTimer = null;
+    if (_observerRegistered) {
+      WidgetsBinding.instance.removeObserver(this);
+      _observerRegistered = false;
+    }
+  }
+
+  /// Hook do WidgetsBindingObserver — dispara quando o app muda de estado
+  /// (foreground ↔ background). Durante run ativa, queremos manter GPS, BPM e
+  /// timer principal vivos (LocationSettings + foreground service garantem),
+  /// mas pausar timers UI puros (motivation, stall, coach rotation safety)
+  /// pra não desperdiçar CPU/bateria com nada renderizando.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState lifecycle) {
+    super.didChangeAppLifecycleState(lifecycle);
+    final goingBg = lifecycle == AppLifecycleState.paused ||
+        lifecycle == AppLifecycleState.inactive ||
+        lifecycle == AppLifecycleState.hidden;
+    if (goingBg && !_appInBackground) {
+      _appInBackground = true;
+      // ignore: avoid_print
+      print('run.lifecycle.background state=$lifecycle');
+      _motivationTimer?.cancel();
+      _motivationTimer = null;
+      _stallCheckTimer?.cancel();
+      _stallCheckTimer = null;
+      _coachRotationSafetyTimer?.cancel();
+      _coachRotationSafetyTimer = null;
+    } else if (lifecycle == AppLifecycleState.resumed && _appInBackground) {
+      _appInBackground = false;
+      // ignore: avoid_print
+      print('run.lifecycle.foreground');
+      if (state.status == RunStatus.active) {
+        _startMotivationTimer();
+        _startCoachRotationSafetyTimer();
+      }
+    }
   }
 
   @override

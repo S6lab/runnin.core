@@ -7,6 +7,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:gemini_live/gemini_live.dart';
 import 'package:runnin/core/audio/coach_audio_player.dart';
+import 'package:runnin/core/logger/logger.dart';
 import 'package:runnin/core/network/api_client.dart';
 import 'package:runnin/features/coach_live/data/coach_context_manager.dart';
 import 'package:runnin/features/coach_live/data/coach_live_beacon_remote_datasource.dart';
@@ -226,15 +227,20 @@ class LiveRunCoachSession {
           callbacks: LiveCallbacks(
             onMessage: _onMessage,
             onError: (err, _) {
-              // ignore: avoid_print
-              print('run.coach.live.error: $err');
+              Logger.error('coach.live.error', err, StackTrace.current, {
+                'is_rotation': isRotation,
+              });
               unawaited(_beacon('ws_error', error: err.toString()));
               _maybeScheduleReconnect(err: err);
             },
             onClose: (code, reason) {
               final is1008 = code == 1008;
-              // ignore: avoid_print
-              print('run.coach.live.close code=$code reason=$reason is1008=$is1008 sysInstrLen=${cfg.systemInstruction?.length ?? 0}');
+              Logger.warn('coach.live.close', context: {
+                'code': code,
+                'reason': reason,
+                'is1008': is1008,
+                'sys_instr_len': cfg.systemInstruction?.length ?? 0,
+              });
               _open = false;
               unawaited(_beacon('ws_close', code: code, reason: reason));
               _maybeScheduleReconnect(code: code, reason: reason);
@@ -244,8 +250,11 @@ class LiveRunCoachSession {
       );
       _open = true;
       _session = newSession;
-      // ignore: avoid_print
-      print('run.coach.live.open_ok model=${cfg.model} sysInstrLen=${cfg.systemInstruction?.length ?? 0} rotation=$isRotation');
+      Logger.info('coach.live.open_ok', context: {
+        'model': cfg.model,
+        'sys_instr_len': cfg.systemInstruction?.length ?? 0,
+        'rotation': isRotation,
+      });
       unawaited(_beacon('open_ok'));
       // Injeta preamble imediatamente (rotação OU reconexão pós-queda).
       if (preamble != null && preamble.isNotEmpty) {

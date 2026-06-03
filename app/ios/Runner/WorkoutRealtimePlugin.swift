@@ -1,6 +1,11 @@
 import Flutter
 import HealthKit
+import OSLog
 import UIKit
+
+/// Logger subsystem dedicado pra rastrear HR streaming no Console.app durante
+/// debug em device. Filtrar via `subsystem:ai.runnin.workout category:hr`.
+private let hrLog = OSLog(subsystem: "ai.runnin.workout", category: "hr")
 
 /// Plugin nativo iOS pra BPM realtime durante a Run ativa.
 ///
@@ -39,6 +44,9 @@ import UIKit
   private var eventSink: FlutterEventSink?
   private var noSourceTimer: Timer?
   private var receivedAtLeastOne = false
+  // Throttling do os_log: 1 a cada 5 samples pra não inundar Console.app
+  // durante runs longos (Apple Watch emite ~1Hz).
+  private var sampleLogCounter = 0
 
   public static func register(with registrar: FlutterPluginRegistrar) {
     let instance = WorkoutRealtimePlugin()
@@ -109,9 +117,12 @@ import UIKit
       result(nil)
       return
     }
+    os_log("auth_request_start", log: hrLog, type: .info)
     healthStore.requestAuthorization(toShare: [], read: [hrType]) { [weak self] granted, error in
       guard let self = self else { return }
       if !granted || error != nil {
+        os_log("auth_denied granted=%d err=%{public}@", log: hrLog, type: .error,
+               granted ? 1 : 0, error?.localizedDescription ?? "nil")
         self.emit([
           "type": "error",
           "code": "permission_denied",
@@ -120,6 +131,7 @@ import UIKit
         DispatchQueue.main.async { result(nil) }
         return
       }
+      os_log("auth_granted", log: hrLog, type: .info)
       DispatchQueue.main.async {
         self.startQueryInternal(hrType: hrType, result: result)
       }
@@ -128,6 +140,9 @@ import UIKit
 
   private func startQueryInternal(hrType: HKQuantityType, result: @escaping FlutterResult) {
     receivedAtLeastOne = false
+    sampleLogCounter = 0
+    os_log("query_started anchor=%{public}@", log: hrLog, type: .info,
+           lastAnchor == nil ? "fresh" : "resumed")
 
     // Predicado: samples a partir de AGORA (não puxa histórico). Anchor inicial
     // nil — o primeiro resultHandler vem com baseline (0 samples se nada novo).
@@ -218,11 +233,15 @@ import UIKit
     let latest = quantities.max(by: { $0.endDate < $1.endDate })
     guard let sample = latest else { return }
     let unit = HKUnit.count().unitDivided(by: .minute())
-    let bpm = sample.quantity.doubleValue(for: unit)
+    let bpmValue = Int(sample.quantity.doubleValue(for: unit).rounded())
+    sampleLogCounter += 1
+    if sampleLogCounter % 5 == 1 {
+      os_log("hr_sample bpm=%d count=%d", log: hrLog, type: .info, bpmValue, quantities.count)
+    }
     receivedAtLeastOne = true
     emit([
       "type": "bpm",
-      "value": Int(bpm.rounded()),
+      "value": bpmValue,
       "ts": Int(sample.endDate.timeIntervalSince1970 * 1000),
     ])
   }

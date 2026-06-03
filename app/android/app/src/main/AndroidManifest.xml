@@ -84,6 +84,9 @@
         <!-- Health Connect: necessário pra detectar o app via PackageManager
              em Android 11+ (package visibility). -->
         <package android:name="com.google.android.apps.healthdata" />
+        <!-- Share dedicado: detectar Instagram/WhatsApp pra deeplinks. -->
+        <package android:name="com.instagram.android" />
+        <package android:name="com.whatsapp" />
         <intent>
             <action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE" />
         </intent>

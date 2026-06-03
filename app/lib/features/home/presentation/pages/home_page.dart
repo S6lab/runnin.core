@@ -7,6 +7,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:runnin/core/router/app_router.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
+import 'package:runnin/features/biometrics/data/bpm_polling_service.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 import 'package:runnin/features/home/domain/use_cases/get_home_data_use_case.dart';
 import 'package:runnin/features/location_weather/data/location_weather_controller.dart';
@@ -1037,47 +1038,66 @@ class _PerformanceSection extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 20),
-                      Text(
-                        run?.avgBpm != null ? '${run!.avgBpm}' : '--',
-                        style: TextStyle(
-                          color: palette.primary,
-                          fontSize: 28,
-                          fontWeight: FontWeight.w500,
-                        ),
+                      // StreamBuilder com BPM ao vivo do Apple Health /
+                      // Health Connect (polling 2min). Fallback pro
+                      // run.avgBpm quando o stream emite null (sem wearable,
+                      // sem permissão, web).
+                      StreamBuilder<int?>(
+                        stream: bpmPollingService.latestBpmStream,
+                        initialData: bpmPollingService.latestBpm,
+                        builder: (context, snap) {
+                          final liveBpm = snap.data;
+                          final bpm = liveBpm ?? run?.avgBpm;
+                          final isLive = liveBpm != null;
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                bpm != null ? '$bpm' : '--',
+                                style: TextStyle(
+                                  color: palette.primary,
+                                  fontSize: 28,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              Text(
+                                bpm == null
+                                    ? 'sem BPM registrado'
+                                    : isLive
+                                        ? 'bpm recente (wearable)'
+                                        : 'bpm medio na ultima corrida',
+                                style: TextStyle(color: palette.muted, fontSize: 10),
+                              ),
+                              const SizedBox(height: 20),
+                              if (bpm != null) ...[
+                                Text(
+                                  'ZONA ESTIMADA',
+                                  style: TextStyle(
+                                    color: palette.muted,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                const SizedBox(height: 20),
+                                Text(
+                                  '$bpm',
+                                  style: TextStyle(
+                                    color: palette.secondary,
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                const SizedBox(height: 20),
+                                _ZoneBars(avgBpm: bpm),
+                              ] else
+                                TextButton(
+                                  onPressed: () => context.push('/profile/edit'),
+                                  child: const Text('REVISAR DADOS'),
+                                ),
+                            ],
+                          );
+                        },
                       ),
-                      Text(
-                        run?.avgBpm != null
-                            ? 'bpm medio na ultima corrida'
-                            : 'sem BPM registrado',
-                        style: TextStyle(color: palette.muted, fontSize: 10),
-                      ),
-                      const Spacer(),
-                      if (run?.avgBpm != null) ...[
-                        Text(
-                          'ZONA ESTIMADA',
-                          style: TextStyle(
-                            color: palette.muted,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-                        Text(
-                          '${run!.avgBpm}',
-                          style: TextStyle(
-                            color: palette.secondary,
-                            fontSize: 15,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-                        _ZoneBars(avgBpm: run.avgBpm!),
-                      ],
-                      if (run?.avgBpm == null)
-                        TextButton(
-                          onPressed: () => context.push('/profile/edit'),
-                          child: const Text('REVISAR DADOS'),
-                        ),
                     ],
                   ),
                 ),

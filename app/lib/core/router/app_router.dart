@@ -3,6 +3,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:runnin/core/logger/logger.dart';
+import 'package:runnin/core/router/router_fallback_page.dart';
 import 'package:runnin/features/admin/presentation/pages/admin_page.dart';
 import 'package:runnin/features/admin/presentation/pages/prompts_admin_page.dart';
 import 'package:runnin/features/admin/presentation/pages/coach_ai_admin_page.dart';
@@ -147,6 +149,22 @@ final appRouter = GoRouter(
     return null;
   },
   refreshListenable: _AuthChangeNotifier(),
+  // errorBuilder dispara quando o GoRouter não consegue resolver uma rota.
+  // Antes: tela branca + GoException. Agora: fallback amigável + Logger
+  // estruturado pra Crashlytics capturar o path problemático.
+  errorBuilder: (context, state) {
+    Logger.error(
+      'router.no_route',
+      state.error ?? Exception('GoRouter: no_route'),
+      StackTrace.current,
+      {
+        'uri': state.uri.toString(),
+        'matched': state.matchedLocation,
+        'fullPath': state.fullPath ?? '',
+      },
+    );
+    return RouterFallbackPage(path: state.uri.toString());
+  },
   routes: [
     GoRoute(path: '/splash', builder: (_, _) => const SplashPage()),
     GoRoute(path: '/admin', builder: (_, _) => const AdminPage()),

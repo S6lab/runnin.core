@@ -58,6 +58,10 @@ dependencies:
   firebase_storage: ^12.4.10
   file_picker: ^11.0.2
   url_launcher: ^6.3.1
+  # Salvar imagem na galeria (Share quebrava ao usar Share.shareXFiles pra
+  # "Salvar" — agora Gal.putImageBytes persiste de verdade).
+  gal: ^2.3.0
+  path_provider: ^2.1.5
   share_plus: ^10.1.4
   image_picker: ^1.1.2
   # Apple HealthKit (iOS) + Google Health Connect (Android) unified plugin.

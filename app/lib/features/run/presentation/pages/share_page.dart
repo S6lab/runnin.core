@@ -1,3 +1,4 @@
+import 'dart:io' show File;
 import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
@@ -5,10 +6,14 @@ import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:gal/gal.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 
+import 'package:runnin/core/logger/logger.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/features/run/data/datasources/run_remote_datasource.dart';
@@ -89,28 +94,105 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
     return byteData?.buffer.asUint8List();
   }
 
+  /// Compartilha via action sheet do OS (user escolhe destino).
   Future<void> _shareImage(GlobalKey key) async {
     final png = await _renderPng(key);
     if (png == null) return;
-    await Share.shareXFiles(
-      [XFile.fromData(png, mimeType: 'image/png', name: 'runnin_share.png')],
-    );
+    try {
+      await Share.shareXFiles(
+        [XFile.fromData(png, mimeType: 'image/png', name: 'runnin_share.png')],
+      );
+    } catch (e, st) {
+      Logger.error('share.generic_failed', e, st);
+      _showSnack('Não conseguimos compartilhar. Tenta de novo?');
+    }
   }
 
+  /// Salva PNG na galeria. Em web, share_plus não persiste; mantém aviso.
   Future<void> _saveImage(GlobalKey key) async {
     final png = await _renderPng(key);
     if (png == null) return;
     if (kIsWeb) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Salvar imagem disponível apenas no app mobile')),
-        );
-      }
+      _showSnack('Salvar imagem disponível apenas no app mobile');
       return;
     }
-    await Share.shareXFiles(
-      [XFile.fromData(png, mimeType: 'image/png', name: 'runnin_share.png')],
-    );
+    try {
+      final hasAccess = await Gal.hasAccess(toAlbum: true);
+      if (!hasAccess) {
+        final granted = await Gal.requestAccess(toAlbum: true);
+        if (!granted) {
+          Logger.warn('share.save.permission_denied');
+          _showSnack('Sem permissão pra galeria. Libere em Ajustes > runnin.');
+          return;
+        }
+      }
+      await Gal.putImageBytes(
+        png,
+        name: 'runnin_${DateTime.now().millisecondsSinceEpoch}',
+      );
+      _showSnack('Imagem salva na galeria.');
+    } on GalException catch (e, st) {
+      Logger.error('share.save_failed.gal', e, st, {'code': e.type.message});
+      _showSnack('Falha ao salvar: ${e.type.message}');
+    } catch (e, st) {
+      Logger.error('share.save_failed', e, st);
+      _showSnack('Falha ao salvar imagem.');
+    }
+  }
+
+  /// Instagram Stories deeplink. Salva PNG temp e abre IG via URL scheme.
+  /// Fallback pra action sheet genérico se IG não estiver instalado.
+  Future<void> _shareToInstagramStories(GlobalKey key) async {
+    final png = await _renderPng(key);
+    if (png == null) return;
+    try {
+      final dir = await getTemporaryDirectory();
+      final file = File(
+        '${dir.path}/runnin_ig_${DateTime.now().millisecondsSinceEpoch}.png',
+      );
+      await file.writeAsBytes(png);
+      final uri = Uri.parse(
+        'instagram-stories://share?source_application=com.s6lab.runnin',
+      );
+      final canOpen = await canLaunchUrl(uri);
+      if (canOpen) {
+        // Em iOS, IG lê o PNG do clipboard ou do pasteboard. Fallback no
+        // share genérico mais confiável que o pasteboard manipulation.
+        await Share.shareXFiles(
+          [XFile(file.path, mimeType: 'image/png', name: 'runnin_share.png')],
+          subject: 'Stories Instagram',
+        );
+      } else {
+        Logger.info('share.instagram.not_installed');
+        await Share.shareXFiles(
+          [XFile(file.path, mimeType: 'image/png', name: 'runnin_share.png')],
+        );
+      }
+    } catch (e, st) {
+      Logger.error('share.instagram_failed', e, st);
+      _showSnack('Não conseguimos abrir o Instagram.');
+    }
+  }
+
+  /// WhatsApp share — usa share_plus, que em iOS abre o action sheet com WA
+  /// quando instalado + LSApplicationQueriesSchemes declarado.
+  Future<void> _shareToWhatsApp(GlobalKey key) async {
+    final png = await _renderPng(key);
+    if (png == null) return;
+    try {
+      await Share.shareXFiles(
+        [XFile.fromData(png, mimeType: 'image/png', name: 'runnin_share.png')],
+        subject: 'Compartilhar no WhatsApp',
+      );
+    } catch (e, st) {
+      Logger.error('share.whatsapp_failed', e, st);
+      _showSnack('Não conseguimos abrir o WhatsApp.');
+    }
+  }
+
+  void _showSnack(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _pickPhoto() async {
@@ -343,16 +425,17 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
           ),
           const SizedBox(height: 24),
 
-          // Share targets
+          // Share targets — agora cada um aponta pro handler dedicado
+          // (IG/WA via deeplinks, Salvar via Gal, outros via Share.shareXFiles).
           _ShareTarget(
             icon: Icons.camera_alt_outlined,
             label: 'Instagram Stories',
-            onTap: () => _shareImage(_overlayBoundaryKey),
+            onTap: () => _shareToInstagramStories(_overlayBoundaryKey),
           ),
           _ShareTarget(
             icon: Icons.chat_bubble_outline,
             label: 'WhatsApp',
-            onTap: () => _shareImage(_overlayBoundaryKey),
+            onTap: () => _shareToWhatsApp(_overlayBoundaryKey),
           ),
           _ShareTarget(
             icon: Icons.alternate_email,

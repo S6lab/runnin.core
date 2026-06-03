@@ -162,8 +162,8 @@ class WorkoutRealtimeService {
   void _attachEventStream() {
     _eventSub ??= _eventChannel.receiveBroadcastStream().listen(
       _onEvent,
-      onError: (Object e) {
-        debugPrint('workout_realtime.event error: $e');
+      onError: (Object e, StackTrace st) {
+        Logger.error('workout_realtime.event_stream_error', e, st);
       },
     );
   }
