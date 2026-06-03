@@ -11,6 +11,7 @@ import androidx.health.services.client.data.Availability
 import androidx.health.services.client.data.DataPointContainer
 import androidx.health.services.client.data.DataType
 import androidx.health.services.client.data.DataTypeAvailability
+import androidx.health.services.client.data.DeltaDataType
 import androidx.health.services.client.data.SampleDataPoint
 import com.google.common.util.concurrent.FutureCallback
 import com.google.common.util.concurrent.Futures
@@ -48,7 +49,8 @@ class WorkoutRealtimePlugin : FlutterPlugin, MethodCallHandler, EventChannel.Str
   private val handler = Handler(Looper.getMainLooper())
 
   private val callback = object : MeasureCallback {
-    override fun onAvailabilityChanged(dataType: DataType<*, *>, availability: Availability) {
+    // Em 1.1.0-rc02 a assinatura mudou de DataType<*, *> pra DeltaDataType<*, *>.
+    override fun onAvailabilityChanged(dataType: DeltaDataType<*, *>, availability: Availability) {
       if (availability is DataTypeAvailability && availability != DataTypeAvailability.AVAILABLE) {
         emit(mapOf("type" to "warning", "code" to availability.name))
       }
