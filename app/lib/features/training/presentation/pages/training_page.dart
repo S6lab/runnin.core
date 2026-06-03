@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:runnin/features/coach/data/datasources/coach_report_remote_datasource.dart';
+import 'package:runnin/core/logger/logger.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
@@ -106,7 +107,12 @@ class _TrainingPageState extends State<TrainingPage> {
       if (plan == null && savedPendingPlanId != null) {
         try {
           plan = await _ds.getPlanById(savedPendingPlanId);
-        } catch (_) {
+        } catch (e, st) {
+          Logger.warn('training.getPlanById_failed', context: {
+            'planId': savedPendingPlanId,
+            'err': '$e',
+          });
+          Logger.error('training.getPlanById_failed', e, st);
           await _clearPendingPlanId();
         }
       }
@@ -136,7 +142,8 @@ class _TrainingPageState extends State<TrainingPage> {
       if (pendingPlanId != null) {
         _startPlanPolling(pendingPlanId);
       }
-    } catch (_) {
+    } catch (e, st) {
+      Logger.error('training.load_failed', e, st);
       if (mounted) {
         setState(() {
           _error = 'Erro ao carregar plano.';
@@ -163,7 +170,8 @@ class _TrainingPageState extends State<TrainingPage> {
   Future<List<WeeklyReport>> _loadWeeklyReports() async {
     try {
       return await _weeklyReportDs.getWeeklyReports();
-    } catch (_) {
+    } catch (e, st) {
+      Logger.error('training.loadWeeklyReports_failed', e, st);
       return [];
     }
   }
@@ -195,8 +203,15 @@ class _TrainingPageState extends State<TrainingPage> {
             isLatest: reports.isEmpty,
           ),
         );
-      } catch (_) {
+      } catch (e, st) {
         // Ignora relatórios pendentes/indisponíveis para manter a página útil.
+        // Log info-level (warn não-aria) pra não inundar Crashlytics.
+        Logger.warn('training.report_unavailable', context: {
+          'runId': run.id,
+          'err': '$e',
+        });
+        // Stack trace só em debug; release não inflama o Crashlytics aqui.
+        Logger.info('training.report_unavailable_stack', context: {'st': st.toString().split('\n').take(2).join(' ')});
       }
     }
     return reports;
@@ -250,7 +265,8 @@ class _TrainingPageState extends State<TrainingPage> {
       setState(() {
         _reports = reports;
       });
-    } catch (_) {
+    } catch (e, st) {
+      Logger.error('training.checkPlanStatus_failed', e, st);
       if (!mounted) return;
       setState(() {
         _planCheckError = manual

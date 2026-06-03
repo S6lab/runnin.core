@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:runnin/core/logger/logger.dart';
 import 'package:runnin/features/home/domain/use_cases/get_home_data_use_case.dart';
 
 // States
@@ -39,7 +40,8 @@ class HomeCubit extends Cubit<HomeState> {
       if (isClosed) return;
       _syncPlanPolling(data);
       emit(HomeLoaded(data));
-    } catch (_) {
+    } catch (e, st) {
+      Logger.error('home.load_failed', e, st);
       if (!isClosed && showLoading) {
         emit(HomeError('Erro ao carregar dados. Tente novamente.'));
       }

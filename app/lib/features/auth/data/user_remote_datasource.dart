@@ -4,6 +4,14 @@ import 'package:runnin/core/network/api_client.dart';
 
 class UserProfile {
   final String id;
+  /// Redundância intencional do uid pra trace cross-system. Igual ao [id].
+  final String authId;
+  /// Email do Firebase Auth — populado no provision. Null se user
+  /// autenticou só por phone.
+  final String? email;
+  /// Phone E.164 do Firebase Auth — populado no provision. Null se user
+  /// autenticou só por email/social.
+  final String? phone;
   final String name;
   final String level;
   final String goal;
@@ -41,6 +49,9 @@ class UserProfile {
 
   const UserProfile({
     required this.id,
+    required this.authId,
+    this.email,
+    this.phone,
     required this.name,
     required this.level,
     required this.goal,
@@ -85,6 +96,11 @@ class UserProfile {
 
   factory UserProfile.fromJson(Map<String, dynamic> j) => UserProfile(
     id: j['id'] as String,
+    // authId pode estar ausente em docs legados (pre-fix). Fallback pro id
+    // mantém o invariante "authId == uid".
+    authId: (j['authId'] as String?) ?? (j['id'] as String),
+    email: j['email'] as String?,
+    phone: j['phone'] as String?,
     name: j['name'] as String,
     level: j['level'] as String,
     goal: j['goal'] as String,

@@ -4,6 +4,8 @@ import 'dart:typed_data';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:record/record.dart';
 
+import 'package:runnin/core/logger/logger.dart';
+
 /// Audio I/O para sessão Coach Live com Gemini.
 ///
 /// Mic:  captura PCM 16-bit mono @ 16kHz (formato esperado pelo Gemini Live)
@@ -11,7 +13,9 @@ import 'package:record/record.dart';
 /// Speaker: recebe chunks PCM 16-bit mono @ 24kHz (default do Gemini Live),
 ///          acumula no buffer e toca como WAV via [flushAndPlay].
 class LiveAudioService {
-  LiveAudioService();
+  LiveAudioService() {
+    _configureAudioContext();
+  }
 
   static const _micSampleRate = 16000;
   static const _speakerSampleRate = 24000;
@@ -22,8 +26,42 @@ class LiveAudioService {
   StreamSubscription<Uint8List>? _micSub;
   final _speakerBuffer = BytesBuilder();
   bool _recording = false;
+  bool _audioContextConfigured = false;
 
   bool get isRecording => _recording;
+
+  /// Configura AVAudioSession (iOS) / AudioFocus (Android) pra category
+  /// `.playback`. Sem isso, o áudio do coach é silenciado quando o silent
+  /// switch está ativado (iOS default = soloAmbient), ou abafado quando
+  /// outro app está tocando música. `mixWithOthers` permite coexistir com
+  /// Spotify/Apple Music sem stop.
+  Future<void> _configureAudioContext() async {
+    if (_audioContextConfigured) return;
+    try {
+      await AudioPlayer.global.setAudioContext(
+        AudioContext(
+          iOS: AudioContextIOS(
+            category: AVAudioSessionCategory.playback,
+            options: const {
+              AVAudioSessionOptions.mixWithOthers,
+              AVAudioSessionOptions.duckOthers,
+            },
+          ),
+          android: AudioContextAndroid(
+            isSpeakerphoneOn: false,
+            stayAwake: true,
+            contentType: AndroidContentType.speech,
+            usageType: AndroidUsageType.assistanceNavigationGuidance,
+            audioFocus: AndroidAudioFocus.gainTransientMayDuck,
+          ),
+        ),
+      );
+      _audioContextConfigured = true;
+      Logger.info('live_audio.context_configured');
+    } catch (e, st) {
+      Logger.error('live_audio.context_config_failed', e, st);
+    }
+  }
 
   /// Verifica + pede permissão de microfone.
   Future<bool> requestMicPermission() => _recorder.hasPermission();
@@ -57,8 +95,9 @@ class LiveAudioService {
     _micSub = null;
     try {
       await _recorder.stop();
-    } catch (_) {
-      // ignore
+    } catch (e, st) {
+      Logger.warn('live_audio.recorder_stop_failed', context: {'err': '$e'});
+      Logger.info('live_audio.recorder_stop_stack', context: {'st': st.toString().split('\n').first});
     }
   }
 
@@ -70,6 +109,8 @@ class LiveAudioService {
   /// Envolve buffer acumulado num header WAV e toca; depois limpa o buffer.
   Future<void> flushAndPlay() async {
     if (_speakerBuffer.isEmpty) return;
+    // Garante que o AudioContext está configurado (idempotente).
+    await _configureAudioContext();
     final pcm = _speakerBuffer.toBytes();
     _speakerBuffer.clear();
     final wav = _wrapPcmAsWav(
@@ -81,8 +122,9 @@ class LiveAudioService {
     try {
       await _player.stop();
       await _player.play(BytesSource(wav));
-    } catch (_) {
-      // ignore
+      Logger.info('live_audio.played', context: {'wav_bytes': wav.length});
+    } catch (e, st) {
+      Logger.error('live_audio.play_failed', e, st, {'wav_bytes': wav.length});
     }
   }
 

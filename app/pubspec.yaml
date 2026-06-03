@@ -83,6 +83,9 @@ dev_dependencies:
   build_runner: ^2.4.14
   freezed: ^3.0.0
   json_serializable: ^6.11.0
+  # Testing infrastructure (PR de stabilization sweep)
+  mocktail: ^1.0.4
+  bloc_test: ^10.0.0
 
 # record 5.2.1 resolve record_linux para 0.7.2, que não implementa o
 # startStream exigido por record_platform_interface 1.5.0 — quebra o build.

@@ -1,3 +1,4 @@
+import 'package:runnin/core/logger/logger.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 import 'package:runnin/features/run/data/datasources/run_remote_datasource.dart';
 import 'package:runnin/features/run/domain/entities/run.dart';
@@ -72,12 +73,24 @@ class GetHomeDataUseCase {
   ];
 
   Future<HomeData> execute() async {
+    // Cada chamada com .catchError individual pra Logger reportar a step
+    // exata que falhou (antes o catch em HomeCubit virava genérico "home.load_failed"
+    // sem dizer se foi getMe / getCurrentPlan / listRuns).
     final results = await Future.wait([
-      _userDs.getMe(),
+      _userDs.getMe().catchError((Object e, StackTrace st) {
+        Logger.error('home.load.getMe_failed', e, st);
+        throw e;
+      }),
       // Cache-first: o plano foi recuperado/cacheado no login; invalida só ao
       // gerar novo, aplicar checkpoint/revisão, ou cruzar domingo.
-      _planDs.getCurrentPlan(cacheFirst: true),
-      _runDs.listRuns(limit: 21),
+      _planDs.getCurrentPlan(cacheFirst: true).catchError((Object e, StackTrace st) {
+        Logger.error('home.load.getCurrentPlan_failed', e, st);
+        throw e;
+      }),
+      _runDs.listRuns(limit: 21).catchError((Object e, StackTrace st) {
+        Logger.error('home.load.listRuns_failed', e, st);
+        throw e;
+      }),
     ]);
 
     final profile = results[0] as UserProfile?;

@@ -17,5 +17,11 @@ export default defineConfig({
     environment: 'node',
     globals: false,
     silent: false,
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'lcov', 'html'],
+      include: ['src/modules/**/*.ts'],
+      exclude: ['**/*.spec.ts', '**/*.d.ts', 'src/modules/**/http/**'],
+    },
   },
 });

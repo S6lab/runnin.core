@@ -1,0 +1,54 @@
+name: Tests
+
+# Roda testes em push pra qualquer branch + em PR + como subjob de deploy
+# (workflow_call). Os deploy workflows chamam isso via uses: tests pra
+# bloquear deploy se algum falhar.
+on:
+  push:
+    branches:
+      - main
+      - homologation
+      - release
+      - release-ios
+      - release-android
+  pull_request:
+  workflow_call: {}
+
+jobs:
+  server-tests:
+    name: Server (Vitest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: server/package-lock.json
+      - name: Install
+        run: npm ci
+      - name: Vitest
+        run: npm test
+
+  flutter-tests:
+    name: Flutter
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.41.9'
+          channel: 'stable'
+          cache: true
+      - name: pub get
+        run: flutter pub get
+      - name: analyze
+        run: flutter analyze --no-fatal-infos
+      - name: flutter test
+        run: flutter test

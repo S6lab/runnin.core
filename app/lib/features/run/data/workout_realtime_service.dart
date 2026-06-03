@@ -2,6 +2,8 @@ import 'dart:async';
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:flutter/services.dart';
 
+import 'package:runnin/core/logger/logger.dart';
+
 /// Estado da sessão de workout. O serviço mantém uma máquina de estados
 /// idempotente — start/pause/resume/stop não fazem nada se já estiverem
 /// no estado correspondente.
@@ -50,7 +52,14 @@ class WorkoutRealtimeService {
 
   /// Stream de BPMs do wearable. Emite `null` quando a fonte fica indisponível
   /// (Watch desligado, permission revogada). UI fica em '—' silenciosamente.
-  Stream<int?> get bpmStream => _bpmController.stream;
+  ///
+  /// Replay-on-listen: cada novo listener recebe imediatamente o `_latestBpm`
+  /// cacheado (se houver), pra não perder o último sample emitido antes do
+  /// subscribe. Crítico pra evitar race entre `start()` e o listener inicial.
+  Stream<int?> get bpmStream async* {
+    if (_latestBpm != null) yield _latestBpm;
+    yield* _bpmController.stream;
+  }
 
   /// Estados da sessão: idle → starting → active ↔ paused → stopping → idle.
   Stream<WorkoutSessionState> get sessionStateStream =>
@@ -98,8 +107,8 @@ class WorkoutRealtimeService {
     try {
       await _methodChannel.invokeMethod('start');
       // Estado real (active vs error) virá via eventStream do nativo.
-    } on PlatformException catch (e) {
-      debugPrint('workout_realtime.start failed: ${e.message}');
+    } on PlatformException catch (e, st) {
+      Logger.error('workout_realtime.start_failed', e, st, {'code': e.code, 'message': e.message ?? ''});
       _setState(WorkoutSessionState.idle);
     }
   }
@@ -114,8 +123,8 @@ class WorkoutRealtimeService {
     try {
       await _methodChannel.invokeMethod('pause');
       _setState(WorkoutSessionState.paused);
-    } on PlatformException catch (e) {
-      debugPrint('workout_realtime.pause failed: ${e.message}');
+    } on PlatformException catch (e, st) {
+      Logger.error('workout_realtime.pause_failed', e, st, {'code': e.code});
     }
   }
 
@@ -125,8 +134,8 @@ class WorkoutRealtimeService {
     try {
       await _methodChannel.invokeMethod('resume');
       _setState(WorkoutSessionState.active);
-    } on PlatformException catch (e) {
-      debugPrint('workout_realtime.resume failed: ${e.message}');
+    } on PlatformException catch (e, st) {
+      Logger.error('workout_realtime.resume_failed', e, st, {'code': e.code});
     }
   }
 
@@ -142,8 +151,8 @@ class WorkoutRealtimeService {
     _setState(WorkoutSessionState.stopping);
     try {
       await _methodChannel.invokeMethod('stop');
-    } on PlatformException catch (e) {
-      debugPrint('workout_realtime.stop failed: ${e.message}');
+    } on PlatformException catch (e, st) {
+      Logger.error('workout_realtime.stop_failed', e, st, {'code': e.code});
     }
     _setState(WorkoutSessionState.idle);
     _detachEventStream();
@@ -165,16 +174,39 @@ class WorkoutRealtimeService {
   }
 
   void _onEvent(dynamic raw) {
-    if (raw is! Map) return;
-    final type = raw['type'] as String?;
+    // Defensive parse: o EventChannel pode entregar Map<dynamic, dynamic>
+    // (iOS NSDictionary → Map sem typo). Se vier num formato inesperado,
+    // loga e segue sem crashar a stream.
+    if (raw is! Map) {
+      Logger.warn('workout_realtime.event_not_map', context: {'raw_type': raw.runtimeType.toString()});
+      return;
+    }
+    final type = raw['type'];
+    if (type is! String) {
+      Logger.warn('workout_realtime.event_no_type', context: {'raw_keys': raw.keys.toList().toString()});
+      return;
+    }
     switch (type) {
       case 'bpm':
-        final value = raw['value'];
-        if (value is num) {
-          _emitBpm(value.round());
-        } else {
-          _emitBpm(null);
+        // raw['value'] pode chegar como:
+        //   - int (Swift Int → Dart int direto)
+        //   - double (alguma plataforma vira NSNumber double)
+        //   - String "85" (debug payload, hypothetical)
+        // Cobrir os 3 com num parse defensivo.
+        final rawValue = raw['value'];
+        int? bpm;
+        if (rawValue is num) {
+          bpm = rawValue.round();
+        } else if (rawValue is String) {
+          bpm = int.tryParse(rawValue) ?? double.tryParse(rawValue)?.round();
         }
+        if (bpm == null) {
+          Logger.warn('workout_realtime.bpm_unparseable', context: {
+            'value_type': rawValue?.runtimeType.toString() ?? 'null',
+            'value': '$rawValue',
+          });
+        }
+        _emitBpm(bpm);
         break;
       case 'state':
         final value = raw['value'] as String?;
@@ -187,14 +219,23 @@ class WorkoutRealtimeService {
         }
         break;
       case 'warning':
-        // Ex.: 'no_hr_source' — silencioso na UI por decisão de produto.
-        debugPrint('workout_realtime.warning: ${raw['code']} ${raw['message']}');
+        // Ex.: 'no_hr_source' — silencioso na UI por decisão de produto, mas
+        // logado pra telemetria poder rastrear quantos users ficam sem fonte.
+        Logger.warn('workout_realtime.warning', context: {
+          'code': '${raw['code']}',
+          'message': '${raw['message']}',
+        });
         _emitBpm(null);
         break;
       case 'error':
-        debugPrint('workout_realtime.error: ${raw['code']} ${raw['message']}');
+        Logger.warn('workout_realtime.error', context: {
+          'code': '${raw['code']}',
+          'message': '${raw['message']}',
+        });
         _emitBpm(null);
         break;
+      default:
+        Logger.warn('workout_realtime.unknown_type', context: {'type': type});
     }
   }
 

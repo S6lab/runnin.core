@@ -10,7 +10,30 @@ export type Gender = 'male' | 'female' | 'other' | 'na';
 export type RunPeriod = 'manha' | 'tarde' | 'noite';
 
 export interface UserProfile {
+  /**
+   * Doc id = Firebase Auth uid. Source-of-truth pra lookup; é o que vai como
+   * `req.uid` em todas as rotas autenticadas.
+   */
   id: string;
+  /**
+   * Redundância intencional do uid pra trace cross-system: quando exportamos
+   * pra analytics / BigQuery, o `id` pode virar `userId` em alguns sinks
+   * mas o `authId` permanece imutável como referência ao Firebase Auth.
+   * Setado em `provisionUser` a partir do uid; igual ao `id` por design.
+   */
+  authId: string;
+  /**
+   * Email do Firebase Auth (admin.auth().getUser(uid).email). Capturado no
+   * provision; null quando o user assinou só com telefone (Brazil-friendly).
+   * Pelo menos UM de email/phone deve estar presente (garantido pelo Auth).
+   */
+  email?: string;
+  /**
+   * Telefone E.164 do Firebase Auth (admin.auth().getUser(uid).phoneNumber).
+   * Null quando o user assinou só com email/social. Pelo menos um de
+   * email/phone deve estar presente.
+   */
+  phone?: string;
   name: string;
   level: RunnerLevel;
   goal: string;

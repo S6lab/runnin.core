@@ -1,5 +1,9 @@
+import 'dart:io' show File;
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:runnin/core/logger/logger.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/features/profile/data/exam_remote_datasource.dart';
@@ -38,7 +42,8 @@ class _HealthExamsPageState extends State<HealthExamsPage> {
         _exams = exams;
         _loading = false;
       });
-    } catch (_) {
+    } catch (e, st) {
+      Logger.error('exams.list_failed', e, st);
       if (!mounted) return;
       setState(() {
         _loading = false;
@@ -47,31 +52,123 @@ class _HealthExamsPageState extends State<HealthExamsPage> {
     }
   }
 
-  Future<void> _pickAndUpload() async {
-    final result = await FilePicker.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['pdf', 'png', 'jpg', 'jpeg'],
-      withData: true,
+  /// Bottom sheet com 2 opções: tirar foto agora (image_picker camera) ou
+  /// escolher um arquivo (file_picker — galeria do iOS / arquivos do Android).
+  /// file_picker no iOS NÃO abre câmera mesmo configurado — precisa de
+  /// image_picker pra essa funcionalidade.
+  Future<void> _showSourcePicker() async {
+    final source = await showModalBottomSheet<_UploadSource>(
+      context: context,
+      backgroundColor: FigmaColors.surfaceCard,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: Icon(Icons.photo_camera_outlined,
+                  color: context.runninPalette.primary),
+              title: const Text('Tirar foto'),
+              onTap: () => Navigator.pop(sheetContext, _UploadSource.camera),
+            ),
+            ListTile(
+              leading: Icon(Icons.folder_outlined,
+                  color: context.runninPalette.primary),
+              title: const Text('Escolher arquivo (PDF, foto)'),
+              onTap: () => Navigator.pop(sheetContext, _UploadSource.file),
+            ),
+            const SizedBox(height: 12),
+          ],
+        ),
+      ),
     );
-    if (result == null || result.files.isEmpty) return;
-    final picked = result.files.first;
-    final bytes = picked.bytes;
-    if (bytes == null) return;
+    if (source == null) return;
+    if (source == _UploadSource.camera) {
+      await _pickFromCamera();
+    } else {
+      await _pickFromFile();
+    }
+  }
 
+  Future<void> _pickFromCamera() async {
+    try {
+      final picker = ImagePicker();
+      final XFile? photo = await picker.pickImage(
+        source: ImageSource.camera,
+        imageQuality: 85,
+      );
+      if (photo == null) {
+        Logger.info('exams.camera.cancelled');
+        return;
+      }
+      final bytes = await File(photo.path).readAsBytes();
+      await _uploadBytes(
+        name: 'foto_${DateTime.now().millisecondsSinceEpoch}.jpg',
+        fileName: photo.name,
+        size: bytes.length,
+        bytes: bytes,
+      );
+    } catch (e, st) {
+      Logger.error('exams.camera.failed', e, st);
+      if (!mounted) return;
+      setState(() {
+        _error = 'Falha ao abrir a câmera. Confirme a permissão em Ajustes > runnin.';
+      });
+    }
+  }
+
+  Future<void> _pickFromFile() async {
+    try {
+      final result = await FilePicker.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['pdf', 'png', 'jpg', 'jpeg'],
+        withData: true,
+      );
+      if (result == null || result.files.isEmpty) {
+        Logger.info('exams.file_picker.cancelled');
+        return;
+      }
+      final picked = result.files.first;
+      final bytes = picked.bytes;
+      if (bytes == null) {
+        Logger.warn('exams.file_picker.empty_bytes', context: {'name': picked.name});
+        return;
+      }
+      await _uploadBytes(
+        name: picked.name,
+        fileName: picked.name,
+        size: picked.size,
+        bytes: bytes,
+      );
+    } catch (e, st) {
+      Logger.error('exams.file_picker.failed', e, st);
+      if (!mounted) return;
+      setState(() {
+        _error = 'Falha ao abrir os arquivos.';
+      });
+    }
+  }
+
+  Future<void> _uploadBytes({
+    required String name,
+    required String fileName,
+    required int size,
+    required List<int> bytes,
+  }) async {
     setState(() {
       _uploading = true;
       _error = null;
     });
-
     try {
       final urlResult = await _remote.getUploadUrl(
-        examName: picked.name,
-        fileName: picked.name,
-        fileSize: picked.size,
+        examName: name,
+        fileName: fileName,
+        fileSize: size,
       );
       await _remote.finalize(urlResult.examId);
       await _loadExams();
-    } catch (_) {
+    } catch (e, st) {
+      Logger.error('exams.upload_failed', e, st,
+          {'name': name, 'size': size});
       if (!mounted) return;
       setState(() {
         _error = 'Falha no upload. Tente novamente.';
@@ -105,7 +202,7 @@ class _HealthExamsPageState extends State<HealthExamsPage> {
                     _UploadCounter(used: _examsThisMonth(), max: 5),
                     const SizedBox(height: AppSpacing.md),
                     FigmaExamUploadCTA(
-                      onTap: _uploading ? () {} : _pickAndUpload,
+                      onTap: _uploading ? () {} : _showSourcePicker,
                       label: _uploading
                           ? 'Enviando...'
                           : '+ Adicionar exame',
@@ -366,3 +463,5 @@ class _RecommendedExamCard extends StatelessWidget {
     );
   }
 }
+
+enum _UploadSource { camera, file }

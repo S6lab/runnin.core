@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { UserRepository } from '../user.repository';
 import { UserProfile, isPremium } from '../user.entity';
 import { CooldownError, PremiumRequiredError } from '@shared/errors/app-error';
+import { getAuth } from '@shared/infra/firebase/firebase.client';
 import { logger } from '@shared/logger/logger';
 
 // Ranges sensatos pra rejeitar dados nonsense (ex: peso 10kg, idade 200).
@@ -114,8 +115,27 @@ export class CompleteOnboardingUseCase {
       if (existing) await this.userRepo.archiveOnboarding(userId, existing);
     }
 
+    // Re-captura email/phone do Firebase Auth (caso o user tenha verificado
+    // depois do provision). Idempotente — se já existir no profile, prefere o
+    // existente. Best-effort — falha no Auth não bloqueia o onboarding.
+    let authEmail = existing?.email;
+    let authPhone = existing?.phone;
+    try {
+      const authRec = await getAuth().getUser(userId);
+      authEmail = authEmail ?? authRec.email ?? undefined;
+      authPhone = authPhone ?? authRec.phoneNumber ?? undefined;
+    } catch (err) {
+      logger.warn('users.onboarding.auth_lookup_failed', {
+        userId,
+        err: err instanceof Error ? err.message : String(err),
+      });
+    }
+
     const profile: UserProfile = {
       id: userId,
+      authId: existing?.authId ?? userId,
+      email: authEmail,
+      phone: authPhone,
       name: input.name,
       level: input.level,
       goal: input.goal,

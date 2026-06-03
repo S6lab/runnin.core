@@ -77,6 +77,12 @@ export class UpsertProfileUseCase {
 
     const profile: UserProfile = {
       id: userId,
+      // authId imutável; se faltar no existing (legado pré-fix), backfilla.
+      authId: existing?.authId ?? userId,
+      // email/phone só vêm via Firebase Auth (provision/onboarding); aqui
+      // apenas preserva o que já existe (PATCH /me não muda contato).
+      email: existing?.email,
+      phone: existing?.phone,
       name: input.name ?? existing?.name ?? '',
       level: input.level ?? existing?.level ?? 'iniciante',
       goal: input.goal ?? existing?.goal ?? '',
