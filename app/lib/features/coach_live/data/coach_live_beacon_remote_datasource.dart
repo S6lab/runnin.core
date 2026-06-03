@@ -46,6 +46,14 @@ class CoachLiveBeaconRemoteDatasource {
     );
   }
 
+  /// Triggers semânticos do cliente → enum do server. Server rejeita com 422
+  /// se vier algo fora do allowlist; sem mapping, o evento é omitido (campo é
+  /// .optional()), preservando a persistência do texto.
+  static const _triggerToServerEvent = <String, String>{
+    'high_bpm': 'bpm_alert',
+    // 'no_movement' não tem equivalente no schema — segue sem `event` no body.
+  };
+
   Future<void> _post({
     required String runId,
     required String author,
@@ -56,11 +64,12 @@ class CoachLiveBeaconRemoteDatasource {
   }) async {
     final clean = text.trim();
     if (clean.isEmpty || runId.isEmpty) return;
+    final serverEvent = _triggerToServerEvent[trigger] ?? trigger;
     final body = <String, dynamic>{
       'runId': runId,
       'author': author,
       'text': clean,
-      'event': trigger,
+      if (_isServerAllowedEvent(serverEvent)) 'event': serverEvent,
       'sessionGeneration': sessionGeneration,
       if (metrics?.distanceKm != null) 'kmAtTime': metrics!.distanceKm,
       if (metrics?.paceAtTimeStr != null) 'paceAtTime': metrics!.paceAtTimeStr,
@@ -77,4 +86,24 @@ class CoachLiveBeaconRemoteDatasource {
       // a corrida continua normalmente.
     }
   }
+
+  static const _serverEventAllowlist = <String>{
+    'pre_run',
+    'start',
+    'km_reached',
+    'km_split',
+    'pace_alert',
+    'bpm_alert',
+    'motivation',
+    'finish',
+    'question',
+    'preview',
+    'segment_start',
+    'segment_pace_off',
+    'segment_end',
+    'push_to_talk',
+  };
+
+  static bool _isServerAllowedEvent(String e) =>
+      _serverEventAllowlist.contains(e);
 }
