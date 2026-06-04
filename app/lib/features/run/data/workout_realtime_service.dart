@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
+import 'package:flutter/foundation.dart' show debugPrint, kIsWeb, visibleForTesting;
 import 'package:flutter/services.dart';
 
 import 'package:runnin/core/logger/logger.dart';
@@ -49,6 +49,7 @@ class WorkoutRealtimeService {
 
   final _bpmController = StreamController<int?>.broadcast();
   final _sessionStateController = StreamController<WorkoutSessionState>.broadcast();
+  final _warningController = StreamController<String>.broadcast();
 
   /// Stream de BPMs do wearable. Emite `null` quando a fonte fica indisponível
   /// (Watch desligado, permission revogada). UI fica em '—' silenciosamente.
@@ -56,10 +57,19 @@ class WorkoutRealtimeService {
   /// Replay-on-listen: cada novo listener recebe imediatamente o `_latestBpm`
   /// cacheado (se houver), pra não perder o último sample emitido antes do
   /// subscribe. Crítico pra evitar race entre `start()` e o listener inicial.
+  ///
+  /// Anexa o EventChannel proativamente no primeiro listen — antes ficava
+  /// gated atrás de [start()] e qualquer subscriber que chegasse antes
+  /// (caso comum em StreamBuilders e tests) perdia samples até start.
   Stream<int?> get bpmStream async* {
+    _attachEventStream();
     if (_latestBpm != null) yield _latestBpm;
     yield* _bpmController.stream;
   }
+
+  /// Stream de warnings nativos (`no_hr_source`, `permission_denied`, etc).
+  /// UI consome pra mostrar banner quando a fonte de BPM falha.
+  Stream<String> get warningStream => _warningController.stream;
 
   /// Estados da sessão: idle → starting → active ↔ paused → stopping → idle.
   Stream<WorkoutSessionState> get sessionStateStream =>
@@ -173,6 +183,13 @@ class WorkoutRealtimeService {
     _eventSub = null;
   }
 
+  /// Test seam: simula um evento como se viesse do EventChannel nativo,
+  /// sem depender do binding global (que causa leak entre instâncias).
+  /// Em produção, [_onEvent] é alimentado por [_attachEventStream] / o canal
+  /// nativo iOS/Android.
+  @visibleForTesting
+  void debugSimulateEvent(Map<dynamic, dynamic> raw) => _onEvent(raw);
+
   void _onEvent(dynamic raw) {
     // Defensive parse: o EventChannel pode entregar Map<dynamic, dynamic>
     // (iOS NSDictionary → Map sem typo). Se vier num formato inesperado,
@@ -219,19 +236,24 @@ class WorkoutRealtimeService {
         }
         break;
       case 'warning':
-        // Ex.: 'no_hr_source' — silencioso na UI por decisão de produto, mas
-        // logado pra telemetria poder rastrear quantos users ficam sem fonte.
+        // Ex.: 'no_hr_source' — emitido após 8s sem samples; UI consome
+        // warningStream pra surfar banner que ajuda usuário a entender
+        // (pedir Watch / verificar permission). Antes era só log.
+        final code = '${raw['code']}';
         Logger.warn('workout_realtime.warning', context: {
-          'code': '${raw['code']}',
+          'code': code,
           'message': '${raw['message']}',
         });
+        if (!_warningController.isClosed) _warningController.add(code);
         _emitBpm(null);
         break;
       case 'error':
+        final code = '${raw['code']}';
         Logger.warn('workout_realtime.error', context: {
-          'code': '${raw['code']}',
+          'code': code,
           'message': '${raw['message']}',
         });
+        if (!_warningController.isClosed) _warningController.add(code);
         _emitBpm(null);
         break;
       default:
@@ -248,6 +270,17 @@ class WorkoutRealtimeService {
     if (_state == s) return;
     _state = s;
     if (!_sessionStateController.isClosed) _sessionStateController.add(s);
+  }
+
+  /// Limpa subs e fecha controllers. Usado nos testes pra evitar leak entre
+  /// instâncias (EventChannel é global por nome de canal). Em produção o
+  /// service vive pelo app inteiro — singleton top-level — então `dispose`
+  /// só é chamado em rotas de cleanup específicas / testes.
+  Future<void> dispose() async {
+    _detachEventStream();
+    if (!_bpmController.isClosed) await _bpmController.close();
+    if (!_sessionStateController.isClosed) await _sessionStateController.close();
+    if (!_warningController.isClosed) await _warningController.close();
   }
 }
 

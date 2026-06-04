@@ -1,6 +1,7 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:runnin/features/run/data/workout_realtime_service.dart';
+// ignore_for_file: unused_import
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -10,6 +11,13 @@ void main() {
 
     setUp(() {
       service = WorkoutRealtimeService();
+    });
+
+    tearDown(() async {
+      // EventChannel é global por nome — sem dispose, listeners de instâncias
+      // anteriores ficam vivos e capturam eventos de testes subsequentes,
+      // gerando vazamento de estado e asserts intermitentes.
+      await service.dispose();
     });
 
     test('bpmStream replay-on-listen emite o último valor cacheado', () async {
@@ -65,6 +73,67 @@ void main() {
       expect(service.latestBpm, null);
     });
 
+    test('warningStream emite código quando plugin envia no_hr_source',
+        () async {
+      final warning = service.warningStream.first;
+      _simulateEventReceived(service, {
+        'type': 'warning',
+        'code': 'no_hr_source',
+        'message': 'No HR for 8s',
+      });
+      expect(await warning, 'no_hr_source');
+    });
+
+    test('warningStream emite código quando plugin envia permission_denied',
+        () async {
+      final warning = service.warningStream.first;
+      _simulateEventReceived(service, {
+        'type': 'error',
+        'code': 'permission_denied',
+        'message': 'denied',
+      });
+      expect(await warning, 'permission_denied');
+    });
+
+    test(
+        'sequência start→sample reflete em latestBpm e propaga pros listeners',
+        () async {
+      // Replay-on-listen + propagação: simula a sequência real do run_bloc
+      // (start dispara o stream nativo; quando o primeiro sample chega,
+      // listeners imediatos recebem). Sem o auto-attach em [bpmStream],
+      // listeners atrás de start() perdiam samples.
+      final emissions = <int?>[];
+      final sub = service.bpmStream.listen(emissions.add);
+      // micro-task pra deixar o subscription do async* anexar antes do primeiro
+      // evento; sem isso, eventos disparados sincronicamente são perdidos.
+      await Future<void>.value();
+      _simulateEventReceived(service, {'type': 'bpm', 'value': 132});
+      await Future<void>.value();
+      _simulateEventReceived(service, {'type': 'bpm', 'value': 140});
+      await Future<void>.value();
+      await sub.cancel();
+      expect(emissions, [132, 140]);
+      expect(service.latestBpm, 140);
+    });
+
+    test(
+        'após warning no_hr_source, sample posterior reativa o stream com novo valor',
+        () async {
+      _simulateEventReceived(service, {'type': 'bpm', 'value': 110});
+      await Future<void>.value();
+      _simulateEventReceived(service, {
+        'type': 'warning',
+        'code': 'no_hr_source',
+      });
+      await Future<void>.value();
+      expect(service.latestBpm, null);
+
+      final next = service.bpmStream.first;
+      _simulateEventReceived(service, {'type': 'bpm', 'value': 125});
+      expect(await next, 125);
+      expect(service.latestBpm, 125);
+    });
+
     test('checkAvailability sem plataforma retorna unsupported_platform',
         () async {
       // Em ambiente de teste flutter_test, kIsWeb=false mas não tem
@@ -84,15 +153,9 @@ void main() {
   });
 }
 
-/// Simula um evento chegando pelo EventChannel. Usa o handler interno do
-/// stream controller via reflection do API público (`bpmStream` triggers
-/// `_attachEventStream` que assina o channel; aqui invocamos via mock).
+/// Simula um evento como se tivesse chegado pelo EventChannel nativo. Usa
+/// o seam `debugSimulateEvent` em vez do binding global — EventChannel é
+/// cached por nome de canal e vazava estado entre testes.
 void _simulateEventReceived(WorkoutRealtimeService service, Map<String, Object?> payload) {
-  const channel = EventChannel('runnin/workout_realtime/events');
-  TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-      .handlePlatformMessage(
-    channel.name,
-    const StandardMethodCodec().encodeSuccessEnvelope(payload),
-    (_) {},
-  );
+  service.debugSimulateEvent(payload);
 }

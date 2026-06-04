@@ -144,10 +144,18 @@ private let hrLog = OSLog(subsystem: "ai.runnin.workout", category: "hr")
     os_log("query_started anchor=%{public}@", log: hrLog, type: .info,
            lastAnchor == nil ? "fresh" : "resumed")
 
-    // Predicado: samples a partir de AGORA (não puxa histórico). Anchor inicial
-    // nil — o primeiro resultHandler vem com baseline (0 samples se nada novo).
+    // Predicado: amostras dos últimos 5 minutos. Antes era `withStart: Date()`
+    // — só samples FUTUROS contavam. O problema: o Apple Watch só escreve HR
+    // ~1Hz quando ele próprio está em workout. Em "uso normal" o Watch escreve
+    // samples esporádicos (1 a cada 1-5 min). Com `withStart: Date()`, se a
+    // run começa entre dois desses samples, fica minutos sem nenhum BPM — UI
+    // mostra "—" e usuário acha que tá quebrado.
+    //
+    // Janela de 5min cobre o intervalo típico do Watch sem ser workout, dando
+    // ao usuário um valor BPM logo no início. Updates continuam chegando via
+    // updateHandler conforme novos samples são escritos no HK.
     let predicate = HKQuery.predicateForSamples(
-      withStart: Date(),
+      withStart: Date(timeIntervalSinceNow: -300),
       end: nil,
       options: .strictStartDate
     )
