@@ -161,7 +161,14 @@ class _LoginPageState extends State<LoginPage> {
         // authStateChanges listener cuida do provisionMe + navigate.
         return;
       }
-      final googleUser = await GoogleSignIn().signIn();
+      // serverClientId é o WEB client OAuth (type=3) do projeto Firebase.
+      // Sem ele, o ID token vem assinado pro Android client em vez do projeto
+      // → signInWithCredential do Firebase rejeita ("Invalid IdToken").
+      // No iOS o GoogleSignIn lê o clientId do GoogleService-Info.plist; só
+      // Android precisa do serverClientId explícito.
+      const webClientId =
+          '506126899076-7k8v4rdhrbkgovm28gllkjdlofii4phq.apps.googleusercontent.com';
+      final googleUser = await GoogleSignIn(serverClientId: webClientId).signIn();
       if (googleUser == null) {
         if (mounted) setState(() => _loading = false);
         return;
