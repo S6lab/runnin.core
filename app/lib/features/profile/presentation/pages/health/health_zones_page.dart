@@ -2,9 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
+import 'package:runnin/features/biometrics/data/biometric_remote_datasource.dart';
 import 'package:runnin/features/profile/presentation/pages/health/zones_utils.dart';
 import 'package:runnin/shared/widgets/figma/figma_zone_card.dart';
 import 'package:runnin/shared/widgets/figma/figma_top_nav.dart';
+
+/// Origem do par (restingBpm, maxBpm) que alimenta as zonas. Usado pra
+/// exibir o badge "ESTIMADO" quando o usuário ainda não configurou os
+/// valores no perfil (cai pra biometrics summary + 220-idade).
+enum _BpmSource { profile, derived }
 
 class HealthZonesPage extends StatefulWidget {
   const HealthZonesPage({super.key});
@@ -15,8 +21,10 @@ class HealthZonesPage extends StatefulWidget {
 
 class _HealthZonesPageState extends State<HealthZonesPage> {
   final _userDatasource = UserRemoteDatasource();
-  UserProfile? _profile;
+  final _biometricDatasource = BiometricRemoteDatasource();
   List<HealthZone> _zones = [];
+  int? _effectiveMax;
+  _BpmSource _bpmSource = _BpmSource.profile;
   bool _loading = true;
 
   @override
@@ -28,24 +36,73 @@ class _HealthZonesPageState extends State<HealthZonesPage> {
   Future<void> _loadProfileAndZones() async {
     try {
       final profile = await _userDatasource.getMe();
-
       if (!mounted) return;
 
-      final hasBpm = profile?.restingBpm != null && profile?.maxBpm != null;
+      // Cascade pros valores efetivos:
+      //   restingBpm: profile → biometrics.avgRestingBpm
+      //   maxBpm:     profile → (220 - idade)  → biometrics.maxBpm observado
+      int? resting = profile?.restingBpm;
+      int? max = profile?.maxBpm;
+      var source = _BpmSource.profile;
+
+      if (resting == null || max == null) {
+        source = _BpmSource.derived;
+        // Try birthDate → idade → 220 - idade.
+        if (max == null) {
+          final age = _ageFromBirthDate(profile?.birthDate);
+          if (age != null && age > 0 && age < 120) {
+            max = 220 - age;
+          }
+        }
+        // Biometrics summary (30 dias) cobre o gap quando os outros falham.
+        try {
+          final summary = await _biometricDatasource.getSummary(windowDays: 30);
+          if (!mounted) return;
+          resting ??= summary.avgRestingBpm?.round();
+          max ??= summary.maxBpm?.round();
+        } catch (_) {
+          // best-effort: sem summary, exibe banner se ainda faltar valor.
+        }
+      }
+
+      final zones = (resting != null && max != null && max > resting)
+          ? computeHealthZones(restingBpm: resting, maxBpm: max)
+          : <HealthZone>[];
 
       setState(() {
-        _profile = profile;
-        _zones = hasBpm
-            ? computeHealthZones(
-                restingBpm: profile!.restingBpm!,
-                maxBpm: profile.maxBpm!,
-              )
-            : [];
+        _effectiveMax = max;
+        _bpmSource = source;
+        _zones = zones;
         _loading = false;
       });
     } catch (_) {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  /// Aceita ISO yyyy-MM-dd ou dd/MM/yyyy. Devolve idade em anos completos.
+  static int? _ageFromBirthDate(String? raw) {
+    if (raw == null || raw.trim().isEmpty) return null;
+    DateTime? d;
+    try {
+      d = DateTime.parse(raw);
+    } catch (_) {
+      final br = RegExp(r'^(\d{2})/(\d{2})/(\d{4})$').firstMatch(raw.trim());
+      if (br != null) {
+        d = DateTime(
+          int.parse(br.group(3)!),
+          int.parse(br.group(2)!),
+          int.parse(br.group(1)!),
+        );
+      }
+    }
+    if (d == null) return null;
+    final now = DateTime.now();
+    var age = now.year - d.year;
+    if (now.month < d.month || (now.month == d.month && now.day < d.day)) {
+      age -= 1;
+    }
+    return age;
   }
 
   @override
@@ -67,11 +124,13 @@ class _HealthZonesPageState extends State<HealthZonesPage> {
                         strokeWidth: 1.5,
                       ),
                     )
-                  : _profile == null ||
-                          _profile!.restingBpm == null ||
-                          _profile!.maxBpm == null
+                  : _zones.isEmpty
                       ? const _MissingBpmBanner()
-                      : _Body(profile: _profile!, zones: _zones),
+                      : _Body(
+                          maxBpm: _effectiveMax!,
+                          zones: _zones,
+                          estimated: _bpmSource == _BpmSource.derived,
+                        ),
             ),
           ],
         ),
@@ -82,12 +141,14 @@ class _HealthZonesPageState extends State<HealthZonesPage> {
 
 class _Body extends StatelessWidget {
   const _Body({
-    required this.profile,
+    required this.maxBpm,
     required this.zones,
+    required this.estimated,
   });
 
-  final UserProfile profile;
+  final int maxBpm;
   final List<HealthZone> zones;
+  final bool estimated;
 
   @override
   Widget build(BuildContext context) {
@@ -108,7 +169,7 @@ class _Body extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 24),
-          _MaxBpmHeader(maxBpm: profile.maxBpm!),
+          _MaxBpmHeader(maxBpm: maxBpm, estimated: estimated),
           const SizedBox(height: 24),
           _SectionHeader(label: 'ZONAS', index: '02'),
           const SizedBox(height: 16),
@@ -152,7 +213,7 @@ class _MissingBpmBanner extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           Text(
-            'Preencha sua frequência cardíaca em repouso e máxima no perfil para visualizar suas zonas.',
+            'Preencha sua data de nascimento ou sua frequência cardíaca em repouso e máxima no perfil para visualizar suas zonas.',
             textAlign: TextAlign.center,
             style: context.runninType.bodySm.copyWith(
               color: FigmaColors.textSecondary,
@@ -181,8 +242,9 @@ class _MissingBpmBanner extends StatelessWidget {
 }
 
 class _MaxBpmHeader extends StatelessWidget {
-  const _MaxBpmHeader({required this.maxBpm});
+  const _MaxBpmHeader({required this.maxBpm, required this.estimated});
   final int maxBpm;
+  final bool estimated;
 
   @override
   Widget build(BuildContext context) {
@@ -196,13 +258,29 @@ class _MaxBpmHeader extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            'FC MÁX',
-            style: context.runninType.labelMd.copyWith(
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
-              color: FigmaColors.textMuted,
-            ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'FC MÁX',
+                style: context.runninType.labelMd.copyWith(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  color: FigmaColors.textMuted,
+                ),
+              ),
+              if (estimated) ...[
+                const SizedBox(height: 4),
+                Text(
+                  'ESTIMADO',
+                  style: context.runninType.labelCaps.copyWith(
+                    fontSize: 9,
+                    color: context.runninPalette.primary,
+                  ),
+                ),
+              ],
+            ],
           ),
           Text(
             '$maxBpm bpm',
