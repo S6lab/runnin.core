@@ -1,5 +1,6 @@
 import 'package:runnin/core/logger/logger.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
+import 'package:runnin/features/biometrics/data/biometric_remote_datasource.dart';
 import 'package:runnin/features/run/data/datasources/run_remote_datasource.dart';
 import 'package:runnin/features/run/domain/entities/run.dart';
 import 'package:runnin/features/training/data/datasources/plan_remote_datasource.dart';
@@ -19,6 +20,10 @@ class HomeData {
   /// Número da semana do PLANO em curso (1-based, vem de PlanWeek.weekNumber).
   /// Null quando não há plano ativo. Não confundir com a semana ISO do ano.
   final int? currentPlanWeekNumber;
+  /// Resumo biométrico dos últimos 7 dias — alimenta o card SONO em
+  /// Status Corporal (avgSleepHours) e fallback do card cardíaco.
+  /// Null quando o user não tem wearable conectado ou a chamada falhou.
+  final BiometricSummary? biometric;
 
   const HomeData({
     required this.profile,
@@ -32,6 +37,7 @@ class HomeData {
     required this.plannedSessions,
     required this.streakDays,
     this.currentPlanWeekNumber,
+    this.biometric,
   });
 }
 
@@ -55,11 +61,13 @@ class GetHomeDataUseCase {
   final UserRemoteDatasource _userDs;
   final PlanRemoteDatasource _planDs;
   final RunRemoteDatasource _runDs;
+  final BiometricRemoteDatasource _biometricDs;
 
   GetHomeDataUseCase()
     : _userDs = UserRemoteDatasource(),
       _planDs = PlanRemoteDatasource(),
-      _runDs = RunRemoteDatasource();
+      _runDs = RunRemoteDatasource(),
+      _biometricDs = BiometricRemoteDatasource();
 
   static const _dayNames = [
     '',
@@ -91,11 +99,21 @@ class GetHomeDataUseCase {
         Logger.error('home.load.listRuns_failed', e, st);
         throw e;
       }),
+      // Biometric summary 7d — alimenta SONO + fallback cardíaco. Best-effort:
+      // se o user não tem wearable conectado, server retorna 200 vazio.
+      _biometricDs.getSummary(windowDays: 7).then<BiometricSummary?>((s) => s).catchError(
+        (Object e, StackTrace st) {
+          Logger.warn('home.load.biometricSummary_failed',
+              context: {'err': '$e'});
+          return null;
+        },
+      ),
     ]);
 
     final profile = results[0] as UserProfile?;
     final plan = results[1] as Plan?;
     final runs = results[2] as List<Run>;
+    final biometric = results[3] as BiometricSummary?;
     final completedRuns =
         runs.where((run) => run.status == 'completed').toList()
           ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
@@ -176,6 +194,7 @@ class GetHomeDataUseCase {
       plannedSessions: plannedSessions,
       streakDays: _calculateStreakDays(completedRuns),
       currentPlanWeekNumber: currentPlanWeek?.weekNumber,
+      biometric: biometric,
     );
   }
 

@@ -1,15 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:runnin/core/network/api_client.dart';
 import 'package:runnin/core/theme/app_palette.dart';
+import 'package:runnin/features/subscriptions/data/billing_service.dart';
 import 'package:runnin/features/subscriptions/data/subscription_remote_datasource.dart';
 import 'package:runnin/features/subscriptions/presentation/subscription_controller.dart';
 import 'package:runnin/shared/widgets/runnin_app_bar.dart';
 
 /// Paywall pós-assessment ou ao tentar acessar feature premium.
 ///
-/// Versão atual: UI + flag manual. "ASSINAR" seta `premium=true` via PATCH /users/me
-/// (sem cobrança real). Quando integrar Stripe/StoreKit, troca o handler.
+/// Versão atual: chama [billingService.purchase] que hoje é uma
+/// [MockBillingService] (PATCH /users/me {premium:true} — sem cobrança real).
+/// Quando RevenueCat for plugado, basta trocar o singleton em
+/// `billing_service.dart` — esta page não muda.
 ///
 /// Anônimo cai aqui automaticamente. Pode ir freemium (continuar grátis sem IA).
 class PaywallPage extends StatefulWidget {
@@ -28,7 +30,6 @@ class PaywallPage extends StatefulWidget {
 
 class _PaywallPageState extends State<PaywallPage> {
   final _datasource = SubscriptionRemoteDatasource();
-  final _dio = apiClient;
   String _priceLabel = 'R\$ 19,90';
   String _periodLabel = '/mês';
   bool _loading = true;
@@ -70,25 +71,25 @@ class _PaywallPageState extends State<PaywallPage> {
       _saving = true;
       _error = null;
     });
-    try {
-      await _dio.patch<void>('/users/me', data: {'premium': true});
-      // Atualiza o billing plan central antes de seguir (gate de geração lê dele).
-      await subscriptionController.refresh();
-      if (!mounted) return;
-      // Veio do onboarding (tem startDate) + agora pode gerar → /plan-loading.
-      if (widget.startDate != null &&
-          subscriptionController.has('generatePlan')) {
-        context.go('/plan-loading?startDate=${widget.startDate}');
-      } else {
-        context.go(widget.nextRoute);
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-        _error = 'Não foi possível assinar agora: $e';
+    final outcome = await billingService.purchase();
+    if (!mounted) return;
+    if (outcome.cancelled) {
+      setState(() => _saving = false);
+      return;
+    }
+    if (!outcome.isSuccess) {
+      setState(() {
+        _error = outcome.error ?? 'Não foi possível assinar agora.';
         _saving = false;
       });
-      }
+      return;
+    }
+    // Veio do onboarding (tem startDate) + agora pode gerar → /plan-loading.
+    if (widget.startDate != null &&
+        subscriptionController.has('generatePlan')) {
+      context.go('/plan-loading?startDate=${widget.startDate}');
+    } else {
+      context.go(widget.nextRoute);
     }
   }
 

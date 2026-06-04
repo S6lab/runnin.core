@@ -269,7 +269,10 @@ class _PlanSetupPageState extends State<PlanSetupPage> {
     final clampedIdx = _stepIdx.clamp(0, total - 1);
     return Column(
       children: [
-        FigmaOnboardingTopProgressBar(total: total, currentIndex: clampedIdx),
+        SafeArea(
+          bottom: false,
+          child: FigmaOnboardingTopProgressBar(total: total, currentIndex: clampedIdx),
+        ),
         Expanded(
           child: SafeArea(
             top: false,

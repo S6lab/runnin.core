@@ -13,6 +13,7 @@ import 'package:runnin/features/home/domain/use_cases/get_home_data_use_case.dar
 import 'package:runnin/features/location_weather/data/location_weather_controller.dart';
 import 'package:runnin/features/home/presentation/cubit/home_cubit.dart';
 import 'package:runnin/features/notifications/presentation/cubit/notifications_cubit.dart';
+import 'package:runnin/features/subscriptions/presentation/subscription_controller.dart';
 import 'package:runnin/features/subscriptions/presentation/widgets/premium_locked_card.dart';
 import 'package:runnin/features/run/domain/entities/run.dart';
 import 'package:runnin/shared/widgets/app_panel.dart';
@@ -136,10 +137,25 @@ class _HomeViewState extends State<_HomeView> {
                      //12 stat icons, and coach.ai brief. Real map asset from Figma pending.
                      _HeroSection(data: state.data),
                     const SizedBox(height: 20),
-                    if (!(state.data.profile?.premium ?? false)) ...[
-                      _PremiumUpsellBanner(),
-                      const SizedBox(height: 20),
-                    ],
+                    // Lê via subscriptionController (fonte de verdade pós-paywall).
+                    // O `state.data.profile?.premium` vinha do cache do dashboard
+                    // e ficava stale após o upgrade → card de paywall continuava
+                    // visível até reload manual. ListenableBuilder garante
+                    // rebuild quando subscriptionController.refresh() é chamado.
+                    ListenableBuilder(
+                      listenable: subscriptionController,
+                      builder: (_, _) {
+                        final isPro = subscriptionController.isPro ||
+                            (state.data.profile?.premium ?? false);
+                        if (isPro) return const SizedBox.shrink();
+                        return Column(
+                          children: [
+                            _PremiumUpsellBanner(),
+                            const SizedBox(height: 20),
+                          ],
+                        );
+                      },
+                    ),
                     // NOTE: _UserInfoCards (peso/altura/idade/freq) and
                     // _SkinSection used to live here as a dashboard-style
                     // layout. They are PERFIL-owned sections and were
@@ -155,29 +171,40 @@ class _HomeViewState extends State<_HomeView> {
                     // detalhes do plano + curadoria do coach AI → Premium.
                     // Freemium vê 1 card de paywall agrupado no lugar das
                     // 3 seções pra não poluir o feed com 3 banners iguais.
-                    if (state.data.profile?.premium ?? false) ...[
-                      // B4 SUP-408 Section 3 — Semana
-                      _SemanaSection(data: state.data),
-                      const SizedBox(height: 20),
-                      // B5 SUP-409 Section 4 — Performance
-                      _PerformanceSection(data: state.data),
-                      const SizedBox(height: 20),
-                      // B6 SUP-410 Section 5 — Coach Resumo Semanal
-                      _CoachAiWeeklySummary(data: state.data),
-                      const SizedBox(height: 20),
-                    ] else ...[
-                      const PremiumLockedCard(
-                        title: 'PLANO • PERFORMANCE • COACH AI',
-                        description:
-                            'Distribuição semanal, métricas de pace/BPM '
-                            'e resumo do coach AI são Premium. Sua '
-                            'corrida livre e os dados pessoais seguem '
-                            'liberados abaixo.',
-                        icon: Icons.lock_outline,
-                        next: '/home',
-                      ),
-                      const SizedBox(height: 20),
-                    ],
+                    ListenableBuilder(
+                      listenable: subscriptionController,
+                      builder: (_, _) {
+                        final isPro = subscriptionController.isPro ||
+                            (state.data.profile?.premium ?? false);
+                        if (isPro) {
+                          return Column(
+                            children: [
+                              _SemanaSection(data: state.data),
+                              const SizedBox(height: 20),
+                              _PerformanceSection(data: state.data),
+                              const SizedBox(height: 20),
+                              _CoachAiWeeklySummary(data: state.data),
+                              const SizedBox(height: 20),
+                            ],
+                          );
+                        }
+                        return Column(
+                          children: const [
+                            PremiumLockedCard(
+                              title: 'PLANO • PERFORMANCE • COACH AI',
+                              description:
+                                  'Distribuição semanal, métricas de pace/BPM '
+                                  'e resumo do coach AI são Premium. Sua '
+                                  'corrida livre e os dados pessoais seguem '
+                                  'liberados abaixo.',
+                              icon: Icons.lock_outline,
+                              next: '/home',
+                            ),
+                            SizedBox(height: 20),
+                          ],
+                        );
+                      },
+                    ),
                      // B7 SUP-411 Section 6 — Status Corporal (REAL)
                      ///status corporal implements all 4 metrics with real data: Prontidão, Sono, Carga Muscular, Hidratação
                      _StatusCorporalSection(
@@ -1397,11 +1424,16 @@ class _StatusCorporalSectionState extends State<_StatusCorporalSection> {
               Expanded(
                 child: MetricCard(
                   label: 'SONO',
-                  value: hasSleepData ? 'OK' : '--',
+                  value: hasSleepData
+                      ? widget.data.biometric!.avgSleepHours!.toStringAsFixed(1)
+                      : '--',
+                  unit: hasSleepData ? 'h' : null,
                   valueColor: FigmaColors.textPrimary,
-                  sub: profile?.hasWearable == true
-                      ? 'Sem sono sincronizado via Health'
-                      : 'Sem origem de sono conectada',
+                  sub: hasSleepData
+                      ? 'Média 7 dias via Apple Health / Health Connect'
+                      : profile?.hasWearable == true
+                          ? 'Sem sono sincronizado via Health'
+                          : 'Sem origem de sono conectada',
                   chart: TextButton(
                     onPressed: () => context.push('/profile/edit'),
                     child: Text(hasSleepData ? 'VER DETALHES' : 'REVISAR PERFIL'),
@@ -1734,7 +1766,8 @@ bool _hasRealBpmData(HomeData data) {
 }
 
 bool _hasRealSleepData(HomeData data) {
-  return false;
+  final hours = data.biometric?.avgSleepHours;
+  return hours != null && hours > 0;
 }
 
 String _weeklyRecommendation(HomeData data) {
