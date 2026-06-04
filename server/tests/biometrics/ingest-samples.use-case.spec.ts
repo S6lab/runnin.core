@@ -79,15 +79,29 @@ describe('IngestSamplesUseCase — promotion pro profile (Frente Bug 1 / 18526fa
     expect(userRepo.patches[0]?.patch.restingBpm).toBe(52);
   });
 
-  it('promove max_bpm também', async () => {
+  it('promove max_bpm derivado do pico dos samples bpm (HealthKit não tem max nativo)', async () => {
     await useCase.execute('uid_1', {
       samples: [
         {
-          type: 'max_bpm',
-          value: 188.4, // server arredonda
+          type: 'bpm',
+          value: 130, // recovery, dentro da janela mas baixo
           unit: 'bpm',
           source: 'apple_health',
           recordedAt: '2026-06-01T00:00:00.000Z',
+        },
+        {
+          type: 'bpm',
+          value: 188.4, // pico do treino → vira maxBpm
+          unit: 'bpm',
+          source: 'apple_health',
+          recordedAt: '2026-06-01T00:30:00.000Z',
+        },
+        {
+          type: 'bpm',
+          value: 95, // easy, abaixo do floor 140 — não conta
+          unit: 'bpm',
+          source: 'apple_health',
+          recordedAt: '2026-06-01T01:00:00.000Z',
         },
       ],
     });
@@ -95,7 +109,41 @@ describe('IngestSamplesUseCase — promotion pro profile (Frente Bug 1 / 18526fa
     expect(userRepo.patches[0]?.patch.maxBpm).toBe(188);
   });
 
-  it('não chama updatePartial quando não há resting/max bpm no batch', async () => {
+  it('não promove maxBpm se pico estiver abaixo de 140 (recovery/easy, não pico real)', async () => {
+    await useCase.execute('uid_1', {
+      samples: [
+        {
+          type: 'bpm',
+          value: 120,
+          unit: 'bpm',
+          source: 'apple_health',
+          recordedAt: '2026-06-01T00:00:00.000Z',
+        },
+      ],
+    });
+
+    expect(userRepo.patches).toHaveLength(0);
+  });
+
+  it('só atualiza maxBpm se for MAIOR que o atual (monotônico)', async () => {
+    // Mock profile.maxBpm = 195 já existente. Sample novo com pico 170 não deve sobrescrever.
+    userRepo.findById = async () => ({ maxBpm: 195 } as UserProfile);
+    await useCase.execute('uid_1', {
+      samples: [
+        {
+          type: 'bpm',
+          value: 170,
+          unit: 'bpm',
+          source: 'apple_health',
+          recordedAt: '2026-06-01T00:00:00.000Z',
+        },
+      ],
+    });
+
+    expect(userRepo.patches).toHaveLength(0);
+  });
+
+  it('não chama updatePartial quando não há nenhum bpm relevante no batch', async () => {
     await useCase.execute('uid_1', {
       samples: [
         {
