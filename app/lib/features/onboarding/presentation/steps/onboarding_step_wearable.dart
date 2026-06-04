@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/features/biometrics/data/health_sync_service.dart';
+import 'package:runnin/features/profile/data/exam_uploader.dart';
 import 'package:runnin/shared/widgets/figma/export.dart';
 
 /// Step do onboarding que oferece sincronizar dados de saúde.
@@ -30,10 +31,14 @@ class OnboardingStepWearable extends StatefulWidget {
 }
 
 class _OnboardingStepWearableState extends State<OnboardingStepWearable> {
+  final _examUploader = ExamUploader();
   bool _connecting = false;
   bool _connected = false;
   int? _syncedCount;
   String? _error;
+  bool _uploadingExam = false;
+  int _examsUploaded = 0;
+  String? _examError;
 
   bool get _isSupported => healthSyncService.isSupported;
 
@@ -85,6 +90,27 @@ class _OnboardingStepWearableState extends State<OnboardingStepWearable> {
       _error = null;
     });
     widget.onSelect(false);
+  }
+
+  Future<void> _onUploadExamTap() async {
+    if (_uploadingExam) return;
+    setState(() {
+      _uploadingExam = true;
+      _examError = null;
+    });
+    final outcome = await _examUploader.pickAndUpload(context);
+    if (!mounted) return;
+    if (outcome.isSuccess) {
+      setState(() {
+        _examsUploaded += 1;
+        _uploadingExam = false;
+      });
+    } else {
+      setState(() {
+        _uploadingExam = false;
+        _examError = outcome.errorMessage;
+      });
+    }
   }
 
   @override
@@ -164,34 +190,106 @@ class _OnboardingStepWearableState extends State<OnboardingStepWearable> {
           FigmaCyanInfoBlock(
             icon: Icons.description_outlined,
             title: 'Tem exames médicos recentes?',
-            bodyWidget: Text.rich(
-              TextSpan(
-                style: context.runninType.bodySm.copyWith(
-                  height: 19.2 / 12,
-                  color: FigmaColors.textSecondary,
-                ),
-                children: [
-                  const TextSpan(
-                    text:
-                        'Testes ergométricos, exames de sangue e laudos médicos permitem que eu calibre zonas cardíacas com FC máx real, monitore ferritina e identifique restrições. Após criar seu plano, acesse ',
-                  ),
+            bodyWidget: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text.rich(
                   TextSpan(
-                    text: 'Perfil → Saúde → Exames',
-                    style: context.runninType.labelMd.copyWith(
-                      fontWeight: FontWeight.w500,
+                    style: context.runninType.bodySm.copyWith(
                       height: 19.2 / 12,
-                      color: context.runninPalette.primary,
+                      color: FigmaColors.textSecondary,
+                    ),
+                    children: [
+                      const TextSpan(
+                        text:
+                            'Testes ergométricos, exames de sangue e laudos médicos permitem que eu calibre zonas cardíacas com FC máx real, monitore ferritina e identifique restrições. Envie agora (PDF ou foto, máx 10MB) ou depois em ',
+                      ),
+                      TextSpan(
+                        text: 'Perfil → Saúde → Exames',
+                        style: context.runninType.labelMd.copyWith(
+                          fontWeight: FontWeight.w500,
+                          height: 19.2 / 12,
+                          color: context.runninPalette.primary,
+                        ),
+                      ),
+                      const TextSpan(text: '.'),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.md),
+                _ExamUploadButton(
+                  uploading: _uploadingExam,
+                  uploadedCount: _examsUploaded,
+                  onTap: _onUploadExamTap,
+                ),
+                if (_examError != null) ...[
+                  const SizedBox(height: AppSpacing.sm),
+                  Text(
+                    _examError!,
+                    style: context.runninType.bodySm.copyWith(
+                      color: context.runninPalette.error,
+                      height: 19.2 / 12,
                     ),
                   ),
-                  const TextSpan(
-                    text:
-                        ' para enviar até 5 arquivos por mês (PDF ou foto, máx 10MB).',
-                  ),
                 ],
-              ),
+              ],
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Botão de upload de exame dentro do FigmaCyanInfoBlock. Mostra estado de
+/// carregamento e contador de exames enviados sem bloquear o avanço do
+/// onboarding — exames são opcionais.
+class _ExamUploadButton extends StatelessWidget {
+  final bool uploading;
+  final int uploadedCount;
+  final VoidCallback onTap;
+
+  const _ExamUploadButton({
+    required this.uploading,
+    required this.uploadedCount,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    final hasUploads = uploadedCount > 0;
+    final label = uploading
+        ? 'Enviando…'
+        : hasUploads
+            ? 'Enviar mais um exame (+$uploadedCount)'
+            : 'Enviar exame agora';
+    return SizedBox(
+      width: double.infinity,
+      height: 44,
+      child: OutlinedButton.icon(
+        onPressed: uploading ? null : onTap,
+        icon: Icon(
+          uploading
+              ? Icons.hourglass_top_outlined
+              : hasUploads
+                  ? Icons.check_circle_outline
+                  : Icons.upload_file_outlined,
+          color: palette.primary,
+          size: 18,
+        ),
+        label: Text(
+          label,
+          style: context.runninType.labelMd.copyWith(
+            color: palette.primary,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        style: OutlinedButton.styleFrom(
+          side: BorderSide(color: palette.primary, width: 1),
+          shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+        ),
       ),
     );
   }

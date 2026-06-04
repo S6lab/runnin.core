@@ -131,7 +131,10 @@ class _OnboardingPageState extends State<OnboardingPage> {
       backgroundColor: palette.background,
       body: Column(
         children: [
-          FigmaOnboardingTopProgressBar(total: _totalSteps, currentIndex: _step),
+          SafeArea(
+            bottom: false,
+            child: FigmaOnboardingTopProgressBar(total: _totalSteps, currentIndex: _step),
+          ),
           Expanded(
             child: SafeArea(
               top: false,
