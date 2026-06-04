@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'dart:io' show Platform;
+import 'dart:io' show File, Platform;
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
@@ -10,6 +10,7 @@ import 'package:flutter/services.dart';
 import 'package:gal/gal.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import 'package:runnin/core/logger/logger.dart';
@@ -85,22 +86,67 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
   }
 
   Future<Uint8List?> _renderPng(GlobalKey key) async {
-    final ctx = key.currentContext;
-    if (ctx == null) return null;
-    final boundary = ctx.findRenderObject() as RenderRepaintBoundary;
-    final image = await boundary.toImage(pixelRatio: 3.0);
-    final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-    return byteData?.buffer.asUint8List();
+    try {
+      // FlutterMap renderiza tiles async via network. Espera ~500ms
+      // pra garantir que os tiles visíveis já estejam pintados antes de
+      // capturar — sem isso, o PNG do mapa sai quase em branco
+      // (RepaintBoundary só captura o que JÁ foi pintado).
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+      // ignore: use_build_context_synchronously — key.currentContext é um getter
+      // de GlobalKey, não BuildContext capturado antes do gap async.
+      final ctx = key.currentContext;
+      if (ctx == null) {
+        Logger.warn('share.render_png.no_context');
+        return null;
+      }
+      final boundary = ctx.findRenderObject() as RenderRepaintBoundary?;
+      if (boundary == null) {
+        Logger.warn('share.render_png.no_boundary');
+        return null;
+      }
+      final image = await boundary.toImage(pixelRatio: 3.0);
+      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      final bytes = byteData?.buffer.asUint8List();
+      Logger.info('share.render_png.ok', context: {'bytes': bytes?.length ?? 0});
+      return bytes;
+    } catch (e, st) {
+      Logger.error('share.render_png.failed', e, st);
+      return null;
+    }
+  }
+
+  /// Salva o PNG em temp file e devolve o XFile. share_plus tem bugs
+  /// conhecidos com XFile.fromData em iOS — alguns apps (WhatsApp,
+  /// Twitter/X) não pegam a imagem na share sheet quando vem só de bytes.
+  /// File on-disk com path absoluto resolve.
+  Future<XFile?> _writeTempPng(Uint8List png) async {
+    try {
+      final dir = await getTemporaryDirectory();
+      final ts = DateTime.now().millisecondsSinceEpoch;
+      final file = File('${dir.path}/runnin_share_$ts.png');
+      await file.writeAsBytes(png);
+      return XFile(file.path, mimeType: 'image/png', name: 'runnin_share.png');
+    } catch (e, st) {
+      Logger.error('share.write_temp.failed', e, st);
+      return null;
+    }
   }
 
   /// Compartilha via action sheet do OS (user escolhe destino).
   Future<void> _shareImage(GlobalKey key) async {
     final png = await _renderPng(key);
-    if (png == null) return;
+    if (png == null) {
+      _showSnack('Não consegui capturar a imagem. Tenta de novo?');
+      return;
+    }
+    final file = await _writeTempPng(png);
+    if (file == null) {
+      _showSnack('Falha ao preparar a imagem.');
+      return;
+    }
     try {
-      await Share.shareXFiles(
-        [XFile.fromData(png, mimeType: 'image/png', name: 'runnin_share.png')],
-      );
+      final result = await Share.shareXFiles([file]);
+      Logger.info('share.generic.result', context: {'status': result.status.name});
     } catch (e, st) {
       Logger.error('share.generic_failed', e, st);
       _showSnack('Não conseguimos compartilhar. Tenta de novo?');
@@ -169,27 +215,36 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
     }
     // Fallback: action sheet do OS (também usado em Android e quando IG
     // não estiver instalado).
+    final file = await _writeTempPng(png);
+    if (file == null) {
+      _showSnack('Falha ao preparar a imagem.');
+      return;
+    }
     try {
-      await Share.shareXFiles(
-        [XFile.fromData(png, mimeType: 'image/png', name: 'runnin_share.png')],
-        subject: 'Stories Instagram',
-      );
+      await Share.shareXFiles([file], subject: 'Stories Instagram');
     } catch (e, st) {
       Logger.error('share.instagram_fallback_failed', e, st);
       _showSnack('Não conseguimos abrir o Instagram.');
     }
   }
 
-  /// WhatsApp share — usa share_plus, que em iOS abre o action sheet com WA
-  /// quando instalado + LSApplicationQueriesSchemes declarado.
+  /// WhatsApp share — usa share_plus com file on-disk (XFile.fromData não
+  /// passa pra WA em iOS de forma confiável; com path absoluto, a share
+  /// sheet do iOS resolve direito).
   Future<void> _shareToWhatsApp(GlobalKey key) async {
     final png = await _renderPng(key);
-    if (png == null) return;
+    if (png == null) {
+      _showSnack('Não consegui capturar a imagem.');
+      return;
+    }
+    final file = await _writeTempPng(png);
+    if (file == null) {
+      _showSnack('Falha ao preparar a imagem.');
+      return;
+    }
     try {
-      await Share.shareXFiles(
-        [XFile.fromData(png, mimeType: 'image/png', name: 'runnin_share.png')],
-        subject: 'Compartilhar no WhatsApp',
-      );
+      final result = await Share.shareXFiles([file], subject: 'Runnin');
+      Logger.info('share.whatsapp.result', context: {'status': result.status.name});
     } catch (e, st) {
       Logger.error('share.whatsapp_failed', e, st);
       _showSnack('Não conseguimos abrir o WhatsApp.');

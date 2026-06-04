@@ -413,9 +413,16 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
                               pulsing: _coachAudioPlaying,
                             ),
                             _StatusChip(
-                              icon: Icons.favorite_outline,
-                              label: 'BPM · —',
-                              color: palette.muted,
+                              icon: state.bpmSourceActive && state.currentBpm != null
+                                  ? Icons.favorite
+                                  : Icons.favorite_outline,
+                              label: state.bpmSourceActive && state.currentBpm != null
+                                  ? 'BPM · ${state.currentBpm}'
+                                  : 'BPM · —',
+                              color: state.bpmSourceActive && state.currentBpm != null
+                                  ? palette.secondary
+                                  : palette.muted,
+                              pulsing: state.bpmSourceActive && state.currentBpm != null,
                             ),
                           ],
                         ),
@@ -1245,10 +1252,11 @@ class _ActiveStatsLayoutState extends State<_ActiveStatsLayout> {
     final runType = state.runType?.isNotEmpty == true ? state.runType! : initialType;
     final paceVal = state.formattedPace == '--:--' ? '--:--' : state.formattedPace;
     // BPM live: vem direto do RunBloc.state.currentBpm — alimentado pelo
-    // workoutRealtimeService (~1Hz quando há Watch / Wear OS pareado). Sem
-    // wearable, fica null → célula mostra '—'.
-    // Kcal estimado simples: distância (km) × 60 (média runner ~60 kcal/km).
-    final int? bpm = state.currentBpm;
+    // workoutRealtimeService (~1Hz quando há Watch / Wear OS pareado).
+    // Quando state.bpmSourceActive=false (sem samples por >20s), exibimos
+    // "—" em cor muted em vez de manter o último valor (que dava sensação
+    // de valor mockado quando o wearable desconectava).
+    final int? bpm = state.bpmSourceActive ? state.currentBpm : null;
     final kcal = ((state.distanceM / 1000) * 60).round();
 
     // Pace ACUMULADO por km (tempo total até o km / nº de km), em mm:ss/km.
@@ -1345,7 +1353,7 @@ class _ActiveStatsLayoutState extends State<_ActiveStatsLayout> {
                       label: 'BPM',
                       value: bpm?.toString() ?? '—',
                       unit: _bpmZone(bpm),
-                      valueColor: palette.secondary,
+                      valueColor: bpm != null ? palette.secondary : palette.muted,
                       valueSize: 20,
                     ),
                   ),

@@ -1861,10 +1861,12 @@ class _MonthlyWeekCard extends StatelessWidget {
       ],
     );
 
+    // Tab MENSAL navega pra tab SEMANAL em qualquer card (locked ou não).
+    // O bloqueio da visualização detalhada acontece APENAS na tab semanal
+    // (na sessão individual). Antes, W3+ no monthly mostrava um dialog
+    // bloqueando a navegação — usuário ficava sem saída na visão geral.
     return InkWell(
-      onTap: isLocked
-          ? () => _showCheckpointLockDialog(context, plan, week.weekNumber)
-          : onTap,
+      onTap: onTap,
       child: AppPanel(
         margin: const EdgeInsets.only(bottom: 8),
         // Semana ATUAL em destaque: borda cyan + fundo levemente tingido.

@@ -8,6 +8,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:runnin/core/audio/telemetry_tts.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 import 'package:runnin/features/run/data/datasources/run_local_datasource.dart';
+import 'package:runnin/core/logger/logger.dart';
 import 'package:runnin/features/run/data/datasources/run_remote_datasource.dart';
 import 'package:runnin/features/run/data/datasources/run_coach_remote_datasource.dart';
 import 'package:runnin/features/run/data/live_run_coach_session.dart';
@@ -122,6 +123,11 @@ class RunState {
   final int? currentBpm;
   /// BPM máximo visto durante a corrida atual. Reset em _onStart.
   final int? maxBpmSeen;
+  /// True quando a fonte BPM (Watch/strap) emitiu sample nos últimos
+  /// [BPM_STALE_SECONDS]s. False quando o wearable caiu / perdeu conexão /
+  /// nunca emitiu. UI usa pra exibir ícone "desativado" em vez de manter
+  /// o último valor cacheado (que dava sensação de valor mockado).
+  final bool bpmSourceActive;
 
   const RunState({
     this.status = RunStatus.idle,
@@ -142,6 +148,7 @@ class RunState {
     this.noMovementPrompt = false,
     this.currentBpm,
     this.maxBpmSeen,
+    this.bpmSourceActive = false,
   });
 
   RunState copyWith({
@@ -163,6 +170,7 @@ class RunState {
     bool? noMovementPrompt,
     int? currentBpm,
     int? maxBpmSeen,
+    bool? bpmSourceActive,
   }) => RunState(
     status: status ?? this.status,
     runId: runId ?? this.runId,
@@ -182,6 +190,7 @@ class RunState {
     noMovementPrompt: noMovementPrompt ?? this.noMovementPrompt,
     currentBpm: currentBpm ?? this.currentBpm,
     maxBpmSeen: maxBpmSeen ?? this.maxBpmSeen,
+    bpmSourceActive: bpmSourceActive ?? this.bpmSourceActive,
   );
 
   String get formattedDistance => '${(distanceM / 1000).toStringAsFixed(2)}km';
@@ -661,6 +670,19 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
 
   void _onTimerTick(_TimerTick event, Emitter<RunState> emit) {
     if (state.status != RunStatus.active) return;
+    // Staleness check: se o último sample BPM foi há mais de _bpmStaleThresholdMs,
+    // marca a fonte como inativa pra UI exibir "—" em vez de manter valor
+    // antigo. Watch pode escrever samples esporádicos (1 a cada poucos
+    // segundos) — 20s tolera bem isso e ainda detecta perda real.
+    final bpmStale = _lastBpmAtMs != null &&
+        DateTime.now().millisecondsSinceEpoch - _lastBpmAtMs! > _bpmStaleThresholdMs;
+    if (bpmStale && state.bpmSourceActive) {
+      emit(state.copyWith(
+        elapsedS: state.elapsedS + 1,
+        bpmSourceActive: false,
+      ));
+      return;
+    }
     emit(state.copyWith(elapsedS: state.elapsedS + 1));
   }
 
@@ -1010,10 +1032,15 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
     final value = event.value;
     if (value != null && value > 0) {
       _kmBpmSamples.add(value);
+      _lastBpmAtMs = DateTime.now().millisecondsSinceEpoch;
       final newMax = (state.maxBpmSeen == null || value > state.maxBpmSeen!)
           ? value
           : state.maxBpmSeen!;
-      emit(state.copyWith(currentBpm: value, maxBpmSeen: newMax));
+      emit(state.copyWith(
+        currentBpm: value,
+        maxBpmSeen: newMax,
+        bpmSourceActive: true,
+      ));
 
       // high_bpm cue — gate por alertPref + maxBpm declarado + cooldown 90s.
       // Sem maxBpm não dispara (evita falsos positivos com estimativa 220-age).
@@ -1032,10 +1059,21 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
         _lastCueAt['high_bpm'] = DateTime.now().millisecondsSinceEpoch;
       }
     } else {
-      // Source caiu (Watch desligado, permission revogada). Mantém o último
-      // value no state pra não piscar pra '—' por um glitch isolado.
+      // Source caiu (Watch desligado, permission revogada, no_hr_source).
+      // Marca como inativa pra UI exibir ícone "desativado" + "—" em vez
+      // de manter o último valor mockado. Mantém o `currentBpm` no state
+      // (pra historico em-memória), mas a UI usa `bpmSourceActive` pra gatear.
+      _lastBpmAtMs = null;
+      if (state.bpmSourceActive) {
+        emit(state.copyWith(bpmSourceActive: false));
+      }
     }
   }
+
+  /// Timestamp em ms do último sample BPM recebido. Usado em [_onTimerTick]
+  /// pra marcar a fonte como inativa após [_bpmStaleThresholdMs] sem update.
+  int? _lastBpmAtMs;
+  static const _bpmStaleThresholdMs = 20 * 1000; // 20s sem sample → stale
 
   void _onAbandon(AbandonRun event, Emitter<RunState> emit) {
     _stop();
@@ -1348,10 +1386,20 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
       }
       return;
     }
-    if (!_coachSession.isOpen) return;
+    if (!_coachSession.isOpen) {
+      Logger.warn('coach.cue.skipped_session_closed', context: {
+        'event': event,
+        'kmReached': '${kmReached ?? '-'}',
+      });
+      return;
+    }
     // Janela da saudação: não provoca falas por cima da largada.
     if (event != 'finish' &&
         DateTime.now().millisecondsSinceEpoch < _suppressCuesUntilMs) {
+      Logger.info('coach.cue.skipped_suppressed', context: {
+        'event': event,
+        'remainingMs': '${_suppressCuesUntilMs - DateTime.now().millisecondsSinceEpoch}',
+      });
       return;
     }
     // Marca o trigger pra o turn que vai chegar — o session usa pra alimentar
