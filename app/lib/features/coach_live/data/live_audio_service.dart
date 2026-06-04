@@ -121,7 +121,11 @@ class LiveAudioService {
     );
     try {
       await _player.stop();
-      await _player.play(BytesSource(wav));
+      // mimeType OBRIGATÓRIO no iOS: audioplayers escreve os bytes em
+      // tempDir sem extensão → sem mimeType, AVPlayer não consegue inferir
+      // o formato e estoura "Failed to set playerItem". Com mimeType,
+      // AVURLAssetOverrideMIMETypeKey força a decodificação WAV.
+      await _player.play(BytesSource(wav, mimeType: 'audio/wav'));
       Logger.info('live_audio.played', context: {'wav_bytes': wav.length});
     } catch (e, st) {
       Logger.error('live_audio.play_failed', e, st, {'wav_bytes': wav.length});
