@@ -16,5 +16,8 @@ import UIKit
     if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "WorkoutRealtimePlugin") {
       WorkoutRealtimePlugin.register(with: registrar)
     }
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "InstagramStoriesPlugin") {
+      InstagramStoriesPlugin.register(with: registrar)
+    }
   }
 }

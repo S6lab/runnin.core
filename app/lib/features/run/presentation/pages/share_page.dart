@@ -1,17 +1,16 @@
-import 'dart:io' show File;
+import 'dart:convert';
+import 'dart:io' show Platform;
 import 'dart:math' as math;
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:gal/gal.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import 'package:runnin/core/logger/logger.dart';
 import 'package:runnin/core/theme/app_palette.dart';
@@ -140,36 +139,43 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
     }
   }
 
-  /// Instagram Stories deeplink. Salva PNG temp e abre IG via URL scheme.
-  /// Fallback pra action sheet genérico se IG não estiver instalado.
+  static const _igStoriesChannel = MethodChannel('runnin/instagram_stories');
+
+  /// Instagram Stories: iOS via plugin nativo que escreve no UIPasteboard
+  /// com chave `com.instagram.sharedSticker.backgroundImage` e abre o
+  /// deeplink `instagram-stories://share`. Sem isso, o IG abria vazio.
+  /// Fallback pra action sheet genérico se IG não estiver instalado ou
+  /// se o plugin retornar false.
   Future<void> _shareToInstagramStories(GlobalKey key) async {
     final png = await _renderPng(key);
     if (png == null) return;
-    try {
-      final dir = await getTemporaryDirectory();
-      final file = File(
-        '${dir.path}/runnin_ig_${DateTime.now().millisecondsSinceEpoch}.png',
-      );
-      await file.writeAsBytes(png);
-      final uri = Uri.parse(
-        'instagram-stories://share?source_application=com.s6lab.runnin',
-      );
-      final canOpen = await canLaunchUrl(uri);
-      if (canOpen) {
-        // Em iOS, IG lê o PNG do clipboard ou do pasteboard. Fallback no
-        // share genérico mais confiável que o pasteboard manipulation.
-        await Share.shareXFiles(
-          [XFile(file.path, mimeType: 'image/png', name: 'runnin_share.png')],
-          subject: 'Stories Instagram',
+    if (!kIsWeb && Platform.isIOS) {
+      try {
+        final ok = await _igStoriesChannel.invokeMethod<bool>(
+          'shareToStories',
+          {
+            'imageBase64': base64Encode(png),
+            'appId': 'com.s6lab.runnin',
+          },
         );
-      } else {
-        Logger.info('share.instagram.not_installed');
-        await Share.shareXFiles(
-          [XFile(file.path, mimeType: 'image/png', name: 'runnin_share.png')],
-        );
+        if (ok == true) {
+          Logger.info('share.instagram.opened_native');
+          return;
+        }
+        Logger.info('share.instagram.not_installed_or_failed');
+      } catch (e, st) {
+        Logger.error('share.instagram_native_failed', e, st);
       }
+    }
+    // Fallback: action sheet do OS (também usado em Android e quando IG
+    // não estiver instalado).
+    try {
+      await Share.shareXFiles(
+        [XFile.fromData(png, mimeType: 'image/png', name: 'runnin_share.png')],
+        subject: 'Stories Instagram',
+      );
     } catch (e, st) {
-      Logger.error('share.instagram_failed', e, st);
+      Logger.error('share.instagram_fallback_failed', e, st);
       _showSnack('Não conseguimos abrir o Instagram.');
     }
   }
@@ -195,16 +201,53 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 
+  /// Pergunta câmera ou galeria via bottom sheet. Web cai direto pra galeria
+  /// (sem câmera no browser). Native abre sheet → captura/escolhe → bytes.
   Future<void> _pickPhoto() async {
-    final picker = ImagePicker();
-    final picked = await picker.pickImage(
-      source: kIsWeb ? ImageSource.gallery : ImageSource.camera,
-    );
-    if (picked != null) {
-      final bytes = await picked.readAsBytes();
-      if (mounted) {
-        setState(() => _photoBytes = bytes);
+    final ImageSource? source;
+    if (kIsWeb) {
+      source = ImageSource.gallery;
+    } else {
+      source = await showModalBottomSheet<ImageSource>(
+        context: context,
+        backgroundColor: FigmaColors.surfaceCard,
+        builder: (sheetContext) => SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: Icon(Icons.photo_camera_outlined,
+                    color: context.runninPalette.primary),
+                title: const Text('Tirar foto agora'),
+                onTap: () => Navigator.pop(sheetContext, ImageSource.camera),
+              ),
+              ListTile(
+                leading: Icon(Icons.photo_library_outlined,
+                    color: context.runninPalette.primary),
+                title: const Text('Escolher da galeria'),
+                onTap: () => Navigator.pop(sheetContext, ImageSource.gallery),
+              ),
+              const SizedBox(height: 12),
+            ],
+          ),
+        ),
+      );
+    }
+    if (source == null) return;
+    try {
+      final picker = ImagePicker();
+      final picked = await picker.pickImage(source: source, imageQuality: 90);
+      if (picked != null) {
+        final bytes = await picked.readAsBytes();
+        if (mounted) {
+          setState(() => _photoBytes = bytes);
+        }
       }
+    } catch (e, st) {
+      Logger.error('share.photo_pick_failed', e, st, {
+        'source': source.name,
+      });
+      _showSnack('Não foi possível abrir ${source == ImageSource.camera ? 'a câmera' : 'a galeria'}.');
     }
   }
 
