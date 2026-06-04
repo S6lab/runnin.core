@@ -317,6 +317,20 @@ class _LoginPageState extends State<LoginPage> {
   String? _phoneVerificationId;
   dynamic _phoneConfirmationResult;
 
+  /// Volta da tela OTP pra entrada de telefone. Limpa o código digitado e
+  /// o erro pra não carregar contexto do attempt anterior. Mantém o
+  /// `_completePhone` como hint visual (user só clicou "trocar", pode ser
+  /// que queira ajustar dígitos).
+  void _backToPhoneEntry() {
+    setState(() {
+      _phoneMode = false;
+      _error = null;
+      _smsCodeController.clear();
+      _phoneVerificationId = null;
+      _phoneConfirmationResult = null;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final palette = context.runninPalette;
@@ -422,6 +436,19 @@ class _LoginPageState extends State<LoginPage> {
                     child: ElevatedButton(
                       onPressed: _loading ? null : _confirmPhoneCode,
                       child: const Text('ENTRAR'),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Center(
+                    child: TextButton(
+                      onPressed: _loading ? null : _backToPhoneEntry,
+                      child: Text(
+                        'TROCAR NÚMERO',
+                        style: context.runninType.labelMd.copyWith(
+                          color: palette.muted,
+                          letterSpacing: 0.6,
+                        ),
+                      ),
                     ),
                   ),
                 ],
