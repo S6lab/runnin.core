@@ -11,7 +11,7 @@ import { enforceLongRunDay } from './enforce-long-run-day';
 import { enforceTargetPace } from './enforce-target-pace';
 import { RunnerLevel, UserProfile } from '@modules/users/domain/user.entity';
 import { UserRepository } from '@modules/users/domain/user.repository';
-import { RACE_WINDOWS, getAllowedWindows, hasImprovePaceBypass } from './plan-windows.constants';
+import { PEAK_WEEKLY_KM, RACE_WINDOWS, getAllowedWindows, hasImprovePaceBypass } from './plan-windows.constants';
 import { validateGoalWindow, GoalWindowError } from './validate-goal-window';
 import { validatePaceTarget, PaceTargetError } from './validate-pace-target';
 import { validateVolumeForGoal } from './validate-volume-for-goal';
@@ -672,9 +672,17 @@ export class GeneratePlanUseCase {
         input.targetPaceMinKm ?? null,
         input.currentPaceMinKm ?? null,
       );
+      // requiredPeakKm: trava o cap no pico necessário pra meta (PEAK_WEEKLY_KM
+      // de plan-windows.constants). Sem isso, a rampa podia subir
+      // indefinidamente, mas também ficava limitada pelo currentWeeklyKm baixo
+      // do iniciante. Match validateVolumeForGoal.
+      const requiredPeakKm = input.goalKind === 'race' && input.raceDistanceKm
+        ? PEAK_WEEKLY_KM[input.raceDistanceKm as 5 | 10 | 21 | 42]
+        : null;
       const clampResult = clampSessionsToCaps(paceRes.weeks, {
         currentWeeklyKm: input.currentWeeklyKm ?? null,
         capacityDistanceKm: input.capacityDistanceKm ?? null,
+        requiredPeakKm,
       });
       const weeks = clampResult.weeks;
       const allOps = [
