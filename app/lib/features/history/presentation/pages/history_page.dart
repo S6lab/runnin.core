@@ -3,11 +3,15 @@ import 'package:go_router/go_router.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/core/units/relative_period_label.dart';
+import 'package:runnin/features/auth/data/user_remote_datasource.dart';
+import 'package:runnin/features/biometrics/data/biometric_remote_datasource.dart';
+import 'package:runnin/features/biometrics/domain/run_zones.dart';
 import 'package:runnin/features/history/data/period_analysis_remote_datasource.dart';
 import 'package:runnin/features/history/data/stats_remote_datasource.dart';
 import 'package:runnin/features/history/domain/entities/period_analysis.dart';
 import 'package:runnin/features/history/domain/entities/stats_aggregate.dart';
 import 'package:runnin/features/history/domain/entities/stats_breakdown.dart';
+import 'package:runnin/features/profile/presentation/pages/health/zones_utils.dart';
 import 'package:runnin/features/run/data/datasources/run_remote_datasource.dart';
 import 'package:runnin/features/run/domain/entities/run.dart';
 import 'package:runnin/features/training/data/datasources/plan_remote_datasource.dart';
@@ -32,8 +36,12 @@ class HistoryPage extends StatefulWidget {
 class _HistoryPageState extends State<HistoryPage> {
   final _remote = RunRemoteDatasource();
   final _planRemote = PlanRemoteDatasource();
+  final _userRemote = UserRemoteDatasource();
+  final _biometricRemote = BiometricRemoteDatasource();
   List<Run>? _allRuns;
   Plan? _plan;
+  UserProfile? _profile;
+  BiometricSummary? _biometricSummary;
   bool _loading = true;
   String? _error;
   _Period _period = _Period.month;
@@ -169,18 +177,32 @@ class _HistoryPageState extends State<HistoryPage> {
   Future<void> _load() async {
     setState(() { _loading = true; _error = null; });
     try {
-      // Carrega runs e plano em paralelo. Plano pode falhar (freemium /
-      // user sem plano) — não bloqueia listagem de runs.
+      // Carrega runs, plano, profile e summary em paralelo. Tudo exceto runs
+      // pode falhar (freemium / user sem plano / sem biometria) — não bloqueia
+      // a listagem. Profile+summary alimentam o cálculo de zonas cardíacas
+      // com ranges Karvonen reais em vez dos buckets hardcoded antigos.
+      // getSummary tem retorno não-nullable; envolve em Future.value(null) no
+      // catch pra encaixar no Future.wait paralelo abaixo.
+      Future<BiometricSummary?> summaryF() async {
+        try { return await _biometricRemote.getSummary(windowDays: 30); }
+        catch (_) { return null; }
+      }
       final results = await Future.wait<dynamic>([
         _remote.listRuns(limit: 200),
         _planRemote.getCurrentPlan().catchError((_) => null),
+        _userRemote.getMe().catchError((_) => null),
+        summaryF(),
       ]);
       final runs = results[0] as List<Run>;
       final plan = results[1] as Plan?;
+      final profile = results[2] as UserProfile?;
+      final summary = results[3] as BiometricSummary?;
       if (mounted) {
         setState(() {
           _allRuns = runs;
           _plan = plan;
+          _profile = profile;
+          _biometricSummary = summary;
           _loading = false;
         });
       }
@@ -327,6 +349,8 @@ class _HistoryPageState extends State<HistoryPage> {
               loadingAnalysis: _loadingAnalysis,
               aggregate: _aggregate,
               breakdown: _breakdown,
+              profile: _profile,
+              biometricSummary: _biometricSummary,
             )
           : _RunsListView(runs: runs, plan: _plan),
     );
@@ -350,6 +374,10 @@ class _DataView extends StatelessWidget {
   final bool loadingAnalysis;
   final StatsAggregate? aggregate;
   final StatsBreakdown? breakdown;
+  /// Profile + summary alimentam o cálculo Karvonen das zonas (ranges
+  /// reais por user). Null = cai pro fallback de buckets fixos.
+  final UserProfile? profile;
+  final BiometricSummary? biometricSummary;
   const _DataView({
     required this.runs,
     required this.plan,
@@ -360,6 +388,8 @@ class _DataView extends StatelessWidget {
     this.loadingAnalysis = false,
     this.aggregate,
     this.breakdown,
+    this.profile,
+    this.biometricSummary,
   });
 
   @override
@@ -412,13 +442,34 @@ class _DataView extends StatelessWidget {
         ]),
         const SizedBox(height: 20),
 
-        // Seção Zonas Cardíacas
+        // Seção Zonas Cardíacas — barra de overview + cards Z1-Z5 detalhados.
+        // Cards reusam FigmaZoneCard (mesmo widget de perfil/saúde/zonas) com
+        // ranges Karvonen do user (profile.restingBpm/maxBpm; fallback 60-190).
         if (stats.zoneDistribution.isNotEmpty)
           ChartPanel(
             title: 'ZONAS CARDÍACAS',
             subtitle: 'Distribuição de tempo nas zonas',
-            child: FigmaZoneDistributionBar(
-              zonePercentages: stats.zoneDistribution,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                FigmaZoneDistributionBar(
+                  zonePercentages: stats.zoneDistribution,
+                ),
+                if (stats.zoneCards.isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  for (var i = 0; i < stats.zoneCards.length; i++) ...[
+                    FigmaZoneCard(
+                      zoneNumber: stats.zoneCards[i].number,
+                      zoneLabel: stats.zoneCards[i].label,
+                      bpmRange:
+                          '${stats.zoneCards[i].minBpm}-${stats.zoneCards[i].maxBpm} bpm',
+                      percent: stats.zoneCards[i].pctTime,
+                      zoneColor: stats.zoneCards[i].color,
+                    ),
+                    if (i < stats.zoneCards.length - 1) const SizedBox(height: 8),
+                  ],
+                ],
+              ],
             ),
           ),
         const SizedBox(height: 16),
@@ -543,33 +594,64 @@ class _DataView extends StatelessWidget {
       avgBpm = totalBpm ~/ runsWithBpmValid.length;
     }
 
-    // Zonas cardíacas (simulado se não tiver dados)
-    final runsWithBpm = runs.where((r) => r.avgBpm != null && r.avgBpm! > 0).toList();
-    List<double> zoneDistribution = [];
-    if (runsWithBpm.isNotEmpty) {
-      int z1 = 0, z2 = 0, z3 = 0, z4 = 0, z5 = 0;
-      for (final r in runsWithBpm) {
-        final bpm = r.avgBpm!;
-        if (bpm < 100) {
-          z1++;
-        } else if (bpm < 120) {
-          z2++;
-        } else if (bpm < 145) {
-          z3++;
-        } else if (bpm < 170) {
-          z4++;
-        } else {
-          z5++;
+    // Zonas cardíacas — distribuição de tempo ponderada pelos splits.
+    // Antes usávamos count-based (cada run "vota" numa zona pelo avgBpm
+    // geral), o que enviesava pra Z3 em qualquer corrida moderada. Agora:
+    //   1. Se o profile/summary fecharem o Karvonen (resting+max válidos),
+    //      classificamos cada split por avgBpm na zona Karvonen real e
+    //      somamos durationS.
+    //   2. Fallback (sem range válido): bucket por faixas fixas com tempo
+    //      total da run, não conta de runs — pelo menos não enviesa por
+    //      tamanho.
+    final range = resolveBpmRange(profile: profile, summary: biometricSummary);
+    final karvonenZones = range.isValid
+        ? computeHealthZones(restingBpm: range.resting!, maxBpm: range.max!)
+        : <HealthZone>[];
+    final zoneTimes = List<int>.filled(5, 0);
+    var anyBpm = false;
+    for (final r in runs) {
+      // Se tem splits, prefere os splits (mais granular). Senão, fallback
+      // pro avgBpm da run inteira × durationS.
+      if (r.splits.isNotEmpty) {
+        for (final s in r.splits) {
+          final bpm = s.avgBpm;
+          if (bpm == null || bpm <= 0 || s.durationS <= 0) continue;
+          anyBpm = true;
+          zoneTimes[_bucketBpm(bpm, karvonenZones)] += s.durationS;
         }
+      } else if (r.avgBpm != null && r.avgBpm! > 0 && r.durationS > 0) {
+        anyBpm = true;
+        zoneTimes[_bucketBpm(r.avgBpm!, karvonenZones)] += r.durationS;
       }
-      final total = runsWithBpm.length;
-      zoneDistribution = [
-        (z1 / total) * 100,
-        (z2 / total) * 100,
-        (z3 / total) * 100,
-        (z4 / total) * 100,
-        (z5 / total) * 100,
+    }
+    final List<double> zoneDistribution;
+    final List<HealthZone> zoneCards;
+    if (anyBpm) {
+      final totalTime = zoneTimes.fold<int>(0, (a, b) => a + b);
+      final pcts = totalTime > 0
+          ? zoneTimes.map((t) => (t / totalTime) * 100).toList()
+          : <double>[0, 0, 0, 0, 0];
+      zoneDistribution = pcts;
+      // Cards reusam a definição (cor + range BPM) do Karvonen ou fallback
+      // de buckets fixos quando o range não é válido.
+      final base = karvonenZones.isNotEmpty
+          ? karvonenZones
+          : _fallbackZonesForCards();
+      zoneCards = [
+        for (var i = 0; i < base.length; i++)
+          HealthZone(
+            number: base[i].number,
+            label: base[i].label,
+            description: base[i].description,
+            minBpm: base[i].minBpm,
+            maxBpm: base[i].maxBpm,
+            color: base[i].color,
+            pctTime: pcts[i],
+          ),
       ];
+    } else {
+      zoneDistribution = const [];
+      zoneCards = const [];
     }
 
     // Volume por semana (últimas 4 semanas)
@@ -620,8 +702,35 @@ class _DataView extends StatelessWidget {
       avgBpm: avgBpm,
       calories: totalCalories,
       zoneDistribution: zoneDistribution,
+      zoneCards: zoneCards,
       weeklyVolume: weeklyVolume,
     );
+  }
+
+  /// Mapeia um BPM em uma das 5 zonas. Usa Karvonen quando [zones] está
+  /// disponível (range válido por user); senão cai em buckets fixos
+  /// 100/120/145/170 (mantém compatibilidade com a lógica antiga).
+  int _bucketBpm(int bpm, List<HealthZone> zones) {
+    if (zones.isEmpty) {
+      if (bpm < 100) return 0;
+      if (bpm < 120) return 1;
+      if (bpm < 145) return 2;
+      if (bpm < 170) return 3;
+      return 4;
+    }
+    for (var i = 0; i < zones.length; i++) {
+      if (bpm < zones[i].maxBpm || i == zones.length - 1) return i;
+    }
+    return zones.length - 1;
+  }
+
+  /// Fallback de cards Z1-Z5 quando o profile não fecha o Karvonen. Usa
+  /// os mesmos labels/cores da página de zonas mas com ranges fixos —
+  /// melhor que sumir os cards inteiros.
+  List<HealthZone> _fallbackZonesForCards() {
+    // Reusa computeHealthZones com restingBpm=60 e maxBpm=190 (genéricos)
+    // pra ter os mesmos labels+cores; o range BPM é só ilustrativo.
+    return computeHealthZones(restingBpm: 60, maxBpm: 190);
   }
 
 }
@@ -640,6 +749,10 @@ class _HistoryStats {
   /// as runs sem `calories` enriquecido); 0 é resultado válido.
   final int? calories;
   final List<double> zoneDistribution;
+  /// Cards Z1-Z5 com nome+range BPM+pctTime preenchidos, renderizados
+  /// abaixo da barra. Vazio = sem BPM válido no período (e a barra
+  /// também fica oculta).
+  final List<HealthZone> zoneCards;
   final List<_WeeklyEntry> weeklyVolume;
 
   const _HistoryStats({
@@ -654,13 +767,14 @@ class _HistoryStats {
     this.avgBpm,
     this.calories,
     this.zoneDistribution = const [],
+    this.zoneCards = const [],
     required this.weeklyVolume,
   });
 
   factory _HistoryStats.empty() => const _HistoryStats(
     count: 0, runningCount: 0, totalKm: 0, totalS: 0, totalTimeLabel: '0m',
     avgPaceLabel: '--:--', streakDays: 0, totalXp: 0,
-    avgBpm: null, calories: null, zoneDistribution: [], weeklyVolume: [],
+    avgBpm: null, calories: null, zoneDistribution: [], zoneCards: [], weeklyVolume: [],
   );
 }
 
