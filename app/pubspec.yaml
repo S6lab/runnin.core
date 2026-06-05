@@ -75,6 +75,11 @@ dependencies:
   # Coach Live audio (mic capture + playback) for Gemini Live multimodal.
   record: ^5.2.1
   audioplayers: ^6.1.0
+  # Query-only do route de áudio (AVAudioSession.devicesStream iOS / AudioManager
+  # Android) pro indicador de fone no header da Home. NÃO chamamos
+  # `session.configure(...)` aqui — audioplayers segue dono da config; nós só
+  # listamos devices ativos.
+  audio_session: ^0.1.21
   # TTS on-device (iOS AVSpeechSynthesizer / Android TextToSpeech / Web
   # SpeechSynthesis) pro modo FREEMIUM falar telemetria a cada km sem
   # backend hit. Premium continua usando Gemini Live (voz natural).

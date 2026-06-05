@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:runnin/core/audio/audio_route_service.dart';
 import 'package:runnin/core/router/app_router.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
@@ -85,6 +86,9 @@ class _HomeViewState extends State<_HomeView> {
     _checkOnboarding(onboardingCacheStatus());
     // Cidade + clima — idempotente, dispara só 1x por sessão.
     locationWeatherController.initIfNeeded();
+    // Audio route — escuta mudanças de fones/AirPods/BT no header da Home.
+    // Idempotente; falha silenciosa em web.
+    audioRouteService.init();
   }
 
   Future<void> _checkOnboarding(bool? cachedStatus) async {
@@ -286,12 +290,17 @@ class _HomeHeader extends StatelessWidget {
               onTap: () => context.push('/profile/health/devices'),
             ),
             const SizedBox(width: 14),
-            _HeaderIconButton(
-              icon: Icons.headphones_outlined,
-              isOn: false,
-              palette: palette,
-              tooltip: 'AUDIO',
-              onTap: () => _openBluetoothSettings(context),
+            // AUDIO: lit quando audioRouteService detecta fone/AirPods/BT.
+            // ListenableBuilder rebuilda o ícone quando o user pluga/desconecta.
+            ListenableBuilder(
+              listenable: audioRouteService,
+              builder: (_, _) => _HeaderIconButton(
+                icon: Icons.headphones_outlined,
+                isOn: audioRouteService.hasExternalAudio,
+                palette: palette,
+                tooltip: 'AUDIO',
+                onTap: () => _openBluetoothSettings(context),
+              ),
             ),
             const SizedBox(width: 14),
             const _NotificationBell(),
@@ -352,18 +361,26 @@ class _HeaderIconButton extends StatelessWidget {
   }
 }
 
-/// Tenta abrir as configs de Bluetooth do sistema. Sem package nativo
-/// (app_settings), o melhor que dá pra fazer cross-platform é mostrar
-/// instrução. Quando o app migrar pra mobile-only, trocar por
+/// Snackbar instrutivo do ícone AUDIO. Quando há fone detectado, confirma
+/// qual é (ex: "Áudio saindo via AirPods Pro"); quando não há, instrui o
+/// user a conectar via Bluetooth do sistema. Não abre settings nativo —
+/// quando o app migrar pra mobile-only podemos trocar por
 /// AppSettings.openAppSettings(type: bluetooth).
 Future<void> _openBluetoothSettings(BuildContext context) async {
+  final hasExternal = audioRouteService.hasExternalAudio;
+  final deviceName = audioRouteService.activeDeviceName;
+  final msg = hasExternal
+      ? (deviceName != null
+          ? 'Áudio saindo via $deviceName.'
+          : 'Fone detectado — áudio do coach sai por ele.')
+      : 'Áudio do coach sai pelo dispositivo conectado. Conecte/troque '
+          'fones de ouvido pelo Bluetooth do seu sistema.';
   ScaffoldMessenger.of(context).showSnackBar(
     SnackBar(
       behavior: SnackBarBehavior.floating,
       backgroundColor: const Color(0xFF1A1A2A),
       content: Text(
-        'Áudio do coach sai pelo dispositivo conectado. Conecte/troque '
-        'fones de ouvido pelo Bluetooth do seu sistema.',
+        msg,
         style: GoogleFonts.jetBrainsMono(
           color: Colors.white,
           fontSize: 12,
