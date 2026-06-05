@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'dart:io' show File, Platform;
+import 'dart:io' show Directory, File, Platform;
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
@@ -115,21 +115,62 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
     }
   }
 
-  /// Salva o PNG em temp file e devolve o XFile. share_plus tem bugs
+  /// Salva o PNG em arquivo e devolve o XFile. share_plus tem bugs
   /// conhecidos com XFile.fromData em iOS — alguns apps (WhatsApp,
   /// Twitter/X) não pegam a imagem na share sheet quando vem só de bytes.
   /// File on-disk com path absoluto resolve.
+  ///
+  /// IMPORTANTE: usar applicationDocumentsDirectory (não temporary). iOS 17
+  /// limpa o temp dir em momentos imprevisíveis e a share sheet às vezes
+  /// mantém o picker aberto por segundos antes do user escolher o destino;
+  /// se o temp file sumir nesse meio, WhatsApp/Twitter recebem "imagem
+  /// quebrada" e não compartilham. Documents é persistente até a app
+  /// remover. Limpamos shares antigos no fim do método.
   Future<XFile?> _writeTempPng(Uint8List png) async {
     try {
-      final dir = await getTemporaryDirectory();
+      final dir = await getApplicationDocumentsDirectory();
+      final shareDir = Directory('${dir.path}/share');
+      if (!await shareDir.exists()) {
+        await shareDir.create(recursive: true);
+      }
+      // GC: remove shares com mais de 1h pra não acumular MB na app.
+      _cleanupOldShares(shareDir);
       final ts = DateTime.now().millisecondsSinceEpoch;
-      final file = File('${dir.path}/runnin_share_$ts.png');
+      final file = File('${shareDir.path}/runnin_share_$ts.png');
       await file.writeAsBytes(png);
       return XFile(file.path, mimeType: 'image/png', name: 'runnin_share.png');
     } catch (e, st) {
       Logger.error('share.write_temp.failed', e, st);
       return null;
     }
+  }
+
+  /// Fire-and-forget: deleta PNGs de share gerados há mais de 1h. Rodado
+  /// a cada _writeTempPng pra manter o dir enxuto. Falhas silenciosas.
+  void _cleanupOldShares(Directory dir) {
+    () async {
+      try {
+        final now = DateTime.now();
+        await for (final entity in dir.list()) {
+          if (entity is! File) continue;
+          if (!entity.path.endsWith('.png')) continue;
+          final stat = await entity.stat();
+          if (now.difference(stat.modified) > const Duration(hours: 1)) {
+            try {
+              await entity.delete();
+            } catch (_) {/* concorrência com share sheet aberto */}
+          }
+        }
+      } catch (_) {/* dir vazio ou indisponível */}
+    }();
+  }
+
+  /// Calcula o rect de origem pro share sheet no iPad — sem isso,
+  /// `Share.shareXFiles` lança em iPad. iPhone ignora.
+  Rect? _sharePositionOrigin() {
+    final box = context.findRenderObject() as RenderBox?;
+    if (box == null) return null;
+    return box.localToGlobal(Offset.zero) & box.size;
   }
 
   /// Compartilha via action sheet do OS (user escolhe destino).
@@ -145,7 +186,10 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
       return;
     }
     try {
-      final result = await Share.shareXFiles([file]);
+      final result = await Share.shareXFiles(
+        [file],
+        sharePositionOrigin: _sharePositionOrigin(),
+      );
       Logger.info('share.generic.result', context: {'status': result.status.name});
     } catch (e, st) {
       Logger.error('share.generic_failed', e, st);
@@ -230,7 +274,9 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
 
   /// WhatsApp share — usa share_plus com file on-disk (XFile.fromData não
   /// passa pra WA em iOS de forma confiável; com path absoluto, a share
-  /// sheet do iOS resolve direito).
+  /// sheet do iOS resolve direito). Arquivo vai em applicationDocuments
+  /// (não temp) pra sobreviver à janela que o iOS 17 mantém aberta antes
+  /// do user escolher o destino.
   Future<void> _shareToWhatsApp(GlobalKey key) async {
     final png = await _renderPng(key);
     if (png == null) {
@@ -243,11 +289,49 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
       return;
     }
     try {
-      final result = await Share.shareXFiles([file], subject: 'Runnin');
-      Logger.info('share.whatsapp.result', context: {'status': result.status.name});
+      final result = await Share.shareXFiles(
+        [file],
+        subject: 'Runnin',
+        sharePositionOrigin: _sharePositionOrigin(),
+      );
+      Logger.info('share.whatsapp.result', context: {
+        'status': result.status.name,
+        if (result.raw.isNotEmpty) 'raw': result.raw,
+      });
     } catch (e, st) {
       Logger.error('share.whatsapp_failed', e, st);
       _showSnack('Não conseguimos abrir o WhatsApp.');
+    }
+  }
+
+  /// Twitter/X share — mesma estratégia do WhatsApp (file on-disk via
+  /// share sheet). Antes caía no _shareImage genérico sem subject e sem
+  /// log dedicado; agora dá pra rastrear se o user dismissou ou se o
+  /// destino simplesmente recusou a imagem.
+  Future<void> _shareToTwitter(GlobalKey key) async {
+    final png = await _renderPng(key);
+    if (png == null) {
+      _showSnack('Não consegui capturar a imagem.');
+      return;
+    }
+    final file = await _writeTempPng(png);
+    if (file == null) {
+      _showSnack('Falha ao preparar a imagem.');
+      return;
+    }
+    try {
+      final result = await Share.shareXFiles(
+        [file],
+        subject: 'Runnin',
+        sharePositionOrigin: _sharePositionOrigin(),
+      );
+      Logger.info('share.twitter.result', context: {
+        'status': result.status.name,
+        if (result.raw.isNotEmpty) 'raw': result.raw,
+      });
+    } catch (e, st) {
+      Logger.error('share.twitter_failed', e, st);
+      _showSnack('Não conseguimos abrir o Twitter / X.');
     }
   }
 
@@ -538,7 +622,7 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
           _ShareTarget(
             icon: Icons.alternate_email,
             label: 'Twitter / X',
-            onTap: () => _shareImage(_overlayBoundaryKey),
+            onTap: () => _shareToTwitter(_overlayBoundaryKey),
           ),
           _ShareTarget(
             icon: Icons.save_alt,
