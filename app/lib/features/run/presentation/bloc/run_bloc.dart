@@ -1026,11 +1026,17 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
         }
       }
 
+      // Recompute final dos splits com os pontos completos. state.splits foi
+      // atualizado por último na última travessia de km — o tail (ex: 40m
+      // de uma run de 3.04km) ainda não tinha virado split. computeKmSplits
+      // emite um KmSplit parcial quando há leftoverM > 100m, fechando esse gap.
+      final finalSplits = computeKmSplits(state.points);
+
       final run = await _remote.completeRun(
         remoteRunId,
         distanceM: state.distanceM,
         durationS: state.elapsedS,
-        splits: state.splits,
+        splits: finalSplits,
       );
       await _local.clearRun(storageRunId);
       // Sessão planejada concluída → o server marcou executedRunId na sessão.

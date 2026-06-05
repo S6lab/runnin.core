@@ -13,6 +13,12 @@ const KmSplitInputSchema = z.object({
   avgPaceMinKm: z.string(),
   avgBpm: z.number().optional(),
   elevationGain: z.number().optional(),
+  /** Distância real do split (m). Opcional — splits de 1km completo omitem.
+   *  Splits parciais (tail < 1km) enviam o leftover real pra calorias
+   *  serem calculadas proporcionalmente. */
+  distanceM: z.number().positive().optional(),
+  /** Marca o split como parcial (tail da corrida). Renderizado com '~' na UI. */
+  isPartial: z.boolean().optional(),
 });
 
 export const CompleteRunSchema = z.object({
@@ -98,14 +104,18 @@ export class CompleteRunUseCase {
     // próprio km (não da run inteira). Persistir splits permite que a hist
     // renderize métricas km-a-km sem precisar reabrir o GPS bruto.
     const enrichedSplits: KmSplit[] | undefined = input.splits?.map(s => {
+      // Splits completos: 1000m. Parciais: usa distanceM real do tail.
+      const splitDistM = typeof s.distanceM === 'number' ? s.distanceM : 1000;
       const base: KmSplit = {
         kmIndex: s.kmIndex,
         durationS: s.durationS,
         avgPaceMinKm: s.avgPaceMinKm,
-        calories: calcCalories(1000, s.durationS, weightKg),
+        calories: calcCalories(splitDistM, s.durationS, weightKg),
       };
       if (typeof s.avgBpm === 'number') base.avgBpm = s.avgBpm;
       if (typeof s.elevationGain === 'number') base.elevationGain = s.elevationGain;
+      if (typeof s.distanceM === 'number') base.distanceM = s.distanceM;
+      if (s.isPartial === true) base.isPartial = true;
       return base;
     });
 

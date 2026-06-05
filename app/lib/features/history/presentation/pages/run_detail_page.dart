@@ -257,17 +257,32 @@ class _RunDetailPageState extends State<RunDetailPage> {
   /// destacado em cyan via isBest; demais em dim. barRatio = pace/maxPace
   /// (split mais lento ocupa toda a largura, mais rápido proporcionalmente
   /// menos — leitura visual de "mais curto = mais rápido").
+  ///
+  /// Splits parciais (isPartial=true, tail < 1km da run) recebem prefixo '~'
+  /// no time e ficam fora do cálculo de "best split" / maxPace, já que a
+  /// distância é menor e a comparação seria injusta.
   List<Widget> _buildSplitRows(List<KmSplit> splits) {
     final sorted = [...splits]..sort((a, b) => a.kmIndex.compareTo(b.kmIndex));
     final paceMins = sorted.map(_paceToMin).toList();
-    final validPaces = paceMins.where((p) => p != null).cast<double>().toList();
+    // Best/maxPace só considera splits completos — partial fica fora.
+    final validPaces = <double>[];
+    for (var i = 0; i < sorted.length; i++) {
+      final p = paceMins[i];
+      if (p != null && !sorted[i].isPartial) validPaces.add(p);
+    }
+
+    String timeOf(KmSplit s) {
+      final base = s.avgPaceMinKm ?? _formatDuration(s.durationS);
+      return s.isPartial ? '~$base' : base;
+    }
+
     if (validPaces.isEmpty) {
       return sorted
           .map((s) => Padding(
                 padding: const EdgeInsets.only(bottom: 6),
                 child: FigmaSplitRow(
                   kmLabel: 'KM${s.kmIndex + 1}',
-                  time: _formatDuration(s.durationS),
+                  time: timeOf(s),
                   barRatio: 0,
                   isBest: false,
                   bpm: s.avgBpm,
@@ -277,19 +292,21 @@ class _RunDetailPageState extends State<RunDetailPage> {
           .toList();
     }
     final maxPace = validPaces.reduce((a, b) => a > b ? a : b);
-    final bestIdx = paceMins.indexWhere((p) => p != null && p == validPaces.reduce((a, b) => a < b ? a : b));
+    final minPace = validPaces.reduce((a, b) => a < b ? a : b);
 
     return List.generate(sorted.length, (i) {
       final s = sorted[i];
       final p = paceMins[i];
-      final ratio = (p != null && maxPace > 0) ? p / maxPace : 0.0;
+      final ratio = (p != null && maxPace > 0 && !s.isPartial) ? p / maxPace : 0.0;
+      // best só entre completos: partial nunca ganha estrela.
+      final isBest = !s.isPartial && p != null && p == minPace;
       return Padding(
         padding: EdgeInsets.only(bottom: i == sorted.length - 1 ? 0 : 6),
         child: FigmaSplitRow(
           kmLabel: 'KM${s.kmIndex + 1}',
-          time: s.avgPaceMinKm ?? _formatDuration(s.durationS),
+          time: timeOf(s),
           barRatio: ratio,
-          isBest: i == bestIdx,
+          isBest: isBest,
           bpm: s.avgBpm,
           calories: s.calories,
           elevationGainM: s.elevationGain,

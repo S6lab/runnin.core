@@ -13,6 +13,12 @@ export interface KmSplit {
   /** Ganho de elevação (m) do km — soma de deltas positivos de altitude
    *  dos GPS points dentro do km. Null quando o device não emite altitude. */
   elevationGain?: number;
+  /** Distância real do split em metros. Splits completos ficam undefined
+   *  (server assume 1000m). Preenchido só em splits parciais (tail da
+   *  corrida, ex: 40m de uma corrida de 3.04km). */
+  distanceM?: number;
+  /** True quando o split é parcial (não fechou 1000m). UI marca com '~'. */
+  isPartial?: boolean;
 }
 
 export interface GpsPoint {

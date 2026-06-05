@@ -94,6 +94,14 @@ class KmSplit {
   /// Ganho de elevação (m) do km — soma de deltas positivos de altitude dos
   /// GPS points dentro do intervalo. Null quando o device não emite altitude.
   final double? elevationGain;
+  /// Distância real do split em metros. Para splits completos fica null
+  /// (server assume 1000m); para parciais preenche com a leftover (ex: 40m
+  /// quando a corrida termina em 3.04km). Necessário pro server calcular
+  /// calorias proporcionais.
+  final double? distanceM;
+  /// True quando o split é parcial — não fechou os 1000m. Renderizado com
+  /// marca visual ("~") e considerado como tail da corrida.
+  final bool isPartial;
 
   const KmSplit({
     required this.kmIndex,
@@ -102,6 +110,8 @@ class KmSplit {
     this.avgBpm,
     this.calories,
     this.elevationGain,
+    this.distanceM,
+    this.isPartial = false,
   });
 
   factory KmSplit.fromJson(Map<String, dynamic> j) => KmSplit(
@@ -111,6 +121,8 @@ class KmSplit {
         avgBpm: (j['avgBpm'] as num?)?.toInt(),
         calories: (j['calories'] as num?)?.toInt(),
         elevationGain: (j['elevationGain'] as num?)?.toDouble(),
+        distanceM: (j['distanceM'] as num?)?.toDouble(),
+        isPartial: (j['isPartial'] as bool?) ?? false,
       );
 
   /// Payload pra enviar splits[] no PATCH /runs/:id/complete. NÃO inclui
@@ -121,6 +133,8 @@ class KmSplit {
         'avgPaceMinKm': avgPaceMinKm ?? formattedPace,
         if (avgBpm != null) 'avgBpm': avgBpm,
         if (elevationGain != null) 'elevationGain': elevationGain,
+        if (distanceM != null) 'distanceM': distanceM,
+        if (isPartial) 'isPartial': true,
       };
 
   /// Pace formatado mm:ss/km. Usa avgPaceMinKm se vier do backend, senão
@@ -206,6 +220,35 @@ List<KmSplit> computeKmSplits(List<GpsPoint> points) {
       bpmSum = 0;
       bpmCount = 0;
       elevGain = 0;
+    }
+  }
+  // Split parcial final: cobre o tail da corrida que não fechou 1km
+  // completo (ex: 3.04km → split de 40m). Sem isso, o tail sumia
+  // (UI mostrava só KM1+KM2+KM3 completos). Threshold 30m: GPS drift
+  // típico parado é ~10-15m; 30m+ já indica deslocamento real (caminhada
+  // ~30s). Mantém o tradeoff: melhor mostrar um partial ocasional de
+  // drift do que sumir com 40m reais que o user andou.
+  final leftoverM = cumDist - kmStartDist;
+  if (leftoverM > 30) {
+    final lastTs = points.last.ts;
+    final leftoverS = (lastTs - kmStartTs) / 1000.0;
+    if (leftoverS > 0) {
+      // Pace normalizado por km (1000m / distância parcial × tempo parcial).
+      // Ex: 40m em 12s → 5:00/km. Mantém formato mm:ss/km no avgPaceMinKm
+      // pra UI renderizar igual aos splits completos.
+      final paceSecPerKm = (leftoverS / leftoverM) * 1000.0;
+      final paceMin = paceSecPerKm ~/ 60;
+      final paceSec = (paceSecPerKm % 60).round();
+      splits.add(KmSplit(
+        kmIndex: kmReached,
+        durationS: leftoverS.round(),
+        avgPaceMinKm:
+            '${paceMin.toString().padLeft(2, '0')}:${paceSec.toString().padLeft(2, '0')}',
+        avgBpm: bpmCount > 0 ? (bpmSum / bpmCount).round() : null,
+        elevationGain: anyAlt ? double.parse(elevGain.toStringAsFixed(1)) : null,
+        distanceM: leftoverM,
+        isPartial: true,
+      ));
     }
   }
   return splits;
