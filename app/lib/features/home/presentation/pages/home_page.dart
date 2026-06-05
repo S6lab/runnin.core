@@ -1407,7 +1407,8 @@ class _StatusCorporalSectionState extends State<_StatusCorporalSection> {
         : (hydrationLoggedL / hydrationGoalL).clamp(0.0, 1.0);
 
     // SUP-411 (HOME-B7): STATUS CORPORAL — 2×2 MetricCard grid per HOME.md §06.
-    final muscleLoad = _muscleLoadLabel(widget.data);
+    final muscleEst = _muscleLoadEstimate(widget.data);
+    final muscleLoad = muscleEst.label;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1470,9 +1471,10 @@ class _StatusCorporalSectionState extends State<_StatusCorporalSection> {
                   label: 'CARGA MUSCULAR',
                   value: muscleLoad,
                   valueColor: context.runninPalette.primary,
-                  sub: hasBpmData
-                      ? 'Com BPM e volume da semana'
-                      : 'Sem BPM real; por distancia/volume',
+                  sub: muscleEst.hint ??
+                      (hasBpmData
+                          ? 'Com BPM e volume da semana'
+                          : 'Sem BPM real; por distancia/volume'),
                   chart: Row(
                     children: [
                       _CargaChip(label: 'BAIXA', active: muscleLoad == 'BAIXA'),
@@ -1839,11 +1841,70 @@ String _readinessLabel(int score) {
   return 'Poucos dados ou recuperacao em observacao';
 }
 
-String _muscleLoadLabel(HomeData data) {
-  final latestDistance = (data.latestRun?.distanceM ?? 0) / 1000;
-  if (latestDistance >= 12 || data.weeklyDistanceKm >= 30) return 'ALTA';
-  if (latestDistance >= 6 || data.weeklyDistanceKm >= 15) return 'MEDIA';
-  return 'BAIXA';
+/// Carga muscular combina volume (distância) + intensidade (maxBpm vs limite
+/// pessoal) + sinal de stress (resting elevado). Antes era só volume — uma
+/// corrida intensa de 5km com BPM beirando o máximo ficava como "BAIXA",
+/// que escondia o esforço real e atrapalhava a recuperação sugerida.
+///
+/// Heurística em 3 níveis com bumps:
+///   base = BAIXA, +1 se volume médio (latest>=6km OU semana>=15km),
+///          +1 se volume alto (latest>=12km OU semana>=30km).
+///   bump = +1 se maxBpm da última run >= 90% do max pessoal (intensidade alta).
+///   bump = +1 se avgRestingBpm do summary >= profile.restingBpm + 8 (stress).
+///   Cap em ALTA. Sub-label diz qual sinal puxou (ex: "pelo BPM").
+({String label, String? hint}) _muscleLoadEstimate(HomeData data) {
+  final latest = data.latestRun;
+  final latestDistance = (latest?.distanceM ?? 0) / 1000;
+  final weekly = data.weeklyDistanceKm;
+  final profile = data.profile;
+  final summary = data.biometric;
+
+  var level = 0;
+  if (latestDistance >= 6 || weekly >= 15) level += 1;
+  if (latestDistance >= 12 || weekly >= 30) level += 1;
+
+  // Limite pessoal de BPM: prefere o declarado; senão estima 220-idade
+  // a partir do birthDate (mesmo cascade que health_zones_page usa).
+  int? personalMax = profile?.maxBpm;
+  if (personalMax == null) {
+    final age = _ageFromBirthDateInt(profile?.birthDate);
+    if (age != null && age > 0 && age < 120) personalMax = 220 - age;
+  }
+  String? hint;
+  if (latest?.maxBpm != null && personalMax != null) {
+    final ratio = latest!.maxBpm! / personalMax;
+    if (ratio >= 0.90) {
+      level += 1;
+      hint = 'pico de BPM próximo do limite';
+    }
+  }
+
+  // Stress por resting elevado: avgRestingBpm dos últimos 7d acima do
+  // declarado em 8bpm já sugere recuperação incompleta (overreaching).
+  final personalResting = profile?.restingBpm;
+  final recentResting = summary?.avgRestingBpm;
+  if (personalResting != null && recentResting != null && recentResting >= personalResting + 8) {
+    level += 1;
+    hint ??= 'BPM repouso elevado';
+  }
+
+  final label = level >= 3 ? 'ALTA' : level >= 1 ? 'MEDIA' : 'BAIXA';
+  return (label: label, hint: hint);
+}
+
+/// Idade em anos a partir de um ISO date string. null pra entrada vazia
+/// ou inválida. Usado no fallback de maxBpm (220 - idade) quando o
+/// usuário não declarou o limite.
+int? _ageFromBirthDateInt(String? birthDate) {
+  if (birthDate == null || birthDate.isEmpty) return null;
+  final dt = DateTime.tryParse(birthDate);
+  if (dt == null) return null;
+  final now = DateTime.now();
+  var age = now.year - dt.year;
+  if (now.month < dt.month || (now.month == dt.month && now.day < dt.day)) {
+    age -= 1;
+  }
+  return age > 0 ? age : null;
 }
 
 double? _hydrationGoalLiters(UserProfile? profile) {
