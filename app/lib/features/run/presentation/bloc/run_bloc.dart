@@ -59,6 +59,14 @@ class _GpsUpdate extends RunEvent {
 
 class _TimerTick extends RunEvent {}
 
+/// Avança elapsedS pelo gap acumulado durante background. iOS suspende o
+/// Dart isolate em paused, fazendo o Timer.periodic perder ticks; sem
+/// catch-up, o tempo congelaria por minutos a cada retorno ao foreground.
+class _TimerCatchUp extends RunEvent {
+  final int seconds;
+  _TimerCatchUp(this.seconds);
+}
+
 class _CoachChunk extends RunEvent {
   final CoachCue cue;
   _CoachChunk(this.cue);
@@ -320,6 +328,10 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
   // Usado pra suprimir TTS/voice em bg (não brigar com Spotify) e pra logger.
   bool _appInBackground = false;
   bool _observerRegistered = false;
+  // Wall-clock (ms) em que o app entrou em background — usado pra calcular
+  // o gap perdido pelo Timer.periodic suspenso no iOS e fazer catch-up
+  // no elapsedS ao retornar pro foreground.
+  int? _bgEnterTsMs;
 
   /// Settings de localização específicas pra Run ativa. iOS exige
   /// `allowBackgroundLocationUpdates` + `pauseLocationUpdatesAutomatically:
@@ -370,6 +382,7 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
     on<StartRun>(_onStart);
     on<_GpsUpdate>(_onGpsUpdate);
     on<_TimerTick>(_onTimerTick);
+    on<_TimerCatchUp>(_onTimerCatchUp);
     on<_CoachChunk>(_onCoachChunk);
     on<CompleteRun>(_onComplete);
     on<AbandonRun>(_onAbandon);
@@ -703,6 +716,12 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
     } catch (e) {
       emit(state.copyWith(status: RunStatus.error, error: e.toString()));
     }
+  }
+
+  void _onTimerCatchUp(_TimerCatchUp event, Emitter<RunState> emit) {
+    if (state.status != RunStatus.active) return;
+    if (event.seconds <= 0) return;
+    emit(state.copyWith(elapsedS: state.elapsedS + event.seconds));
   }
 
   void _onTimerTick(_TimerTick event, Emitter<RunState> emit) {
@@ -1276,6 +1295,12 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
         lifecycle == AppLifecycleState.hidden;
     if (goingBg && !_appInBackground) {
       _appInBackground = true;
+      // Marca o instante exato (wall-clock) do background. Usado no resume
+      // pra catch-up do elapsedS — iOS suspende o Dart isolate em paused
+      // e o Timer.periodic perde ticks; sem isso, o tempo congelava por
+      // todo o período de tela bloqueada e o coach acumulava sintomas
+      // (cooldowns não destravavam, kmDurationS ficava errado).
+      _bgEnterTsMs = DateTime.now().millisecondsSinceEpoch;
       // ignore: avoid_print
       print('run.lifecycle.background state=$lifecycle');
       _motivationTimer?.cancel();
@@ -1296,6 +1321,20 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
       }
     } else if (lifecycle == AppLifecycleState.resumed && _appInBackground) {
       _appInBackground = false;
+      // Catch-up: gap em segundos entre quando entrou em bg e agora.
+      // Se >1s e run ativa, dispara _TimerCatchUp pra somar de uma vez
+      // no elapsedS. Sem isso, o usuário voltava ao foreground e via
+      // o cronômetro travado no horário do lock.
+      final enterTs = _bgEnterTsMs;
+      _bgEnterTsMs = null;
+      if (enterTs != null && state.status == RunStatus.active) {
+        final gapS = ((DateTime.now().millisecondsSinceEpoch - enterTs) / 1000).round();
+        if (gapS > 1) {
+          // ignore: avoid_print
+          print('run.lifecycle.catchup gapS=$gapS');
+          add(_TimerCatchUp(gapS));
+        }
+      }
       // ignore: avoid_print
       print('run.lifecycle.foreground');
       // App de volta ao primeiro plano: notificação não tem mais propósito.
