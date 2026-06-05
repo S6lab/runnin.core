@@ -173,30 +173,6 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
     return box.localToGlobal(Offset.zero) & box.size;
   }
 
-  /// Compartilha via action sheet do OS (user escolhe destino).
-  Future<void> _shareImage(GlobalKey key) async {
-    final png = await _renderPng(key);
-    if (png == null) {
-      _showSnack('Não consegui capturar a imagem. Tenta de novo?');
-      return;
-    }
-    final file = await _writeTempPng(png);
-    if (file == null) {
-      _showSnack('Falha ao preparar a imagem.');
-      return;
-    }
-    try {
-      final result = await Share.shareXFiles(
-        [file],
-        sharePositionOrigin: _sharePositionOrigin(),
-      );
-      Logger.info('share.generic.result', context: {'status': result.status.name});
-    } catch (e, st) {
-      Logger.error('share.generic_failed', e, st);
-      _showSnack('Não conseguimos compartilhar. Tenta de novo?');
-    }
-  }
-
   /// Salva PNG na galeria. Em web, share_plus não persiste; mantém aviso.
   Future<void> _saveImage(GlobalKey key) async {
     final png = await _renderPng(key);
@@ -490,25 +466,42 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
             ),
           ],
           const SizedBox(height: 24),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              _ShareTarget(
-                label: 'COMPARTILHAR',
-                icon: Icons.ios_share,
-                onTap: () => _shareImage(_mapBoundaryKey),
-              ),
-              _ShareTarget(
-                label: 'SALVAR',
-                icon: Icons.download,
-                onTap: () => _saveImage(_mapBoundaryKey),
-              ),
-            ],
-          ),
+          // Mesmos 4 destinos da aba FOTO — antes a aba MAPA tinha só
+          // COMPARTILHAR/SALVAR genéricos. Agora user envia direto pro
+          // IG/WA/Twitter sem precisar passar pela action sheet.
+          ..._buildShareTargets(_mapBoundaryKey),
           const SizedBox(height: 24),
         ],
       ),
     );
+  }
+
+  /// Lista padrão de 4 destinos de share, reusada em ambas as abas
+  /// (MAPA e FOTO). Cada handler renderiza a `RepaintBoundary` apontada
+  /// pela [boundaryKey] e dispatcha pra IG/WA/Twitter/Galeria.
+  List<Widget> _buildShareTargets(GlobalKey boundaryKey) {
+    return [
+      _ShareTarget(
+        icon: Icons.camera_alt_outlined,
+        label: 'Instagram Stories',
+        onTap: () => _shareToInstagramStories(boundaryKey),
+      ),
+      _ShareTarget(
+        icon: Icons.chat_bubble_outline,
+        label: 'WhatsApp',
+        onTap: () => _shareToWhatsApp(boundaryKey),
+      ),
+      _ShareTarget(
+        icon: Icons.alternate_email,
+        label: 'Twitter / X',
+        onTap: () => _shareToTwitter(boundaryKey),
+      ),
+      _ShareTarget(
+        icon: Icons.save_alt,
+        label: 'Salvar imagem',
+        onTap: () => _saveImage(boundaryKey),
+      ),
+    ];
   }
 
   // ─── TAB 2: CÂMERA + OVERLAY ─────────────────────────────────────────────────
@@ -607,28 +600,8 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
           ),
           const SizedBox(height: 24),
 
-          // Share targets — agora cada um aponta pro handler dedicado
-          // (IG/WA via deeplinks, Salvar via Gal, outros via Share.shareXFiles).
-          _ShareTarget(
-            icon: Icons.camera_alt_outlined,
-            label: 'Instagram Stories',
-            onTap: () => _shareToInstagramStories(_overlayBoundaryKey),
-          ),
-          _ShareTarget(
-            icon: Icons.chat_bubble_outline,
-            label: 'WhatsApp',
-            onTap: () => _shareToWhatsApp(_overlayBoundaryKey),
-          ),
-          _ShareTarget(
-            icon: Icons.alternate_email,
-            label: 'Twitter / X',
-            onTap: () => _shareToTwitter(_overlayBoundaryKey),
-          ),
-          _ShareTarget(
-            icon: Icons.save_alt,
-            label: 'Salvar imagem',
-            onTap: () => _saveImage(_overlayBoundaryKey),
-          ),
+          // Mesmos 4 destinos da aba MAPA — paridade entre abas.
+          ..._buildShareTargets(_overlayBoundaryKey),
           const SizedBox(height: 32),
         ],
       ),
