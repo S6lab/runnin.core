@@ -6,9 +6,14 @@ import 'package:latlong2/latlong.dart';
 import 'package:runnin/core/network/api_client.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
+import 'package:runnin/features/auth/data/user_remote_datasource.dart';
+import 'package:runnin/features/biometrics/data/biometric_remote_datasource.dart';
+import 'package:runnin/features/biometrics/domain/run_zones.dart';
 import 'package:runnin/features/run/data/datasources/run_remote_datasource.dart';
 import 'package:runnin/features/run/domain/entities/run.dart';
 import 'package:runnin/shared/widgets/figma/figma_split_row.dart';
+import 'package:runnin/shared/widgets/figma/figma_zone_card.dart';
+import 'package:runnin/shared/widgets/figma/figma_zone_distribution_bar.dart';
 import 'package:runnin/shared/widgets/metric_card.dart';
 
 class RunDetailPage extends StatefulWidget {
@@ -21,9 +26,12 @@ class RunDetailPage extends StatefulWidget {
 
 class _RunDetailPageState extends State<RunDetailPage> {
   final _remote = RunRemoteDatasource();
+  final _userRemote = UserRemoteDatasource();
+  final _biometricRemote = BiometricRemoteDatasource();
   Run? _run;
   List<GpsPoint> _gpsPoints = const [];
   String? _summary;
+  RunZoneDistribution? _zones;
   bool _loadingRun = true;
   bool _loadingReport = true;
 
@@ -40,10 +48,29 @@ class _RunDetailPageState extends State<RunDetailPage> {
       // Pontos GPS salvos da corrida → mesmo mapa da tela de compartilhar.
       final points =
           await _remote.getGpsPoints(widget.runId).catchError((_) => <GpsPoint>[]);
+      // Zonas cardíacas: precisamos do profile (resting/maxBpm declarados) e do
+      // summary (fallback observado de 30d). Best-effort — sem profile, cai
+      // pro fallback 220-idade; sem nada, banner "sem dados" na seção.
+      UserProfile? profile;
+      BiometricSummary? summary;
+      try {
+        final results = await Future.wait([
+          _userRemote.getMe(),
+          _biometricRemote.getSummary(windowDays: 30),
+        ]);
+        profile = results[0] as UserProfile?;
+        summary = results[1] as BiometricSummary?;
+      } catch (_) {/* segue sem zonas */}
+      final zones = computeRunZoneDistribution(
+        run: run,
+        profile: profile,
+        summary: summary,
+      );
       if (mounted) {
         setState(() {
           _run = run;
           _gpsPoints = points;
+          _zones = zones;
           _loadingRun = false;
         });
       }
@@ -149,7 +176,15 @@ class _RunDetailPageState extends State<RunDetailPage> {
                               _RunDataGrid(run: _run!),
                               const SizedBox(height: 24),
 
-                              // 3 ── SPLITS
+                              // 3 ── ZONAS CARDÍACAS: distribuição de tempo por
+                              //      zona usando avgBpm de cada split + Karvonen
+                              //      a partir do profile (ou fallback 220-idade).
+                              if (_zones != null) ...[
+                                _RunZonesSection(distribution: _zones!),
+                                const SizedBox(height: 24),
+                              ],
+
+                              // 4 ── SPLITS
                               _SectionLabel('SPLITS'),
                               const SizedBox(height: 12),
                               Container(
@@ -341,6 +376,78 @@ class _RunDetailPageState extends State<RunDetailPage> {
     final m = (s ~/ 60).toString();
     final r = (s % 60).toString().padLeft(2, '0');
     return '$m:$r';
+  }
+}
+
+/// Seção ZONAS CARDÍACAS — barra de distribuição (5 zonas) em cima + cards
+/// Z1-Z5 (mesmo widget de perfil/saúde/zonas) com nome+range+% de tempo.
+/// FC máx da corrida fica como sufixo do header. Sem dados de BPM válidos
+/// nos splits, mostra banner explicativo em vez do gráfico.
+class _RunZonesSection extends StatelessWidget {
+  final RunZoneDistribution distribution;
+  const _RunZonesSection({required this.distribution});
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    final type = context.runninType;
+    final hasData = distribution.hasEnoughBpmData && distribution.zones.isNotEmpty;
+    final maxBpm = distribution.maxBpmRun;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            _SectionLabel('ZONAS CARDÍACAS'),
+            if (maxBpm != null && maxBpm > 0)
+              Text(
+                'FC máx ${maxBpm}bpm',
+                style: type.bodyXs.copyWith(
+                  color: FigmaColors.textMuted,
+                  letterSpacing: 0.6,
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: FigmaColors.surfaceCard,
+            border: Border.all(color: palette.border),
+          ),
+          child: hasData
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    FigmaZoneDistributionBar(
+                      zonePercentages: distribution.zones.map((z) => z.pctTime).toList(),
+                    ),
+                    const SizedBox(height: 16),
+                    for (var i = 0; i < distribution.zones.length; i++) ...[
+                      FigmaZoneCard(
+                        zoneNumber: distribution.zones[i].number,
+                        zoneLabel: distribution.zones[i].label,
+                        bpmRange:
+                            '${distribution.zones[i].minBpm}-${distribution.zones[i].maxBpm} bpm',
+                        percent: distribution.zones[i].pctTime,
+                        zoneColor: distribution.zones[i].color,
+                      ),
+                      if (i < distribution.zones.length - 1)
+                        const SizedBox(height: 8),
+                    ],
+                  ],
+                )
+              : Text(
+                  'Sem BPM suficiente nessa corrida pra distribuir por zona. '
+                  'Preencha BPM repouso e FC máx em PERFIL > SAÚDE pra ativar.',
+                  style: type.bodySm.copyWith(color: FigmaColors.textMuted),
+                ),
+        ),
+      ],
+    );
   }
 }
 
