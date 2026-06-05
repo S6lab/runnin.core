@@ -194,6 +194,11 @@ class _HistoryPageState extends State<HistoryPage> {
     final r = _periodRange();
     return _allRuns!
         .where((run) => run.status == 'completed')
+        // distanceM >= 100m exclui run "stationary" (start sem GPS / abandono
+        // mascarado como completed) que poluía agregados — uma run de 38min
+        // com 0km gerava pace médio absurdo (23min/km) ao entrar na conta.
+        // Mesma regra agora aplicada server-side em findByDateRange.
+        .where((run) => run.distanceM >= 100)
         .where((run) {
           final d = DateTime.tryParse(run.createdAt);
           if (d == null) return false;
@@ -514,30 +519,28 @@ class _DataView extends StatelessWidget {
     final totalCalories = runs.fold<int>(0, (s, r) => s + (r.calories ?? 0));
     final runningCount = runs.where((r) => r.status == 'completed').length;
 
-    // Pace médio em segundos/km
+    // Pace médio em segundos/km — weighted por distância (totalS / totalDistKm).
+    // Antes calculávamos média aritmética dos paces individuais, que é
+    // matematicamente errado: uma run curta lenta puxava o agregado pra
+    // cima na mesma proporção de uma longa rápida. Agora a duração total
+    // dividida pela distância total dá o pace real do volume completo.
     int? avgPaceSec;
-    final runsWithPace = runs.where((r) => r.avgPace != null).toList();
-    if (runsWithPace.isNotEmpty) {
-      final paceSecsTotal = runsWithPace.fold<int>(0, (s, r) {
-        final parts = r.avgPace!.split(':');
-        if (parts.length != 2) return s;
-        final m = int.tryParse(parts[0]) ?? 0;
-        final sec = int.tryParse(parts[1]) ?? 0;
-        return s + m * 60 + sec;
-      });
-      avgPaceSec = paceSecsTotal ~/ runsWithPace.length;
+    if (totalDistM > 0 && totalS > 0) {
+      avgPaceSec = (totalS * 1000 / totalDistM).round();
     }
 
     final avgPaceLabel = avgPaceSec == null
         ? '--:--'
         : '${avgPaceSec ~/ 60}:${(avgPaceSec % 60).toString().padLeft(2, '0')}';
 
-    // BPM médio
+    // BPM médio — antes filtrávamos por r.avgPace != null (bug de
+    // copy-paste): runs sem GPS mas com sensor BPM ficavam fora da conta.
+    // O filtro correto é direto pelo campo que estamos agregando.
     int? avgBpm;
-    final runsWithAvg = runs.where((r) => r.avgPace != null).toList();
-    if (runsWithAvg.isNotEmpty) {
-      final totalBpm = runsWithAvg.fold<int>(0, (s, r) => s + (r.avgBpm ?? 0));
-      avgBpm = totalBpm ~/ runsWithAvg.length;
+    final runsWithBpmValid = runs.where((r) => r.avgBpm != null && r.avgBpm! > 0).toList();
+    if (runsWithBpmValid.isNotEmpty) {
+      final totalBpm = runsWithBpmValid.fold<int>(0, (s, r) => s + r.avgBpm!);
+      avgBpm = totalBpm ~/ runsWithBpmValid.length;
     }
 
     // Zonas cardíacas (simulado se não tiver dados)

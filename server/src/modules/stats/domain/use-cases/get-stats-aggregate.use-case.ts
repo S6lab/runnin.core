@@ -55,13 +55,20 @@ export class GetStatsAggregateUseCase {
     if (runs.length === 0) {
       return { avgPaceMinKm: null, avgBpm: null, maxBpm: null, avgDistanceKmPerRun: 0 };
     }
-    const paceMins = runs.map(r => this.paceToMin(r.avgPace)).filter((p): p is number => p !== null);
-    const avgPaceVal = paceMins.length > 0 ? paceMins.reduce((a, b) => a + b, 0) / paceMins.length : null;
+    // Pace médio = duração total / distância total (weighted por distância).
+    // Antes era média aritmética dos paces individuais, que distorcia o
+    // agregado quando havia runs de tamanhos muito diferentes — uma run
+    // curta lenta puxava o pace pra cima sem contribuir muito pro volume.
+    const totalDistM = runs.reduce((s, r) => s + (r.distanceM || 0), 0);
+    const totalDurationS = runs.reduce((s, r) => s + (r.durationS || 0), 0);
+    const avgPaceVal = totalDistM > 0 && totalDurationS > 0
+      ? (totalDurationS / totalDistM) * 1000 / 60  // s/m → min/km
+      : null;
     const bpms = runs.map(r => r.avgBpm).filter((b): b is number => typeof b === 'number');
     const avgBpm = bpms.length > 0 ? Math.round(bpms.reduce((a, b) => a + b, 0) / bpms.length) : null;
     const maxBpms = runs.map(r => r.maxBpm).filter((b): b is number => typeof b === 'number');
     const maxBpm = maxBpms.length > 0 ? Math.max(...maxBpms) : null;
-    const totalDistKm = runs.reduce((s, r) => s + (r.distanceM || 0), 0) / 1000;
+    const totalDistKm = totalDistM / 1000;
     return {
       avgPaceMinKm: avgPaceVal !== null ? this.minToPace(avgPaceVal) : null,
       avgBpm,

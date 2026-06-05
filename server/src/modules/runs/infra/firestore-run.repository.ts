@@ -74,6 +74,11 @@ export class FirestoreRunRepository implements RunRepository {
       .get();
     return snap.docs
       .map(d => ({ id: d.id, userId, ...d.data() }) as Run)
-      .filter(r => r.status === 'completed');
+      // distanceM >= 100m exclui runs "stationary" (start sem GPS / abandono
+      // mascarado como completed). Sem esse filtro, uma run com 0km mas 38min
+      // de duração distorcia agregados de pace médio (caso real reportado).
+      // 100m é o mesmo threshold semântico do stationaryDistanceThresholdM
+      // que o RunBloc usa pra decidir se vale falar "finish" pro coach.
+      .filter(r => r.status === 'completed' && (r.distanceM ?? 0) >= 100);
   }
 }

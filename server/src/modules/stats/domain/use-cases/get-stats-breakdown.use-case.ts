@@ -65,10 +65,12 @@ export class GetStatsBreakdownUseCase {
     const calories = Math.round(periodRuns.reduce((s, r) => s + (r.calories || 0), 0));
     const totalXp = periodRuns.reduce((s, r) => s + (r.xpEarned || 0), 0);
 
-    const paceSecs = periodRuns
-      .map((r) => paceToSec(r.avgPace))
-      .filter((p): p is number => p !== null);
-    const avgPaceSec = paceSecs.length ? Math.round(avg(paceSecs)) : null;
+    // Pace médio = duração total / distância total (weighted por distância).
+    // Antes era média aritmética dos paces de cada run, que distorcia o
+    // valor quando havia runs de tamanhos muito diferentes.
+    const avgPaceSec = totalDistanceM > 0 && totalDurationS > 0
+      ? Math.round((totalDurationS / totalDistanceM) * 1000)
+      : null;
 
     const bpms = periodRuns.map((r) => r.avgBpm).filter((b): b is number => typeof b === 'number');
     const avgBpm = bpms.length ? Math.round(avg(bpms)) : null;
@@ -111,10 +113,15 @@ export class GetStatsBreakdownUseCase {
         const d = new Date(r.createdAt);
         return d >= b.start && d < b.end;
       });
-      const realizedKm = round1(inBucket.reduce((s, r) => s + (r.distanceM || 0), 0) / 1000);
-      const realizedPaceSecs = inBucket
-        .map((r) => paceToSec(r.avgPace))
-        .filter((p): p is number => p !== null);
+      const bucketDistM = inBucket.reduce((s, r) => s + (r.distanceM || 0), 0);
+      const bucketDurationS = inBucket.reduce((s, r) => s + (r.durationS || 0), 0);
+      const realizedKm = round1(bucketDistM / 1000);
+      // Pace médio do bucket = duração total / distância total (weighted),
+      // mesma correção do buildStats — média aritmética dos avgPace de cada
+      // run subvaloriza/supervaloriza runs por igual independente do peso.
+      const realizedPaceSec = bucketDistM > 0 && bucketDurationS > 0
+        ? Math.round((bucketDurationS / bucketDistM) * 1000)
+        : null;
 
       // Planejado: itera cada dia do bucket, pega o plano ativo naquele dia.
       let plannedKm = 0;
@@ -131,8 +138,11 @@ export class GetStatsBreakdownUseCase {
       volume.push({ label: b.label, plannedKm: round1(plannedKm), realizedKm });
       pace.push({
         label: b.label,
+        // Planejado continua média simples — os paces vêm da config do
+        // plano (alvo por sessão), não de execução real, então peso por
+        // distância não faz sentido aqui.
         projectedPaceSec: plannedPaceSecs.length ? Math.round(avg(plannedPaceSecs)) : null,
-        avgPaceSec: realizedPaceSecs.length ? Math.round(avg(realizedPaceSecs)) : null,
+        avgPaceSec: realizedPaceSec,
       });
     }
 
