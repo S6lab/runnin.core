@@ -261,6 +261,16 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
   /// Atualiza em _onGpsUpdate quando distância cruza kmStart de outro.
   int _currentSegmentIdx = -1;
 
+  /// Distância alvo da sessão planejada (metros). Setado em _loadPlanSession
+  /// a partir de PlanSession.distanceKm; null quando run é livre. Usado
+  /// pelo cue `goal_reached`: quando o user passa do alvo, o coach avisa
+  /// "sua sessão termina aqui" e oferece continuar (sem auto-complete).
+  double? _plannedDistanceM;
+  /// One-shot: garante que `goal_reached` dispare 1x por run mesmo se o
+  /// user continuar correndo passado o alvo (esperado — coach disse "se
+  /// quiser continuar, eu sigo"). Reset no _onStart.
+  bool _goalReachedFired = false;
+
   /// Janela da saudação inicial: até este timestamp (ms) os cues de
   /// `/coach/message` são suprimidos pra NÃO tocarem por cima da saudação
   /// (Live) — evita "dois coaches" no início. A saudação já anuncia a sessão.
@@ -432,6 +442,8 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
     _planSessionId = event.planSessionId;
     _segments = const [];
     _currentSegmentIdx = -1;
+    _plannedDistanceM = null;
+    _goalReachedFired = false;
     // Premium: usa LiveRunCoachSession (Gemini Live). Freemium: TTS local
     // de telemetria a cada km. Default true mantém retro-compat se um
     // caller antigo não passar o flag.
@@ -803,6 +815,22 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
         splits: updatedSplits,
       ),
     );
+
+    // Goal reached: a sessão planejada tem distanceKm > 0 e o user acabou
+    // de cruzar esse alvo. Cue avisa "sua sessão termina aqui — se quiser
+    // continuar, eu sigo" sem auto-completar a run. One-shot.
+    if (!_goalReachedFired &&
+        _plannedDistanceM != null &&
+        newDistance >= _plannedDistanceM!) {
+      _goalReachedFired = true;
+      unawaited(_requestCoachCue(
+        event: 'goal_reached',
+        distanceM: newDistance,
+        elapsedS: state.elapsedS,
+        currentPaceMinKm: smoothedPace,
+      ));
+      _lastCueAt['goal_reached'] = DateTime.now().millisecondsSinceEpoch;
+    }
 
     if (crossedKmBoundary) {
       final prevKm = _lastCoachKm;
@@ -1315,6 +1343,9 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
       }
       if (found == null) return;
       _segments = found.executionSegments;
+      // Alvo de distância vem da sessão planejada — cue goal_reached
+      // dispara quando newDistance cruza isso. distanceKm vem em km double.
+      _plannedDistanceM = found.distanceKm > 0 ? found.distanceKm * 1000 : null;
       // Marca o 1º segment (aquecimento) como JÁ entrado: no km 0 o detector
       // de transição não dispara segment_start pro segment inicial — a
       // saudação já anuncia a largada. Sem isso, o segment_start do warmup
@@ -1562,6 +1593,8 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
         return 'Coach, apertei iniciar mas ainda não comecei a me mexer. Tudo certo pra largar?';
       case 'finish':
         return 'Coach, terminei a corrida! Total ${dist}km em ${dur(state.elapsedS)}, pace médio $avgPace/km. Me dá o resumo geral.';
+      case 'goal_reached':
+        return 'Coach, acabei de bater a meta de distância da minha sessão do dia ($totals). Me avisa que a sessão termina aqui mas que você segue comigo se eu quiser continuar.';
       default:
         return 'Coach, como estou indo? $totals';
     }

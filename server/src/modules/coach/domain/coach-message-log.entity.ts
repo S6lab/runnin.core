@@ -19,6 +19,7 @@ export type CoachMessageEvent =
   | 'segment_start'
   | 'segment_pace_off'
   | 'segment_end'
+  | 'goal_reached'
   | 'push_to_talk';
 
 export type CoachMessageAuthor = 'coach' | 'user';
