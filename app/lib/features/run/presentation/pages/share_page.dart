@@ -873,16 +873,21 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
 
   /// Splits por km como "KM1  mm:ss". Prefere os splits reais da corrida
   /// (run.splits); fallback no cálculo a partir do GPS. Vazio quando não há
-  /// dado suficiente (não inventa). Splits parciais ganham prefixo '~' na
-  /// pace pra deixar claro que não foram 1km completo (ex: 'KM3  ~05:00').
+  /// dado suficiente (não inventa). Splits parciais (tail < 1km) renderizam
+  /// distância+duração reais (ex: '+0.18  0:50') em vez de pace normalizado
+  /// — para uma run de 2.18km, o trecho final foram 180m em 50s; pace/km
+  /// extrapolado (~05:00) confundia ao sugerir 5min de corrida.
   List<String> _splitLabels() {
     String fmt(int s) => '${s ~/ 60}:${(s % 60).toString().padLeft(2, '0')}';
     final rs = _run?.splits ?? const [];
     if (rs.isNotEmpty) {
       return rs.map((s) {
+        if (s.isPartial) {
+          final km = (s.distanceM ?? 0) / 1000;
+          return '+${km.toStringAsFixed(2)}  ${fmt(s.durationS)}';
+        }
         final pace = s.avgPaceMinKm ?? fmt(s.durationS);
-        final mark = s.isPartial ? '~' : '';
-        return 'KM${s.kmIndex + 1}  $mark$pace';
+        return 'KM${s.kmIndex + 1}  $pace';
       }).toList();
     }
     final secs = computeKmSplitsSeconds(_gpsPoints);

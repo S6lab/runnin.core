@@ -258,9 +258,12 @@ class _RunDetailPageState extends State<RunDetailPage> {
   /// (split mais lento ocupa toda a largura, mais rápido proporcionalmente
   /// menos — leitura visual de "mais curto = mais rápido").
   ///
-  /// Splits parciais (isPartial=true, tail < 1km da run) recebem prefixo '~'
-  /// no time e ficam fora do cálculo de "best split" / maxPace, já que a
-  /// distância é menor e a comparação seria injusta.
+  /// Splits parciais (isPartial=true, tail < 1km da run, ex: 2.18km → 0.18km
+  /// no fim) renderizam:
+  ///  - kmLabel: "+0.18" (distância real do trecho, prefixo + sinaliza tail)
+  ///  - time: duração real do trecho (não pace normalizado, que era confuso
+  ///    pra 180m — "~05:00" sugeria pace de 5min/km mas o user só andou 50s)
+  ///  - ficam fora do best/maxPace pra comparação não ficar injusta.
   List<Widget> _buildSplitRows(List<KmSplit> splits) {
     final sorted = [...splits]..sort((a, b) => a.kmIndex.compareTo(b.kmIndex));
     final paceMins = sorted.map(_paceToMin).toList();
@@ -271,9 +274,17 @@ class _RunDetailPageState extends State<RunDetailPage> {
       if (p != null && !sorted[i].isPartial) validPaces.add(p);
     }
 
+    String labelOf(KmSplit s) {
+      if (!s.isPartial) return 'KM${s.kmIndex + 1}';
+      final km = (s.distanceM ?? 0) / 1000;
+      return '+${km.toStringAsFixed(2)}';
+    }
+
     String timeOf(KmSplit s) {
-      final base = s.avgPaceMinKm ?? _formatDuration(s.durationS);
-      return s.isPartial ? '~$base' : base;
+      // Partial: duração real (não pace normalizado), porque pace/km extrapolado
+      // de 180m em 50s = 4:38/km não ajuda a entender que foram só 50s.
+      if (s.isPartial) return _formatDuration(s.durationS);
+      return s.avgPaceMinKm ?? _formatDuration(s.durationS);
     }
 
     if (validPaces.isEmpty) {
@@ -281,7 +292,7 @@ class _RunDetailPageState extends State<RunDetailPage> {
           .map((s) => Padding(
                 padding: const EdgeInsets.only(bottom: 6),
                 child: FigmaSplitRow(
-                  kmLabel: 'KM${s.kmIndex + 1}',
+                  kmLabel: labelOf(s),
                   time: timeOf(s),
                   barRatio: 0,
                   isBest: false,
@@ -303,7 +314,7 @@ class _RunDetailPageState extends State<RunDetailPage> {
       return Padding(
         padding: EdgeInsets.only(bottom: i == sorted.length - 1 ? 0 : 6),
         child: FigmaSplitRow(
-          kmLabel: 'KM${s.kmIndex + 1}',
+          kmLabel: labelOf(s),
           time: timeOf(s),
           barRatio: ratio,
           isBest: isBest,
