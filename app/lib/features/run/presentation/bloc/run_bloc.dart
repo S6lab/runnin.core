@@ -10,6 +10,7 @@ import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 import 'package:runnin/features/run/data/datasources/run_local_datasource.dart';
 import 'package:runnin/core/debug/mock_gps_service.dart';
 import 'package:runnin/core/logger/logger.dart';
+import 'package:runnin/core/notifications/run_bg_notification_service.dart';
 import 'package:runnin/features/run/data/datasources/run_remote_datasource.dart';
 import 'package:runnin/features/run/data/datasources/run_coach_remote_datasource.dart';
 import 'package:runnin/features/run/data/live_run_coach_session.dart';
@@ -793,6 +794,15 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
     if (crossedKmBoundary) {
       final prevKm = _lastCoachKm;
       _lastCoachKm = kmReached;
+      // Atualiza notif persistente (se app está em bg) com distância nova.
+      // Em foreground, _appInBackground=false e o service só atualiza o
+      // payload existente — o sistema OS decide se mostra/atualiza.
+      if (_appInBackground) {
+        unawaited(runBgNotificationService.show(
+          distanceM: newDistance,
+          elapsedS: state.elapsedS,
+        ));
+      }
       // Tempo do km que acabou de cruzar (não acumulado). Coach reporta
       // "1 km em X min" + server estima calorias do km (MET × peso × tempo).
       final kmDurationS = state.elapsedS - _lastKmStartElapsedS;
@@ -1189,6 +1199,9 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
     _scheduledAnalysis?.cancel();
     _stallCheckTimer?.cancel();
     _coachRotationSafetyTimer?.cancel();
+    // Run terminou — dispensa a notificação de background mesmo se a app
+    // estava em foreground (caso o user voltou e finalizou pela UI).
+    unawaited(runBgNotificationService.cancel());
     _gpsSub = null;
     _gpsPollTimer = null;
     _timer = null;
@@ -1224,10 +1237,22 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
       _stallCheckTimer = null;
       _coachRotationSafetyTimer?.cancel();
       _coachRotationSafetyTimer = null;
+      // Notificação persistente na bandeja/lock screen pra confirmar
+      // visualmente que a run continua trackeada com app em background.
+      // Só dispara se a run está rodando — pausada ou idle não polui o
+      // centro de notificações.
+      if (state.status == RunStatus.active) {
+        unawaited(runBgNotificationService.show(
+          distanceM: state.distanceM,
+          elapsedS: state.elapsedS,
+        ));
+      }
     } else if (lifecycle == AppLifecycleState.resumed && _appInBackground) {
       _appInBackground = false;
       // ignore: avoid_print
       print('run.lifecycle.foreground');
+      // App de volta ao primeiro plano: notificação não tem mais propósito.
+      unawaited(runBgNotificationService.cancel());
       if (state.status == RunStatus.active) {
         _startMotivationTimer();
         _startCoachRotationSafetyTimer();

@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:runnin/core/notifications/run_bg_notification_service.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 import 'package:runnin/features/biometrics/data/health_sync_service.dart';
 import 'package:runnin/features/notifications/data/push_notifications_service.dart';
@@ -41,6 +42,12 @@ Future<void> _runApp() async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   await Hive.initFlutter();
   await themeController.load();
+
+  // Inicializa canal/permissão da notificação persistente da run (bandeja /
+  // lock screen quando app vai pra background mid-corrida). iOS pede
+  // permissão real só quando a notif é solicitada pela primeira vez no
+  // RunBloc — aqui é só init de canal/handler.
+  unawaited(runBgNotificationService.init());
 
   final isAdminEntry =
       Uri.base.path == '/admin' || Uri.base.path.startsWith('/admin/');

@@ -1,7 +1,7 @@
 name: runnin
 description: "runnin.ai — AI Running Coach"
 publish_to: 'none'
-version: 1.0.2+21
+version: 1.0.2+22
 
 environment:
   sdk: ^3.11.4
@@ -21,6 +21,11 @@ dependencies:
   firebase_messaging: ^15.2.5
   firebase_remote_config: ^5.4.3
   package_info_plus: ^8.3.0
+  # Persistent notification durante a corrida em background. iOS exibe
+  # na lock screen + notification center; Android cria foreground service
+  # notification (alternativa ao foregroundNotificationConfig do geolocator,
+  # com mais controle de copy/icon).
+  flutter_local_notifications: ^18.0.1
 
   # State management
   flutter_riverpod: ^2.6.1
