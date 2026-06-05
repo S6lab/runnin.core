@@ -61,6 +61,17 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
   /// uma vez e ambas usam.
   double _aspectRatio = 9 / 16;
 
+  /// Offsets custom (em pixels relativos à RepaintBoundary) dos grupos
+  /// arrastáveis na foto. Null = usar posição default do canto. Reset
+  /// ao trocar de aspect ratio (pixels não escalam corretamente entre
+  /// 9:16 e 4:5).
+  ///
+  /// Keys: 'stats' (chips pace/dist/tempo/bpm, top-left),
+  /// 'splits' (lista de splits, top-right),
+  /// 'route' (mini-mapa do traçado, bottom-left).
+  /// Logo RUNNIN.AI fica fixo no bottom-right (branding).
+  final Map<String, Offset> _overlayOffsets = {};
+
   @override
   void initState() {
     super.initState();
@@ -495,7 +506,12 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
     Widget chip({required String label, required double value}) {
       final active = (_aspectRatio - value).abs() < 0.001;
       return GestureDetector(
-        onTap: () => setState(() => _aspectRatio = value),
+        onTap: () => setState(() {
+          _aspectRatio = value;
+          // Pixels não escalam corretamente entre 9:16 e 4:5; reseta as
+          // posições custom dos chips arrastáveis pra voltar aos cantos.
+          _overlayOffsets.clear();
+        }),
         behavior: HitTestBehavior.opaque,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -575,7 +591,7 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
           if (_photoBytes != null) ...[
             const SizedBox(height: 8),
             Text(
-              'Arraste pra posicionar · pinça/scroll pra ajustar o tamanho',
+              'Foto: pinça pra ajustar · Chips: arraste pra reposicionar',
               style: context.runninType.bodyXs.copyWith(
                 fontSize: 10,
                 color: FigmaColors.textMuted,
@@ -669,146 +685,188 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
 
     return AspectRatio(
       aspectRatio: _aspectRatio,
-      child: Container(
-        clipBehavior: Clip.hardEdge,
-        decoration: BoxDecoration(
-          color: const Color(0xFF1A1A2E),
-          border: Border.all(color: FigmaColors.borderDefault, width: 1),
-        ),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            // Photo base or placeholder (placeholder é tappável → abre o
-            // seletor de foto, como diz o texto). Com foto, o usuário pode
-            // ARRASTAR (posição) e PINÇAR/scroll (tamanho) — só a foto
-            // transforma; os textos dos cantos ficam fixos por cima.
-            if (_photoBytes != null)
-              Positioned.fill(
-                child: InteractiveViewer(
-                  // ValueKey pela identidade dos bytes → ao trocar de foto,
-                  // o transform reseta (volta ao enquadramento inicial).
-                  key: ValueKey(_photoBytes),
-                  panEnabled: true,
-                  scaleEnabled: true,
-                  minScale: 1.0,
-                  maxScale: 5.0,
-                  boundaryMargin: const EdgeInsets.all(double.infinity),
-                  clipBehavior: Clip.none,
-                  child: Image.memory(_photoBytes!, fit: BoxFit.cover),
-                ),
-              )
-            else
-              GestureDetector(
-                onTap: _pickPhoto,
-                behavior: HitTestBehavior.opaque,
-                child: Container(
-                  color: const Color(0xFF1A1A2E),
-                  child: Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.camera_alt, size: 48, color: FigmaColors.textMuted),
-                        const SizedBox(height: 12),
-                        Text(
-                          'TOQUE PARA ADICIONAR FOTO',
-                          style: context.runninType.labelCaps.copyWith(
-                            color: FigmaColors.textMuted,
-                            letterSpacing: 1,
-                          ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          // Dimensões reais da RepaintBoundary — usadas pros defaults
+          // (top-right precisa de boxWidth, bottom-left de boxHeight) e
+          // pra clampar os drags dentro do box.
+          final boxSize = Size(constraints.maxWidth, constraints.maxHeight);
+          return Container(
+            clipBehavior: Clip.hardEdge,
+            decoration: BoxDecoration(
+              color: const Color(0xFF1A1A2E),
+              border: Border.all(color: FigmaColors.borderDefault, width: 1),
+            ),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                // Photo base or placeholder (placeholder é tappável → abre o
+                // seletor de foto, como diz o texto). Com foto, o usuário pode
+                // ARRASTAR (posição) e PINÇAR/scroll (tamanho) — só a foto
+                // transforma; os textos dos cantos ficam fixos por cima.
+                if (_photoBytes != null)
+                  Positioned.fill(
+                    child: InteractiveViewer(
+                      // ValueKey pela identidade dos bytes → ao trocar de foto,
+                      // o transform reseta (volta ao enquadramento inicial).
+                      key: ValueKey(_photoBytes),
+                      panEnabled: true,
+                      scaleEnabled: true,
+                      minScale: 1.0,
+                      maxScale: 5.0,
+                      boundaryMargin: const EdgeInsets.all(double.infinity),
+                      clipBehavior: Clip.none,
+                      child: Image.memory(_photoBytes!, fit: BoxFit.cover),
+                    ),
+                  )
+                else
+                  GestureDetector(
+                    onTap: _pickPhoto,
+                    behavior: HitTestBehavior.opaque,
+                    child: Container(
+                      color: const Color(0xFF1A1A2E),
+                      child: Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.camera_alt, size: 48, color: FigmaColors.textMuted),
+                            const SizedBox(height: 12),
+                            Text(
+                              'TOQUE PARA ADICIONAR FOTO',
+                              style: context.runninType.labelCaps.copyWith(
+                                color: FigmaColors.textMuted,
+                                letterSpacing: 1,
+                              ),
+                            ),
+                          ],
                         ),
-                      ],
+                      ),
                     ),
                   ),
-                ),
-              ),
 
-            // CANTO SUPERIOR ESQUERDO: pace / distância / tempo / BPM
-            // (um abaixo do outro).
-            Positioned(
-              top: 16,
-              left: 16,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (_activeToggles.contains(0)) // Pace
-                    _OverlayChip(label: '$pace/km'),
-                  if (_activeToggles.contains(1)) // Distância
-                    _OverlayChip(label: '${distKm}km'),
-                  if (_activeToggles.contains(2)) // Tempo
-                    _OverlayChip(label: duration),
-                  if (_activeToggles.contains(3) && _run?.avgBpm != null) // BPM
-                    _OverlayChip(label: '${_run!.avgBpm} BPM'),
-                ],
-              ),
-            ),
-
-            // CANTO SUPERIOR DIREITO: splits por km (KM1 - mm:ss, um abaixo
-            // do outro).
-            if (_activeToggles.contains(5) && splitLabels.isNotEmpty)
-              Positioned(
-                top: 16,
-                right: 16,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                  color: Colors.black.withValues(alpha: 0.45),
+                // CANTO SUPERIOR ESQUERDO: pace / distância / tempo / BPM
+                // (um abaixo do outro). Arrastável.
+                _draggableOverlay(
+                  id: 'stats',
+                  defaultPosition: const Offset(16, 16),
+                  boxSize: boxSize,
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      for (final l in splitLabels)
-                        Text(
-                          l,
-                          style: context.runninType.labelCaps.copyWith(
-                            fontSize: 9,
-                            height: 1.55,
-                            letterSpacing: 0.5,
-                            color: Colors.white,
-                          ),
-                        ),
+                      if (_activeToggles.contains(0)) // Pace
+                        _OverlayChip(label: '$pace/km'),
+                      if (_activeToggles.contains(1)) // Distância
+                        _OverlayChip(label: '${distKm}km'),
+                      if (_activeToggles.contains(2)) // Tempo
+                        _OverlayChip(label: duration),
+                      if (_activeToggles.contains(3) && _run?.avgBpm != null) // BPM
+                        _OverlayChip(label: '${_run!.avgBpm} BPM'),
                     ],
                   ),
                 ),
-              ),
 
-            // CANTO INFERIOR ESQUERDO: traçado da rota (igual ao mapa).
-            if (_activeToggles.contains(4) && _gpsPoints.length >= 2)
-              Positioned(
-                bottom: 16,
-                left: 16,
-                child: Container(
-                  width: 84,
-                  height: 84,
-                  padding: const EdgeInsets.all(8),
-                  color: Colors.black.withValues(alpha: 0.4),
-                  child: CustomPaint(
-                    painter: _RouteTracePainter(
-                      points: _gpsPoints,
-                      color: context.runninPalette.primary,
+                // CANTO SUPERIOR DIREITO: splits por km. Arrastável; default
+                // estimado em ~100px de largura pro chip ficar dentro do box.
+                if (_activeToggles.contains(5) && splitLabels.isNotEmpty)
+                  _draggableOverlay(
+                    id: 'splits',
+                    defaultPosition: Offset(boxSize.width - 110, 16),
+                    boxSize: boxSize,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                      color: Colors.black.withValues(alpha: 0.45),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          for (final l in splitLabels)
+                            Text(
+                              l,
+                              style: context.runninType.labelCaps.copyWith(
+                                fontSize: 9,
+                                height: 1.55,
+                                letterSpacing: 0.5,
+                                color: Colors.white,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                // CANTO INFERIOR ESQUERDO: traçado da rota. Arrastável; trace
+                // é 84x84 fixo, default na base com 16px de padding.
+                if (_activeToggles.contains(4) && _gpsPoints.length >= 2)
+                  _draggableOverlay(
+                    id: 'route',
+                    defaultPosition: Offset(16, boxSize.height - 84 - 16),
+                    boxSize: boxSize,
+                    child: Container(
+                      width: 84,
+                      height: 84,
+                      padding: const EdgeInsets.all(8),
+                      color: Colors.black.withValues(alpha: 0.4),
+                      child: CustomPaint(
+                        painter: _RouteTracePainter(
+                          points: _gpsPoints,
+                          color: context.runninPalette.primary,
+                        ),
+                      ),
+                    ),
+                  ),
+
+                // CANTO INFERIOR DIREITO: logo RUNNIN.AI. Fixo — é branding.
+                Positioned(
+                  bottom: 16,
+                  right: 16,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.xs),
+                    color: Colors.black.withValues(alpha: 0.5),
+                    child: Text(
+                      'RUNNIN.AI',
+                      style: context.runninType.labelCaps.copyWith(
+                        fontSize: 9,
+                        letterSpacing: 2,
+                        color: context.runninPalette.primary,
+                      ),
                     ),
                   ),
                 ),
-              ),
-
-            // CANTO INFERIOR DIREITO: logo RUNNIN.AI.
-            Positioned(
-              bottom: 16,
-              right: 16,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.xs),
-                color: Colors.black.withValues(alpha: 0.5),
-                child: Text(
-                  'RUNNIN.AI',
-                  style: context.runninType.labelCaps.copyWith(
-                    fontSize: 9,
-                    letterSpacing: 2,
-                    color: context.runninPalette.primary,
-                  ),
-                ),
-              ),
+              ],
             ),
-          ],
-        ),
+          );
+        },
+      ),
+    );
+  }
+
+  /// Wrapper Positioned + GestureDetector pro drag de overlays.
+  /// Posição vem de [_overlayOffsets] (override) ou [defaultPosition].
+  /// Clamp 40px de margem mantém pelo menos um pedaço do grupo dentro do
+  /// box mesmo se o user arrastar pra borda.
+  Widget _draggableOverlay({
+    required String id,
+    required Offset defaultPosition,
+    required Size boxSize,
+    required Widget child,
+  }) {
+    final pos = _overlayOffsets[id] ?? defaultPosition;
+    return Positioned(
+      left: pos.dx,
+      top: pos.dy,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onPanUpdate: (d) {
+          setState(() {
+            final next = pos + d.delta;
+            _overlayOffsets[id] = Offset(
+              next.dx.clamp(0.0, boxSize.width - 40),
+              next.dy.clamp(0.0, boxSize.height - 40),
+            );
+          });
+        },
+        child: child,
       ),
     );
   }
