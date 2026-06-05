@@ -19,12 +19,12 @@ class FigmaCounterPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final _ac = accent ?? context.runninPalette.primary;
+    final ac = accent ?? context.runninPalette.primary;
     return Container(
       width: width,
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
-        border: Border.all(color: _ac, width: 1),
+        border: Border.all(color: ac, width: 1),
         borderRadius: FigmaBorderRadius.zero,
       ),
       child: Column(
@@ -35,7 +35,7 @@ class FigmaCounterPill extends StatelessWidget {
             style: GoogleFonts.jetBrainsMono(
               fontSize: 20,
               fontWeight: FontWeight.w600,
-              color: _ac,
+              color: ac,
             ),
           ),
           const SizedBox(height: 2),

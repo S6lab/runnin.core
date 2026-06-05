@@ -17,7 +17,7 @@ class NotificationRemoteDatasource {
       '/notifications',
       queryParameters: {
         if (cursor != null && cursor.isNotEmpty) 'cursor': cursor,
-        if (limit != null) 'limit': limit,
+        'limit': ?limit,
       },
     );
     final data = res.data as Map<String, dynamic>;
