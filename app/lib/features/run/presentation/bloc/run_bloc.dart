@@ -913,6 +913,19 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
       // Cue 1: km_reached (info imediato sobre o km que acabou).
       // _lastCoachKm já dedup (1x por km), sem cooldown adicional.
       if (_alertPrefs['kmAlert'] == true) {
+        // Alvo: segment.targetPace > session.targetPace > null. Sem alvo no
+        // payload, o LLM não conseguia entregar a fala "seu pace foi X, alvo
+        // Y" que o user pediu — ficava com narração genérica.
+        final kmNow = newDistance / 1000;
+        PlanSegment? segHere;
+        for (final s in _segments) {
+          if (kmNow >= s.kmStart && kmNow < s.kmEnd) {
+            segHere = s;
+            break;
+          }
+        }
+        final kmTarget = _parsePaceMinKm(segHere?.targetPace) ??
+            _parsePaceMinKm(state.targetPace);
         // UMA fala por km: pace + tempo do km + ganho de elevação, e o coach
         // compara com a fase do roteiro (contexto vem no systemInstruction).
         unawaited(_requestCoachCue(
@@ -921,6 +934,7 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
           distanceM: newDistance,
           elapsedS: state.elapsedS,
           currentPaceMinKm: smoothedPace,
+          targetPaceMinKm: kmTarget,
           kmDurationS: kmDurationS,
           kmAvgBpm: kmAvgBpm,
           elevationGainM:
@@ -1734,7 +1748,7 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
             'ganho de elevação +${elevationGainM.toStringAsFixed(0)}m',
           if (kmAvgBpm != null) 'frequência cardíaca $kmAvgBpm',
         ];
-        return 'Coach, como estou indo? Acabei de fechar o km $kmReached: ${m.join(', ')}. $totals';
+        return 'Coach, acabei de fechar o km $kmReached: ${m.join(', ')}. $totals Anuncia o fechamento do km com a fórmula combinada: "fechamos o $kmReachedº km" + comparação clara pace × alvo.';
       case 'km_split':
         return 'Coach, fechei o km $kmReached em ${pace(currentPaceMinKm)}/km. A meta era ${pace(targetPaceMinKm)}/km. Me dá o veredito.';
       case 'pace_alert':

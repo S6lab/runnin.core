@@ -70,8 +70,12 @@ export function buildEventPrompt(ctx: RunContextInput): string {
   switch (ctx.event) {
     case 'pre_run':
       return `O corredor quer iniciar uma corrida do tipo ${ctx.runType ?? 'livre'}. Prepare o atleta com foco no objetivo, no plano atual e no cuidado com intensidade.\n\n${base}`;
-    case 'km_reached':
-      return `O atleta${ctx.athleteName ? ' ' + ctx.athleteName : ''} acabou de completar o km ${ctx.kmReached}. Dê um feedback CURTO (1-2 frases, 8-12 segundos de áudio) que **mencione naturalmente** os 5 dados do km — pace, distância do km (1 km), tempo do km, calorias gastas e FC média — e termine com uma ação simples (manter/acelerar/recuperar) ou observação técnica. Use o nome do atleta na saudação. Varie a ordem dos dados a cada km pra não soar robótico — destaque o mais relevante do momento (ex: se FC alta, abre por aí; se pace ideal, abre por aí).\n\nExemplo de tom (NÃO copie literal, varie): "Muito bem, João. Pace em 8, 1 km em 8 minutos, 80 cal, FC 150 bpm. Mantém esse ritmo, respiração tranquila."\n\n${base}`;
+    case 'km_reached': {
+      const curPace = formatPaceMmSs(ctx.currentPaceMinKm) ?? 'X:XX';
+      const tgtPace = formatPaceMmSs(ctx.targetPaceMinKm);
+      const tgtSuffix = tgtPace ? `, alvo ${tgtPace}/km` : '';
+      return `O atleta${ctx.athleteName ? ' ' + ctx.athleteName : ''} acabou de completar o km ${ctx.kmReached}. ESTRUTURA OBRIGATÓRIA, 2 frases:\n\n1) "Fechamos o ${ctx.kmReached}º km${ctx.athleteName ? ', ' + ctx.athleteName : ''}. Seu pace foi ${curPace}/km${tgtSuffix}." — anúncio claro do fechamento + comparação direta com o alvo (se houver alvo).\n2) Uma frase curta com ação ("mantém", "segura", "acelera 5 segundos") ou observação técnica de cadência/respiração baseada no que mais se destaca (FC alta, elevação, distância vs km anterior). Use o tom da persona configurada.\n\nNão pule a 1ª frase, não inverta a ordem, não enrole. 8-12s de áudio total.\n\n${base}`;
+    }
     case 'km_split': {
       const cur = formatPaceMmSs(ctx.currentPaceMinKm) ?? 'X:XX';
       const tgt = formatPaceMmSs(ctx.targetPaceMinKm) ?? 'Y:YY';
