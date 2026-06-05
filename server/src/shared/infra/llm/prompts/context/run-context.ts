@@ -81,8 +81,11 @@ export function buildEventPrompt(ctx: RunContextInput): string {
       const tgt = formatPaceMmSs(ctx.targetPaceMinKm) ?? 'Y:YY';
       return `O atleta${ctx.athleteName ? ' ' + ctx.athleteName : ''} acabou de fechar o km ${ctx.kmReached}. Diga claramente, NESTE formato (varie só o nome e o tom final), 1-2 frases: "${ctx.athleteName ?? 'Atleta'}, seu pace no km ${ctx.kmReached} foi ${cur}/km, a meta é manter em ${tgt}/km." Depois UMA frase curta com tom da persona (motivador: gás pra manter; técnico: ajuste objetivo de cadência/postura). NÃO troque a 1ª frase pelo livre — ela é o feedback de split que o user pediu.\n\n${base}`;
     }
-    case 'pace_alert':
-      return `O pace do corredor desviou do plano. Corrija com firmeza e cuidado.\n\n${base}`;
+    case 'pace_alert': {
+      const curPace = formatPaceMmSs(ctx.currentPaceMinKm) ?? 'X:XX';
+      const tgtPace = formatPaceMmSs(ctx.targetPaceMinKm) ?? 'Y:YY';
+      return `O pace do corredor desviou do alvo da sessão. Corrija explicitamente, NESTE formato, 2 frases:\n\n1) "${ctx.athleteName ?? 'Atleta'}, seu pace agora é ${curPace}/km, o alvo é ${tgtPace}/km." — números claros, sem rodeio.\n2) Ação direta no tom da persona: motivador puxa pra acelerar/segurar com energia; técnico instrui cadência/respiração. Sempre indique a DIREÇÃO do ajuste (acelera/segura) — não deixe ambíguo.\n\n${base}`;
+    }
     case 'motivation':
       return `Mensagem de motivação no meio da corrida — nenhum alerta específico, apenas mantenha o corredor engajado. 1 frase curta, foco na constância.\n\n${base}`;
     case 'start':
@@ -93,8 +96,11 @@ export function buildEventPrompt(ctx: RunContextInput): string {
       return `O corredor fez uma pergunta. Responda brevemente.\n\n${base}`;
     case 'segment_start':
       return `O corredor entrou no próximo segmento do plano (índice ${ctx.currentSegmentIndex ?? '?'}). Anuncie a transição em 1 frase referenciando o briefing do segmento (fase + instrução).\n\n${base}`;
-    case 'segment_pace_off':
-      return `O pace do corredor desviou do alvo DESTE segmento do plano. Corrija com firmeza e cuidado, citando o pace alvo do segmento atual (não o pace alvo geral da sessão).\n\n${base}`;
+    case 'segment_pace_off': {
+      const curPace = formatPaceMmSs(ctx.currentPaceMinKm) ?? 'X:XX';
+      const tgtPace = formatPaceMmSs(ctx.targetPaceMinKm) ?? 'Y:YY';
+      return `O pace do corredor desviou do alvo DESTE segmento do plano (índice ${ctx.currentSegmentIndex ?? '?'}). Corrija explicitamente, NESTE formato, 2 frases:\n\n1) "${ctx.athleteName ?? 'Atleta'}, na fase atual seu pace é ${curPace}/km, o alvo da fase é ${tgtPace}/km." — cite o ALVO DO SEGMENTO (não o pace alvo geral da sessão).\n2) Ação direta com DIREÇÃO clara (acelera X segundos, segura na próxima curva) no tom da persona.\n\n${base}`;
+    }
     case 'segment_end':
       return `O corredor terminou o segmento atual (índice ${ctx.currentSegmentIndex ?? '?'}). Em 1 frase, valide a execução do segmento e prepare a transição.\n\n${base}`;
     case 'goal_reached':
