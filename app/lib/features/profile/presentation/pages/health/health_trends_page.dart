@@ -3,6 +3,7 @@ import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 import 'package:runnin/features/biometrics/data/biometric_remote_datasource.dart';
+import 'package:runnin/features/biometrics/domain/recovery_score.dart';
 import 'package:runnin/features/run/data/datasources/run_remote_datasource.dart';
 import 'package:runnin/features/run/domain/entities/run.dart';
 import 'package:runnin/shared/widgets/figma/figma_hist_stat_card.dart';
@@ -234,9 +235,35 @@ _Stats _buildStats(List<Run> runs) {
     );
 }
 
-int _recoveryScore(num? avgHrv) {
-  if (avgHrv == null) return 0;
-  return (avgHrv / 10).round().clamp(0, 10);
+/// Computa o recovery a partir do summary biométrico + perfil. Antes
+/// dependia só de HRV (sempre null sem wearable HRV-capable). Agora
+/// combina sono + BPM resting + HRV, com pesos que redistribuem quando
+/// um sinal falta — ver [computeRecoveryScore].
+///
+/// restingBpm prioriza o valor do perfil (declarado pelo user) e cai
+/// pro biometrics summary; sleep e hrv só vêm do summary.
+RecoveryScore _recoveryFromSources(
+  UserProfile? profile,
+  BiometricSummary? summary,
+) {
+  final resting = profile?.restingBpm ?? summary?.avgRestingBpm;
+  return computeRecoveryScore(
+    avgSleepHours: summary?.avgSleepHours,
+    avgRestingBpm: resting,
+    avgHrv: summary?.avgHrv,
+  );
+}
+
+/// Label sutil pro card de recovery: lista os sinais que entraram no
+/// cálculo ("sono · bpm" ou "sono · bpm · hrv"). Usado quando o score
+/// existe — quando falta sinal, a UI mostra um CTA em vez deste label.
+String? _recoveryComponentsLabel(RecoveryComponents c) {
+  final parts = <String>[];
+  if (c.sleepUsed) parts.add('sono');
+  if (c.restingBpmUsed) parts.add('bpm');
+  if (c.hrvUsed) parts.add('hrv');
+  if (parts.isEmpty) return null;
+  return parts.join(' · ');
 }
 
 class _Body extends StatelessWidget {
@@ -249,7 +276,7 @@ class _Body extends StatelessWidget {
   Widget build(BuildContext context) {
     final stats = _buildStats(runs);
     final sleepHours = biometricSummary?.avgSleepHours;
-    final recoveryScore = _recoveryScore(biometricSummary?.avgHrv);
+    final recovery = _recoveryFromSources(userProfile, biometricSummary);
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(23.99),
@@ -290,9 +317,11 @@ class _Body extends StatelessWidget {
               ),
               _HealthCard(
                 label: 'Recovery score',
-                value: recoveryScore > 0 ? recoveryScore.toString() : '—',
-                unit: '',
-                secondaryLabel: recoveryScore > 0 ? null : 'Sem dados de HRV',
+                value: recovery.score?.toString() ?? '—',
+                unit: recovery.hasScore ? '/100' : '',
+                secondaryLabel: recovery.hasScore
+                    ? _recoveryComponentsLabel(recovery.components)
+                    : 'Conecte sono e BPM repouso',
                 valueColor: context.runninPalette.secondary,
               ),
             ],
