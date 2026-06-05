@@ -8,6 +8,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:runnin/core/audio/telemetry_tts.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 import 'package:runnin/features/run/data/datasources/run_local_datasource.dart';
+import 'package:runnin/core/debug/mock_gps_service.dart';
 import 'package:runnin/core/logger/logger.dart';
 import 'package:runnin/features/run/data/datasources/run_remote_datasource.dart';
 import 'package:runnin/features/run/data/datasources/run_coach_remote_datasource.dart';
@@ -646,6 +647,16 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
             }
           });
         });
+      } else if (mockGpsService.enabled) {
+        // Modo mock (debug-only): simula posições com pace configurável
+        // pra exercitar o fluxo de corrida em simulator ou sem sair de
+        // casa. Mock só liga em kDebugMode (guard interno do service).
+        Logger.warn('run.mock_gps.enabled', context: {
+          'paceMinKm': '${mockGpsService.paceMinKm}',
+        });
+        _gpsSub = mockGpsService
+            .stream()
+            .listen((pos) => add(_GpsUpdate(pos)));
       } else {
         _gpsSub = Geolocator.getPositionStream(
           locationSettings: _runLocationSettings(),
@@ -1160,6 +1171,8 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
           if (!isClosed) add(_GpsUpdate(pos));
         }).catchError((_) {});
       });
+    } else if (mockGpsService.enabled) {
+      _gpsSub = mockGpsService.stream().listen((pos) => add(_GpsUpdate(pos)));
     } else {
       _gpsSub = Geolocator.getPositionStream(
         locationSettings: _runLocationSettings(),

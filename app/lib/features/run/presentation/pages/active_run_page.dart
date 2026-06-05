@@ -3,11 +3,13 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:runnin/core/audio/coach_audio_player.dart';
+import 'package:runnin/core/debug/mock_gps_service.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/features/run/domain/entities/run.dart' show GpsPoint;
 import 'package:runnin/features/run/presentation/bloc/run_bloc.dart';
@@ -1447,6 +1449,12 @@ class _ActiveStatsLayoutState extends State<_ActiveStatsLayout> {
               onPauseResume: widget.onPauseResume,
               onFinish: widget.onFinish,
             ),
+            // Toggle mock GPS (debug-only — invisível em release). Aparece
+            // no idle pra setar pace ANTES de iniciar; some quando a run
+            // está rolando pra não poluir a UI de stats.
+            if (state.status == RunStatus.idle ||
+                state.status == RunStatus.starting)
+              const _MockGpsToggle(),
           ],
         ),
       ),
@@ -1778,6 +1786,113 @@ class _SplitCard extends StatelessWidget {
               letterSpacing: 0.5,
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── DEBUG: Mock GPS toggle ─────────────────────────────────────────────────
+//
+// Renderiza um painel pequeno abaixo do INICIAR pra ligar/desligar o
+// mock GPS e ajustar o pace antes de começar. Em release (kDebugMode=false)
+// retorna SizedBox.shrink — zero overhead.
+
+class _MockGpsToggle extends StatefulWidget {
+  const _MockGpsToggle();
+
+  @override
+  State<_MockGpsToggle> createState() => _MockGpsToggleState();
+}
+
+class _MockGpsToggleState extends State<_MockGpsToggle> {
+  late bool _enabled = mockGpsService.enabled;
+  late double _pace = mockGpsService.paceMinKm;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!kDebugMode) return const SizedBox.shrink();
+    final palette = context.runninPalette;
+    return Container(
+      margin: const EdgeInsets.only(top: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: palette.surface,
+        border: Border.all(
+          color: _enabled ? palette.primary : palette.border,
+          width: 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                _enabled ? Icons.bug_report : Icons.bug_report_outlined,
+                size: 14,
+                color: _enabled ? palette.primary : palette.muted,
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  _enabled
+                      ? 'MOCK GPS · ${_pace.toStringAsFixed(1)}min/km'
+                      : 'MOCK GPS (DEBUG)',
+                  style: context.runninType.labelMd.copyWith(
+                    fontSize: 10,
+                    letterSpacing: 1.1,
+                    color: _enabled ? palette.primary : palette.muted,
+                  ),
+                ),
+              ),
+              Transform.scale(
+                scale: 0.7,
+                child: Switch(
+                  value: _enabled,
+                  activeThumbColor: palette.primary,
+                  onChanged: (v) {
+                    setState(() {
+                      _enabled = v;
+                      mockGpsService.enabled = v;
+                    });
+                  },
+                ),
+              ),
+            ],
+          ),
+          if (_enabled) ...[
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                Text(
+                  'PACE',
+                  style: context.runninType.labelMd.copyWith(
+                    fontSize: 9,
+                    color: palette.muted,
+                    letterSpacing: 0.8,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Slider(
+                    value: _pace.clamp(3.0, 12.0),
+                    min: 3.0,
+                    max: 12.0,
+                    divisions: 18, // 0.5 min/km steps
+                    activeColor: palette.primary,
+                    inactiveColor: palette.border,
+                    onChanged: (v) {
+                      setState(() {
+                        _pace = v;
+                        mockGpsService.paceMinKm = v;
+                      });
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ],
         ],
       ),
     );

@@ -70,6 +70,13 @@ class LiveRunCoachSession {
     Duration(seconds: 30),
   ];
 
+  /// Cap de tentativas de reconnect antes de desistir definitivamente.
+  /// Sem isso, sessão Gemini fechada por `new_session_expire_time` ficava
+  /// tentando reabrir infinito (vimos attempt 28+ nos logs), consumindo
+  /// bateria e bandwidth. Após esse cap, a session fica em estado fechado
+  /// silente — RunBloc captura `coach.cue.skipped_session_closed` no log.
+  static const int _maxReconnectAttempts = 5;
+
   LiveSession? _session;
   final _transcriptsCtrl = StreamController<String>.broadcast();
   final StringBuffer _turnTranscript = StringBuffer();
@@ -311,6 +318,8 @@ class LiveRunCoachSession {
       skipReason = 'clean_close_1000';
     } else if (_reconnectTimer != null) {
       skipReason = 'already_scheduled';
+    } else if (_reconnectAttempt >= _maxReconnectAttempts) {
+      skipReason = 'max_attempts_exhausted';
     }
     if (skipReason != null) {
       unawaited(_beacon(
@@ -319,6 +328,17 @@ class LiveRunCoachSession {
         code: code,
       ));
       return;
+    }
+
+    // Quando o server Google fecha com `new_session_expire_time deadline
+    // exceeded`, é o TOKEN que não pode mais abrir sessão nova (NSXT do
+    // ephemeral token expirou — limite SDK do Gemini Live, ~10-15min).
+    // Marcamos o token como vencido pra forçar refetch no próximo attempt.
+    // Sem isso, reusávamos o _lastConfig com token morto e cada open
+    // estourava TimeoutException de 10s → loop infinito (28+ attempts
+    // observados nos logs).
+    if (reason != null && reason.contains('new_session_expire_time')) {
+      _tokenExpiresAt = DateTime.now().subtract(const Duration(minutes: 1));
     }
     final isNetwork = err is SocketException ||
         code == 1001 ||
