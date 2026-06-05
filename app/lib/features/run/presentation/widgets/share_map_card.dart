@@ -6,12 +6,18 @@ import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/features/run/domain/entities/run.dart';
 
 /// Card de share com mapa da rota no fundo e stats sobrepostos.
-/// Renderiza num aspect ratio 9:16 (story-friendly) e é capturável via
-/// RepaintBoundary -> toImage.
+/// Renderiza no [aspectRatio] passado (9:16 default = story; 4:5 = feed) e
+/// é capturável via RepaintBoundary -> toImage.
 class ShareMapCard extends StatelessWidget {
   final Run run;
   final List<GpsPoint> points;
-  const ShareMapCard({super.key, required this.run, required this.points});
+  final double aspectRatio;
+  const ShareMapCard({
+    super.key,
+    required this.run,
+    required this.points,
+    this.aspectRatio = 9 / 16,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -35,7 +41,7 @@ class ShareMapCard extends StatelessWidget {
     final bounds = hasRoute ? LatLngBounds.fromPoints(latLng) : null;
 
     return AspectRatio(
-      aspectRatio: 9 / 16,
+      aspectRatio: aspectRatio,
       child: ClipRect(
         child: Container(
           color: const Color(0xFF1E2630), // neutro escuro enquanto tiles carregam

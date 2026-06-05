@@ -55,6 +55,12 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
   final Set<int> _activeToggles = Set.from(_defaultToggles);
   Uint8List? _photoBytes;
 
+  /// Proporção da imagem de share. 9:16 = story (IG/Stories), 4:5 = feed
+  /// (post quadrado-ish). Default story porque é o formato mais usado pelo
+  /// público alvo. Aplicado em ambas as abas (mapa + foto) — o user escolhe
+  /// uma vez e ambas usam.
+  double _aspectRatio = 9 / 16;
+
   @override
   void initState() {
     super.initState();
@@ -452,9 +458,15 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const SizedBox(height: 12),
+          _buildAspectSelector(),
+          const SizedBox(height: 12),
           RepaintBoundary(
             key: _mapBoundaryKey,
-            child: ShareMapCard(run: _run!, points: _gpsPoints),
+            child: ShareMapCard(
+              run: _run!,
+              points: _gpsPoints,
+              aspectRatio: _aspectRatio,
+            ),
           ),
           if (!hasRoute) ...[
             const SizedBox(height: 12),
@@ -473,6 +485,45 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
           const SizedBox(height: 24),
         ],
       ),
+    );
+  }
+
+  /// Seletor de proporção 9:16 (story) / 4:5 (feed). Renderizado acima de
+  /// cada preview (MAPA e FOTO). Compartilha estado entre as abas — user
+  /// escolhe uma vez, ambas usam.
+  Widget _buildAspectSelector() {
+    Widget chip({required String label, required double value}) {
+      final active = (_aspectRatio - value).abs() < 0.001;
+      return GestureDetector(
+        onTap: () => setState(() => _aspectRatio = value),
+        behavior: HitTestBehavior.opaque,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: active ? context.runninPalette.primary : Colors.transparent,
+            border: Border.all(
+              color: active ? context.runninPalette.primary : FigmaColors.borderDefault,
+              width: 1.041,
+            ),
+          ),
+          child: Text(
+            label,
+            style: context.runninType.labelMd.copyWith(
+              fontSize: 10,
+              letterSpacing: 0.8,
+              color: active ? FigmaColors.bgBase : FigmaColors.textSecondary,
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Row(
+      children: [
+        chip(label: '9:16  STORY', value: 9 / 16),
+        const SizedBox(width: 8),
+        chip(label: '4:5  FEED', value: 4 / 5),
+      ],
     );
   }
 
@@ -512,6 +563,8 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          const SizedBox(height: 12),
+          _buildAspectSelector(),
           const SizedBox(height: 12),
 
           // Photo preview with overlay
@@ -615,7 +668,7 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
     final splitLabels = _splitLabels();
 
     return AspectRatio(
-      aspectRatio: 4 / 5,
+      aspectRatio: _aspectRatio,
       child: Container(
         clipBehavior: Clip.hardEdge,
         decoration: BoxDecoration(
