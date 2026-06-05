@@ -894,18 +894,37 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
         _lastCueAt['km_reached'] = DateTime.now().millisecondsSinceEpoch;
         _maybeRotateLiveSession(trigger: 'km_reached');
       }
-      // kmSplits: ao fechar um km, manda delta de pace vs km anterior.
-      // Só dispara do 2º km em diante (precisa ter referência).
-      if (_alertPrefs['kmSplits'] == true && prevKm > 0 && smoothedPace != null && _lastKmPace != null) {
-        unawaited(_requestCoachCue(
-          event: 'km_split',
-          kmReached: kmReached,
-          distanceM: newDistance,
-          elapsedS: state.elapsedS,
-          currentPaceMinKm: smoothedPace,
-          targetPaceMinKm: _lastKmPace,
-        ));
-        _lastCueAt['km_split'] = DateTime.now().millisecondsSinceEpoch;
+      // kmSplits: ao fechar um km, manda o pace deste km E o alvo planejado
+      // (segment.targetPace > session.targetPace > pace do km anterior como
+      // fallback). Antes mandávamos só o pace do km anterior, e o coach
+      // dizia "acelerou/manteve/caiu" — útil mas vago. Agora a fala fica
+      // "seu pace no km X foi YY, a meta é XX".
+      if (_alertPrefs['kmSplits'] == true && smoothedPace != null) {
+        final kmNow = newDistance / 1000;
+        PlanSegment? segHere;
+        for (final s in _segments) {
+          if (kmNow >= s.kmStart && kmNow < s.kmEnd) {
+            segHere = s;
+            break;
+          }
+        }
+        final plannedTarget = _parsePaceMinKm(segHere?.targetPace) ??
+            _parsePaceMinKm(state.targetPace);
+        final targetForCue = plannedTarget ?? (prevKm > 0 ? _lastKmPace : null);
+        // Sem nenhum alvo (Free Run sem pace alvo no 1º km) → não dispara
+        // pra não soar genérico. A partir do 2º km, fallback de _lastKmPace
+        // garante que a comparação aconteça.
+        if (targetForCue != null) {
+          unawaited(_requestCoachCue(
+            event: 'km_split',
+            kmReached: kmReached,
+            distanceM: newDistance,
+            elapsedS: state.elapsedS,
+            currentPaceMinKm: smoothedPace,
+            targetPaceMinKm: targetForCue,
+          ));
+          _lastCueAt['km_split'] = DateTime.now().millisecondsSinceEpoch;
+        }
       }
       _lastKmPace = smoothedPace;
     }
@@ -1615,7 +1634,7 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
         ];
         return 'Coach, como estou indo? Acabei de fechar o km $kmReached: ${m.join(', ')}. $totals';
       case 'km_split':
-        return 'Coach, fechei o km $kmReached em ${pace(currentPaceMinKm)}/km (o km anterior foi ${pace(targetPaceMinKm)}/km). Acelerei, mantive ou caí? $totals';
+        return 'Coach, fechei o km $kmReached em ${pace(currentPaceMinKm)}/km. A meta era ${pace(targetPaceMinKm)}/km. Me dá o veredito.';
       case 'pace_alert':
         return 'Coach, meu pace está ${pace(currentPaceMinKm)}/km e o alvo é $tgt. Me corrige? $totals';
       case 'segment_pace_off':

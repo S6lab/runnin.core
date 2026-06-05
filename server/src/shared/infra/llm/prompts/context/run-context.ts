@@ -27,14 +27,29 @@ export interface RunContextInput {
   windKmh?: number;
 }
 
+/** Pace double (min/km) → "mm:ss/km" pra ficar legível na fala do coach
+ *  ("5:30/km" em vez de "5.50/km"). Lida com null/undefined. */
+function formatPaceMmSs(p: number | undefined): string | null {
+  if (typeof p !== 'number' || !isFinite(p) || p <= 0) return null;
+  const min = Math.floor(p);
+  const sec = Math.round((p - min) * 60);
+  // Edge: arredondamento pode estourar pra 60s (ex: 5.999) — normaliza.
+  if (sec === 60) return `${min + 1}:00`;
+  return `${min}:${sec.toString().padStart(2, '0')}`;
+}
+
 export function formatRunContext(ctx: RunContextInput): string {
   const lines: string[] = [];
   if (ctx.athleteName) lines.push(`- Atleta: ${ctx.athleteName}`);
   if (ctx.runType) lines.push(`- Tipo: ${ctx.runType}`);
   if (typeof ctx.distanceM === 'number') lines.push(`- Distância acumulada: ${(ctx.distanceM / 1000).toFixed(2)} km`);
   if (typeof ctx.elapsedS === 'number') lines.push(`- Tempo total: ${Math.floor(ctx.elapsedS / 60)} min ${ctx.elapsedS % 60}s`);
-  if (typeof ctx.currentPaceMinKm === 'number') lines.push(`- Pace atual: ${ctx.currentPaceMinKm.toFixed(2)}/km`);
-  if (typeof ctx.targetPaceMinKm === 'number') lines.push(`- Pace alvo: ${ctx.targetPaceMinKm.toFixed(2)}/km`);
+  // Pace em mm:ss/km (não decimal) — fala do coach soa muito mais natural
+  // ("5:30/km" vs "5.50/km" que ele lê como "cinco vírgula cinquenta").
+  const curPace = formatPaceMmSs(ctx.currentPaceMinKm);
+  if (curPace) lines.push(`- Pace atual: ${curPace}/km`);
+  const tgtPace = formatPaceMmSs(ctx.targetPaceMinKm);
+  if (tgtPace) lines.push(`- Pace alvo: ${tgtPace}/km`);
   if (typeof ctx.bpm === 'number') lines.push(`- BPM atual: ${ctx.bpm}`);
   if (typeof ctx.kmReached === 'number') lines.push(`- KM completado: ${ctx.kmReached}`);
   if (typeof ctx.kmDurationS === 'number') {
@@ -57,8 +72,11 @@ export function buildEventPrompt(ctx: RunContextInput): string {
       return `O corredor quer iniciar uma corrida do tipo ${ctx.runType ?? 'livre'}. Prepare o atleta com foco no objetivo, no plano atual e no cuidado com intensidade.\n\n${base}`;
     case 'km_reached':
       return `O atleta${ctx.athleteName ? ' ' + ctx.athleteName : ''} acabou de completar o km ${ctx.kmReached}. Dê um feedback CURTO (1-2 frases, 8-12 segundos de áudio) que **mencione naturalmente** os 5 dados do km — pace, distância do km (1 km), tempo do km, calorias gastas e FC média — e termine com uma ação simples (manter/acelerar/recuperar) ou observação técnica. Use o nome do atleta na saudação. Varie a ordem dos dados a cada km pra não soar robótico — destaque o mais relevante do momento (ex: se FC alta, abre por aí; se pace ideal, abre por aí).\n\nExemplo de tom (NÃO copie literal, varie): "Muito bem, João. Pace em 8, 1 km em 8 minutos, 80 cal, FC 150 bpm. Mantém esse ritmo, respiração tranquila."\n\n${base}`;
-    case 'km_split':
-      return `O corredor fechou o km ${ctx.kmReached}. Compare o pace deste km com o anterior e diga se acelerou, manteve ou caiu, em 1-2 frases.\n\n${base}`;
+    case 'km_split': {
+      const cur = formatPaceMmSs(ctx.currentPaceMinKm) ?? 'X:XX';
+      const tgt = formatPaceMmSs(ctx.targetPaceMinKm) ?? 'Y:YY';
+      return `O atleta${ctx.athleteName ? ' ' + ctx.athleteName : ''} acabou de fechar o km ${ctx.kmReached}. Diga claramente, NESTE formato (varie só o nome e o tom final), 1-2 frases: "${ctx.athleteName ?? 'Atleta'}, seu pace no km ${ctx.kmReached} foi ${cur}/km, a meta é manter em ${tgt}/km." Depois UMA frase curta com tom da persona (motivador: gás pra manter; técnico: ajuste objetivo de cadência/postura). NÃO troque a 1ª frase pelo livre — ela é o feedback de split que o user pediu.\n\n${base}`;
+    }
     case 'pace_alert':
       return `O pace do corredor desviou do plano. Corrija com firmeza e cuidado.\n\n${base}`;
     case 'motivation':
