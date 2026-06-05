@@ -109,10 +109,27 @@ class RunBgNotificationService {
     }
   }
 
-  /// Mostra/atualiza a notificação. Caller passa [distanceM] e [elapsedS]
-  /// pra refletir o estado atual; chamar a cada km fechado mantém o card
-  /// atualizado.
-  Future<void> show({required double distanceM, required int elapsedS}) async {
+  /// Última payload mostrada — usado pra deduplicar updates idênticos a 1Hz
+  /// (sem mudar km/pace/tempo, evita re-render desnecessário no iOS).
+  String? _lastPayload;
+
+  /// Mostra/atualiza a notificação. Pode ser chamada a 1Hz pelo timer da run
+  /// (em background): a notif mostra km · tempo · pace formando um "card
+  /// vivo" no lock screen. Antes só era chamada por km cruzado e o card
+  /// parecia estático.
+  ///
+  /// iOS: `interruptionLevel: timeSensitive` + `presentBanner: false` evita
+  /// banner toast a cada update (só atualiza silenciosamente). Pra ficar
+  /// realmente "ao vivo" estilo Spotify/Strava precisaria de ActivityKit
+  /// (Widget Extension target separado) — escopo de follow-up.
+  ///
+  /// Android: `ongoing: true` + `usesChronometer: true` já dá efeito vivo
+  /// (cronômetro tickando) e atualizar o body a 1Hz refresca pace/km.
+  Future<void> update({
+    required double distanceM,
+    required int elapsedS,
+    double? paceMinKm,
+  }) async {
     if (!_isSupported) return;
     if (!_initialized) await init();
     if (!_permissionGranted) {
@@ -122,15 +139,24 @@ class RunBgNotificationService {
     }
     final km = (distanceM / 1000).toStringAsFixed(2);
     final timeLabel = _fmtTime(elapsedS);
+    final paceLabel = _fmtPace(paceMinKm);
+    final body = paceLabel != null
+        ? '$km km · $timeLabel · $paceLabel/km'
+        : '$km km · $timeLabel';
+    if (body == _lastPayload) return; // dedup pra ticks com mesmo segundo
+    _lastPayload = body;
     try {
       await _plugin.show(
         _notifId,
         'Corrida em andamento',
-        '${km}km · $timeLabel',
+        body,
         NotificationDetails(
           iOS: const DarwinNotificationDetails(
-            presentAlert: true,
-            presentBanner: true,
+            // presentBanner=false: updates a 1Hz não devem mostrar banner.
+            // O card no lock screen continua visível, mas sem toast por
+            // segundo. interruptionLevel mantém visibilidade no Foco.
+            presentAlert: false,
+            presentBanner: false,
             presentSound: false,
             interruptionLevel: InterruptionLevel.timeSensitive,
             threadIdentifier: 'runnin.run.active',
@@ -139,28 +165,47 @@ class RunBgNotificationService {
             _channelId,
             _channelName,
             channelDescription: _channelDescription,
-            importance: Importance.high,
-            priority: Priority.high,
+            // importance low: ficar silencioso ao atualizar a cada 1s.
+            // O canal manter HIGH no init garante visibilidade no lock screen.
+            importance: Importance.low,
+            priority: Priority.low,
             ongoing: true,
             autoCancel: false,
             showWhen: true,
             usesChronometer: true,
+            onlyAlertOnce: true,
             category: AndroidNotificationCategory.workout,
           ),
         ),
       );
     } catch (e, st) {
-      Logger.error('run_bg_notif.show_failed', e, st);
+      Logger.error('run_bg_notif.update_failed', e, st);
     }
+  }
+
+  /// Alias antigo — mantém API anterior pra callers que só queriam mostrar
+  /// uma vez (ex: ao entrar em bg). Internamente delega pra update().
+  Future<void> show({required double distanceM, required int elapsedS}) {
+    return update(distanceM: distanceM, elapsedS: elapsedS);
   }
 
   Future<void> cancel() async {
     if (!_isSupported) return;
+    _lastPayload = null;
     try {
       await _plugin.cancel(_notifId);
     } catch (e, st) {
       Logger.error('run_bg_notif.cancel_failed', e, st);
     }
+  }
+
+  /// Pace em min/km → "mm:ss". null/0 → null (omitimos do body).
+  static String? _fmtPace(double? p) {
+    if (p == null || !p.isFinite || p <= 0) return null;
+    final min = p.floor();
+    final sec = ((p - min) * 60).round();
+    if (sec == 60) return '${min + 1}:00';
+    return '$min:${sec.toString().padLeft(2, '0')}';
   }
 
   static String _fmtTime(int sec) {

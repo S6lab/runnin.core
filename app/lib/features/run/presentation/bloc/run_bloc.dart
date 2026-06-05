@@ -732,14 +732,26 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
     // segundos) — 20s tolera bem isso e ainda detecta perda real.
     final bpmStale = _lastBpmAtMs != null &&
         DateTime.now().millisecondsSinceEpoch - _lastBpmAtMs! > _bpmStaleThresholdMs;
+    final newElapsed = state.elapsedS + 1;
     if (bpmStale && state.bpmSourceActive) {
       emit(state.copyWith(
-        elapsedS: state.elapsedS + 1,
+        elapsedS: newElapsed,
         bpmSourceActive: false,
       ));
-      return;
+    } else {
+      emit(state.copyWith(elapsedS: newElapsed));
     }
-    emit(state.copyWith(elapsedS: state.elapsedS + 1));
+    // Atualiza a notificação persistente a 1Hz quando em bg pra ficar com
+    // cara de "ao vivo" (km · tempo · pace). Foreground não toca — o
+    // sistema mostraria badge desnecessário. Dedup interno em update()
+    // ignora payloads idênticos. ActivityKit (iOS) ficou de follow-up.
+    if (_appInBackground) {
+      unawaited(runBgNotificationService.update(
+        distanceM: state.distanceM,
+        elapsedS: newElapsed,
+        paceMinKm: state.currentPaceMinKm,
+      ));
+    }
   }
 
   void _onCoachChunk(_CoachChunk event, Emitter<RunState> emit) {
@@ -858,9 +870,10 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
       // Em foreground, _appInBackground=false e o service só atualiza o
       // payload existente — o sistema OS decide se mostra/atualiza.
       if (_appInBackground) {
-        unawaited(runBgNotificationService.show(
+        unawaited(runBgNotificationService.update(
           distanceM: newDistance,
           elapsedS: state.elapsedS,
+          paceMinKm: smoothedPace,
         ));
       }
       // Tempo do km que acabou de cruzar (não acumulado). Coach reporta
@@ -1333,9 +1346,10 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
       // Só dispara se a run está rodando — pausada ou idle não polui o
       // centro de notificações.
       if (state.status == RunStatus.active) {
-        unawaited(runBgNotificationService.show(
+        unawaited(runBgNotificationService.update(
           distanceM: state.distanceM,
           elapsedS: state.elapsedS,
+          paceMinKm: state.currentPaceMinKm,
         ));
       }
     } else if (lifecycle == AppLifecycleState.resumed && _appInBackground) {
