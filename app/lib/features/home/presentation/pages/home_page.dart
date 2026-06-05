@@ -9,6 +9,7 @@ import 'package:runnin/core/router/app_router.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/features/biometrics/data/bpm_polling_service.dart';
+import 'package:runnin/features/biometrics/data/health_sync_service.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 import 'package:runnin/features/home/domain/use_cases/get_home_data_use_case.dart';
 import 'package:runnin/features/location_weather/data/location_weather_controller.dart';
@@ -89,6 +90,19 @@ class _HomeViewState extends State<_HomeView> {
     // Audio route — escuta mudanças de fones/AirPods/BT no header da Home.
     // Idempotente; falha silenciosa em web.
     audioRouteService.init();
+    // Sleep + BPM histórico estavam zerados porque syncSince só rodava no
+    // onboarding. Refaz se a última sync ficou velha (> 6h). Fire-and-forget
+    // pra não bloquear o primeiro render — telemetria via analytics dá
+    // visibilidade do resultado.
+    _refreshHealthIfStale();
+  }
+
+  Future<void> _refreshHealthIfStale() async {
+    try {
+      if (await healthSyncService.isStale()) {
+        await healthSyncService.syncSince();
+      }
+    } catch (_) {/* best-effort, eventos de erro já saem do service */}
   }
 
   Future<void> _checkOnboarding(bool? cachedStatus) async {

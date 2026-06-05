@@ -36,6 +36,19 @@ class HealthSyncService {
 
   bool get isSupported => !kIsWeb && (Platform.isIOS || Platform.isAndroid);
 
+  /// Última hora que `syncSince()` completou com sucesso. Usado pela Home
+  /// pra decidir se vale disparar sync de novo (idade > 6h). null antes
+  /// do primeiro sync ou se o storage não estiver inicializado.
+  Future<DateTime?> lastSyncedAt() => _readLastSync();
+
+  /// True quando o último sync rolou há mais de [maxAge]. Útil pra
+  /// triggers idempotentes ("se a última sync ficou velha, refaz").
+  Future<bool> isStale({Duration maxAge = const Duration(hours: 6)}) async {
+    final last = await lastSyncedAt();
+    if (last == null) return true;
+    return DateTime.now().difference(last) > maxAge;
+  }
+
   String get _platformLabel {
     if (kIsWeb) return 'web';
     if (Platform.isIOS) return 'ios';
@@ -166,6 +179,16 @@ class HealthSyncService {
         .cast<BiometricSampleInput>()
         .toList();
 
+    // Breakdown por tipo do que veio do plugin — ajuda diagnosticar quando
+    // sleep ou hrv aparece zerado em /home (esperamos sleep_hours>0 e
+    // bpm>0; se sleep_hours=0 com bpm>0 = permissão de sono não concedida
+    // ou Apple Health sem dados de sono).
+    final byType = <String, int>{};
+    for (final p in raw) {
+      final key = _typeMap[p.type] ?? p.type.name;
+      byType[key] = (byType[key] ?? 0) + 1;
+    }
+
     if (samples.isEmpty) {
       await _saveLastSync(to);
       analytics.logEvent('wearable_sync_completed', params: {
@@ -173,6 +196,7 @@ class HealthSyncService {
         'provider': _sourceLabel,
         'samples_saved': 0,
         'samples_fetched': raw.length,
+        ...byType.map((k, v) => MapEntry('fetched_$k', v)),
       });
       return 0;
     }
@@ -207,6 +231,7 @@ class HealthSyncService {
       'samples_saved': totalSaved,
       'samples_fetched': raw.length,
       'failed_batches': failedBatches,
+      ...byType.map((k, v) => MapEntry('fetched_$k', v)),
     });
     return totalSaved;
   }
