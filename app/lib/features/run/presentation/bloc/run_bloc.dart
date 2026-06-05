@@ -16,6 +16,7 @@ import 'package:runnin/features/run/data/datasources/run_coach_remote_datasource
 import 'package:runnin/features/run/data/live_run_coach_session.dart';
 import 'package:runnin/features/run/data/workout_realtime_service.dart';
 import 'package:runnin/features/coach_live/data/coach_context_manager.dart';
+import 'package:runnin/features/location_weather/data/location_weather_controller.dart';
 import 'package:runnin/features/run/domain/entities/run.dart';
 import 'package:runnin/features/training/data/datasources/plan_remote_datasource.dart';
 import 'package:runnin/features/training/domain/entities/plan.dart';
@@ -523,6 +524,18 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
           final startType = event.type;
           final startRunId = runId;
           unawaited(() async {
+            // Refetch de clima ANTES de abrir a Live session — snapshot
+            // capturado na home pode ter horas de idade. Best-effort: 3s
+            // timeout pra não atrasar o start visível. Briefing do coach
+            // (build-run-coach-instruction) só usa clima se chegar fresh.
+            if (locationWeatherController.isStale) {
+              try {
+                await locationWeatherController.refresh().timeout(
+                      const Duration(seconds: 3),
+                      onTimeout: () {},
+                    );
+              } catch (_) {/* mantém snapshot anterior */}
+            }
             final ok = await _coachSession.open(
               planSessionId: _planSessionId,
               runId: startRunId,

@@ -614,6 +614,14 @@ class LiveRunCoachSession {
       // sessão Live pro coach considerar calor/umidade/vento na fala —
       // sem impacto na UI da corrida ativa.
       final weather = locationWeatherController.weather;
+      Logger.info('run.coach.live_token.weather_snapshot', context: {
+        'present': weather != null,
+        if (weather != null) 'tempC': weather.temperatureC,
+        if (weather != null) 'humidity': weather.humidityPercent,
+        if (weather != null) 'windKmh': weather.windKmh,
+        if (weather != null)
+          'ageMs': DateTime.now().difference(weather.fetchedAt).inMilliseconds,
+      });
       final body = <String, dynamic>{
         'planSessionId': ?planSessionId,
         if (weather != null) ...{

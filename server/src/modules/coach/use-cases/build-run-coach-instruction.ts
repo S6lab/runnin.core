@@ -2,6 +2,7 @@ import { PlanSession, PlanSegment } from '@modules/plans/domain/plan.entity';
 import { getPromptConfig } from '@shared/infra/llm/prompts/config-store';
 import { renderTemplate } from '@shared/infra/llm/prompts/render';
 import { resolvePersonaTone } from '@shared/infra/llm/prompts/persona/resolver';
+import { logger } from '@shared/logger/logger';
 import { CoachRuntimeContext } from './coach-runtime-context.service';
 
 /**
@@ -62,6 +63,12 @@ export async function buildRunCoachInstruction(
 
   const sessionBlock = formatSessionBriefing(runtime.currentSession);
   const weatherBlock = formatWeatherBriefing(weather);
+  logger.info('coach.instruction.weather_present', {
+    present: !!weather && weatherBlock !== '',
+    tempC: weather?.temperatureC,
+    humidity: weather?.humidityPercent,
+    windKmh: weather?.windKmh,
+  });
 
   // Como interpretar os turns: cada mensagem que chega é a VOZ DO ATLETA
   // falando com você em primeira pessoa (ex: "Coach, como estou indo? Fechei
@@ -92,9 +99,14 @@ function formatWeatherBriefing(w: WeatherSnapshot | undefined): string {
   if (typeof w.humidityPercent === 'number') parts.push(`umidade ${w.humidityPercent}%`);
   if (typeof w.windKmh === 'number') parts.push(`vento ${w.windKmh}km/h`);
   if (parts.length === 0) return '';
+  // Briefing inicial OBRIGATÓRIO menciona clima — antes era "use só quando for
+  // relevante", o que fazia o coach pular o dado mesmo em condições atípicas
+  // (11°C 100% umidade reportado pelo user). Bandas explícitas pra calor,
+  // frio, umidade e vento dão ao LLM um anchor concreto pra falar.
   return [
     `CLIMA NO MOMENTO: ${parts.join(' · ')}.`,
-    'Considere essas condições ao orientar — calor (>25°C) pede pace conservador e hidratação atenta; umidade alta (>70%) reduz dissipação térmica; vento contra forte (>15km/h) custa esforço extra. Use só quando for relevante pra fala — não mencione clima toda hora.',
+    'Mencione o clima já no primeiro turno (briefing) citando o número real (ex: "11°C e umidade alta"), e retome quando o esforço pedir ajuste.',
+    'Bandas: calor (>25°C) → pace conservador + hidratação; frio (<13°C) → aquece mais antes de acelerar; umidade alta (>70%) → suor não dissipa, alerta sinais de fadiga térmica; vento contra forte (>15km/h) → custo extra, ajuste expectativa de pace.',
   ].join(' ');
 }
 

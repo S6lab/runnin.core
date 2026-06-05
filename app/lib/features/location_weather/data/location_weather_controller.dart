@@ -47,6 +47,37 @@ class LocationWeatherController extends ChangeNotifier {
   bool get permissionGranted => _permissionGranted;
   bool get loading => _loading;
 
+  /// True quando o snapshot atual tem > 30min — chamar [refresh] antes
+  /// de gerar briefing/sessão pra não passar dado velho pro LLM.
+  bool get isStale {
+    final w = _weather;
+    if (w == null) return true;
+    return DateTime.now().difference(w.fetchedAt) > const Duration(minutes: 30);
+  }
+
+  /// Força refetch de cidade + clima sem alterar permissão/gps. Usado no
+  /// início de corrida pra garantir que o briefing do coach use clima
+  /// atual (snapshot da home pode ser de horas atrás). Best-effort —
+  /// falhas silenciosas (controller mantém último valor).
+  Future<void> refresh() async {
+    if (_loading) return;
+    if (_lat == null || _lng == null) {
+      // Sem coordenada cacheada — cai pro fluxo normal de init que pede
+      // permissão e pega posição.
+      _initialized = false;
+      await initIfNeeded();
+      return;
+    }
+    _loading = true;
+    notifyListeners();
+    try {
+      await Future.wait([_fetchCity(), _fetchWeather()]);
+    } finally {
+      _loading = false;
+      notifyListeners();
+    }
+  }
+
   /// Idempotente. Chamar várias vezes não dispara múltiplos fetches.
   Future<void> initIfNeeded() async {
     if (_initialized || _loading) return;
