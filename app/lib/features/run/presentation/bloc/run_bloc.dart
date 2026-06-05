@@ -7,6 +7,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:runnin/core/audio/telemetry_tts.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
+import 'package:runnin/features/biometrics/data/health_sync_service.dart';
 import 'package:runnin/features/run/data/datasources/run_local_datasource.dart';
 import 'package:runnin/core/debug/mock_gps_service.dart';
 import 'package:runnin/core/logger/logger.dart';
@@ -87,9 +88,15 @@ class _NoMovementDetected extends RunEvent {}
 /// Tick interno disparado por cada sample BPM emitido pelo
 /// [WorkoutRealtimeService] (1Hz quando há Watch/Wear OS pareado). Null
 /// quando a fonte some (Watch desligado, permission revogada).
+///
+/// [fallback]=true indica que o sample veio do polling do healthSyncService
+/// (HealthKit/Health Connect direto) em vez do stream nativo de workout.
+/// Coach cue `high_bpm` só dispara em modo realtime — fallback tem
+/// latência alta (15s+) e pode levar a alertas atrasados.
 class _BpmTick extends RunEvent {
   final int? value;
-  _BpmTick(this.value);
+  final bool fallback;
+  _BpmTick(this.value, {this.fallback = false});
 }
 
 /// Limpa o flag do dialog de "parado" (ex: ao escolher continuar/encerrar).
@@ -139,6 +146,11 @@ class RunState {
   /// nunca emitiu. UI usa pra exibir ícone "desativado" em vez de manter
   /// o último valor cacheado (que dava sensação de valor mockado).
   final bool bpmSourceActive;
+  /// Origem do sample BPM ativo: 'realtime' (WorkoutRealtimeService, Watch/
+  /// Wear OS pareado), 'fallback' (polling do HealthKit/Health Connect quando
+  /// realtime não inicia), ou 'none' (sem nenhuma fonte). UI mostra ícone
+  /// diferente por fonte e o copy do chip ("BPM · 142" vs "BPM · sem fonte").
+  final String bpmSource;
 
   const RunState({
     this.status = RunStatus.idle,
@@ -160,6 +172,7 @@ class RunState {
     this.currentBpm,
     this.maxBpmSeen,
     this.bpmSourceActive = false,
+    this.bpmSource = 'none',
   });
 
   RunState copyWith({
@@ -182,6 +195,7 @@ class RunState {
     int? currentBpm,
     int? maxBpmSeen,
     bool? bpmSourceActive,
+    String? bpmSource,
   }) => RunState(
     status: status ?? this.status,
     runId: runId ?? this.runId,
@@ -202,6 +216,7 @@ class RunState {
     currentBpm: currentBpm ?? this.currentBpm,
     maxBpmSeen: maxBpmSeen ?? this.maxBpmSeen,
     bpmSourceActive: bpmSourceActive ?? this.bpmSourceActive,
+    bpmSource: bpmSource ?? this.bpmSource,
   );
 
   String get formattedDistance => '${(distanceM / 1000).toStringAsFixed(2)}km';
@@ -440,6 +455,13 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
       (v) => add(_BpmTick(v)),
     );
     unawaited(workoutRealtimeService.start());
+
+    // Agenda fallback: em 5s, se realtime ainda não emitiu, começa polling.
+    _bpmFallbackPollTimer?.cancel();
+    _bpmFallbackPollTimer = Timer(
+      const Duration(seconds: _bpmFallbackWarmupSec),
+      _maybeStartBpmFallbackPolling,
+    );
 
     // Lifecycle observer pra detectar app→background. Sem isso, GPS e bpmSub
     // continuam ativos (LocationSettings já garante), mas timers UI ficariam
@@ -1078,6 +1100,8 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
     _pendingRotationTrigger = null;
     _bpmSub?.cancel();
     _bpmSub = null;
+    _bpmFallbackPollTimer?.cancel();
+    _bpmFallbackPollTimer = null;
     unawaited(workoutRealtimeService.stop());
     if (state.distanceM >= stationaryDistanceThresholdM) {
       _requestCoachCue(event: 'finish');
@@ -1145,8 +1169,12 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
 
   /// Cada sample BPM vindo do wearable. Acumula pro split do km (kmAvgBpm),
   /// atualiza maxBpmSeen, emite o state pra UI consumir, e dispara o cue
-  /// high_bpm quando aplicável (substitui o TODO histórico de high_bpm
-  /// que aguardava stream do wearable).
+  /// high_bpm quando aplicável.
+  ///
+  /// Realtime (workoutRealtimeService) tem prioridade: quando chega um
+  /// sample realtime, cancela o polling de fallback (se ativo) e marca
+  /// bpmSource='realtime'. Fallback (healthSyncService.latestBpm) só
+  /// é usado quando realtime não emitiu nada em 5s — vide _scheduleBpmFallback.
   void _onBpmTick(_BpmTick event, Emitter<RunState> emit) {
     final value = event.value;
     if (value != null && value > 0) {
@@ -1155,16 +1183,27 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
       final newMax = (state.maxBpmSeen == null || value > state.maxBpmSeen!)
           ? value
           : state.maxBpmSeen!;
+      // Realtime ganha do fallback: se realtime sample chega, cancela o
+      // polling (volta ao "modo barato"). Marca fonte na ordem certa
+      // pra UI mostrar ícone correspondente.
+      final source = event.fallback ? 'fallback' : 'realtime';
+      if (!event.fallback) {
+        _bpmFallbackPollTimer?.cancel();
+        _bpmFallbackPollTimer = null;
+      }
       emit(state.copyWith(
         currentBpm: value,
         maxBpmSeen: newMax,
         bpmSourceActive: true,
+        bpmSource: source,
       ));
 
       // high_bpm cue — gate por alertPref + maxBpm declarado + cooldown 90s.
       // Sem maxBpm não dispara (evita falsos positivos com estimativa 220-age).
-      // Só roda quando run está ativa (não em paused/idle).
+      // Só roda quando run está ativa (não em paused/idle) E em realtime
+      // (fallback tem latência alta — pode atrasar alerta de pico de esforço).
       if (state.status == RunStatus.active &&
+          !event.fallback &&
           _alertPrefs['highBpm'] == true &&
           _userMaxBpm != null &&
           value > (_userMaxBpm! * 0.92) &&
@@ -1184,7 +1223,7 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
       // (pra historico em-memória), mas a UI usa `bpmSourceActive` pra gatear.
       _lastBpmAtMs = null;
       if (state.bpmSourceActive) {
-        emit(state.copyWith(bpmSourceActive: false));
+        emit(state.copyWith(bpmSourceActive: false, bpmSource: 'none'));
       }
     }
   }
@@ -1194,10 +1233,55 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
   int? _lastBpmAtMs;
   static const _bpmStaleThresholdMs = 20 * 1000; // 20s sem sample → stale
 
+  /// Polling de BPM via healthSyncService.latestBpm() quando o stream
+  /// nativo de workout não emite (Watch offline, permission negada).
+  /// Iniciado 5s após _onStart se _lastBpmAtMs ainda for null. Tickada
+  /// a cada 15s. Cancelado assim que chega um sample realtime ou ao
+  /// pause/complete/abandon.
+  Timer? _bpmFallbackPollTimer;
+  static const _bpmFallbackWarmupSec = 5;
+  static const _bpmFallbackIntervalSec = 15;
+
+  /// Avalia se vale começar a polling de fallback do BPM. Chamado 5s
+  /// após _onStart pelo timer de warmup. Se realtime já emitiu sample
+  /// (lastBpmAtMs != null), no-op — workoutRealtimeService está OK.
+  /// Senão, agenda Timer.periodic 15s pra buscar latestBpm do health.
+  void _maybeStartBpmFallbackPolling() {
+    if (_lastBpmAtMs != null) {
+      // Realtime já chegou — não precisa de fallback.
+      return;
+    }
+    if (state.status != RunStatus.active) return;
+    // ignore: avoid_print
+    print('run.bpm.fallback.start reason=no_realtime_after_warmup');
+    _bpmFallbackPollTimer?.cancel();
+    _pollBpmOnce(); // primeira tentativa imediata
+    _bpmFallbackPollTimer = Timer.periodic(
+      const Duration(seconds: _bpmFallbackIntervalSec),
+      (_) => _pollBpmOnce(),
+    );
+  }
+
+  Future<void> _pollBpmOnce() async {
+    if (state.status != RunStatus.active) {
+      _bpmFallbackPollTimer?.cancel();
+      _bpmFallbackPollTimer = null;
+      return;
+    }
+    try {
+      final bpm = await healthSyncService.latestBpm(withinSeconds: 120);
+      if (bpm != null && bpm > 0 && !isClosed) {
+        add(_BpmTick(bpm, fallback: true));
+      }
+    } catch (_) {/* silencioso — caller mostra "sem fonte" no fim */}
+  }
+
   void _onAbandon(AbandonRun event, Emitter<RunState> emit) {
     _stop();
     _bpmSub?.cancel();
     _bpmSub = null;
+    _bpmFallbackPollTimer?.cancel();
+    _bpmFallbackPollTimer = null;
     unawaited(workoutRealtimeService.stop());
     _pendingRotationTrigger = null;
     if (_isPremium) {
@@ -1223,6 +1307,7 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
     _scheduledAnalysis?.cancel();
     _stallCheckTimer?.cancel();
     _coachRotationSafetyTimer?.cancel();
+    _bpmFallbackPollTimer?.cancel();
     _timer = null;
     _gpsPollTimer = null;
     _gpsSub = null;
@@ -1230,6 +1315,7 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
     _scheduledAnalysis = null;
     _stallCheckTimer = null;
     _coachRotationSafetyTimer = null;
+    _bpmFallbackPollTimer = null;
     unawaited(workoutRealtimeService.pause());
     emit(state.copyWith(status: RunStatus.paused));
   }
@@ -1385,6 +1471,8 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
     _coachTranscriptSub?.cancel();
     _bpmSub?.cancel();
     _bpmSub = null;
+    _bpmFallbackPollTimer?.cancel();
+    _bpmFallbackPollTimer = null;
     unawaited(workoutRealtimeService.stop());
     if (_isPremium) {
       unawaited(_coachSession.close());

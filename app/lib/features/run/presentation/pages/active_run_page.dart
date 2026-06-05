@@ -415,16 +415,27 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
                               pulsing: _coachAudioPlaying,
                             ),
                             _StatusChip(
+                              // Realtime (Watch/Strap) = coração pulsando.
+                              // Fallback (polling do HealthKit/Health Connect) =
+                              // ícone de relógio: tem dado mas latência alta.
+                              // Sem fonte = coração contornado, sem pulse.
                               icon: state.bpmSourceActive && state.currentBpm != null
-                                  ? Icons.favorite
+                                  ? (state.bpmSource == 'fallback'
+                                      ? Icons.history
+                                      : Icons.favorite)
                                   : Icons.favorite_outline,
                               label: state.bpmSourceActive && state.currentBpm != null
                                   ? 'BPM · ${state.currentBpm}'
-                                  : 'BPM · —',
+                                  : state.bpmSource == 'none' &&
+                                          state.status == RunStatus.active
+                                      ? 'BPM · sem fonte'
+                                      : 'BPM · —',
                               color: state.bpmSourceActive && state.currentBpm != null
                                   ? palette.secondary
                                   : palette.muted,
-                              pulsing: state.bpmSourceActive && state.currentBpm != null,
+                              pulsing: state.bpmSourceActive &&
+                                  state.currentBpm != null &&
+                                  state.bpmSource == 'realtime',
                             ),
                           ],
                         ),
