@@ -3,15 +3,24 @@ import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 import 'package:runnin/features/biometrics/data/biometric_remote_datasource.dart';
+import 'package:runnin/features/biometrics/domain/run_zones.dart';
 import 'package:runnin/features/profile/presentation/pages/health/zones_utils.dart';
-import 'package:runnin/shared/widgets/figma/figma_zone_card.dart';
+import 'package:runnin/features/run/data/datasources/run_remote_datasource.dart';
 import 'package:runnin/shared/widgets/figma/figma_top_nav.dart';
+import 'package:runnin/shared/widgets/figma/figma_zone_card.dart';
+import 'package:runnin/shared/widgets/figma/figma_zone_distribution_bar.dart';
 
-/// Origem do par (restingBpm, maxBpm) que alimenta as zonas. Usado pra
-/// exibir o badge "ESTIMADO" quando o usuário ainda não configurou os
-/// valores no perfil (cai pra biometrics summary + 220-idade).
-enum _BpmSource { profile, derived }
+/// Janela de runs considerada pra computar a distribuição. 30d cobre a
+/// maioria das corridas de um user ativo sem trazer ruído de meses atrás.
+const int _kWindowDays = 30;
 
+/// Mostra as 5 zonas cardíacas do user com (a) ranges Karvonen calculados
+/// pela cascata profile → derived → fallback genérico (60/190) e (b) a
+/// distribuição real de tempo nas zonas das últimas 30d de corridas.
+///
+/// Antes a página mostrava banner "Sem dados carregados" sempre que faltava
+/// profile.restingBpm/maxBpm. User reclamou — agora cai em ranges genéricos
+/// + badge "GENÉRICO" pra ser transparente sobre a origem dos números.
 class HealthZonesPage extends StatefulWidget {
   const HealthZonesPage({super.key});
 
@@ -22,87 +31,69 @@ class HealthZonesPage extends StatefulWidget {
 class _HealthZonesPageState extends State<HealthZonesPage> {
   final _userDatasource = UserRemoteDatasource();
   final _biometricDatasource = BiometricRemoteDatasource();
+  final _runDatasource = RunRemoteDatasource();
+
   List<HealthZone> _zones = [];
   int? _effectiveMax;
-  _BpmSource _bpmSource = _BpmSource.profile;
+  BpmRangeSource _bpmSource = BpmRangeSource.profile;
+  bool _hasDistribution = false;
+  int? _observedMaxFromRuns;
   bool _loading = true;
 
   @override
   void initState() {
     super.initState();
-    _loadProfileAndZones();
+    _loadAll();
   }
 
-  Future<void> _loadProfileAndZones() async {
+  Future<void> _loadAll() async {
+    UserProfile? profile;
+    BiometricSummary? summary;
+    var runs = const <dynamic>[];
+
+    // Best-effort em paralelo — qualquer falha vira null/[] e a UI ainda
+    // renderiza com os defaults genéricos.
     try {
-      final profile = await _userDatasource.getMe();
-      if (!mounted) return;
-
-      // Cascade pros valores efetivos:
-      //   restingBpm: profile → biometrics.avgRestingBpm
-      //   maxBpm:     profile → (220 - idade)  → biometrics.maxBpm observado
-      int? resting = profile?.restingBpm;
-      int? max = profile?.maxBpm;
-      var source = _BpmSource.profile;
-
-      if (resting == null || max == null) {
-        source = _BpmSource.derived;
-        // Try birthDate → idade → 220 - idade.
-        if (max == null) {
-          final age = _ageFromBirthDate(profile?.birthDate);
-          if (age != null && age > 0 && age < 120) {
-            max = 220 - age;
-          }
-        }
-        // Biometrics summary (30 dias) cobre o gap quando os outros falham.
-        try {
-          final summary = await _biometricDatasource.getSummary(windowDays: 30);
-          if (!mounted) return;
-          resting ??= summary.avgRestingBpm?.round();
-          max ??= summary.maxBpm?.round();
-        } catch (_) {
-          // best-effort: sem summary, exibe banner se ainda faltar valor.
-        }
-      }
-
-      final zones = (resting != null && max != null && max > resting)
-          ? computeHealthZones(restingBpm: resting, maxBpm: max)
-          : <HealthZone>[];
-
-      setState(() {
-        _effectiveMax = max;
-        _bpmSource = source;
-        _zones = zones;
-        _loading = false;
-      });
-    } catch (_) {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
-
-  /// Aceita ISO yyyy-MM-dd ou dd/MM/yyyy. Devolve idade em anos completos.
-  static int? _ageFromBirthDate(String? raw) {
-    if (raw == null || raw.trim().isEmpty) return null;
-    DateTime? d;
+      profile = await _userDatasource.getMe();
+    } catch (_) {}
     try {
-      d = DateTime.parse(raw);
-    } catch (_) {
-      final br = RegExp(r'^(\d{2})/(\d{2})/(\d{4})$').firstMatch(raw.trim());
-      if (br != null) {
-        d = DateTime(
-          int.parse(br.group(3)!),
-          int.parse(br.group(2)!),
-          int.parse(br.group(1)!),
-        );
-      }
-    }
-    if (d == null) return null;
-    final now = DateTime.now();
-    var age = now.year - d.year;
-    if (now.month < d.month || (now.month == d.month && now.day < d.day)) {
-      age -= 1;
-    }
-    return age;
+      summary = await _biometricDatasource.getSummary(windowDays: _kWindowDays);
+    } catch (_) {}
+    try {
+      // listRuns sem limit explícito traz 20 (default datasource). É o
+      // que o histórico usa — manter coerente.
+      final fetched = await _runDatasource.listRuns(limit: 40);
+      final cutoff = DateTime.now().subtract(const Duration(days: _kWindowDays));
+      runs = fetched.where((r) {
+        final d = DateTime.tryParse(r.createdAt);
+        return d != null && d.isAfter(cutoff);
+      }).toList();
+    } catch (_) {}
+
+    if (!mounted) return;
+
+    final range = resolveBpmRange(profile: profile, summary: summary);
+    final dist = computeAggregateRunZoneDistribution(
+      runs: List.from(runs),
+      profile: profile,
+      summary: summary,
+    );
+
+    // Quando temos distribuição real, usa zones com pctTime preenchido.
+    // Senão, ainda mostra os 5 cards com ranges (pctTime=0) — melhor que
+    // tela vazia.
+    final zones = dist.zones.isNotEmpty
+        ? dist.zones
+        : computeHealthZones(restingBpm: range.resting, maxBpm: range.max);
+
+    setState(() {
+      _effectiveMax = range.max;
+      _bpmSource = range.source;
+      _zones = zones;
+      _hasDistribution = dist.hasEnoughBpmData;
+      _observedMaxFromRuns = dist.maxBpmRun;
+      _loading = false;
+    });
   }
 
   @override
@@ -124,13 +115,13 @@ class _HealthZonesPageState extends State<HealthZonesPage> {
                         strokeWidth: 1.5,
                       ),
                     )
-                  : _zones.isEmpty
-                      ? const _MissingBpmBanner()
-                      : _Body(
-                          maxBpm: _effectiveMax!,
-                          zones: _zones,
-                          estimated: _bpmSource == _BpmSource.derived,
-                        ),
+                  : _Body(
+                      maxBpm: _effectiveMax!,
+                      zones: _zones,
+                      source: _bpmSource,
+                      hasDistribution: _hasDistribution,
+                      observedMaxFromRuns: _observedMaxFromRuns,
+                    ),
             ),
           ],
         ),
@@ -143,12 +134,16 @@ class _Body extends StatelessWidget {
   const _Body({
     required this.maxBpm,
     required this.zones,
-    required this.estimated,
+    required this.source,
+    required this.hasDistribution,
+    required this.observedMaxFromRuns,
   });
 
   final int maxBpm;
   final List<HealthZone> zones;
-  final bool estimated;
+  final BpmRangeSource source;
+  final bool hasDistribution;
+  final int? observedMaxFromRuns;
 
   @override
   Widget build(BuildContext context) {
@@ -169,10 +164,22 @@ class _Body extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 24),
-          _MaxBpmHeader(maxBpm: maxBpm, estimated: estimated),
+          _MaxBpmHeader(
+            maxBpm: maxBpm,
+            source: source,
+            observedMaxFromRuns: observedMaxFromRuns,
+          ),
           const SizedBox(height: 24),
           _SectionHeader(label: 'ZONAS', index: '02'),
           const SizedBox(height: 16),
+          // Distribuição visual — só faz sentido quando temos pelo menos
+          // uma run com BPM nas últimas 30d.
+          if (hasDistribution) ...[
+            FigmaZoneDistributionBar(
+              zonePercentages: zones.map((z) => z.pctTime).toList(),
+            ),
+            const SizedBox(height: 16),
+          ],
           for (final zone in zones)
             FigmaZoneCard(
               zoneNumber: zone.number,
@@ -181,6 +188,15 @@ class _Body extends StatelessWidget {
               percent: zone.pctTime,
               zoneColor: zone.color,
             ),
+          if (!hasDistribution) ...[
+            const SizedBox(height: 12),
+            Text(
+              'Sem dados de BPM nas últimas $_kWindowDays dias — corra com um sensor pra ver sua distribuição real.',
+              style: context.runninType.bodySm.copyWith(
+                color: FigmaColors.textSecondary,
+              ),
+            ),
+          ],
           const SizedBox(height: 24),
           _SectionHeader(label: 'SOBRE AS ZONAS', index: '03'),
           const SizedBox(height: 16),
@@ -195,59 +211,30 @@ class _Body extends StatelessWidget {
   }
 }
 
-class _MissingBpmBanner extends StatelessWidget {
-  const _MissingBpmBanner();
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text(
-            'DADOS INCOMPLETOS',
-            style: context.runninType.dataXs.copyWith(
-              color: FigmaColors.textPrimary,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            'Preencha sua data de nascimento ou sua frequência cardíaca em repouso e máxima no perfil para visualizar suas zonas.',
-            textAlign: TextAlign.center,
-            style: context.runninType.bodySm.copyWith(
-              color: FigmaColors.textSecondary,
-            ),
-          ),
-          const SizedBox(height: 24),
-          GestureDetector(
-            onTap: () => Navigator.of(context).pop(),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              decoration: BoxDecoration(
-                border: Border.all(color: context.runninPalette.primary, width: 1),
-              ),
-              child: Text(
-                'PREENCHER PERFIL',
-                style: context.runninType.labelCaps.copyWith(
-                  color: context.runninPalette.primary,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _MaxBpmHeader extends StatelessWidget {
-  const _MaxBpmHeader({required this.maxBpm, required this.estimated});
+  const _MaxBpmHeader({
+    required this.maxBpm,
+    required this.source,
+    required this.observedMaxFromRuns,
+  });
   final int maxBpm;
-  final bool estimated;
+  final BpmRangeSource source;
+  final int? observedMaxFromRuns;
+
+  String? get _sourceBadge {
+    switch (source) {
+      case BpmRangeSource.profile:
+        return null;
+      case BpmRangeSource.derived:
+        return 'ESTIMADO';
+      case BpmRangeSource.genericFallback:
+        return 'GENÉRICO';
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    final badge = _sourceBadge;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
@@ -255,41 +242,58 @@ class _MaxBpmHeader extends StatelessWidget {
         color: FigmaColors.surfaceCard,
         border: Border.all(color: FigmaColors.borderDefault, width: 1.041),
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'FC MÁX',
+                    style: context.runninType.labelMd.copyWith(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: FigmaColors.textMuted,
+                    ),
+                  ),
+                  if (badge != null) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      badge,
+                      style: context.runninType.labelCaps.copyWith(
+                        fontSize: 9,
+                        color: context.runninPalette.primary,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
               Text(
-                'FC MÁX',
-                style: context.runninType.labelMd.copyWith(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                  color: FigmaColors.textMuted,
+                '$maxBpm bpm',
+                style: context.runninType.dataXs.copyWith(
+                  fontSize: 24,
+                  letterSpacing: 0,
+                  color: FigmaColors.textPrimary,
                 ),
               ),
-              if (estimated) ...[
-                const SizedBox(height: 4),
-                Text(
-                  'ESTIMADO',
-                  style: context.runninType.labelCaps.copyWith(
-                    fontSize: 9,
-                    color: context.runninPalette.primary,
-                  ),
-                ),
-              ],
             ],
           ),
-          Text(
-            '$maxBpm bpm',
-            style: context.runninType.dataXs.copyWith(
-              fontSize: 24,
-              letterSpacing: 0,
-              color: FigmaColors.textPrimary,
+          // Quando temos um pico observado nas runs maior que o max teórico,
+          // expõe pro user — sinal de que o range tá subestimado e pode
+          // precisar atualizar o profile.
+          if (observedMaxFromRuns != null && observedMaxFromRuns! > maxBpm) ...[
+            const SizedBox(height: 12),
+            Text(
+              'Pico observado nas corridas: ${observedMaxFromRuns!} bpm',
+              style: context.runninType.bodySm.copyWith(
+                color: FigmaColors.textSecondary,
+              ),
             ),
-          ),
+          ],
         ],
       ),
     );

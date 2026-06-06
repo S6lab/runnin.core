@@ -441,8 +441,8 @@ class _RunZonesSection extends StatelessWidget {
                   ],
                 )
               : Text(
-                  'Sem BPM suficiente nessa corrida pra distribuir por zona. '
-                  'Preencha BPM repouso e FC máx em PERFIL > SAÚDE pra ativar.',
+                  'Sem BPM coletado nessa corrida pra distribuir por zona — '
+                  'corra com um sensor de FC conectado pra ativar.',
                   style: type.bodySm.copyWith(color: FigmaColors.textMuted),
                 ),
         ),

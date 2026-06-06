@@ -604,9 +604,7 @@ class _DataView extends StatelessWidget {
     //      total da run, não conta de runs — pelo menos não enviesa por
     //      tamanho.
     final range = resolveBpmRange(profile: profile, summary: biometricSummary);
-    final karvonenZones = range.isValid
-        ? computeHealthZones(restingBpm: range.resting!, maxBpm: range.max!)
-        : <HealthZone>[];
+    final karvonenZones = computeHealthZones(restingBpm: range.resting, maxBpm: range.max);
     final zoneTimes = List<int>.filled(5, 0);
     var anyBpm = false;
     for (final r in runs) {
