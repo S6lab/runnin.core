@@ -153,7 +153,7 @@ class _Body extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const SizedBox(height: 8),
-          _SectionHeader(label: 'SAÚDE', index: '01'),
+          _SectionHeader(label: 'SAÚDE'),
           const SizedBox(height: 4),
           Text(
             'Distribuição de frequência cardíaca',
@@ -170,7 +170,7 @@ class _Body extends StatelessWidget {
             observedMaxFromRuns: observedMaxFromRuns,
           ),
           const SizedBox(height: 24),
-          _SectionHeader(label: 'ZONAS', index: '02'),
+          _SectionHeader(label: 'ZONAS'),
           const SizedBox(height: 16),
           // Distribuição visual — só faz sentido quando temos pelo menos
           // uma run com BPM nas últimas 30d.
@@ -198,7 +198,7 @@ class _Body extends StatelessWidget {
             ),
           ],
           const SizedBox(height: 24),
-          _SectionHeader(label: 'SOBRE AS ZONAS', index: '03'),
+          _SectionHeader(label: 'SOBRE AS ZONAS'),
           const SizedBox(height: 16),
           for (final zone in zones)...[
             _ZoneDescription(zone: zone),
@@ -355,34 +355,16 @@ class _ZoneDescription extends StatelessWidget {
 }
 
 class _SectionHeader extends StatelessWidget {
-  const _SectionHeader({required this.label, required this.index});
+  const _SectionHeader({required this.label});
   final String label;
-  final String index;
 
   @override
   Widget build(BuildContext context) {
-    return RichText(
-      text: TextSpan(
-        children: [
-          TextSpan(
-            text: label,
-            style: context.runninType.dataXs.copyWith(
-              color: FigmaColors.textPrimary,
-              height: 24.2 / 22,
-            ),
-          ),
-          WidgetSpan(
-            alignment: PlaceholderAlignment.top,
-            child: Text(
-              index,
-              style: context.runninType.labelCaps.copyWith(
-                fontSize: 6.6,
-                fontWeight: FontWeight.w400,
-                color: context.runninPalette.primary,
-              ),
-            ),
-          ),
-        ],
+    return Text(
+      label,
+      style: context.runninType.dataXs.copyWith(
+        color: FigmaColors.textPrimary,
+        height: 24.2 / 22,
       ),
     );
   }

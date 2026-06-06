@@ -284,7 +284,7 @@ class _Body extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const SizedBox(height: 8),
-          _SectionHeader(label: 'TENDÊNCIAS', index: '01'),
+          _SectionHeader(label: 'TENDÊNCIAS'),
           const SizedBox(height: 16),
           GridView.count(
             crossAxisCount: 2,
@@ -404,35 +404,16 @@ class _Stats {
 }
 
 class _SectionHeader extends StatelessWidget {
-  const _SectionHeader({required this.label, required this.index});
+  const _SectionHeader({required this.label});
   final String label;
-  final String index;
 
   @override
   Widget build(BuildContext context) {
-    return RichText(
-      text: TextSpan(
-        children: [
-          TextSpan(
-            text: label,
-            style: context.runninType.dataXs.copyWith(
-              color: FigmaColors.textPrimary,
-              height: 24.2 / 22,
-            ),
-          ),
-          WidgetSpan(
-            alignment: PlaceholderAlignment.top,
-            child: Text(
-              index,
-              style: context.runninType.labelCaps.copyWith(
-                fontSize: 6.6,
-                fontWeight: FontWeight.w400,
-                letterSpacing: 0,
-                color: context.runninPalette.primary,
-              ),
-            ),
-          ),
-        ],
+    return Text(
+      label,
+      style: context.runninType.dataXs.copyWith(
+        color: FigmaColors.textPrimary,
+        height: 24.2 / 22,
       ),
     );
   }
