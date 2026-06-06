@@ -25,7 +25,7 @@ class LiveCoachVoiceService {
   // PRECISA bater com DEFAULT_MODEL em create-live-ephemeral-token.use-case.ts
   // Native-audio é o modelo Live oficial pra AUDIO modality em bidi.
   // gemini-live-2.5-flash-preview suporta TEXT mas não AUDIO no bidi.
-  static const _model = 'gemini-2.5-flash-native-audio';
+  static const _model = 'gemini-2.5-flash-preview-native-audio-dialog';
   static const _voiceDefault = 'Charon';
 
   String? _cachedToken;
