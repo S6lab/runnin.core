@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 54;
+	objectVersion = 70;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -11,6 +11,20 @@
 		331C808B294A63AB00263BE5 /* RunnerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 331C807B294A618700263BE5 /* RunnerTests.swift */; };
 		3B3967161E833CAA004F5970 /* AppFrameworkInfo.plist in Resources */ = {isa = PBXBuildFile; fileRef = 3B3967151E833CAA004F5970 /* AppFrameworkInfo.plist */; };
 		3E1C01BBF829EBE4793BBCDA /* Pods_Runner.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A8470622D088289E8C8CD749 /* Pods_Runner.framework */; };
+		55D6DD9C2FD3AECA00104508 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 55D6DD9B2FD3AEC900104508 /* WidgetKit.framework */; };
+		55D6DD9E2FD3AECA00104508 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 55D6DD9D2FD3AECA00104508 /* SwiftUI.framework */; };
+		55D6DDAD2FD3AECA00104508 /* RunninLiveActivityExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 55D6DD9A2FD3AEC900104508 /* RunninLiveActivityExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		55D6DDC92FD3B1E700104508 /* LiveActivityPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55D6DDBF2FD3B1E700104508 /* LiveActivityPlugin.swift */; };
+		55D6DDCA2FD3B1E700104508 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55D6DDB62FD3B1E700104508 /* AppDelegate.swift */; };
+		55D6DDCB2FD3B1E700104508 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55D6DDC62FD3B1E700104508 /* SceneDelegate.swift */; };
+		55D6DDCC2FD3B1E700104508 /* GeneratedPluginRegistrant.m in Sources */ = {isa = PBXBuildFile; fileRef = 55D6DDB92FD3B1E700104508 /* GeneratedPluginRegistrant.m */; };
+		55D6DDCD2FD3B1E700104508 /* InstagramStoriesPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55D6DDBC2FD3B1E700104508 /* InstagramStoriesPlugin.swift */; };
+		55D6DDCE2FD3B1E700104508 /* WorkoutRealtimePlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55D6DDC72FD3B1E700104508 /* WorkoutRealtimePlugin.swift */; };
+		55D6DDD02FD3B1E700104508 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 55D6DDC22FD3B1E700104508 /* PrivacyInfo.xcprivacy */; };
+		55D6DDD12FD3B1E700104508 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 55D6DDB72FD3B1E700104508 /* Assets.xcassets */; };
+		55D6DDD22FD3B1E700104508 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 55D6DDC12FD3B1E700104508 /* Main.storyboard */; };
+		55D6DDD32FD3B1E700104508 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 55D6DDBA2FD3B1E700104508 /* GoogleService-Info.plist */; };
+		55D6DDD42FD3B1E700104508 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 55D6DDBE2FD3B1E700104508 /* LaunchScreen.storyboard */; };
 		662049E35EF7702BB83975E4 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = EBA3921879AE686BF449B596 /* GoogleService-Info.plist */; };
 		74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74858FAE1ED2DC5600515810 /* AppDelegate.swift */; };
 		7884E8682EC3CC0700C636F2 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7884E8672EC3CC0400C636F2 /* SceneDelegate.swift */; };
@@ -31,9 +45,27 @@
 			remoteGlobalIDString = 97C146ED1CF9000F007C117D;
 			remoteInfo = Runner;
 		};
+		55D6DDAB2FD3AECA00104508 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 97C146E61CF9000F007C117D /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 55D6DD992FD3AEC900104508;
+			remoteInfo = RunninLiveActivityExtension;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
+		55D6DDB32FD3AECA00104508 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				55D6DDAD2FD3AECA00104508 /* RunninLiveActivityExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		9705A1C41CF9048500538489 /* Embed Frameworks */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
@@ -55,6 +87,25 @@
 		3B3967151E833CAA004F5970 /* AppFrameworkInfo.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = AppFrameworkInfo.plist; path = Flutter/AppFrameworkInfo.plist; sourceTree = "<group>"; };
 		4AB9DBE20E0127A14502ECA4 /* Pods-RunnerTests.profile.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-RunnerTests.profile.xcconfig"; path = "Target Support Files/Pods-RunnerTests/Pods-RunnerTests.profile.xcconfig"; sourceTree = "<group>"; };
 		4D69C62447723518696BB6CB /* Pods-Runner.profile.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.profile.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.profile.xcconfig"; sourceTree = "<group>"; };
+		55D6DD9A2FD3AEC900104508 /* RunninLiveActivityExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = RunninLiveActivityExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		55D6DD9B2FD3AEC900104508 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
+		55D6DD9D2FD3AECA00104508 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
+		55D6DDB62FD3B1E700104508 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		55D6DDB72FD3B1E700104508 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		55D6DDB82FD3B1E700104508 /* GeneratedPluginRegistrant.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = GeneratedPluginRegistrant.h; sourceTree = "<group>"; };
+		55D6DDB92FD3B1E700104508 /* GeneratedPluginRegistrant.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = GeneratedPluginRegistrant.m; sourceTree = "<group>"; };
+		55D6DDBA2FD3B1E700104508 /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
+		55D6DDBB2FD3B1E700104508 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		55D6DDBC2FD3B1E700104508 /* InstagramStoriesPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InstagramStoriesPlugin.swift; sourceTree = "<group>"; };
+		55D6DDBD2FD3B1E700104508 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
+		55D6DDBF2FD3B1E700104508 /* LiveActivityPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveActivityPlugin.swift; sourceTree = "<group>"; };
+		55D6DDC02FD3B1E700104508 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
+		55D6DDC22FD3B1E700104508 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		55D6DDC32FD3B1E700104508 /* Runner.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Runner.entitlements; sourceTree = "<group>"; };
+		55D6DDC42FD3B1E700104508 /* Runner-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "Runner-Bridging-Header.h"; sourceTree = "<group>"; };
+		55D6DDC52FD3B1E700104508 /* RunnerRelease.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = RunnerRelease.entitlements; sourceTree = "<group>"; };
+		55D6DDC62FD3B1E700104508 /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
+		55D6DDC72FD3B1E700104508 /* WorkoutRealtimePlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutRealtimePlugin.swift; sourceTree = "<group>"; };
 		74858FAD1ED2DC5600515810 /* Runner-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "Runner-Bridging-Header.h"; sourceTree = "<group>"; };
 		74858FAE1ED2DC5600515810 /* AppDelegate.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		7884E8672EC3CC0400C636F2 /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
@@ -77,7 +128,37 @@
 		EBA3921879AE686BF449B596 /* GoogleService-Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; name = "GoogleService-Info.plist"; path = "Runner/GoogleService-Info.plist"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		55D6DDAE2FD3AECA00104508 /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 55D6DD992FD3AEC900104508 /* RunninLiveActivityExtension */;
+		};
+		55D6DDD62FD3B28E00104508 /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				RunActivityAttributes.swift,
+			);
+			target = 97C146ED1CF9000F007C117D /* Runner */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		55D6DD9F2FD3AECA00104508 /* RunninLiveActivity */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (55D6DDD62FD3B28E00104508 /* PBXFileSystemSynchronizedBuildFileExceptionSet */, 55D6DDAE2FD3AECA00104508 /* PBXFileSystemSynchronizedBuildFileExceptionSet */, ); explicitFileTypes = {}; explicitFolders = (); path = RunninLiveActivity; sourceTree = "<group>"; };
+/* End PBXFileSystemSynchronizedRootGroup section */
+
 /* Begin PBXFrameworksBuildPhase section */
+		55D6DD972FD3AEC900104508 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				55D6DD9E2FD3AECA00104508 /* SwiftUI.framework in Frameworks */,
+				55D6DD9C2FD3AECA00104508 /* WidgetKit.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		820AECAA6F28EDF6411DB688 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -118,11 +199,36 @@
 			path = Pods;
 			sourceTree = "<group>";
 		};
+		55D6DDC82FD3B1E700104508 /* Runner */ = {
+			isa = PBXGroup;
+			children = (
+				55D6DDB62FD3B1E700104508 /* AppDelegate.swift */,
+				55D6DDB72FD3B1E700104508 /* Assets.xcassets */,
+				55D6DDB82FD3B1E700104508 /* GeneratedPluginRegistrant.h */,
+				55D6DDB92FD3B1E700104508 /* GeneratedPluginRegistrant.m */,
+				55D6DDBA2FD3B1E700104508 /* GoogleService-Info.plist */,
+				55D6DDBB2FD3B1E700104508 /* Info.plist */,
+				55D6DDBC2FD3B1E700104508 /* InstagramStoriesPlugin.swift */,
+				55D6DDBE2FD3B1E700104508 /* LaunchScreen.storyboard */,
+				55D6DDBF2FD3B1E700104508 /* LiveActivityPlugin.swift */,
+				55D6DDC12FD3B1E700104508 /* Main.storyboard */,
+				55D6DDC22FD3B1E700104508 /* PrivacyInfo.xcprivacy */,
+				55D6DDC32FD3B1E700104508 /* Runner.entitlements */,
+				55D6DDC42FD3B1E700104508 /* Runner-Bridging-Header.h */,
+				55D6DDC52FD3B1E700104508 /* RunnerRelease.entitlements */,
+				55D6DDC62FD3B1E700104508 /* SceneDelegate.swift */,
+				55D6DDC72FD3B1E700104508 /* WorkoutRealtimePlugin.swift */,
+			);
+			path = Runner;
+			sourceTree = "<group>";
+		};
 		6AE16112FBA6F85E49D4F9A7 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
 				A8470622D088289E8C8CD749 /* Pods_Runner.framework */,
 				DDFD6235D76041781BCAA840 /* Pods_RunnerTests.framework */,
+				55D6DD9B2FD3AEC900104508 /* WidgetKit.framework */,
+				55D6DD9D2FD3AECA00104508 /* SwiftUI.framework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -141,8 +247,10 @@
 		97C146E51CF9000F007C117D = {
 			isa = PBXGroup;
 			children = (
+				55D6DDC82FD3B1E700104508 /* Runner */,
 				9740EEB11CF90186004384FC /* Flutter */,
 				97C146F01CF9000F007C117D /* Runner */,
+				55D6DD9F2FD3AECA00104508 /* RunninLiveActivity */,
 				97C146EF1CF9000F007C117D /* Products */,
 				331C8082294A63A400263BE5 /* RunnerTests */,
 				EBA3921879AE686BF449B596 /* GoogleService-Info.plist */,
@@ -156,6 +264,7 @@
 			children = (
 				97C146EE1CF9000F007C117D /* Runner.app */,
 				331C8081294A63A400263BE5 /* RunnerTests.xctest */,
+				55D6DD9A2FD3AEC900104508 /* RunninLiveActivityExtension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -201,6 +310,28 @@
 			productReference = 331C8081294A63A400263BE5 /* RunnerTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
+		55D6DD992FD3AEC900104508 /* RunninLiveActivityExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 55D6DDAF2FD3AECA00104508 /* Build configuration list for PBXNativeTarget "RunninLiveActivityExtension" */;
+			buildPhases = (
+				55D6DD962FD3AEC900104508 /* Sources */,
+				55D6DD972FD3AEC900104508 /* Frameworks */,
+				55D6DD982FD3AEC900104508 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				55D6DD9F2FD3AECA00104508 /* RunninLiveActivity */,
+			);
+			name = RunninLiveActivityExtension;
+			packageProductDependencies = (
+			);
+			productName = RunninLiveActivityExtension;
+			productReference = 55D6DD9A2FD3AEC900104508 /* RunninLiveActivityExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 		97C146ED1CF9000F007C117D /* Runner */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 97C147051CF9000F007C117D /* Build configuration list for PBXNativeTarget "Runner" */;
@@ -209,6 +340,7 @@
 				9740EEB61CF901F6004384FC /* Run Script */,
 				97C146EA1CF9000F007C117D /* Sources */,
 				97C146EB1CF9000F007C117D /* Frameworks */,
+				55D6DDB32FD3AECA00104508 /* Embed Foundation Extensions */,
 				97C146EC1CF9000F007C117D /* Resources */,
 				9705A1C41CF9048500538489 /* Embed Frameworks */,
 				3B06AD1E1E4923F5004D2608 /* Thin Binary */,
@@ -219,6 +351,7 @@
 			buildRules = (
 			);
 			dependencies = (
+				55D6DDAC2FD3AECA00104508 /* PBXTargetDependency */,
 			);
 			name = Runner;
 			productName = Runner;
@@ -232,12 +365,16 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
+				LastSwiftUpdateCheck = 2650;
 				LastUpgradeCheck = 1510;
 				ORGANIZATIONNAME = "";
 				TargetAttributes = {
 					331C8080294A63A400263BE5 = {
 						CreatedOnToolsVersion = 14.0;
 						TestTargetID = 97C146ED1CF9000F007C117D;
+					};
+					55D6DD992FD3AEC900104508 = {
+						CreatedOnToolsVersion = 26.5;
 					};
 					97C146ED1CF9000F007C117D = {
 						CreatedOnToolsVersion = 7.3.1;
@@ -260,6 +397,7 @@
 			targets = (
 				97C146ED1CF9000F007C117D /* Runner */,
 				331C8080294A63A400263BE5 /* RunnerTests */,
+				55D6DD992FD3AEC900104508 /* RunninLiveActivityExtension */,
 			);
 		};
 /* End PBXProject section */
@@ -272,12 +410,24 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		55D6DD982FD3AEC900104508 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		97C146EC1CF9000F007C117D /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 				97C147011CF9000F007C117D /* LaunchScreen.storyboard in Resources */,
 				3B3967161E833CAA004F5970 /* AppFrameworkInfo.plist in Resources */,
+				55D6DDD02FD3B1E700104508 /* PrivacyInfo.xcprivacy in Resources */,
+				55D6DDD12FD3B1E700104508 /* Assets.xcassets in Resources */,
+				55D6DDD22FD3B1E700104508 /* Main.storyboard in Resources */,
+				55D6DDD32FD3B1E700104508 /* GoogleService-Info.plist in Resources */,
+				55D6DDD42FD3B1E700104508 /* LaunchScreen.storyboard in Resources */,
 				97C146FE1CF9000F007C117D /* Assets.xcassets in Resources */,
 				97C146FC1CF9000F007C117D /* Main.storyboard in Resources */,
 				662049E35EF7702BB83975E4 /* GoogleService-Info.plist in Resources */,
@@ -400,7 +550,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "/bin/sh \"$FLUTTER_ROOT/packages/flutter_tools/bin/xcode_backend.sh\" build";
+			shellScript = "/bin/sh \"$FLUTTER_ROOT/packages/flutter_tools/bin/xcode_backend.sh\" build\n";
 		};
 		A8B0DC16146FC54AD79E1205 /* [CP] Embed Pods Frameworks */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -434,6 +584,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		55D6DD962FD3AEC900104508 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		97C146EA1CF9000F007C117D /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -443,6 +600,12 @@
 				7884E8682EC3CC0700C636F2 /* SceneDelegate.swift in Sources */,
 				7A1B0001AE000000DEAD0001 /* WorkoutRealtimePlugin.swift in Sources */,
 				7A1B0001AE000000DEAD0003 /* InstagramStoriesPlugin.swift in Sources */,
+				55D6DDC92FD3B1E700104508 /* LiveActivityPlugin.swift in Sources */,
+				55D6DDCA2FD3B1E700104508 /* AppDelegate.swift in Sources */,
+				55D6DDCB2FD3B1E700104508 /* SceneDelegate.swift in Sources */,
+				55D6DDCC2FD3B1E700104508 /* GeneratedPluginRegistrant.m in Sources */,
+				55D6DDCD2FD3B1E700104508 /* InstagramStoriesPlugin.swift in Sources */,
+				55D6DDCE2FD3B1E700104508 /* WorkoutRealtimePlugin.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -454,9 +617,30 @@
 			target = 97C146ED1CF9000F007C117D /* Runner */;
 			targetProxy = 331C8085294A63A400263BE5 /* PBXContainerItemProxy */;
 		};
+		55D6DDAC2FD3AECA00104508 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 55D6DD992FD3AEC900104508 /* RunninLiveActivityExtension */;
+			targetProxy = 55D6DDAB2FD3AECA00104508 /* PBXContainerItemProxy */;
+		};
 /* End PBXTargetDependency section */
 
 /* Begin PBXVariantGroup section */
+		55D6DDBE2FD3B1E700104508 /* LaunchScreen.storyboard */ = {
+			isa = PBXVariantGroup;
+			children = (
+				55D6DDBD2FD3B1E700104508 /* Base */,
+			);
+			name = LaunchScreen.storyboard;
+			sourceTree = "<group>";
+		};
+		55D6DDC12FD3B1E700104508 /* Main.storyboard */ = {
+			isa = PBXVariantGroup;
+			children = (
+				55D6DDC02FD3B1E700104508 /* Base */,
+			);
+			name = Main.storyboard;
+			sourceTree = "<group>";
+		};
 		97C146FA1CF9000F007C117D /* Main.storyboard */ = {
 			isa = PBXVariantGroup;
 			children = (
@@ -543,6 +727,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				LM_SKIP_METADATA_EXTRACTION = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = com.s6lab.runnin;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
@@ -598,6 +783,135 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Runner.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Runner";
+			};
+			name = Profile;
+		};
+		55D6DDB02FD3AECA00104508 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = Y36XR89PWG;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = RunninLiveActivity/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = RunninLiveActivity;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				LM_SKIP_METADATA_EXTRACTION = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MARKETING_VERSION = 1.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.s6lab.runnin.RunninLiveActivity;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		55D6DDB12FD3AECA00104508 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = Y36XR89PWG;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = RunninLiveActivity/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = RunninLiveActivity;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				LM_SKIP_METADATA_EXTRACTION = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MARKETING_VERSION = 1.0;
+				MTL_FAST_MATH = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.s6lab.runnin.RunninLiveActivity;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		55D6DDB22FD3AECA00104508 /* Profile */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = Y36XR89PWG;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = RunninLiveActivity/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = RunninLiveActivity;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				LM_SKIP_METADATA_EXTRACTION = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MARKETING_VERSION = 1.0;
+				MTL_FAST_MATH = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.s6lab.runnin.RunninLiveActivity;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Profile;
 		};
@@ -727,6 +1041,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				LM_SKIP_METADATA_EXTRACTION = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = com.s6lab.runnin;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
@@ -751,6 +1066,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				LM_SKIP_METADATA_EXTRACTION = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = com.s6lab.runnin;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
@@ -768,6 +1084,16 @@
 				331C8088294A63A400263BE5 /* Debug */,
 				331C8089294A63A400263BE5 /* Release */,
 				331C808A294A63A400263BE5 /* Profile */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		55D6DDAF2FD3AECA00104508 /* Build configuration list for PBXNativeTarget "RunninLiveActivityExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				55D6DDB02FD3AECA00104508 /* Debug */,
+				55D6DDB12FD3AECA00104508 /* Release */,
+				55D6DDB22FD3AECA00104508 /* Profile */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

@@ -1,24 +1,23 @@
-// Widget Extension da Live Activity de corrida. Renderiza:
-//   - Lock screen: card grande (~80pt) com pace · km · tempo em mono bold
-//   - Dynamic Island compact: km à esquerda, tempo à direita
-//   - Dynamic Island expanded: tudo + sessionType + pace
-//   - Minimal (Dynamic Island recolhido): ícone de runner
+// Live Activity de corrida — card grande no lock screen + Dynamic Island.
+// Tamanhos pensados pra dobrar a altura da notif anterior (~80pt vs ~30pt).
+// Identidade visual mono + cyan bate com RUNNIN.AI do app.
 //
-// Tamanhos pensados pra dobrar a altura da notif anterior (que era ~30pt).
-// Visual cyber (mono + cyan) bate com a identidade RUNNIN.AI do app.
+// Estrutura:
+//   - Lock screen: header (marca + status "CORRIDA ATIVA") + linha com 3
+//     métricas grandes (DISTÂNCIA · PACE · TEMPO).
+//   - Dynamic Island compact: KM esquerda, TEMPO direita.
+//   - Dynamic Island expanded: mesmas métricas + sessionType + pace.
+//   - Minimal (recolhido): ícone de runner em cyan.
+//
+// O modelo está em RunActivityAttributes.swift (mesmo target + Runner via
+// Target Membership) e o plugin que dispatcha updates em
+// ios/Runner/LiveActivityPlugin.swift.
 
 import ActivityKit
 import SwiftUI
 import WidgetKit
 
-@main
-struct RunninLiveActivityBundle: WidgetBundle {
-  var body: some Widget {
-    RunninLiveActivity()
-  }
-}
-
-struct RunninLiveActivity: Widget {
+struct RunninLiveActivityLiveActivity: Widget {
   var body: some WidgetConfiguration {
     ActivityConfiguration(for: RunActivityAttributes.self) { context in
       // Lock Screen
@@ -28,13 +27,8 @@ struct RunninLiveActivity: Widget {
       )
       .padding(.horizontal, 18)
       .padding(.vertical, 16)
-      .background(
-        LinearGradient(
-          colors: [Color.black, Color(red: 0.05, green: 0.05, blue: 0.10)],
-          startPoint: .topLeading,
-          endPoint: .bottomTrailing
-        )
-      )
+      .activityBackgroundTint(Color.black)
+      .activitySystemActionForegroundColor(Color.white)
     } dynamicIsland: { context in
       DynamicIsland {
         DynamicIslandExpandedRegion(.leading) {
