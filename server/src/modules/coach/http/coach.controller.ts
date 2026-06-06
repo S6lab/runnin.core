@@ -77,7 +77,7 @@ const LiveTurnSchema = z.object({
       'km_reached',
       'km_split',
       'pace_alert',
-      'bpm_alert',
+      'high_bpm',
       'motivation',
       'finish',
       'question',

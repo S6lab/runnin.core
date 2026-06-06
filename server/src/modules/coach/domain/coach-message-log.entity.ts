@@ -11,7 +11,7 @@ export type CoachMessageEvent =
   | 'km_reached'
   | 'km_split'
   | 'pace_alert'
-  | 'bpm_alert'
+  | 'high_bpm'
   | 'motivation'
   | 'finish'
   | 'question'

@@ -74,17 +74,35 @@ export function buildEventPrompt(ctx: RunContextInput): string {
       const curPace = formatPaceMmSs(ctx.currentPaceMinKm) ?? 'X:XX';
       const tgtPace = formatPaceMmSs(ctx.targetPaceMinKm);
       const tgtSuffix = tgtPace ? `, alvo ${tgtPace}/km` : '';
-      return `O atleta${ctx.athleteName ? ' ' + ctx.athleteName : ''} acabou de completar o km ${ctx.kmReached}. ESTRUTURA OBRIGATÓRIA, 2 frases:\n\n1) "Fechamos o ${ctx.kmReached}º km${ctx.athleteName ? ', ' + ctx.athleteName : ''}. Seu pace foi ${curPace}/km${tgtSuffix}." — anúncio claro do fechamento + comparação direta com o alvo (se houver alvo).\n2) Uma frase curta com ação ("mantém", "segura", "acelera 5 segundos") ou observação técnica de cadência/respiração baseada no que mais se destaca (FC alta, elevação, distância vs km anterior). Use o tom da persona configurada.\n\nNão pule a 1ª frase, não inverta a ordem, não enrole. 8-12s de áudio total.\n\n${base}`;
+      const bpmHint = typeof ctx.kmAvgBpm === 'number'
+        ? ` Quando "FC média do km" estiver no contexto, considere mencionar ela na 2ª frase ("FC ${ctx.kmAvgBpm}, tá dentro" ou "FC ${ctx.kmAvgBpm}, vamos segurar pra não estourar") como observação técnica mais informativa que cadência genérica.`
+        : '';
+      return `O atleta${ctx.athleteName ? ' ' + ctx.athleteName : ''} acabou de completar o km ${ctx.kmReached}. ESTRUTURA OBRIGATÓRIA, 2 frases:\n\n1) "Fechamos o ${ctx.kmReached}º km${ctx.athleteName ? ', ' + ctx.athleteName : ''}. Seu pace foi ${curPace}/km${tgtSuffix}." — anúncio claro do fechamento + comparação direta com o alvo (se houver alvo).\n2) Uma frase curta com ação ("mantém", "segura", "acelera 5 segundos") ou observação técnica de cadência/respiração baseada no que mais se destaca (FC alta, elevação, distância vs km anterior). Use o tom da persona configurada.${bpmHint}\n\nNão pule a 1ª frase, não inverta a ordem, não enrole. 8-12s de áudio total.\n\n${base}`;
     }
     case 'km_split': {
       const cur = formatPaceMmSs(ctx.currentPaceMinKm) ?? 'X:XX';
       const tgt = formatPaceMmSs(ctx.targetPaceMinKm) ?? 'Y:YY';
-      return `O atleta${ctx.athleteName ? ' ' + ctx.athleteName : ''} acabou de fechar o km ${ctx.kmReached}. Diga claramente, NESTE formato (varie só o nome e o tom final), 1-2 frases: "${ctx.athleteName ?? 'Atleta'}, seu pace no km ${ctx.kmReached} foi ${cur}/km, a meta é manter em ${tgt}/km." Depois UMA frase curta com tom da persona (motivador: gás pra manter; técnico: ajuste objetivo de cadência/postura). NÃO troque a 1ª frase pelo livre — ela é o feedback de split que o user pediu.\n\n${base}`;
+      const bpmHint = typeof ctx.kmAvgBpm === 'number'
+        ? ` Quando "FC média do km" estiver no contexto, MENCIONE ela na 2ª frase se for relevante ("FC média ${ctx.kmAvgBpm}, tá dentro" ou "FC subiu pra ${ctx.kmAvgBpm}, segura no próximo km").`
+        : '';
+      return `O atleta${ctx.athleteName ? ' ' + ctx.athleteName : ''} acabou de fechar o km ${ctx.kmReached}. Diga claramente, NESTE formato (varie só o nome e o tom final), 1-2 frases: "${ctx.athleteName ?? 'Atleta'}, seu pace no km ${ctx.kmReached} foi ${cur}/km, a meta é manter em ${tgt}/km." Depois UMA frase curta com tom da persona (motivador: gás pra manter; técnico: ajuste objetivo de cadência/postura). NÃO troque a 1ª frase pelo livre — ela é o feedback de split que o user pediu.${bpmHint}\n\n${base}`;
     }
     case 'pace_alert': {
       const curPace = formatPaceMmSs(ctx.currentPaceMinKm) ?? 'X:XX';
       const tgtPace = formatPaceMmSs(ctx.targetPaceMinKm) ?? 'Y:YY';
-      return `O pace do corredor desviou do alvo da sessão. Corrija explicitamente, NESTE formato, 2 frases:\n\n1) "${ctx.athleteName ?? 'Atleta'}, seu pace agora é ${curPace}/km, o alvo é ${tgtPace}/km." — números claros, sem rodeio.\n2) Ação direta no tom da persona: motivador puxa pra acelerar/segurar com energia; técnico instrui cadência/respiração. Sempre indique a DIREÇÃO do ajuste (acelera/segura) — não deixe ambíguo.\n\n${base}`;
+      const bpmHint = typeof ctx.bpm === 'number'
+        ? ` Se "BPM atual" estiver elevado (>~85% do máximo), correlacione com o pace alto na 2ª frase ("FC tá em ${ctx.bpm}, segura").`
+        : '';
+      return `O pace do corredor desviou do alvo da sessão. Corrija explicitamente, NESTE formato, 2 frases:\n\n1) "${ctx.athleteName ?? 'Atleta'}, seu pace agora é ${curPace}/km, o alvo é ${tgtPace}/km." — números claros, sem rodeio.\n2) Ação direta no tom da persona: motivador puxa pra acelerar/segurar com energia; técnico instrui cadência/respiração. Sempre indique a DIREÇÃO do ajuste (acelera/segura) — não deixe ambíguo.${bpmHint}\n\n${base}`;
+    }
+    case 'high_bpm': {
+      // Disparado em [run_bloc._onBpmTick] quando BPM > 92% do maxBpm
+      // declarado. ctx.kmAvgBpm carrega o valor atual (não a média do km).
+      // Antes esse evento caía no `default` e o LLM recebia só o base — sem
+      // instrução. Resultado: cue silencioso ou frase genérica.
+      const bpm = typeof ctx.kmAvgBpm === 'number' ? ctx.kmAvgBpm : ctx.bpm;
+      const bpmTxt = typeof bpm === 'number' ? `${bpm}` : 'muito alta';
+      return `Alerta de FC ELEVADA. O atleta${ctx.athleteName ? ' ' + ctx.athleteName : ''} está com BPM em ${bpmTxt} — acima de 92% do limite seguro declarado. NESTE formato, 2 frases curtas (8-10s áudio):\n\n1) "${ctx.athleteName ?? 'Atleta'}, FC em ${bpmTxt}, atenção." — direto, sem alarmismo.\n2) Ação prescritiva (respira fundo agora, reduz pace por 30s, anda 100m se for crítico) no tom da persona. NÃO instrua a parar a menos que o BPM seja extremo.\n\n${base}`;
     }
     case 'motivation':
       return `Mensagem de motivação no meio da corrida — nenhum alerta específico, apenas mantenha o corredor engajado. 1 frase curta, foco na constância.\n\n${base}`;
@@ -95,7 +113,10 @@ export function buildEventPrompt(ctx: RunContextInput): string {
       // ao user que o coach está acompanhando ativamente.
       const curPace = formatPaceMmSs(ctx.currentPaceMinKm) ?? 'X:XX';
       const km = typeof ctx.distanceM === 'number' ? (ctx.distanceM / 1000).toFixed(2) : '?';
-      return `Check-in de presença do coach. Em 1 frase curta (10-15 palavras), confirma que está acompanhando${ctx.athleteName ? ' ' + ctx.athleteName : ''} citando os números atuais ("você está em ${km}km, pace ${curPace}/km") e UMA observação rápida sobre o que está vendo (constância, ritmo estável, respiração — escolha 1 baseado no contexto). Sem alerta nem instrução — só presença. Não soe robótico: varia abertura ("Acompanhando", "${ctx.athleteName ? ctx.athleteName + ', tudo certo aqui' : 'Tudo certo'}", "Passando pra dizer", etc.).\n\n${base}`;
+      const bpmHint = typeof ctx.bpm === 'number'
+        ? ` Se "BPM atual" estiver no contexto, prefira usar ele como sinal vital ("FC em ${ctx.bpm}, ritmo confortável") em vez de adivinhar respiração — é mais informativo.`
+        : '';
+      return `Check-in de presença do coach. Em 1 frase curta (10-15 palavras), confirma que está acompanhando${ctx.athleteName ? ' ' + ctx.athleteName : ''} citando os números atuais ("você está em ${km}km, pace ${curPace}/km") e UMA observação rápida sobre o que está vendo (constância, ritmo estável, respiração — escolha 1 baseado no contexto). Sem alerta nem instrução — só presença. Não soe robótico: varia abertura ("Acompanhando", "${ctx.athleteName ? ctx.athleteName + ', tudo certo aqui' : 'Tudo certo'}", "Passando pra dizer", etc.).${bpmHint}\n\n${base}`;
     }
     case 'start':
       return `Corredor iniciando treino. Dê uma frase de largada com foco claro.\n\n${base}`;

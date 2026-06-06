@@ -49,8 +49,10 @@ class CoachLiveBeaconRemoteDatasource {
   /// Triggers semânticos do cliente → enum do server. Server rejeita com 422
   /// se vier algo fora do allowlist; sem mapping, o evento é omitido (campo é
   /// .optional()), preservando a persistência do texto.
+  /// Server unificou `bpm_alert` → `high_bpm`, então essa entrada virou
+  /// identidade — mantenho o map vazio (com placeholder pra docs) pra ficar
+  /// claro que NÃO há mais renaming.
   static const _triggerToServerEvent = <String, String>{
-    'high_bpm': 'bpm_alert',
     // 'no_movement' não tem equivalente no schema — segue sem `event` no body.
   };
 
