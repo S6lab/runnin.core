@@ -170,6 +170,36 @@ class HealthSyncService {
     });
   }
 
+  /// Total de passos no intervalo [from, to]. Usado no detalhe da corrida pra
+  /// exibir passos da sessão sem depender de um campo extra na Run entity
+  /// (não temos, mas Apple Health/Health Connect agregam o número direto).
+  /// Retorna null em erro ou plataforma não suportada — caller exibe "--".
+  /// STEPS no HK vem como múltiplos samples (1 por minuto, ou por activity),
+  /// então somamos os valores numéricos da janela.
+  Future<int?> stepsBetween(DateTime from, DateTime to) async {
+    if (!isSupported) return null;
+    if (!to.isAfter(from)) return null;
+    try {
+      final samples = await _health.getHealthDataFromTypes(
+        startTime: from,
+        endTime: to,
+        types: const [HealthDataType.STEPS],
+      );
+      if (samples.isEmpty) return 0;
+      double total = 0;
+      for (final s in samples) {
+        final raw = s.value;
+        final v = raw is NumericHealthValue
+            ? raw.numericValue
+            : double.tryParse(raw.toString());
+        if (v != null && v > 0) total += v;
+      }
+      return total.round();
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Lê o BPM mais recente dos últimos [withinSeconds] segundos. Usado pra
   /// alimentar a UI de BPM live durante a corrida (ActiveRunPage). Retorna
   /// null se não houver leitura recente ou se o plugin falhar — caller exibe

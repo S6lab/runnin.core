@@ -442,38 +442,6 @@ class _DataView extends StatelessWidget {
         ]),
         const SizedBox(height: 20),
 
-        // Seção Zonas Cardíacas — barra de overview + cards Z1-Z5 detalhados.
-        // Cards reusam FigmaZoneCard (mesmo widget de perfil/saúde/zonas) com
-        // ranges Karvonen do user (profile.restingBpm/maxBpm; fallback 60-190).
-        if (stats.zoneDistribution.isNotEmpty)
-          ChartPanel(
-            title: 'ZONAS CARDÍACAS',
-            subtitle: 'Distribuição de tempo nas zonas',
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                FigmaZoneDistributionBar(
-                  zonePercentages: stats.zoneDistribution,
-                ),
-                if (stats.zoneCards.isNotEmpty) ...[
-                  const SizedBox(height: 16),
-                  for (var i = 0; i < stats.zoneCards.length; i++) ...[
-                    FigmaZoneCard(
-                      zoneNumber: stats.zoneCards[i].number,
-                      zoneLabel: stats.zoneCards[i].label,
-                      bpmRange:
-                          '${stats.zoneCards[i].minBpm}-${stats.zoneCards[i].maxBpm} bpm',
-                      percent: stats.zoneCards[i].pctTime,
-                      zoneColor: stats.zoneCards[i].color,
-                    ),
-                    if (i < stats.zoneCards.length - 1) const SizedBox(height: 8),
-                  ],
-                ],
-              ],
-            ),
-          ),
-        const SizedBox(height: 16),
-
         // Volume acumulado no período: barras paralelas planejado vs
         // realizado por dia/semana/mês (do breakdown do BE; fallback no
         // cálculo client-side enquanto carrega).
@@ -511,6 +479,45 @@ class _DataView extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 16),
+
+        // Seção Zonas Cardíacas — barra de overview + cards Z1-Z5 detalhados.
+        // Cards reusam FigmaZoneCard (mesmo widget de perfil/saúde/zonas) com
+        // ranges Karvonen do user (profile.restingBpm/maxBpm; fallback 60-190).
+        // Posicionada no FIM da aba dados (após PACE DO PERÍODO) — user pediu.
+        // SEMPRE renderizamos quando há cards (que agora é always-on graças ao
+        // fallback genérico). A barra de distribuição aparece só quando há BPM
+        // nas runs do período; ausente, mostramos texto explicando.
+        if (stats.zoneCards.isNotEmpty) ...[
+          ChartPanel(
+            title: 'ZONAS CARDÍACAS',
+            subtitle: stats.zoneDistribution.isNotEmpty
+                ? 'Distribuição de tempo nas zonas'
+                : 'Referência — sem BPM nas corridas deste período',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (stats.zoneDistribution.isNotEmpty) ...[
+                  FigmaZoneDistributionBar(
+                    zonePercentages: stats.zoneDistribution,
+                  ),
+                  const SizedBox(height: 16),
+                ],
+                for (var i = 0; i < stats.zoneCards.length; i++) ...[
+                  FigmaZoneCard(
+                    zoneNumber: stats.zoneCards[i].number,
+                    zoneLabel: stats.zoneCards[i].label,
+                    bpmRange:
+                        '${stats.zoneCards[i].minBpm}-${stats.zoneCards[i].maxBpm} bpm',
+                    percent: stats.zoneCards[i].pctTime,
+                    zoneColor: stats.zoneCards[i].color,
+                  ),
+                  if (i < stats.zoneCards.length - 1) const SizedBox(height: 8),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+        ],
 
         // Evolução Resumo — deltas vêm de /stats/aggregate quando disponível,
         // fallback pra '--' enquanto carrega ou se backend não responde.
@@ -624,17 +631,21 @@ class _DataView extends StatelessWidget {
     }
     final List<double> zoneDistribution;
     final List<HealthZone> zoneCards;
+    // Cards reusam a definição (cor + range BPM) do Karvonen quando o range
+    // resolve, senão fallback de buckets fixos. Renderizamos os cards SEMPRE
+    // (mesmo sem BPM nas runs do período) — usuário precisa enxergar a
+    // referência das zonas pra entender o que vai aparecer quando tiver dado.
+    // A barra de distribuição (zoneDistribution) é que fica vazia e o widget
+    // pai esconde só ela quando o array está vazio.
+    final base = karvonenZones.isNotEmpty
+        ? karvonenZones
+        : _fallbackZonesForCards();
     if (anyBpm) {
       final totalTime = zoneTimes.fold<int>(0, (a, b) => a + b);
       final pcts = totalTime > 0
           ? zoneTimes.map((t) => (t / totalTime) * 100).toList()
           : <double>[0, 0, 0, 0, 0];
       zoneDistribution = pcts;
-      // Cards reusam a definição (cor + range BPM) do Karvonen ou fallback
-      // de buckets fixos quando o range não é válido.
-      final base = karvonenZones.isNotEmpty
-          ? karvonenZones
-          : _fallbackZonesForCards();
       zoneCards = [
         for (var i = 0; i < base.length; i++)
           HealthZone(
@@ -648,8 +659,18 @@ class _DataView extends StatelessWidget {
           ),
       ];
     } else {
+      // Sem BPM nas runs: cards com pctTime=0 (mostra ranges), barra escondida.
       zoneDistribution = const [];
-      zoneCards = const [];
+      zoneCards = base
+          .map((z) => HealthZone(
+                number: z.number,
+                label: z.label,
+                description: z.description,
+                minBpm: z.minBpm,
+                maxBpm: z.maxBpm,
+                color: z.color,
+              ))
+          .toList();
     }
 
     // Volume por semana (últimas 4 semanas)

@@ -8,6 +8,7 @@ import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 import 'package:runnin/features/biometrics/data/biometric_remote_datasource.dart';
+import 'package:runnin/features/biometrics/data/health_sync_service.dart';
 import 'package:runnin/features/biometrics/domain/run_zones.dart';
 import 'package:runnin/features/run/data/datasources/run_remote_datasource.dart';
 import 'package:runnin/features/run/domain/entities/run.dart';
@@ -32,6 +33,9 @@ class _RunDetailPageState extends State<RunDetailPage> {
   List<GpsPoint> _gpsPoints = const [];
   String? _summary;
   RunZoneDistribution? _zones;
+  /// Passos no intervalo da corrida lidos do Apple Health/Health Connect.
+  /// null = ainda carregando ou plataforma sem health; 0 = sem dados; >0 = ok.
+  int? _stepsInRun;
   bool _loadingRun = true;
   bool _loadingReport = true;
 
@@ -66,11 +70,23 @@ class _RunDetailPageState extends State<RunDetailPage> {
         profile: profile,
         summary: summary,
       );
+      // Passos da sessão via Apple Health/Health Connect — best-effort.
+      // Janela: createdAt → createdAt + durationS. Sem campo na Run entity;
+      // o que temos é a agregação direta do HK no intervalo da corrida.
+      int? steps;
+      try {
+        final start = DateTime.tryParse(run.createdAt);
+        if (start != null && run.durationS > 0) {
+          final end = start.add(Duration(seconds: run.durationS));
+          steps = await healthSyncService.stepsBetween(start, end);
+        }
+      } catch (_) {/* segue sem passos */}
       if (mounted) {
         setState(() {
           _run = run;
           _gpsPoints = points;
           _zones = zones;
+          _stepsInRun = steps;
           _loadingRun = false;
         });
       }
@@ -173,7 +189,7 @@ class _RunDetailPageState extends State<RunDetailPage> {
                               //      (mesmo padrão da periodização).
                               _SectionLabel('DADOS DA CORRIDA'),
                               const SizedBox(height: 12),
-                              _RunDataGrid(run: _run!),
+                              _RunDataGrid(run: _run!, stepsInRun: _stepsInRun),
                               const SizedBox(height: 24),
 
                               // 3 ── ZONAS CARDÍACAS: distribuição de tempo por
@@ -546,8 +562,11 @@ class _RunRouteMap extends StatelessWidget {
 /// Dados da corrida em grid de 2 por linha (MetricCard), mesmo padrão da
 /// periodização. Métricas biométricas só aparecem quando há dado.
 class _RunDataGrid extends StatelessWidget {
+  /// Passos no intervalo da corrida, fetched do Apple Health/Health Connect.
+  /// null = HK indisponível / sem permissão; 0 = sem dados; >0 = ok.
+  final int? stepsInRun;
   final Run run;
-  const _RunDataGrid({required this.run});
+  const _RunDataGrid({required this.run, required this.stepsInRun});
 
   static String _fmtDur(int s) {
     final h = s ~/ 3600;
@@ -573,6 +592,13 @@ class _RunDataGrid extends StatelessWidget {
     }
     if (run.calories != null && run.calories! > 0) {
       entries.add(('CALORIAS', '${run.calories}', 'kcal'));
+    }
+    // PASSOS: agregado direto do Apple Health/Health Connect filtrando pela
+    // janela da corrida (createdAt → +durationS). Não é campo da Run entity —
+    // pulled on-the-fly em [_RunDetailPageState._loadRun]. Quando stepsInRun é
+    // null (sem permissão ou plataforma sem HK) o card é omitido.
+    if (stepsInRun != null && stepsInRun! > 0) {
+      entries.add(('PASSOS', '$stepsInRun', null));
     }
     // Ganho de elevação capturado via GPS/altímetro durante a corrida.
     if (run.elevationGain != null && run.elevationGain! > 0) {
