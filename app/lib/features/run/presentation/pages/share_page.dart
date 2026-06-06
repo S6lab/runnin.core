@@ -9,6 +9,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:gal/gal.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -60,6 +61,92 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
   /// público alvo. Aplicado em ambas as abas (mapa + foto) — o user escolhe
   /// uma vez e ambas usam.
   double _aspectRatio = 9 / 16;
+
+  /// Cor do texto dos chips/labels da foto. Index:
+  /// 0=palette.primary, 1=palette.secondary, 2=branco, 3=preto.
+  /// Default primary (mantém o visual histórico).
+  int _overlayColorIdx = 0;
+  /// Toggle bold pra fontes dos chips/splits/logo.
+  bool _overlayBold = false;
+  /// Família tipográfica do overlay. 0=mono (JetBrainsMono — default),
+  /// 1=sans (Inter), 2=serif (Playfair Display). Aplicado aos chips,
+  /// splits e RUNNIN.AI.
+  int _overlayFontIdx = 0;
+  /// Fundo dos chips. 0=padrão (preto translúcido), 1=preto sólido,
+  /// 2=branco, 3=sem box (texto sem fundo).
+  int _overlayBoxIdx = 0;
+  /// Escala individual de cada chip (1.0 = default). User aumenta com
+  /// pinça de 2 dedos. Mantida por id (mesmo das posições).
+  final Map<String, double> _overlayScales = {};
+  /// Chip "selecionado" pelo último toque (id). Usado pra desenhar
+  /// affordance visual (borda). Null = nada selecionado.
+  String? _selectedOverlayId;
+
+  Color _resolveOverlayColor(BuildContext ctx) {
+    final p = ctx.runninPalette;
+    switch (_overlayColorIdx) {
+      case 1: return p.secondary;
+      case 2: return Colors.white;
+      case 3: return Colors.black;
+      case 0:
+      default: return p.primary;
+    }
+  }
+
+  Color? _resolveOverlayBoxColor() {
+    switch (_overlayBoxIdx) {
+      case 1: return Colors.black;
+      case 2: return Colors.white;
+      case 3: return null; // sem box
+      case 0:
+      default: return Colors.black.withValues(alpha: 0.6);
+    }
+  }
+
+  /// Resolve TextStyle pros chips/splits/logo combinando font index +
+  /// bold + cor. fontSize fica por conta do caller.
+  TextStyle _resolveOverlayTextStyle(BuildContext ctx, double size) {
+    final color = _resolveOverlayColor(ctx);
+    final weight = _overlayBold ? FontWeight.w800 : FontWeight.w600;
+    switch (_overlayFontIdx) {
+      case 1:
+        return GoogleFonts.inter(fontSize: size, fontWeight: weight, color: color, letterSpacing: 0.4);
+      case 2:
+        return GoogleFonts.playfairDisplay(fontSize: size, fontWeight: weight, color: color, letterSpacing: 0.2);
+      case 0:
+      default:
+        return GoogleFonts.jetBrainsMono(fontSize: size, fontWeight: weight, color: color, letterSpacing: 0.8);
+    }
+  }
+
+  /// Troca a cor do texto e força contraste vs box quando ambos batem em
+  /// preto ou branco — preserva legibilidade.
+  void _setOverlayColor(int newIdx) {
+    setState(() {
+      _overlayColorIdx = newIdx;
+      // Texto preto + qualquer box preto/translúcido → força box branco.
+      if (newIdx == 3 && (_overlayBoxIdx == 0 || _overlayBoxIdx == 1)) {
+        _overlayBoxIdx = 2;
+      // Texto branco + box branco → força box preto sólido.
+      } else if (newIdx == 2 && _overlayBoxIdx == 2) {
+        _overlayBoxIdx = 1;
+      }
+    });
+  }
+
+  /// Troca o box e força contraste do texto se necessário.
+  void _setOverlayBox(int newIdx) {
+    setState(() {
+      _overlayBoxIdx = newIdx;
+      // Box preto + texto preto → texto branco.
+      if ((newIdx == 0 || newIdx == 1) && _overlayColorIdx == 3) {
+        _overlayColorIdx = 2;
+      // Box branco + texto branco → texto preto.
+      } else if (newIdx == 2 && _overlayColorIdx == 2) {
+        _overlayColorIdx = 3;
+      }
+    });
+  }
 
   /// Offsets custom (em pixels relativos à RepaintBoundary) dos grupos
   /// arrastáveis na foto. Null = usar posição default do canto. Reset
@@ -499,6 +586,130 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
     );
   }
 
+  /// Header padrão das subseções de estilo (cor/fundo/fonte).
+  Widget _styleSectionLabel(BuildContext ctx, String text) {
+    return Text(
+      text,
+      style: ctx.runninType.labelCaps.copyWith(
+        fontSize: 11,
+        letterSpacing: 1.1,
+        color: FigmaColors.textSecondary,
+      ),
+    );
+  }
+
+  /// 4 swatches (palette primary/secondary, branco, preto) pra escolher a
+  /// cor dos textos do overlay. Selecionado fica com borda destacada.
+  Widget _buildOverlayColorSelector() {
+    final palette = context.runninPalette;
+    final options = <Color>[palette.primary, palette.secondary, Colors.white, Colors.black];
+    return Row(
+      children: [
+        for (var i = 0; i < options.length; i++) ...[
+          GestureDetector(
+            onTap: () => _setOverlayColor(i),
+            behavior: HitTestBehavior.opaque,
+            child: Container(
+              width: 28,
+              height: 28,
+              decoration: BoxDecoration(
+                color: options[i],
+                border: Border.all(
+                  color: _overlayColorIdx == i ? palette.primary : FigmaColors.borderDefault,
+                  width: _overlayColorIdx == i ? 2 : 1,
+                ),
+              ),
+            ),
+          ),
+          if (i < options.length - 1) const SizedBox(width: 10),
+        ],
+      ],
+    );
+  }
+
+  /// 4 opções de fundo do chip: PADRÃO (preto translúcido), PRETO, BRANCO
+  /// e SEM (transparente). Auto-flip do texto quando coincide com fundo.
+  Widget _buildOverlayBoxSelector() {
+    final palette = context.runninPalette;
+    final labels = ['PADRÃO', 'PRETO', 'BRANCO', 'SEM'];
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: List.generate(labels.length, (i) {
+        final active = _overlayBoxIdx == i;
+        return GestureDetector(
+          onTap: () => _setOverlayBox(i),
+          behavior: HitTestBehavior.opaque,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: active ? palette.primary : Colors.transparent,
+              border: Border.all(
+                color: active ? palette.primary : FigmaColors.borderDefault,
+                width: 1.041,
+              ),
+            ),
+            child: Text(
+              labels[i],
+              style: context.runninType.labelMd.copyWith(
+                fontSize: 10,
+                letterSpacing: 0.8,
+                color: active ? FigmaColors.bgBase : FigmaColors.textSecondary,
+              ),
+            ),
+          ),
+        );
+      }),
+    );
+  }
+
+  /// Linha com toggle NEGRITO + 3 famílias de fonte (MONO/SANS/SERIF).
+  Widget _buildOverlayFontRow() {
+    final palette = context.runninPalette;
+    final fonts = ['MONO', 'SANS', 'SERIF'];
+    Widget pill({required bool active, required String label, required VoidCallback onTap}) {
+      return GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: active ? palette.primary : Colors.transparent,
+            border: Border.all(
+              color: active ? palette.primary : FigmaColors.borderDefault,
+              width: 1.041,
+            ),
+          ),
+          child: Text(
+            label,
+            style: context.runninType.labelMd.copyWith(
+              fontSize: 10,
+              letterSpacing: 0.8,
+              color: active ? FigmaColors.bgBase : FigmaColors.textSecondary,
+            ),
+          ),
+        ),
+      );
+    }
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        pill(
+          active: _overlayBold,
+          label: 'NEGRITO',
+          onTap: () => setState(() => _overlayBold = !_overlayBold),
+        ),
+        for (var i = 0; i < fonts.length; i++)
+          pill(
+            active: _overlayFontIdx == i,
+            label: fonts[i],
+            onTap: () => setState(() => _overlayFontIdx = i),
+          ),
+      ],
+    );
+  }
+
   /// Seletor de proporção 9:16 (story) / 4:5 (feed). Renderizado acima de
   /// cada preview (MAPA e FOTO). Compartilha estado entre as abas — user
   /// escolhe uma vez, ambas usam.
@@ -667,6 +878,27 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
               );
             }),
           ),
+          const SizedBox(height: 20),
+
+          // Seletor de cor dos textos do overlay (chips, splits, logo,
+          // traçado). 4 swatches: palette primary/secondary + branco +
+          // preto. Auto-flip contra o fundo pra preservar contraste.
+          _styleSectionLabel(context, 'COR DOS TEXTOS'),
+          const SizedBox(height: 12),
+          _buildOverlayColorSelector(),
+          const SizedBox(height: 20),
+
+          // Fundo do chip — 3 swatches + opção "sem". Auto-flip do texto
+          // quando o user escolhe preto/branco e o texto coincide.
+          _styleSectionLabel(context, 'FUNDO DOS CHIPS'),
+          const SizedBox(height: 12),
+          _buildOverlayBoxSelector(),
+          const SizedBox(height: 20),
+
+          // Tipografia (3 famílias) + bold toggle, linha única.
+          _styleSectionLabel(context, 'ESTILO DO TEXTO'),
+          const SizedBox(height: 12),
+          _buildOverlayFontRow(),
           const SizedBox(height: 24),
 
           // Mesmos 4 destinos da aba MAPA — paridade entre abas.
@@ -691,6 +923,14 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
           // (top-right precisa de boxWidth, bottom-left de boxHeight) e
           // pra clampar os drags dentro do box.
           final boxSize = Size(constraints.maxWidth, constraints.maxHeight);
+          // Estilos compartilhados dos elementos do overlay (chips, splits,
+          // logo, traçado). User configura pelos seletores do painel
+          // abaixo do preview (cor, fonte, bold, fundo).
+          final overlayColor = _resolveOverlayColor(context);
+          final boxColor = _resolveOverlayBoxColor();
+          final chipStyle = _resolveOverlayTextStyle(context, 11);
+          final splitStyle = _resolveOverlayTextStyle(context, 9).copyWith(height: 1.55);
+          final logoStyle = _resolveOverlayTextStyle(context, 9).copyWith(letterSpacing: 2);
           return Container(
             clipBehavior: Clip.hardEdge,
             decoration: BoxDecoration(
@@ -744,27 +984,57 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
                     ),
                   ),
 
-                // CANTO SUPERIOR ESQUERDO: pace / distância / tempo / BPM
-                // (um abaixo do outro). Arrastável.
-                _draggableOverlay(
-                  id: 'stats',
-                  defaultPosition: const Offset(16, 16),
-                  boxSize: boxSize,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (_activeToggles.contains(0)) // Pace
-                        _OverlayChip(label: '$pace/km'),
-                      if (_activeToggles.contains(1)) // Distância
-                        _OverlayChip(label: '${distKm}km'),
-                      if (_activeToggles.contains(2)) // Tempo
-                        _OverlayChip(label: duration),
-                      if (_activeToggles.contains(3) && _run?.avgBpm != null) // BPM
-                        _OverlayChip(label: '${_run!.avgBpm} BPM'),
-                    ],
+                // CHIPS INDIVIDUAIS de pace / distância / tempo / BPM.
+                // Cada um arrastável independente. Default empilhados no
+                // canto superior esquerdo (~28px de altura cada com pad).
+                if (_activeToggles.contains(0))
+                  _draggableOverlay(
+                    id: 'chip_pace',
+                    defaultPosition: const Offset(16, 16),
+                    boxSize: boxSize,
+                    child: _OverlayChip(
+                      label: '$pace/km',
+                      icon: Icons.directions_run_outlined,
+                      textStyle: chipStyle,
+                      boxColor: boxColor,
+                    ),
                   ),
-                ),
+                if (_activeToggles.contains(1))
+                  _draggableOverlay(
+                    id: 'chip_distance',
+                    defaultPosition: const Offset(16, 48),
+                    boxSize: boxSize,
+                    child: _OverlayChip(
+                      label: '${distKm}km',
+                      icon: Icons.straighten_outlined,
+                      textStyle: chipStyle,
+                      boxColor: boxColor,
+                    ),
+                  ),
+                if (_activeToggles.contains(2))
+                  _draggableOverlay(
+                    id: 'chip_time',
+                    defaultPosition: const Offset(16, 80),
+                    boxSize: boxSize,
+                    child: _OverlayChip(
+                      label: duration,
+                      icon: Icons.schedule_outlined,
+                      textStyle: chipStyle,
+                      boxColor: boxColor,
+                    ),
+                  ),
+                if (_activeToggles.contains(3) && _run?.avgBpm != null)
+                  _draggableOverlay(
+                    id: 'chip_bpm',
+                    defaultPosition: const Offset(16, 112),
+                    boxSize: boxSize,
+                    child: _OverlayChip(
+                      label: '${_run!.avgBpm} BPM',
+                      icon: Icons.favorite_outline,
+                      textStyle: chipStyle,
+                      boxColor: boxColor,
+                    ),
+                  ),
 
                 // CANTO SUPERIOR DIREITO: splits por km. Arrastável; default
                 // estimado em ~100px de largura pro chip ficar dentro do box.
@@ -775,21 +1045,13 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
                     boxSize: boxSize,
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                      color: Colors.black.withValues(alpha: 0.45),
+                      color: boxColor,
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.end,
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           for (final l in splitLabels)
-                            Text(
-                              l,
-                              style: context.runninType.labelCaps.copyWith(
-                                fontSize: 9,
-                                height: 1.55,
-                                letterSpacing: 0.5,
-                                color: Colors.white,
-                              ),
-                            ),
+                            Text(l, style: splitStyle),
                         ],
                       ),
                     ),
@@ -806,31 +1068,25 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
                       width: 84,
                       height: 84,
                       padding: const EdgeInsets.all(8),
-                      color: Colors.black.withValues(alpha: 0.4),
+                      color: boxColor,
                       child: CustomPaint(
                         painter: _RouteTracePainter(
                           points: _gpsPoints,
-                          color: context.runninPalette.primary,
+                          color: overlayColor,
                         ),
                       ),
                     ),
                   ),
 
-                // CANTO INFERIOR DIREITO: logo RUNNIN.AI. Fixo — é branding.
-                Positioned(
-                  bottom: 16,
-                  right: 16,
+                // CANTO INFERIOR DIREITO: logo RUNNIN.AI.
+                _draggableOverlay(
+                  id: 'logo',
+                  defaultPosition: Offset(boxSize.width - 90, boxSize.height - 36),
+                  boxSize: boxSize,
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.xs),
-                    color: Colors.black.withValues(alpha: 0.5),
-                    child: Text(
-                      'RUNNIN.AI',
-                      style: context.runninType.labelCaps.copyWith(
-                        fontSize: 9,
-                        letterSpacing: 2,
-                        color: context.runninPalette.primary,
-                      ),
-                    ),
+                    color: boxColor,
+                    child: Text('RUNNIN.AI', style: logoStyle),
                   ),
                 ),
               ],
@@ -841,39 +1097,26 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
     );
   }
 
-  /// Wrapper Positioned + Listener pro drag de overlays. Usa Listener
-  /// (raw pointer events) em vez de GestureDetector porque o
-  /// InteractiveViewer da foto ganha a arena de gestos do GestureDetector
-  /// — chip nem se mexia. Listener bypassa a arena: enquanto o pointer
-  /// começa em cima do chip, recebemos todos os onPointerMove até soltar,
-  /// independente do InteractiveViewer também querer pan.
-  ///
-  /// Clamp 40px de margem mantém pelo menos um pedaço do grupo dentro do
-  /// box mesmo se o user arrastar pra borda.
+  /// Wrapper que renderiza overlay arrastável (1 dedo) + escalável
+  /// (pinça de 2 dedos). Estado vive no _DraggableOverlay (StatefulWidget)
+  /// pra tracking multi-pointer dele mesmo.
   Widget _draggableOverlay({
     required String id,
     required Offset defaultPosition,
     required Size boxSize,
     required Widget child,
   }) {
-    final pos = _overlayOffsets[id] ?? defaultPosition;
-    return Positioned(
-      left: pos.dx,
-      top: pos.dy,
-      child: Listener(
-        behavior: HitTestBehavior.opaque,
-        onPointerMove: (event) {
-          setState(() {
-            final cur = _overlayOffsets[id] ?? defaultPosition;
-            final next = cur + event.localDelta;
-            _overlayOffsets[id] = Offset(
-              next.dx.clamp(0.0, boxSize.width - 40),
-              next.dy.clamp(0.0, boxSize.height - 40),
-            );
-          });
-        },
-        child: child,
-      ),
+    return _DraggableOverlay(
+      id: id,
+      defaultPosition: defaultPosition,
+      boxSize: boxSize,
+      offset: _overlayOffsets[id] ?? defaultPosition,
+      scale: _overlayScales[id] ?? 1.0,
+      selected: _selectedOverlayId == id,
+      onOffsetChanged: (off) => setState(() => _overlayOffsets[id] = off),
+      onScaleChanged: (s) => setState(() => _overlayScales[id] = s),
+      onTap: () => setState(() => _selectedOverlayId = id),
+      child: child,
     );
   }
 
@@ -1022,19 +1265,162 @@ class _ShareTarget extends StatelessWidget {
 }
 
 class _OverlayChip extends StatelessWidget {
-  const _OverlayChip({required this.label});
+  const _OverlayChip({
+    required this.label,
+    this.icon,
+    this.textStyle,
+    this.boxColor,
+  });
   final String label;
+  /// Ícone minimalista (outlined) à esquerda do texto. Null = só texto.
+  final IconData? icon;
+  /// Style do texto (font + bold + color). Null = fallback labelCaps com
+  /// palette.primary.
+  final TextStyle? textStyle;
+  /// Cor do box atrás do chip. Null = sem box (transparente).
+  final Color? boxColor;
 
   @override
   Widget build(BuildContext context) {
+    final style = textStyle ??
+        context.runninType.labelCaps.copyWith(color: context.runninPalette.primary);
+    final iconSize = (style.fontSize ?? 12);
     return Container(
-      margin: const EdgeInsets.only(top: 4),
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.xs),
-      color: Colors.black.withValues(alpha: 0.6),
-      child: Text(
-        label,
-        style: context.runninType.labelCaps.copyWith(
-          color: context.runninPalette.primary,
+      color: boxColor,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (icon != null) ...[
+            Icon(icon, size: iconSize, color: style.color),
+            const SizedBox(width: 4),
+          ],
+          Text(label, style: style),
+        ],
+      ),
+    );
+  }
+}
+
+/// Overlay arrastável + escalável via pinça. Estado dos pointers vive aqui
+/// porque cada chip precisa rastrear seus próprios toques sem afetar os
+/// outros nem o InteractiveViewer da foto.
+///
+/// 1 dedo segurando = arrasta (delta direto no offset).
+/// 2 dedos = pinça: distância entre eles vs distância inicial = escala.
+/// Toque rápido = seleciona (mostra borda) — feedback visual antes do drag.
+///
+/// Listener (raw pointer events) bypassa o GestureArena, então mesmo com
+/// InteractiveViewer abaixo o chip ganha os toques que começam sobre ele.
+class _DraggableOverlay extends StatefulWidget {
+  final String id;
+  final Offset defaultPosition;
+  final Size boxSize;
+  final Offset offset;
+  final double scale;
+  final bool selected;
+  final ValueChanged<Offset> onOffsetChanged;
+  final ValueChanged<double> onScaleChanged;
+  final VoidCallback onTap;
+  final Widget child;
+
+  const _DraggableOverlay({
+    required this.id,
+    required this.defaultPosition,
+    required this.boxSize,
+    required this.offset,
+    required this.scale,
+    required this.selected,
+    required this.onOffsetChanged,
+    required this.onScaleChanged,
+    required this.onTap,
+    required this.child,
+  });
+
+  @override
+  State<_DraggableOverlay> createState() => _DraggableOverlayState();
+}
+
+class _DraggableOverlayState extends State<_DraggableOverlay> {
+  // Posições globais dos pointers ativos (id → position).
+  final Map<int, Offset> _pointers = {};
+  // Snapshot do estado quando a pinça começou (2 pointers).
+  double? _pinchStartDistance;
+  double? _pinchStartScale;
+
+  void _onDown(PointerDownEvent e) {
+    _pointers[e.pointer] = e.position;
+    widget.onTap();
+    if (_pointers.length == 2) {
+      _pinchStartDistance = _distance(_pointers.values);
+      _pinchStartScale = widget.scale;
+    }
+  }
+
+  void _onMove(PointerMoveEvent e) {
+    final wasPinching = _pointers.length >= 2;
+    _pointers[e.pointer] = e.position;
+
+    if (_pointers.length >= 2) {
+      // Pinça: recomputa escala a partir do snapshot.
+      final d = _distance(_pointers.values);
+      if (_pinchStartDistance != null && _pinchStartDistance! > 0) {
+        final next = (_pinchStartScale ?? 1.0) * (d / _pinchStartDistance!);
+        widget.onScaleChanged(next.clamp(0.5, 4.0));
+      }
+    } else if (!wasPinching && _pointers.length == 1) {
+      // Drag single-finger via delta do evento.
+      final next = widget.offset + e.localDelta;
+      widget.onOffsetChanged(Offset(
+        next.dx.clamp(0.0, widget.boxSize.width - 40),
+        next.dy.clamp(0.0, widget.boxSize.height - 40),
+      ));
+    }
+  }
+
+  void _onUp(PointerUpEvent e) {
+    _pointers.remove(e.pointer);
+    if (_pointers.length < 2) {
+      _pinchStartDistance = null;
+      _pinchStartScale = null;
+    }
+  }
+
+  void _onCancel(PointerCancelEvent e) {
+    _pointers.remove(e.pointer);
+    _pinchStartDistance = null;
+    _pinchStartScale = null;
+  }
+
+  double _distance(Iterable<Offset> pts) {
+    if (pts.length < 2) return 0;
+    final a = pts.elementAt(0);
+    final b = pts.elementAt(1);
+    return (a - b).distance;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    final border = widget.selected
+        ? Border.all(color: palette.primary.withValues(alpha: 0.9), width: 1)
+        : null;
+    return Positioned(
+      left: widget.offset.dx,
+      top: widget.offset.dy,
+      child: Listener(
+        behavior: HitTestBehavior.opaque,
+        onPointerDown: _onDown,
+        onPointerMove: _onMove,
+        onPointerUp: _onUp,
+        onPointerCancel: _onCancel,
+        child: Transform.scale(
+          scale: widget.scale,
+          alignment: Alignment.topLeft,
+          child: Container(
+            decoration: border == null ? null : BoxDecoration(border: border),
+            child: widget.child,
+          ),
         ),
       ),
     );
