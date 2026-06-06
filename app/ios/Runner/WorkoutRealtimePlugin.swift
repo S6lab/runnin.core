@@ -2,10 +2,13 @@ import Flutter
 import HealthKit
 import OSLog
 import UIKit
+import WatchConnectivity
 
 /// Logger subsystem dedicado pra rastrear HR streaming no Console.app durante
 /// debug em device. Filtrar via `subsystem:ai.runnin.workout category:hr`.
 private let hrLog = OSLog(subsystem: "ai.runnin.workout", category: "hr")
+/// Logger pra eventos de WatchConnectivity (start/stop messages, pairing).
+private let wcLog = OSLog(subsystem: "ai.runnin.workout", category: "watch-bridge")
 
 /// Plugin nativo iOS pra BPM realtime durante a Run ativa.
 ///
@@ -54,6 +57,78 @@ private let hrLog = OSLog(subsystem: "ai.runnin.workout", category: "hr")
     registrar.addMethodCallDelegate(instance, channel: method)
     let event = FlutterEventChannel(name: eventChannelName, binaryMessenger: registrar.messenger())
     event.setStreamHandler(instance)
+    instance.activateWatchSession()
+  }
+
+  // MARK: WatchConnectivity bridge — força HKWorkoutSession no Watch
+
+  /// Ativa o WCSession quando o app sobe. Sem isso, mensagens enviadas via
+  /// `sendMessage`/`transferUserInfo` ficam encolhidas até a sessão ativar
+  /// e podem chegar fora de ordem. Idempotente — WatchConnectivity faz dedup.
+  private func activateWatchSession() {
+    guard WCSession.isSupported() else {
+      os_log("activate skip=not_supported", log: wcLog, type: .info)
+      return
+    }
+    let session = WCSession.default
+    session.delegate = self
+    session.activate()
+  }
+
+  /// Manda mensagem pro Watch companion (RunninWatch). Quando o Watch está
+  /// reachable (app rodando em foreground OU complication ativa), usa
+  /// `sendMessage` — entrega imediata. Senão cai pra `transferUserInfo` que
+  /// fila a mensagem até o Watch acordar. Pra `startWorkout` o ideal é
+  /// `sendMessage` (queremos efeito imediato); pra `stopWorkout` ambos
+  /// funcionam (queremos garantia de entrega mesmo se o Watch tá dormindo).
+  private func notifyWatch(action: String) {
+    guard WCSession.isSupported() else { return }
+    let session = WCSession.default
+    guard session.activationState == .activated else {
+      os_log("notify skip=not_activated action=%{public}@", log: wcLog, type: .info, action)
+      return
+    }
+    guard session.isPaired, session.isWatchAppInstalled else {
+      os_log("notify skip=no_watch_app paired=%d installed=%d action=%{public}@",
+             log: wcLog, type: .info,
+             session.isPaired ? 1 : 0,
+             session.isWatchAppInstalled ? 1 : 0,
+             action)
+      emitWatchStatus()
+      return
+    }
+    let payload: [String: Any] = ["action": action]
+    if session.isReachable {
+      session.sendMessage(payload, replyHandler: { reply in
+        os_log("notify.sent action=%{public}@ reply=%{public}@", log: wcLog, type: .info,
+               action, String(describing: reply))
+      }, errorHandler: { err in
+        os_log("notify.error fallback=userInfo action=%{public}@ err=%{public}@",
+               log: wcLog, type: .error, action, err.localizedDescription)
+        session.transferUserInfo(payload)
+      })
+    } else {
+      session.transferUserInfo(payload)
+      os_log("notify.queued action=%{public}@ (Watch unreachable)", log: wcLog, type: .info, action)
+    }
+  }
+
+  /// Emite pro Flutter o estado atual do pareamento + instalação do Watch app.
+  /// Consumido pelo `WorkoutRealtimeService` em Dart pra renderizar:
+  ///   - banner "Conecte um Apple Watch" (paired=false)
+  ///   - banner "Instale Runnin no seu Watch" (paired=true, installed=false)
+  ///   - badge "via Watch" no chip BPM (todos true durante a corrida)
+  private func emitWatchStatus() {
+    let session = WCSession.default
+    let paired = WCSession.isSupported() && session.activationState == .activated && session.isPaired
+    let installed = paired && session.isWatchAppInstalled
+    let reachable = installed && session.isReachable
+    emit([
+      "type": "watch_status",
+      "paired": paired,
+      "appInstalled": installed,
+      "reachable": reachable,
+    ])
   }
 
   // MARK: FlutterStreamHandler
@@ -136,6 +211,12 @@ private let hrLog = OSLog(subsystem: "ai.runnin.workout", category: "hr")
       os_log("auth_granted", log: hrLog, type: .info)
       DispatchQueue.main.async {
         self.startQueryInternal(hrType: hrType, result: result)
+        // Pede pro Watch companion iniciar HKWorkoutSession nativa — esse é
+        // o efeito que coloca o Watch em modo high-frequency HR (~1Hz).
+        // Sem o companion / sem essa mensagem, ficamos lendo samples
+        // esporádicos do HK store (~5min).
+        self.notifyWatch(action: "startWorkout")
+        self.emitWatchStatus()
       }
     }
   }
@@ -226,6 +307,11 @@ private let hrLog = OSLog(subsystem: "ai.runnin.workout", category: "hr")
       query = nil
     }
     lastAnchor = nil
+    // Encerra HKWorkoutSession no Watch (libera Activity Ring + sai do
+    // modo high-freq HR). Mesmo se Watch estiver dormindo, transferUserInfo
+    // entrega quando ele acordar — evita session ficar "pendurada" e
+    // drenando bateria silenciosamente.
+    notifyWatch(action: "stopWorkout")
     emit(["type": "state", "value": "ended"])
     result(nil)
   }
@@ -281,5 +367,44 @@ private let hrLog = OSLog(subsystem: "ai.runnin.workout", category: "hr")
     DispatchQueue.main.async {
       self.eventSink?(payload)
     }
+  }
+}
+
+// MARK: - WCSessionDelegate
+//
+// Métodos obrigatórios pra plataforma iOS. O lado watchOS (RunninWatch)
+// implementa o seu próprio delegate; aqui só precisamos reagir a
+// mudanças de pareamento / instalação pra propagar pro Flutter.
+extension WorkoutRealtimePlugin: WCSessionDelegate {
+  public func session(_ session: WCSession,
+                      activationDidCompleteWith activationState: WCSessionActivationState,
+                      error: Error?) {
+    os_log("wc.activation state=%d err=%{public}@", log: wcLog, type: .info,
+           activationState.rawValue, error?.localizedDescription ?? "nil")
+    emitWatchStatus()
+  }
+
+  public func sessionDidBecomeInactive(_ session: WCSession) {
+    os_log("wc.inactive", log: wcLog, type: .info)
+  }
+
+  public func sessionDidDeactivate(_ session: WCSession) {
+    // iOS pode trocar Watch pareado mid-sessão. Reativa pra pegar o novo.
+    os_log("wc.deactivate reactivating", log: wcLog, type: .info)
+    WCSession.default.activate()
+  }
+
+  public func sessionWatchStateDidChange(_ session: WCSession) {
+    os_log("wc.watch_state_changed paired=%d installed=%d reachable=%d",
+           log: wcLog, type: .info,
+           session.isPaired ? 1 : 0,
+           session.isWatchAppInstalled ? 1 : 0,
+           session.isReachable ? 1 : 0)
+    emitWatchStatus()
+  }
+
+  public func sessionReachabilityDidChange(_ session: WCSession) {
+    os_log("wc.reachability=%d", log: wcLog, type: .info, session.isReachable ? 1 : 0)
+    emitWatchStatus()
   }
 }

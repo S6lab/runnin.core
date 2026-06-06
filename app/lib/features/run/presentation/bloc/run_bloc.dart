@@ -100,6 +100,13 @@ class _BpmTick extends RunEvent {
   _BpmTick(this.value, {this.fallback = false});
 }
 
+/// Mudança no pareamento/instalação/reachability do Apple Watch companion.
+/// Vem do plugin nativo via `workoutRealtimeService.watchStatusStream`.
+class _WatchStatusChanged extends RunEvent {
+  final WatchPairingStatus status;
+  _WatchStatusChanged(this.status);
+}
+
 /// Limpa o flag do dialog de "parado" (ex: ao escolher continuar/encerrar).
 class DismissNoMovementPrompt extends RunEvent {}
 
@@ -164,6 +171,11 @@ class RunState {
   /// realtime não inicia), ou 'none' (sem nenhuma fonte). UI mostra ícone
   /// diferente por fonte e o copy do chip ("BPM · 142" vs "BPM · sem fonte").
   final String bpmSource;
+  /// Pareamento + instalação do app companion no Apple Watch (iOS).
+  /// Atualizado pelo plugin nativo via stream `watchStatusStream`. UI usa
+  /// pra renderizar banner pre-run + badge "via Watch" no chip BPM.
+  /// `null` em plataformas sem Watch (Android, web).
+  final WatchPairingStatus? watchStatus;
 
   const RunState({
     this.status = RunStatus.idle,
@@ -186,6 +198,7 @@ class RunState {
     this.maxBpmSeen,
     this.bpmStaleness = BpmStaleness.lost,
     this.bpmSource = 'none',
+    this.watchStatus,
   });
 
   /// Compat com a UI antiga e o gating de coach cue `high_bpm`: ativo quando
@@ -214,6 +227,7 @@ class RunState {
     int? maxBpmSeen,
     BpmStaleness? bpmStaleness,
     String? bpmSource,
+    WatchPairingStatus? watchStatus,
   }) => RunState(
     status: status ?? this.status,
     runId: runId ?? this.runId,
@@ -235,6 +249,7 @@ class RunState {
     maxBpmSeen: maxBpmSeen ?? this.maxBpmSeen,
     bpmStaleness: bpmStaleness ?? this.bpmStaleness,
     bpmSource: bpmSource ?? this.bpmSource,
+    watchStatus: watchStatus ?? this.watchStatus,
   );
 
   String get formattedDistance => '${(distanceM / 1000).toStringAsFixed(2)}km';
@@ -365,6 +380,10 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
   StreamSubscription<int?>? _bpmSub;
   final List<int> _kmBpmSamples = [];
   int? _userMaxBpm;
+  /// Subscription pro watch_status do plugin nativo iOS. Ativa pro tempo
+  /// todo (não só durante corrida) — a pre-run page também precisa do estado
+  /// pra mostrar banner "Instale Runnin no Watch".
+  StreamSubscription<WatchPairingStatus>? _watchStatusSub;
 
   // Lifecycle: true quando o app está em background (paused/inactive/hidden).
   // Usado pra suprimir TTS/voice em bg (não brigar com Spotify) e pra logger.
@@ -421,6 +440,19 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
   static const _flushIntervalS = 30;
 
   RunBloc() : super(const RunState()) {
+    // Inscreve no stream de pareamento do Watch — ativo o ciclo de vida
+    // todo do bloc (não só durante corrida). Pre-run page consome via
+    // BlocBuilder pra renderizar banner "Conecte um Watch" / "Instale o app
+    // no Watch". O plugin nativo emite quando o WCSession activate + a cada
+    // mudança de pareamento/instalação/reachability.
+    _watchStatusSub = workoutRealtimeService.watchStatusStream.listen(
+      (status) {
+        if (!isClosed) add(_WatchStatusChanged(status));
+      },
+    );
+    on<_WatchStatusChanged>(
+      (e, emit) => emit(state.copyWith(watchStatus: e.status)),
+    );
     on<StartRun>(_onStart);
     on<_GpsUpdate>(_onGpsUpdate);
     on<_TimerTick>(_onTimerTick);
@@ -1643,6 +1675,8 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
     _coachTranscriptSub?.cancel();
     _bpmSub?.cancel();
     _bpmSub = null;
+    _watchStatusSub?.cancel();
+    _watchStatusSub = null;
     _bpmFallbackPollTimer?.cancel();
     _bpmFallbackPollTimer = null;
     _runHealthSyncTimer?.cancel();

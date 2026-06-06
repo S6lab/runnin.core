@@ -9,6 +9,47 @@ import 'package:runnin/core/logger/logger.dart';
 /// no estado correspondente.
 enum WorkoutSessionState { idle, starting, active, paused, stopping }
 
+/// Estado do pareamento + instalação do app companion no Apple Watch.
+/// Emitido pelo plugin nativo iOS via evento `watch_status`. Consumido por
+/// [RunBloc]/[active_run_page] pra renderizar:
+///   - banner "Conecte um Apple Watch" (paired=false)
+///   - banner "Instale o Runnin no Watch" (paired=true, installed=false)
+///   - badge "via Watch" no chip BPM (reachable=true durante a corrida)
+class WatchPairingStatus {
+  final bool paired;
+  final bool appInstalled;
+  final bool reachable;
+
+  const WatchPairingStatus({
+    required this.paired,
+    required this.appInstalled,
+    required this.reachable,
+  });
+
+  static const unknown = WatchPairingStatus(
+    paired: false, appInstalled: false, reachable: false,
+  );
+
+  factory WatchPairingStatus.fromMap(Map<dynamic, dynamic> map) =>
+      WatchPairingStatus(
+        paired: map['paired'] == true,
+        appInstalled: map['appInstalled'] == true,
+        reachable: map['reachable'] == true,
+      );
+
+  bool get isOptimal => paired && appInstalled && reachable;
+
+  @override
+  bool operator ==(Object other) =>
+      other is WatchPairingStatus &&
+      other.paired == paired &&
+      other.appInstalled == appInstalled &&
+      other.reachable == reachable;
+
+  @override
+  int get hashCode => Object.hash(paired, appInstalled, reachable);
+}
+
 /// Resultado de `checkAvailability`. `available=false` quando: plataforma
 /// não suporta (web), versão do OS abaixo do mínimo, HealthKit/Health
 /// Services indisponível, ou device sem capability de heart rate.
@@ -50,6 +91,8 @@ class WorkoutRealtimeService {
   final _bpmController = StreamController<int?>.broadcast();
   final _sessionStateController = StreamController<WorkoutSessionState>.broadcast();
   final _warningController = StreamController<String>.broadcast();
+  final _watchStatusController = StreamController<WatchPairingStatus>.broadcast();
+  WatchPairingStatus _latestWatchStatus = WatchPairingStatus.unknown;
 
   /// Stream de BPMs do wearable. Emite `null` quando a fonte fica indisponível
   /// (Watch desligado, permission revogada). UI fica em '—' silenciosamente.
@@ -74,6 +117,17 @@ class WorkoutRealtimeService {
   /// Estados da sessão: idle → starting → active ↔ paused → stopping → idle.
   Stream<WorkoutSessionState> get sessionStateStream =>
       _sessionStateController.stream;
+
+  /// Estado do pareamento + instalação do app companion no Apple Watch.
+  /// Replay-on-listen igual ao bpmStream — UI que chega depois do primeiro
+  /// evento ainda vê o status atual em vez de `unknown`.
+  Stream<WatchPairingStatus> get watchStatusStream async* {
+    _attachEventStream();
+    yield _latestWatchStatus;
+    yield* _watchStatusController.stream;
+  }
+
+  WatchPairingStatus get latestWatchStatus => _latestWatchStatus;
 
   int? get latestBpm => _latestBpm;
   WorkoutSessionState get state => _state;
@@ -284,6 +338,17 @@ class WorkoutRealtimeService {
         });
         if (!_warningController.isClosed) _warningController.add(code);
         _emitBpm(null);
+        break;
+      case 'watch_status':
+        // Emitido pelo plugin iOS a cada mudança de pareamento, instalação
+        // ou reachability. UI usa pra mostrar banner pre-run + badge no chip.
+        final status = WatchPairingStatus.fromMap(raw);
+        if (status != _latestWatchStatus) {
+          _latestWatchStatus = status;
+          if (!_watchStatusController.isClosed) {
+            _watchStatusController.add(status);
+          }
+        }
         break;
       default:
         Logger.warn('workout_realtime.unknown_type', context: {'type': type});

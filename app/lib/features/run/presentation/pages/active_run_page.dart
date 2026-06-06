@@ -619,9 +619,21 @@ class _BpmStatusChip extends StatelessWidget {
     bool pulsing;
     String? suffix;
 
+    // Quando o Apple Watch companion está ativo (paired + appInstalled +
+    // reachable durante a corrida), trocamos o ícone pra um relógio sutil
+    // — dica visual de que o BPM tá vindo em high-freq via HKWorkoutSession
+    // no Watch. Antes era ambíguo entre realtime "qualquer" e fallback poll.
+    final watchActive = state.watchStatus?.isOptimal == true &&
+        state.status == RunStatus.active;
     switch (staleness) {
       case BpmStaleness.fresh:
-        icon = source == 'fallback' ? Icons.history : Icons.favorite;
+        if (watchActive && source == 'realtime') {
+          icon = Icons.watch;
+        } else if (source == 'fallback') {
+          icon = Icons.history;
+        } else {
+          icon = Icons.favorite;
+        }
         color = palette.secondary;
         pulsing = hasValue && source == 'realtime';
         label = hasValue ? 'BPM · $value' : 'BPM · —';

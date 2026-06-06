@@ -9,6 +9,7 @@ import 'package:runnin/core/audio/coach_audio_player.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/warmup/warmup_exercises.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
+import 'package:runnin/features/run/data/workout_realtime_service.dart';
 import 'package:runnin/features/location_weather/data/location_weather_controller.dart';
 import 'package:runnin/features/run/data/datasources/run_coach_remote_datasource.dart';
 import 'package:runnin/features/run/presentation/bloc/run_bloc.dart';
@@ -535,6 +536,11 @@ class _PrepViewState extends State<_PrepView> {
               : 'Corrida livre. Faça uma revisão rápida — hidratação, calçado e telefone carregado evitam dor de cabeça no meio do trajeto.',
           accent: context.runninPalette.primary,
         ),
+        const SizedBox(height: 14),
+        // Estado do Apple Watch companion (iOS apenas — Android/web fica null).
+        // Quando paired+installed+reachable está OK, mostra confirmação verde.
+        // Quando falta algo, instrui o user (conecta Watch / instala o app).
+        const _WatchStatusBanner(),
         const SizedBox(height: 14),
         // Tiles checkáveis. Gate do CONTINUAR depende de todos marcados.
         for (var i = 0; i < items.length; i++) ...[
@@ -1458,6 +1464,78 @@ class _SecondaryModeCard extends StatelessWidget {
             ],
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Card pequeno que reflete o estado do Apple Watch companion no pre-run.
+/// Estados:
+///   - paired+installed+reachable: verde, "Apple Watch conectado · BPM em
+///     tempo real durante a corrida"
+///   - paired+installed mas não reachable: amarelo, "Apple Watch pareado
+///     mas app não respondeu — abra o Runnin no Watch e tente de novo"
+///   - paired mas !installed: amarelo, "Instale o Runnin no seu Apple Watch
+///     (app Watch → toque em INSTALAR no Runnin)"
+///   - !paired: muted, "Sem Apple Watch pareado — BPM cai pra polling lento"
+///   - null (Android/web): widget some via SizedBox.shrink
+class _WatchStatusBanner extends StatelessWidget {
+  const _WatchStatusBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    final type = context.runninType;
+    final status = context.select<RunBloc, WatchPairingStatus?>(
+      (b) => b.state.watchStatus,
+    );
+    // Android / web / iOS antes do plugin emitir nada → não renderiza.
+    if (status == null) return const SizedBox.shrink();
+
+    final ({String label, Color color, IconData icon}) info;
+    if (status.isOptimal) {
+      info = (
+        label: 'Apple Watch conectado · BPM em tempo real',
+        color: palette.primary,
+        icon: Icons.watch,
+      );
+    } else if (status.paired && status.appInstalled) {
+      info = (
+        label: 'Watch pareado, app não respondeu — abra o Runnin no Watch',
+        color: palette.muted,
+        icon: Icons.watch_off_outlined,
+      );
+    } else if (status.paired) {
+      info = (
+        label: 'Instale o Runnin no Apple Watch pra ler BPM em tempo real',
+        color: palette.muted,
+        icon: Icons.download_for_offline_outlined,
+      );
+    } else {
+      info = (
+        label: 'Sem Apple Watch pareado — BPM cai pra leitura espaçada',
+        color: palette.muted,
+        icon: Icons.watch_off_outlined,
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: palette.surface,
+        border: Border.all(color: info.color.withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        children: [
+          Icon(info.icon, size: 16, color: info.color),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              info.label,
+              style: type.bodyXs.copyWith(color: info.color),
+            ),
+          ),
+        ],
       ),
     );
   }
