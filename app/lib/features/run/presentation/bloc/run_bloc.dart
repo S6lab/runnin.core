@@ -485,11 +485,18 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
     );
     unawaited(workoutRealtimeService.start());
 
-    // Agenda fallback: em 5s, se realtime ainda não emitiu, começa polling.
+    // Agenda fallback: em 1s, se realtime ainda não emitiu, começa polling.
     _bpmFallbackPollTimer?.cancel();
     _bpmFallbackPollTimer = Timer(
       const Duration(seconds: _bpmFallbackWarmupSec),
       _maybeStartBpmFallbackPolling,
+    );
+    // Sync periódico em paralelo: empurra TODOS os tipos (bpm/hrv/steps/...)
+    // pro server durante a corrida. Cancela em pause/abandon/complete.
+    _runHealthSyncTimer?.cancel();
+    _runHealthSyncTimer = Timer.periodic(
+      const Duration(seconds: _runHealthSyncIntervalSec),
+      (_) => unawaited(healthSyncService.syncSince()),
     );
 
     // Lifecycle observer pra detectar app→background. Sem isso, GPS e bpmSub
@@ -1161,6 +1168,8 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
     _bpmSub = null;
     _bpmFallbackPollTimer?.cancel();
     _bpmFallbackPollTimer = null;
+    _runHealthSyncTimer?.cancel();
+    _runHealthSyncTimer = null;
     unawaited(workoutRealtimeService.stop());
     if (state.distanceM >= stationaryDistanceThresholdM) {
       _requestCoachCue(event: 'finish');
@@ -1361,8 +1370,25 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
   /// a cada 15s. Cancelado assim que chega um sample realtime ou ao
   /// pause/complete/abandon.
   Timer? _bpmFallbackPollTimer;
-  static const _bpmFallbackWarmupSec = 5;
-  static const _bpmFallbackIntervalSec = 15;
+  /// Warmup curto: durante a corrida, BPM precisa aparecer rápido. iPhone-only
+  /// (sem Watch app companion) depende quase 100% do fallback poll porque
+  /// HKAnchoredObjectQuery raramente fica vivo sem HKWorkoutSession nativa.
+  /// 1s ainda dá folga pra realtime ganhar a corrida se ele funcionar.
+  static const _bpmFallbackWarmupSec = 1;
+  /// Polling agressivo (5s) — Apple Watch escreve BPM no HK store a ~5-10s
+  /// quando em workout, ~1min idle. Polling abaixo disso é overkill.
+  static const _bpmFallbackIntervalSec = 5;
+
+  /// Sync periódico de TODOS os samples (bpm, hrv, steps...) durante a corrida
+  /// ativa. Empurra dados frescos pro server (`/biometrics/samples`) sem
+  /// depender da home pra rodar `syncSince`. Útil pra (a) summary do user
+  /// estar updated entre corridas, (b) se o app crashar, dados parciais
+  /// ficam salvos.
+  Timer? _runHealthSyncTimer;
+  /// 10s pra dar sensação de tempo real durante a corrida. Apple Health
+  /// escreve BPM a ~5-10s quando o Watch está em workout, então um sync
+  /// abaixo disso é desperdício. Custo é uma chamada HK + POST de delta.
+  static const _runHealthSyncIntervalSec = 10;
 
   /// Avalia se vale começar a polling de fallback do BPM. Chamado 5s
   /// após _onStart pelo timer de warmup. Se realtime já emitiu sample
@@ -1391,7 +1417,7 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
       return;
     }
     try {
-      final bpm = await healthSyncService.latestBpm(withinSeconds: 120);
+      final bpm = await healthSyncService.latestBpm(withinSeconds: 60);
       if (bpm != null && bpm > 0 && !isClosed) {
         add(_BpmTick(bpm, fallback: true));
       }
@@ -1404,6 +1430,8 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
     _bpmSub = null;
     _bpmFallbackPollTimer?.cancel();
     _bpmFallbackPollTimer = null;
+    _runHealthSyncTimer?.cancel();
+    _runHealthSyncTimer = null;
     unawaited(workoutRealtimeService.stop());
     _pendingRotationTrigger = null;
     if (_isPremium) {
@@ -1430,6 +1458,8 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
     _stallCheckTimer?.cancel();
     _coachRotationSafetyTimer?.cancel();
     _bpmFallbackPollTimer?.cancel();
+    _runHealthSyncTimer?.cancel();
+    _runHealthSyncTimer = null;
     _timer = null;
     _gpsPollTimer = null;
     _gpsSub = null;
@@ -1615,6 +1645,8 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
     _bpmSub = null;
     _bpmFallbackPollTimer?.cancel();
     _bpmFallbackPollTimer = null;
+    _runHealthSyncTimer?.cancel();
+    _runHealthSyncTimer = null;
     unawaited(workoutRealtimeService.stop());
     if (_isPremium) {
       unawaited(_coachSession.close());
