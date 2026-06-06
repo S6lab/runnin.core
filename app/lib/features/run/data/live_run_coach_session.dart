@@ -640,7 +640,7 @@ class LiveRunCoachSession {
       if (token == null || token.isEmpty) return null;
       // Server manda 'models/<id>'; o pacote conecta com o id sem prefixo.
       final rawModel = (data?['model'] as String?) ??
-          'models/gemini-live-2.5-flash-native-audio';
+          'models/gemini-2.5-flash-native-audio-latest';
       final model = rawModel.replaceFirst('models/', '');
       final expireRaw = data?['expireTime'] as String?;
       if (expireRaw != null) {

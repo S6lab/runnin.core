@@ -2,9 +2,9 @@ import WebSocket, { RawData } from 'ws';
 import { logger } from '@shared/logger/logger';
 
 // v1beta + modelo native-audio-dialog (suporte oficial BidiGenerateContent).
-// 'gemini-live-2.5-flash-preview' só funciona com auth_tokens
+// 'gemini-2.5-flash-native-audio-latest' só funciona com auth_tokens
 // (BidiGenerateContentConstrained), não com BidiGenerateContent direto.
-// 'gemini-live-2.5-flash-native-audio' é o equivalente pro
+// 'gemini-2.5-flash-native-audio-latest' é o equivalente pro
 // endpoint não-constrained — capturado em prod tanto v1alpha quanto
 // v1beta rejeitavam o modelo anterior.
 const GEMINI_LIVE_URL = 'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent';
@@ -12,22 +12,22 @@ const GEMINI_LIVE_URL = 'wss://generativelanguage.googleapis.com/ws/google.ai.ge
 // O modelo anterior 'gemini-2.0-flash-live-001' foi removido do v1beta —
 // Google rejeitou com "models/gemini-2.0-flash-live-001 is not found for
 // API version v1beta, or is not supported for bidiGenerateContent".
-// 'gemini-live-2.5-flash-preview' está ativo em v1alpha (auth_tokens)
+// 'gemini-2.5-flash-native-audio-latest' está ativo em v1alpha (auth_tokens)
 // E em v1beta (bidi WebSocket). Override via GEMINI_LIVE_MODEL env.
 // Deve bater com o modelo que o app usa pra conectar na Live API
 // (live_coach_voice_service.dart `_model`) — o token efêmero é vinculado ao
 // modelo; descasar gera áudio sobreposto/estranho no início da corrida.
 // Histórico das migrações:
 //   gemini-2.0-flash-live-001 → removido do v1beta (404)
-//   gemini-live-2.5-flash-native-audio-preview-12-2025 → preview expirou,
+//   gemini-2.5-flash-native-audio-latest-preview-12-2025 → preview expirou,
 //     começou a retornar 1008 "Operation is not implemented" em
 //     Live sessions; visível no log do app como close imediato após
 //     coach.live.open_ok
-// GA atual: 'gemini-live-2.5-flash-native-audio' (registry em
+// GA atual: 'gemini-2.5-flash-native-audio-latest' (registry em
 // admin-registries.ts). Override via GEMINI_LIVE_MODEL pra testar
 // previews futuras sem mexer no código.
 const DEFAULT_MODEL = process.env['GEMINI_LIVE_MODEL']?.trim()
-  || 'models/gemini-live-2.5-flash-native-audio';
+  || 'models/gemini-2.5-flash-native-audio-latest';
 
 export interface GeminiLiveConfig {
   model?: string;
