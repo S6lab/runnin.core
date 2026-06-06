@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 70;
+	objectVersion = 54;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -129,14 +129,14 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		55D6DDAE2FD3AECA00104508 /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
+		55D6DDAE2FD3AECA00104508 /* Exceptions for "RunninLiveActivity" folder in "RunninLiveActivityExtension" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
 			);
 			target = 55D6DD992FD3AEC900104508 /* RunninLiveActivityExtension */;
 		};
-		55D6DDD62FD3B28E00104508 /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
+		55D6DDD62FD3B28E00104508 /* Exceptions for "RunninLiveActivity" folder in "Runner" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				RunActivityAttributes.swift,
@@ -146,7 +146,19 @@
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		55D6DD9F2FD3AECA00104508 /* RunninLiveActivity */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (55D6DDD62FD3B28E00104508 /* PBXFileSystemSynchronizedBuildFileExceptionSet */, 55D6DDAE2FD3AECA00104508 /* PBXFileSystemSynchronizedBuildFileExceptionSet */, ); explicitFileTypes = {}; explicitFolders = (); path = RunninLiveActivity; sourceTree = "<group>"; };
+		55D6DD9F2FD3AECA00104508 /* RunninLiveActivity */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				55D6DDD62FD3B28E00104508 /* Exceptions for "RunninLiveActivity" folder in "Runner" target */,
+				55D6DDAE2FD3AECA00104508 /* Exceptions for "RunninLiveActivity" folder in "RunninLiveActivityExtension" target */,
+			);
+			explicitFileTypes = {
+			};
+			explicitFolders = (
+			);
+			path = RunninLiveActivity;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -326,8 +338,6 @@
 				55D6DD9F2FD3AECA00104508 /* RunninLiveActivity */,
 			);
 			name = RunninLiveActivityExtension;
-			packageProductDependencies = (
-			);
 			productName = RunninLiveActivityExtension;
 			productReference = 55D6DD9A2FD3AEC900104508 /* RunninLiveActivityExtension.appex */;
 			productType = "com.apple.product-type.app-extension";
@@ -446,13 +456,9 @@
 			inputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-Runner/Pods-Runner-resources-${CONFIGURATION}-input-files.xcfilelist",
 			);
-			inputPaths = (
-			);
 			name = "[CP] Copy Pods Resources";
 			outputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-Runner/Pods-Runner-resources-${CONFIGURATION}-output-files.xcfilelist",
-			);
-			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -560,13 +566,9 @@
 			inputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-Runner/Pods-Runner-frameworks-${CONFIGURATION}-input-files.xcfilelist",
 			);
-			inputPaths = (
-			);
 			name = "[CP] Embed Pods Frameworks";
 			outputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-Runner/Pods-Runner-frameworks-${CONFIGURATION}-output-files.xcfilelist",
-			);
-			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -806,7 +808,7 @@
 				INFOPLIST_FILE = RunninLiveActivity/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = RunninLiveActivity;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.2;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -851,7 +853,7 @@
 				INFOPLIST_FILE = RunninLiveActivity/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = RunninLiveActivity;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.2;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -893,7 +895,7 @@
 				INFOPLIST_FILE = RunninLiveActivity/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = RunninLiveActivity;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.2;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
