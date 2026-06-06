@@ -384,6 +384,10 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
   /// todo (não só durante corrida) — a pre-run page também precisa do estado
   /// pra mostrar banner "Instale Runnin no Watch".
   StreamSubscription<WatchPairingStatus>? _watchStatusSub;
+  /// Subscription pra comandos vindos do Watch (sendMessage). Watch user pode
+  /// pausar/abandonar a corrida via slide-to-confirm na ActiveRunScreen, ou
+  /// iniciar uma corrida nova via tap na PreRunScreen.
+  StreamSubscription<WatchCommand>? _watchCommandSub;
 
   // Lifecycle: true quando o app está em background (paused/inactive/hidden).
   // Usado pra suprimir TTS/voice em bg (não brigar com Spotify) e pra logger.
@@ -452,6 +456,36 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
     );
     on<_WatchStatusChanged>(
       (e, emit) => emit(state.copyWith(watchStatus: e.status)),
+    );
+    // Comandos do Watch (PreRunScreen → startRun, ActiveRunScreen → pause/abandon).
+    // Mapeia pra events do bloc — Watch nunca despacha direto pra UI.
+    _watchCommandSub = workoutRealtimeService.watchCommandStream.listen(
+      (cmd) {
+        if (isClosed) return;
+        switch (cmd.action) {
+          case 'pauseRun':
+            if (state.status == RunStatus.active) add(PauseRun());
+            break;
+          case 'resumeRun':
+            if (state.status == RunStatus.paused) add(ResumeRun());
+            break;
+          case 'abandonRun':
+            add(AbandonRun());
+            break;
+          case 'startRun':
+            // Watch só pode iniciar quando idle (já tem corrida ativa? ignora).
+            if (state.status == RunStatus.idle ||
+                state.status == RunStatus.completed) {
+              final p = cmd.payload;
+              add(StartRun(
+                type: (p['type'] as String?) ?? 'Free Run',
+                isPremium: p['isPremium'] == true,
+                planSessionId: p['planSessionId'] as String?,
+              ));
+            }
+            break;
+        }
+      },
     );
     on<StartRun>(_onStart);
     on<_GpsUpdate>(_onGpsUpdate);
@@ -842,6 +876,51 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
         sessionType: state.runType,
       ));
     }
+    // Push state pro Watch — 1Hz. updateApplicationContext dedup automático
+    // (entrega só o último valor se Watch tava offline). Idempotente quando
+    // Watch app não instalado (plugin skips com log).
+    unawaited(workoutRealtimeService.pushRunState({
+      'type': 'run_state',
+      'status': 'active',
+      'elapsedS': newElapsed,
+      'distanceM': state.distanceM,
+      'paceMinKm': state.currentPaceMinKm,
+      'bpm': state.currentBpm ?? 0,
+      'caloriesKcal': _approxCalories(state.distanceM),
+      'elevationM': _approxElevationGain(state.splits),
+      'runType': state.runType ?? 'Free Run',
+    }));
+  }
+
+  /// Empurra snapshot mínimo de transição de status pro Watch. Usado em
+  /// pause/resume/abandon/complete — fora do tick periódico, garante que o
+  /// Watch transiciona de UI imediatamente em vez de esperar +1s.
+  void _pushStatusToWatch(String status) {
+    unawaited(workoutRealtimeService.pushRunState({
+      'type': 'run_state',
+      'status': status,
+      'elapsedS': state.elapsedS,
+      'distanceM': state.distanceM,
+      'paceMinKm': state.currentPaceMinKm,
+      'bpm': state.currentBpm ?? 0,
+      'caloriesKcal': _approxCalories(state.distanceM),
+      'elevationM': _approxElevationGain(state.splits),
+      'runType': state.runType ?? 'Free Run',
+    }));
+  }
+
+  /// Aproximação simples de calorias pelo distância (60 kcal/km, ajustar
+  /// futuramente com BPM + peso). Usado só pra exibir no Watch — não vai
+  /// pro server (a corrida finalizada usa cálculo correto server-side).
+  double _approxCalories(double distanceM) => (distanceM / 1000.0) * 60.0;
+
+  /// Soma elevationGain dos splits fechados — fonte: campos do KmSplit.
+  double _approxElevationGain(List<KmSplit> splits) {
+    var total = 0.0;
+    for (final s in splits) {
+      total += s.elevationGain ?? 0;
+    }
+    return total;
   }
 
   void _onCoachChunk(_CoachChunk event, Emitter<RunState> emit) {
@@ -1203,6 +1282,7 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
     _runHealthSyncTimer?.cancel();
     _runHealthSyncTimer = null;
     unawaited(workoutRealtimeService.stop());
+    _pushStatusToWatch('idle');
     if (state.distanceM >= stationaryDistanceThresholdM) {
       _requestCoachCue(event: 'finish');
       // Mantém a sessão Live aberta até o resumo terminar de tocar (premium).
@@ -1466,6 +1546,8 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
     _runHealthSyncTimer = null;
     unawaited(workoutRealtimeService.stop());
     _pendingRotationTrigger = null;
+    // Volta o Watch pra PreRunScreen.
+    _pushStatusToWatch('idle');
     if (_isPremium) {
       unawaited(_coachSession.close());
       _coachCtx.dispose();
@@ -1507,6 +1589,7 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
     _bpmStaleLogged = false;
     unawaited(workoutRealtimeService.pause());
     emit(state.copyWith(status: RunStatus.paused));
+    _pushStatusToWatch('paused');
   }
 
   /// Parado em 30s sem deslocamento: pausa (mesmo cleanup do _onPause) e
@@ -1677,6 +1760,8 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
     _bpmSub = null;
     _watchStatusSub?.cancel();
     _watchStatusSub = null;
+    _watchCommandSub?.cancel();
+    _watchCommandSub = null;
     _bpmFallbackPollTimer?.cancel();
     _bpmFallbackPollTimer = null;
     _runHealthSyncTimer?.cancel();

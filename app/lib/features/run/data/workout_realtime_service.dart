@@ -9,6 +9,20 @@ import 'package:runnin/core/logger/logger.dart';
 /// no estado correspondente.
 enum WorkoutSessionState { idle, starting, active, paused, stopping }
 
+/// Comando emitido pelo Watch via WCSession sendMessage. RunBloc traduz em
+/// events do bloc (PauseRun, AbandonRun, StartRun com payload, etc).
+class WatchCommand {
+  final String action;          // 'pauseRun' | 'resumeRun' | 'abandonRun' | 'startRun'
+  final Map<String, dynamic> payload; // raw extras: type, planSessionId, isPremium
+
+  const WatchCommand({required this.action, this.payload = const {}});
+
+  factory WatchCommand.fromMap(Map<dynamic, dynamic> map) => WatchCommand(
+        action: (map['action'] as String?) ?? '',
+        payload: Map<String, dynamic>.from(map['payload'] as Map? ?? const {}),
+      );
+}
+
 /// Estado do pareamento + instalação do app companion no Apple Watch.
 /// Emitido pelo plugin nativo iOS via evento `watch_status`. Consumido por
 /// [RunBloc]/[active_run_page] pra renderizar:
@@ -93,6 +107,10 @@ class WorkoutRealtimeService {
   final _warningController = StreamController<String>.broadcast();
   final _watchStatusController = StreamController<WatchPairingStatus>.broadcast();
   WatchPairingStatus _latestWatchStatus = WatchPairingStatus.unknown;
+  /// Comandos vindos do Watch via WCSession sendMessage. Payload tem `action`
+  /// e opcionalmente outros campos (ex: action=startRun → type, planSessionId).
+  /// RunBloc se inscreve e dispatcha events correspondentes.
+  final _watchCommandController = StreamController<WatchCommand>.broadcast();
 
   /// Stream de BPMs do wearable. Emite `null` quando a fonte fica indisponível
   /// (Watch desligado, permission revogada). UI fica em '—' silenciosamente.
@@ -128,6 +146,23 @@ class WorkoutRealtimeService {
   }
 
   WatchPairingStatus get latestWatchStatus => _latestWatchStatus;
+
+  /// Stream de comandos vindos do Watch (pauseRun/abandonRun/startRun/etc).
+  /// RunBloc inscreve uma vez no init e dispatcha events correspondentes.
+  Stream<WatchCommand> get watchCommandStream {
+    _attachEventStream();
+    return _watchCommandController.stream;
+  }
+
+  /// Empurra snapshot do RunState atual pro Watch via WCSession applicationContext.
+  /// Idempotente — chamado pelo RunBloc a cada `_onTimerTick` (1Hz) durante
+  /// active/paused. Payload é Map serializável (sem tipos custom).
+  Future<void> pushRunState(Map<String, dynamic> payload) async {
+    if (!_isSupported) return;
+    try {
+      await _methodChannel.invokeMethod('pushRunState', payload);
+    } catch (_) {/* best-effort, plugin loga internamente */}
+  }
 
   int? get latestBpm => _latestBpm;
   WorkoutSessionState get state => _state;
@@ -348,6 +383,14 @@ class WorkoutRealtimeService {
           if (!_watchStatusController.isClosed) {
             _watchStatusController.add(status);
           }
+        }
+        break;
+      case 'watch_command':
+        // Comando vindo do Watch (sendMessage WCSession). RunBloc traduz
+        // em events do bloc — pausa/abandona/inicia corrida.
+        final cmd = WatchCommand.fromMap(raw);
+        if (cmd.action.isNotEmpty && !_watchCommandController.isClosed) {
+          _watchCommandController.add(cmd);
         }
         break;
       default:

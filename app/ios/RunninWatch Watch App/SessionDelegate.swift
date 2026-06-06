@@ -39,6 +39,18 @@ class SessionDelegate: NSObject, WCSessionDelegate {
     }
     #endif
 
+    /// State snapshot vindo do iPhone via `updateApplicationContext` (Watch
+    /// recebe último valor com dedup automático). Atualiza o singleton
+    /// `WatchRunState` que toda a UI Watch observa.
+    func session(_ session: WCSession,
+                 didReceiveApplicationContext applicationContext: [String: Any]) {
+        os_log("recv.context type=%{public}@", log: wsLog, type: .info,
+               (applicationContext["type"] as? String) ?? "?")
+        Task { @MainActor in
+            WatchRunState.shared.update(from: applicationContext)
+        }
+    }
+
     /// `sendMessage` no iPhone com replyHandler chega aqui. Mantemos a logica
     /// idempotente — chamar `start()` duas vezes seguido é seguro.
     func session(_ session: WCSession,

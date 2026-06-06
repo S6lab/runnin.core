@@ -113,6 +113,29 @@ private let wcLog = OSLog(subsystem: "ai.runnin.workout", category: "watch-bridg
     }
   }
 
+  /// Empurra pro Watch o snapshot do RunState atual (elapsedS, distanceM,
+  /// paceMinKm, bpm, etc). Watch consome via `didReceiveApplicationContext`
+  /// pra atualizar a UI sem precisar de iPhone aberto.
+  ///
+  /// Usa `updateApplicationContext`: low-latency, dedup automático (entrega
+  /// só o último valor, descarta intermediários se Watch tava offline).
+  /// Diferente de `sendMessage` que exige reachable.
+  ///
+  /// Chamado pelo Dart via MethodChannel `runnin/workout_realtime`
+  /// method "pushRunState". Idempotente; é OK chamar a cada tick (1Hz).
+  private func pushRunState(_ payload: [String: Any]) {
+    guard WCSession.isSupported() else { return }
+    let session = WCSession.default
+    guard session.activationState == .activated else { return }
+    guard session.isPaired, session.isWatchAppInstalled else { return }
+    do {
+      try session.updateApplicationContext(payload)
+    } catch {
+      os_log("push_state.failed err=%{public}@", log: wcLog, type: .error,
+             error.localizedDescription)
+    }
+  }
+
   /// Emite pro Flutter o estado atual do pareamento + instalação do Watch app.
   /// Consumido pelo `WorkoutRealtimeService` em Dart pra renderizar:
   ///   - banner "Conecte um Apple Watch" (paired=false)
@@ -159,6 +182,13 @@ private let wcLog = OSLog(subsystem: "ai.runnin.workout", category: "watch-bridg
       stop(result: result)
     case "restart":
       restartQuery(result: result)
+    case "pushRunState":
+      // Dart manda dict com elapsedS/distanceM/paceMinKm/bpm/calKcal/etc.
+      // Watch consome via didReceiveApplicationContext.
+      if let args = call.arguments as? [String: Any] {
+        pushRunState(args)
+      }
+      result(nil)
     default:
       result(FlutterMethodNotImplemented)
     }
@@ -382,6 +412,28 @@ extension WorkoutRealtimePlugin: WCSessionDelegate {
     os_log("wc.activation state=%d err=%{public}@", log: wcLog, type: .info,
            activationState.rawValue, error?.localizedDescription ?? "nil")
     emitWatchStatus()
+  }
+
+  /// Comandos vindos do Watch (sendMessage com reply). Action strings:
+  ///   - "pauseRun" / "resumeRun" / "abandonRun" — controle de corrida em curso
+  ///   - "startRun" {type, planSessionId?, isPremium} — Watch quer iniciar corrida
+  /// Reply é minimal {"ok": true} pra Watch saber que iPhone recebeu.
+  /// O comando vai pro Dart via evento `watch_command` no eventSink — quem
+  /// dispatcha no RunBloc é o WorkoutRealtimeService.
+  public func session(_ session: WCSession,
+                      didReceiveMessage message: [String: Any],
+                      replyHandler: @escaping ([String: Any]) -> Void) {
+    if let action = message["action"] as? String {
+      os_log("wc.recv action=%{public}@", log: wcLog, type: .info, action)
+      emit([
+        "type": "watch_command",
+        "action": action,
+        "payload": message,
+      ])
+      replyHandler(["ok": true])
+      return
+    }
+    replyHandler(["ok": false, "error": "no_action"])
   }
 
   public func sessionDidBecomeInactive(_ session: WCSession) {

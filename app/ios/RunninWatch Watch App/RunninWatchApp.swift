@@ -32,6 +32,7 @@ struct RunninWatchApp: App {
         WindowGroup {
             ContentView()
                 .environmentObject(WorkoutController.shared)
+                .environmentObject(WatchRunState.shared)
         }
     }
 }
