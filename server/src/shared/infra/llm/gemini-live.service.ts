@@ -17,8 +17,17 @@ const GEMINI_LIVE_URL = 'wss://generativelanguage.googleapis.com/ws/google.ai.ge
 // Deve bater com o modelo que o app usa pra conectar na Live API
 // (live_coach_voice_service.dart `_model`) — o token efêmero é vinculado ao
 // modelo; descasar gera áudio sobreposto/estranho no início da corrida.
+// Histórico das migrações:
+//   gemini-2.0-flash-live-001 → removido do v1beta (404)
+//   gemini-2.5-flash-native-audio-preview-12-2025 → preview expirou,
+//     começou a retornar 1008 "Operation is not implemented" em
+//     Live sessions; visível no log do app como close imediato após
+//     coach.live.open_ok
+// GA atual: 'gemini-2.5-flash-native-audio' (registry em
+// admin-registries.ts). Override via GEMINI_LIVE_MODEL pra testar
+// previews futuras sem mexer no código.
 const DEFAULT_MODEL = process.env['GEMINI_LIVE_MODEL']?.trim()
-  || 'models/gemini-2.5-flash-native-audio-preview-12-2025';
+  || 'models/gemini-2.5-flash-native-audio';
 
 export interface GeminiLiveConfig {
   model?: string;

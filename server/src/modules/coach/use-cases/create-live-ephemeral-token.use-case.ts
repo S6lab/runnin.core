@@ -8,9 +8,11 @@ const AUTH_TOKENS_URL =
 // gemini_live e docs Google Live API).
 // DEVE bater com live_coach_voice_service.dart `_model` no app (token efêmero
 // é vinculado ao modelo). Descasar gera voz sobreposta no início da corrida.
+// preview-12-2025 expirou (1008 "Operation not implemented"). GA atual
+// é gemini-2.5-flash-native-audio (vide admin-registries.ts).
 const DEFAULT_MODEL =
   process.env['GEMINI_LIVE_MODEL']?.trim() ||
-  'models/gemini-2.5-flash-native-audio-preview-12-2025';
+  'models/gemini-2.5-flash-native-audio';
 
 /**
  * Cria token efêmero pra app Flutter conectar direto no Gemini Live
