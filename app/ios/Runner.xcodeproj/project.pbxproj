@@ -15,24 +15,16 @@
 		55D6DD9E2FD3AECA00104508 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 55D6DD9D2FD3AECA00104508 /* SwiftUI.framework */; };
 		55D6DDAD2FD3AECA00104508 /* RunninLiveActivityExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 55D6DD9A2FD3AEC900104508 /* RunninLiveActivityExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		55D6DDC92FD3B1E700104508 /* LiveActivityPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55D6DDBF2FD3B1E700104508 /* LiveActivityPlugin.swift */; };
-		55D6DDCA2FD3B1E700104508 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55D6DDB62FD3B1E700104508 /* AppDelegate.swift */; };
-		55D6DDCB2FD3B1E700104508 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55D6DDC62FD3B1E700104508 /* SceneDelegate.swift */; };
-		55D6DDCC2FD3B1E700104508 /* GeneratedPluginRegistrant.m in Sources */ = {isa = PBXBuildFile; fileRef = 55D6DDB92FD3B1E700104508 /* GeneratedPluginRegistrant.m */; };
-		55D6DDCD2FD3B1E700104508 /* InstagramStoriesPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55D6DDBC2FD3B1E700104508 /* InstagramStoriesPlugin.swift */; };
-		55D6DDCE2FD3B1E700104508 /* WorkoutRealtimePlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55D6DDC72FD3B1E700104508 /* WorkoutRealtimePlugin.swift */; };
 		55D6DDD02FD3B1E700104508 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 55D6DDC22FD3B1E700104508 /* PrivacyInfo.xcprivacy */; };
 		55D6DDD12FD3B1E700104508 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 55D6DDB72FD3B1E700104508 /* Assets.xcassets */; };
 		55D6DDD22FD3B1E700104508 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 55D6DDC12FD3B1E700104508 /* Main.storyboard */; };
 		55D6DDD32FD3B1E700104508 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 55D6DDBA2FD3B1E700104508 /* GoogleService-Info.plist */; };
 		55D6DDD42FD3B1E700104508 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 55D6DDBE2FD3B1E700104508 /* LaunchScreen.storyboard */; };
-		662049E35EF7702BB83975E4 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = EBA3921879AE686BF449B596 /* GoogleService-Info.plist */; };
 		74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74858FAE1ED2DC5600515810 /* AppDelegate.swift */; };
 		7884E8682EC3CC0700C636F2 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7884E8672EC3CC0400C636F2 /* SceneDelegate.swift */; };
 		7A1B0001AE000000DEAD0001 /* WorkoutRealtimePlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A1B0001AE000000DEAD0002 /* WorkoutRealtimePlugin.swift */; };
 		7A1B0001AE000000DEAD0003 /* InstagramStoriesPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A1B0001AE000000DEAD0004 /* InstagramStoriesPlugin.swift */; };
-		7A1B0001AE000000DEAD0005 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 7A1B0001AE000000DEAD0006 /* PrivacyInfo.xcprivacy */; };
 		97C146FC1CF9000F007C117D /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FA1CF9000F007C117D /* Main.storyboard */; };
-		97C146FE1CF9000F007C117D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FD1CF9000F007C117D /* Assets.xcassets */; };
 		97C147011CF9000F007C117D /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FF1CF9000F007C117D /* LaunchScreen.storyboard */; };
 		A632E1F13EC1DA2C0CED00E4 /* Pods_RunnerTests.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = DDFD6235D76041781BCAA840 /* Pods_RunnerTests.framework */; };
 /* End PBXBuildFile section */
@@ -438,10 +430,7 @@
 				55D6DDD22FD3B1E700104508 /* Main.storyboard in Resources */,
 				55D6DDD32FD3B1E700104508 /* GoogleService-Info.plist in Resources */,
 				55D6DDD42FD3B1E700104508 /* LaunchScreen.storyboard in Resources */,
-				97C146FE1CF9000F007C117D /* Assets.xcassets in Resources */,
 				97C146FC1CF9000F007C117D /* Main.storyboard in Resources */,
-				662049E35EF7702BB83975E4 /* GoogleService-Info.plist in Resources */,
-				7A1B0001AE000000DEAD0005 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -603,11 +592,6 @@
 				7A1B0001AE000000DEAD0001 /* WorkoutRealtimePlugin.swift in Sources */,
 				7A1B0001AE000000DEAD0003 /* InstagramStoriesPlugin.swift in Sources */,
 				55D6DDC92FD3B1E700104508 /* LiveActivityPlugin.swift in Sources */,
-				55D6DDCA2FD3B1E700104508 /* AppDelegate.swift in Sources */,
-				55D6DDCB2FD3B1E700104508 /* SceneDelegate.swift in Sources */,
-				55D6DDCC2FD3B1E700104508 /* GeneratedPluginRegistrant.m in Sources */,
-				55D6DDCD2FD3B1E700104508 /* InstagramStoriesPlugin.swift in Sources */,
-				55D6DDCE2FD3B1E700104508 /* WorkoutRealtimePlugin.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -686,6 +670,7 @@
 				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
 				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
 				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
 				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
 				CLANG_WARN_STRICT_PROTOTYPES = YES;
 				CLANG_WARN_SUSPICIOUS_MOVE = YES;
@@ -708,6 +693,7 @@
 				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SUPPORTED_PLATFORMS = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				VALIDATE_PRODUCT = YES;
@@ -800,7 +786,7 @@
 				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
 				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
+				CURRENT_PROJECT_VERSION = 26;
 				DEVELOPMENT_TEAM = Y36XR89PWG;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
@@ -816,7 +802,7 @@
 				);
 				LM_SKIP_METADATA_EXTRACTION = YES;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
-				MARKETING_VERSION = "$(FLUTTER_BUILD_NAME)";
+				MARKETING_VERSION = 1.0.2;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = com.s6lab.runnin.RunninLiveActivity;
@@ -845,7 +831,7 @@
 				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
 				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
+				CURRENT_PROJECT_VERSION = 26;
 				DEVELOPMENT_TEAM = Y36XR89PWG;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
@@ -861,7 +847,7 @@
 				);
 				LM_SKIP_METADATA_EXTRACTION = YES;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
-				MARKETING_VERSION = "$(FLUTTER_BUILD_NAME)";
+				MARKETING_VERSION = 1.0.2;
 				MTL_FAST_MATH = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = com.s6lab.runnin.RunninLiveActivity;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -887,7 +873,7 @@
 				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
 				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
+				CURRENT_PROJECT_VERSION = 26;
 				DEVELOPMENT_TEAM = Y36XR89PWG;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
@@ -903,7 +889,7 @@
 				);
 				LM_SKIP_METADATA_EXTRACTION = YES;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
-				MARKETING_VERSION = "$(FLUTTER_BUILD_NAME)";
+				MARKETING_VERSION = 1.0.2;
 				MTL_FAST_MATH = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = com.s6lab.runnin.RunninLiveActivity;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -941,6 +927,7 @@
 				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
 				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
 				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
 				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
 				CLANG_WARN_STRICT_PROTOTYPES = YES;
 				CLANG_WARN_SUSPICIOUS_MOVE = YES;
@@ -970,6 +957,7 @@
 				MTL_ENABLE_DEBUG_INFO = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Debug;
@@ -998,6 +986,7 @@
 				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
 				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
 				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
 				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
 				CLANG_WARN_STRICT_PROTOTYPES = YES;
 				CLANG_WARN_SUSPICIOUS_MOVE = YES;
@@ -1020,6 +1009,7 @@
 				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SUPPORTED_PLATFORMS = iphoneos;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
