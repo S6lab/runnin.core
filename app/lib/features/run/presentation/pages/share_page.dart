@@ -841,8 +841,13 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
     );
   }
 
-  /// Wrapper Positioned + GestureDetector pro drag de overlays.
-  /// Posição vem de [_overlayOffsets] (override) ou [defaultPosition].
+  /// Wrapper Positioned + Listener pro drag de overlays. Usa Listener
+  /// (raw pointer events) em vez de GestureDetector porque o
+  /// InteractiveViewer da foto ganha a arena de gestos do GestureDetector
+  /// — chip nem se mexia. Listener bypassa a arena: enquanto o pointer
+  /// começa em cima do chip, recebemos todos os onPointerMove até soltar,
+  /// independente do InteractiveViewer também querer pan.
+  ///
   /// Clamp 40px de margem mantém pelo menos um pedaço do grupo dentro do
   /// box mesmo se o user arrastar pra borda.
   Widget _draggableOverlay({
@@ -855,11 +860,12 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
     return Positioned(
       left: pos.dx,
       top: pos.dy,
-      child: GestureDetector(
+      child: Listener(
         behavior: HitTestBehavior.opaque,
-        onPanUpdate: (d) {
+        onPointerMove: (event) {
           setState(() {
-            final next = pos + d.delta;
+            final cur = _overlayOffsets[id] ?? defaultPosition;
+            final next = cur + event.localDelta;
             _overlayOffsets[id] = Offset(
               next.dx.clamp(0.0, boxSize.width - 40),
               next.dy.clamp(0.0, boxSize.height - 40),
