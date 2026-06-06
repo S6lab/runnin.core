@@ -12,7 +12,15 @@
 import ActivityKit
 import Flutter
 import Foundation
+import OSLog
 import UIKit
+
+/// Logger pra debugar Live Activity em Console.app — filtra com
+/// `subsystem:ai.runnin.live_activity`. User reportou que a notif
+/// "regrediu" pra tamanho pequeno — log ajuda a confirmar se Live Activity
+/// está sendo iniciada (caminho ok) ou caindo no fallback (flutter_local_
+/// notifications) silenciosamente.
+private let laLog = OSLog(subsystem: "ai.runnin.live_activity", category: "lifecycle")
 
 @objc class LiveActivityPlugin: NSObject, FlutterPlugin {
   private static let channelName = "runnin/live_activity"
@@ -61,6 +69,7 @@ import UIKit
   @available(iOS 16.2, *)
   private func handleStart(call: FlutterMethodCall, result: @escaping FlutterResult) {
     guard ActivityAuthorizationInfo().areActivitiesEnabled else {
+      os_log("start.refused reason=activities_disabled", log: laLog, type: .error)
       result(false)
       return
     }
@@ -95,11 +104,15 @@ import UIKit
         content: ActivityContent(state: content, staleDate: nil)
       )
       LiveActivityPlugin.currentActivity = activity
+      os_log("start.success id=%{public}@ session=%{public}@", log: laLog, type: .info,
+             activity.id, sessionType)
       result(true)
     } catch {
       // request lança quando: Live Activities desabilitadas pelo user
       // em Settings > <App> > Live Activities, ou cap atingido (apple
       // limita a quantidade simultânea).
+      os_log("start.failed err=%{public}@", log: laLog, type: .error,
+             error.localizedDescription)
       result(false)
     }
   }

@@ -184,12 +184,18 @@ class RunBgNotificationService {
           'sessionType': ?sessionType,
         });
         if (ok == true) {
+          if (!_liveActivityStarted) {
+            // Log info uma única vez por sessão pra confirmar em Console.app
+            // que Live Activity ficou de fato ativa (vs fallback silencioso
+            // pro flutter_local_notifications).
+            Logger.info('live_activity.start.success');
+          }
           _liveActivityStarted = true;
           return;
         }
         // start/update retornou false (Live Activities desabilitada em
         // Settings, ou cap atingido) — segue pro fallback de notif local.
-        Logger.warn('live_activity.$method.returned_false');
+        Logger.warn('live_activity.$method.returned_false_falling_back');
       } on PlatformException catch (e, st) {
         Logger.error('live_activity.invoke_failed', e, st);
         // fall through pro fallback

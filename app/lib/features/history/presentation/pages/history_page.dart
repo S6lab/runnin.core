@@ -488,6 +488,10 @@ class _DataView extends StatelessWidget {
         // fallback genérico). A barra de distribuição aparece só quando há BPM
         // nas runs do período; ausente, mostramos texto explicando.
         if (stats.zoneCards.isNotEmpty) ...[
+          // Respiro visual entre PACE DO PERÍODO (acima) e ZONAS CARDÍACAS.
+          // Antes era 16pt herdado da seção anterior — colado demais, user
+          // reportou que ZONAS ficava "trepado" nas tendências.
+          const SizedBox(height: 20),
           ChartPanel(
             title: 'ZONAS CARDÍACAS',
             subtitle: stats.zoneDistribution.isNotEmpty

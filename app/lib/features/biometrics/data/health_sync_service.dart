@@ -26,8 +26,15 @@ class HealthSyncService {
     HealthDataType.HEART_RATE,
     HealthDataType.RESTING_HEART_RATE,
     HealthDataType.HEART_RATE_VARIABILITY_SDNN,
+    // SLEEP_ASLEEP é o agregado total (iPhone Health). Em iOS 16+, Apple
+    // Watch reporta sleep stages granulares (DEEP/REM/LIGHT) e ASLEEP pode
+    // vir vazio mesmo com user concedendo Sono. Por isso pegamos as 3 fases
+    // e o server agrega total = DEEP + REM + LIGHT. SLEEP_AWAKE intencional-
+    // mente fora — não conta como tempo dormido.
     HealthDataType.SLEEP_ASLEEP,
     HealthDataType.SLEEP_DEEP,
+    HealthDataType.SLEEP_REM,
+    HealthDataType.SLEEP_LIGHT,
     HealthDataType.STEPS,
     HealthDataType.BLOOD_OXYGEN,
     HealthDataType.WEIGHT,
@@ -125,6 +132,25 @@ class HealthSyncService {
       });
       return false;
     }
+  }
+
+  /// Status per-type das permissões granted no HK/HC. Versão pública do
+  /// `_logPermissionsBreakdown` — usada pela UI de perfil/saúde pra mostrar
+  /// checklist visual ao user (Sono ✓ / Batimentos ✓ / HRV ✗ etc).
+  /// Chama N vezes `_health.hasPermissions([type])` — caro o suficiente pra
+  /// rodar só em demanda (botão "VERIFICAR"), nunca no initState.
+  Future<Map<String, bool>> permissionsBreakdown() async {
+    if (!isSupported) return const {};
+    final granted = <String, bool>{};
+    for (final t in _types) {
+      try {
+        final ok = await _health.hasPermissions([t], permissions: [HealthDataAccess.READ]);
+        granted[_typeMap[t] ?? t.name] = ok ?? false;
+      } catch (_) {
+        granted[_typeMap[t] ?? t.name] = false;
+      }
+    }
+    return granted;
   }
 
   Future<bool> hasPermissions() async {
@@ -353,7 +379,9 @@ class HealthSyncService {
     // mostra "480h" em vez de "8h". Mantemos `_unitMap` como 'hours' e
     // dividimos aqui.
     if (p.type == HealthDataType.SLEEP_ASLEEP ||
-        p.type == HealthDataType.SLEEP_DEEP) {
+        p.type == HealthDataType.SLEEP_DEEP ||
+        p.type == HealthDataType.SLEEP_REM ||
+        p.type == HealthDataType.SLEEP_LIGHT) {
       value = value / 60.0;
     }
 
@@ -384,6 +412,8 @@ class HealthSyncService {
     HealthDataType.HEART_RATE_VARIABILITY_SDNN: 'hrv',
     HealthDataType.SLEEP_ASLEEP: 'sleep_hours',
     HealthDataType.SLEEP_DEEP: 'sleep_deep',
+    HealthDataType.SLEEP_REM: 'sleep_rem',
+    HealthDataType.SLEEP_LIGHT: 'sleep_light',
     HealthDataType.STEPS: 'steps',
     HealthDataType.BLOOD_OXYGEN: 'spo2',
     HealthDataType.WEIGHT: 'weight',
@@ -397,6 +427,8 @@ class HealthSyncService {
     HealthDataType.HEART_RATE_VARIABILITY_SDNN: 'ms',
     HealthDataType.SLEEP_ASLEEP: 'hours',
     HealthDataType.SLEEP_DEEP: 'hours',
+    HealthDataType.SLEEP_REM: 'hours',
+    HealthDataType.SLEEP_LIGHT: 'hours',
     HealthDataType.STEPS: 'count',
     HealthDataType.BLOOD_OXYGEN: '%',
     HealthDataType.WEIGHT: 'kg',

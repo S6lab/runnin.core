@@ -91,20 +91,14 @@ struct RunLockScreenView: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
-      // Header: marca + status
-      HStack {
-        Text("RUNNIN")
-          .font(.system(size: 12, weight: .semibold, design: .monospaced))
-          .tracking(1.6)
-          .foregroundStyle(.white)
-        Text(".AI")
-          .font(.system(size: 10, weight: .bold, design: .monospaced))
-          .padding(.horizontal, 5)
-          .padding(.vertical, 2)
-          .background(Color.cyan)
-          .foregroundStyle(.black)
-        Text("·")
-          .foregroundStyle(.white.opacity(0.3))
+      // Header: logo + sessão + status. Logo é a marca cyan do app
+      // (RunninLogo asset do Live Activity extension bundle).
+      HStack(spacing: 8) {
+        Image("RunninLogo")
+          .resizable()
+          .aspectRatio(contentMode: .fit)
+          .frame(width: 28, height: 28)
+          .clipShape(RoundedRectangle(cornerRadius: 6))
         Text(attributes.sessionType.uppercased())
           .font(.system(size: 10, weight: .medium, design: .monospaced))
           .tracking(1.0)

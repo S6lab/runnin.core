@@ -7,8 +7,10 @@ export type BiometricSampleType =
   | 'resting_bpm'      // BPM em repouso (média do dia)
   | 'max_bpm'          // BPM máximo (medido ou estimado)
   | 'hrv'              // heart rate variability (ms, RMSSD ou SDNN)
-  | 'sleep_hours'      // horas de sono na noite
+  | 'sleep_hours'      // horas de sono na noite (total — Apple só envia em iOS<16)
   | 'sleep_deep'       // horas em sono profundo
+  | 'sleep_rem'        // horas em sono REM
+  | 'sleep_light'      // horas em sono light (combinada com deep+rem = total moderno)
   | 'steps'            // passos no período
   | 'spo2'             // saturação de oxigênio (%)
   | 'weight'           // peso (kg)

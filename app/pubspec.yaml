@@ -1,7 +1,7 @@
 name: runnin
 description: "runnin.ai — AI Running Coach"
 publish_to: 'none'
-version: 1.0.2+29
+version: 1.0.2+30
 
 environment:
   sdk: ^3.11.4
@@ -112,3 +112,4 @@ flutter:
   assets:
     - assets/warmup_exercises.json
     - assets/img/hero/
+    - assets/logo/

@@ -9,6 +9,22 @@ import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 import 'package:runnin/features/biometrics/data/health_sync_service.dart';
 import 'package:runnin/shared/widgets/figma/figma_device_card.dart';
 import 'package:runnin/shared/widgets/figma/figma_top_nav.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+/// Tipo canônico (vide _typeMap em health_sync_service) → label legível
+/// pro UI de permissões. Fora dessa lista cai num default `key.toUpperCase()`.
+const Map<String, String> _kPermissionLabels = {
+  'bpm': 'Batimentos cardíacos',
+  'resting_bpm': 'FC em repouso',
+  'hrv': 'Variabilidade FC (HRV)',
+  'sleep_hours': 'Sono total',
+  'sleep_deep': 'Sono profundo',
+  'steps': 'Passos',
+  'calories_burned': 'Calorias gastas',
+  'spo2': 'Oxigenação (SpO2)',
+  'weight': 'Peso',
+  'respiratory_rate': 'Respiração',
+};
 
 class HealthDevicesPage extends StatefulWidget {
   const HealthDevicesPage({super.key});
@@ -28,6 +44,11 @@ class _HealthDevicesPageState extends State<HealthDevicesPage> {
   bool _appleHealthConnected = false;
   bool _googleHealthConnected = false;
   final _userRemote = UserRemoteDatasource();
+
+  /// Resultado do último click em "VERIFICAR". null = nunca foi solicitado;
+  /// vazio = "verificando..."; preenchido = mostra checklist.
+  Map<String, bool>? _permissionsCache;
+  bool _permissionsLoading = false;
 
   @override
   void initState() {
@@ -52,6 +73,37 @@ class _HealthDevicesPageState extends State<HealthDevicesPage> {
       });
     } catch (_) {
       // Falha silenciosa — usuário ainda pode clicar em conectar.
+    }
+  }
+
+  Future<void> _checkPermissions() async {
+    if (_permissionsLoading) return;
+    setState(() => _permissionsLoading = true);
+    analytics.logEvent('wearable_permissions_check_tapped', params: const {});
+    try {
+      final result = await healthSyncService.permissionsBreakdown();
+      if (!mounted) return;
+      setState(() {
+        _permissionsCache = result;
+        _permissionsLoading = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _permissionsLoading = false);
+    }
+  }
+
+  Future<void> _requestMissingPermissions() async {
+    analytics.logEvent('wearable_permissions_request_again_tapped', params: const {});
+    await healthSyncService.ensureAuthorizations();
+    // Reverificar depois pra UI refletir o que o user concedeu agora.
+    await _checkPermissions();
+  }
+
+  Future<void> _openIOSSettings() async {
+    analytics.logEvent('wearable_permissions_open_settings_tapped', params: const {});
+    final uri = Uri.parse('app-settings:');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri);
     }
   }
 
@@ -104,6 +156,22 @@ class _HealthDevicesPageState extends State<HealthDevicesPage> {
                   else
                     const _EmptyConnectedState(),
                   const SizedBox(height: AppSpacing.xxl),
+                  // STATUS DE PERMISSÕES — só mostra em iOS/Android (não web).
+                  // User pediu pra ter como verificar exatamente quais tipos
+                  // de saúde o app está conseguindo ler (debug do caso "sono
+                  // não aparece em lugar nenhum").
+                  if (healthSyncService.isSupported) ...[
+                    _FieldLabel(label: 'STATUS DE PERMISSÕES'),
+                    const SizedBox(height: AppSpacing.md),
+                    _PermissionsPanel(
+                      data: _permissionsCache,
+                      loading: _permissionsLoading,
+                      onCheck: _checkPermissions,
+                      onRequestAgain: _requestMissingPermissions,
+                      onOpenSettings: Platform.isIOS ? _openIOSSettings : null,
+                    ),
+                    const SizedBox(height: AppSpacing.xxl),
+                  ],
                   _FieldLabel(label: 'PLATAFORMAS DE SAÚDE'),
                   const SizedBox(height: AppSpacing.md),
                   const _PlatformsHelperText(),
@@ -350,6 +418,176 @@ class _EmptyConnectedState extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Painel "STATUS DE PERMISSÕES" da página perfil/saúde/wearable.
+/// Estados:
+///   - data == null && !loading: estado inicial; mostra só botão "VERIFICAR"
+///   - loading: spinner
+///   - data != null: lista com per-type ✓/✗ + CTAs "Solicitar novamente" e
+///     (iOS) "Abrir Configurações"
+class _PermissionsPanel extends StatelessWidget {
+  final Map<String, bool>? data;
+  final bool loading;
+  final Future<void> Function() onCheck;
+  final Future<void> Function() onRequestAgain;
+  final Future<void> Function()? onOpenSettings;
+
+  const _PermissionsPanel({
+    required this.data,
+    required this.loading,
+    required this.onCheck,
+    required this.onRequestAgain,
+    required this.onOpenSettings,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppSpacing.xl),
+      decoration: BoxDecoration(
+        color: FigmaColors.surfaceCard,
+        border: Border.all(color: FigmaColors.borderDefault, width: 1.041),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Veja quais tipos de dados de saúde o app está conseguindo ler. '
+            'Útil pra debugar quando algum dado (ex: sono) não aparece.',
+            style: context.runninType.bodyXs.copyWith(
+              height: 1.5,
+              color: FigmaColors.textMuted,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          if (data == null && !loading)
+            _PermissionsCtaButton(
+              label: 'VERIFICAR',
+              onTap: onCheck,
+              primary: true,
+            )
+          else if (loading)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: AppSpacing.md),
+              child: Center(child: CircularProgressIndicator(strokeWidth: 1.5)),
+            )
+          else
+            ..._buildResultList(context, palette),
+        ],
+      ),
+    );
+  }
+
+  List<Widget> _buildResultList(BuildContext context, dynamic palette) {
+    final entries = data!.entries.toList();
+    // Ordem amigável: sono, batimentos, repouso, hrv, calorias, passos, resto.
+    const order = [
+      'sleep_hours', 'sleep_deep', 'bpm', 'resting_bpm', 'hrv',
+      'calories_burned', 'steps', 'spo2', 'weight', 'respiratory_rate',
+    ];
+    entries.sort((a, b) {
+      final ai = order.indexOf(a.key);
+      final bi = order.indexOf(b.key);
+      return (ai == -1 ? 999 : ai).compareTo(bi == -1 ? 999 : bi);
+    });
+    return [
+      for (final e in entries)
+        Padding(
+          padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+          child: Row(
+            children: [
+              Icon(
+                e.value ? Icons.check_circle_outline : Icons.cancel_outlined,
+                size: 16,
+                color: e.value ? palette.primary : FigmaColors.textMuted,
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Text(
+                  _kPermissionLabels[e.key] ?? e.key.toUpperCase(),
+                  style: context.runninType.bodySm.copyWith(
+                    color: e.value ? FigmaColors.textPrimary : FigmaColors.textMuted,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      const SizedBox(height: AppSpacing.md),
+      Row(
+        children: [
+          Expanded(
+            child: _PermissionsCtaButton(
+              label: 'SOLICITAR NOVAMENTE',
+              onTap: onRequestAgain,
+              primary: true,
+            ),
+          ),
+          if (onOpenSettings != null) ...[
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(
+              child: _PermissionsCtaButton(
+                label: 'CONFIGURAÇÕES',
+                onTap: onOpenSettings!,
+                primary: false,
+              ),
+            ),
+          ],
+        ],
+      ),
+      const SizedBox(height: AppSpacing.sm),
+      _PermissionsCtaButton(
+        label: 'VERIFICAR DE NOVO',
+        onTap: onCheck,
+        primary: false,
+      ),
+    ];
+  }
+}
+
+class _PermissionsCtaButton extends StatelessWidget {
+  final String label;
+  final Future<void> Function() onTap;
+  final bool primary;
+
+  const _PermissionsCtaButton({
+    required this.label,
+    required this.onTap,
+    required this.primary,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    return InkWell(
+      onTap: () => onTap(),
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md,
+          vertical: AppSpacing.md,
+        ),
+        decoration: BoxDecoration(
+          border: Border.all(
+            color: primary ? palette.primary : FigmaColors.borderDefault,
+            width: 1,
+          ),
+          color: primary ? Colors.transparent : Colors.transparent,
+        ),
+        alignment: Alignment.center,
+        child: Text(
+          label,
+          style: context.runninType.labelCaps.copyWith(
+            color: primary ? palette.primary : FigmaColors.textPrimary,
+            fontWeight: FontWeight.w500,
+            letterSpacing: 1.0,
+          ),
+        ),
       ),
     );
   }
