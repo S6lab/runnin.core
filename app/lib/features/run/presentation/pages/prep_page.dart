@@ -214,6 +214,23 @@ class _PrepViewState extends State<_PrepView> {
           _selectedType = session.type;
         });
         _loadExercises();
+        // Empurra a sessão pro Watch pra ele mostrar "SESSÃO DO DIA" no
+        // TypeSelectorScreen. Best-effort — Watch app pode não estar
+        // instalado, plugin skipa silenciosamente.
+        unawaited(workoutRealtimeService.pushRunState({
+          'type': 'today_session',
+          'session': {
+            'type': session.type,
+            'distanceKm': session.distanceKm,
+            'planSessionId': session.id,
+          },
+        }));
+      } else if (mounted) {
+        // Sem sessão hoje — limpa a vista do Watch (only_free_run).
+        unawaited(workoutRealtimeService.pushRunState({
+          'type': 'today_session',
+          'session': null,
+        }));
       }
     } catch (_) {/* Sem plano OU erro de network — segue free run */}
   }

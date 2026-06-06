@@ -4,54 +4,54 @@ import WatchConnectivity
 /// Jornada 2 — corrida ativa no Watch. Espelha o RunState do iPhone que vem
 /// via WCSession applicationContext (1Hz).
 ///
-/// Layout (vertical):
-///   - Header: RunninLogo + runType
-///   - Primários: TEMPO, DISTÂNCIA, PACE (stat rows grandes, mono bold)
-///   - Secundários: BPM · ELEV · CAL (linha compacta)
-///   - Controles: SlideToConfirmButton PAUSAR (yellow) + PARAR (red)
-///
-/// Pause/Stop usa slide-to-confirm pra evitar tap acidental no pulso.
+/// Layout (estrutura split — ScrollView só pros stats, botões FIXOS no
+/// rodapé pra não competir com pan vertical do ScrollView quando user faz
+/// slide horizontal nos SlideToConfirmButton):
+///   - Topo (scrollable): Header + status PAUSADO + primários + secundários
+///   - Rodapé (fixo): SlideToConfirmButton PAUSAR/RETOMAR + PARAR
 struct ActiveRunScreen: View {
     @EnvironmentObject var state: WatchRunState
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    RunninLogo()
-                    Spacer()
-                    Text(state.runType.uppercased())
-                        .font(.system(size: 8, weight: .medium, design: .monospaced))
-                        .tracking(0.8)
-                        .foregroundStyle(.white.opacity(0.5))
-                }
-
-                if state.status == .paused {
-                    HStack(spacing: 4) {
-                        Circle().fill(Color.yellow).frame(width: 6, height: 6)
-                        Text("PAUSADO")
-                            .font(.system(size: 9, weight: .bold, design: .monospaced))
-                            .tracking(1.0)
-                            .foregroundStyle(.yellow)
+        VStack(spacing: 6) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack {
+                        RunninLogo()
+                        Spacer()
+                        Text(state.runType.uppercased())
+                            .font(.system(size: 8, weight: .medium, design: .monospaced))
+                            .tracking(0.8)
+                            .foregroundStyle(.white.opacity(0.5))
                     }
+
+                    if state.status == .paused {
+                        HStack(spacing: 4) {
+                            Circle().fill(Color.yellow).frame(width: 6, height: 6)
+                            Text("PAUSADO")
+                                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                                .tracking(1.0)
+                                .foregroundStyle(.yellow)
+                        }
+                    }
+
+                    statRow(label: "TEMPO", value: state.formattedElapsed, unit: nil)
+                    statRow(label: "DIST", value: state.formattedDistance, unit: "km")
+                    statRow(label: "PACE", value: state.formattedPace, unit: "/km")
+
+                    HStack(spacing: 8) {
+                        miniStat(label: "BPM", value: state.bpm > 0 ? "\(state.bpm)" : "—")
+                        miniStat(label: "ELEV", value: "+\(Int(state.elevationM))m")
+                        miniStat(label: "CAL", value: "\(Int(state.caloriesKcal))")
+                    }
+                    .padding(.top, 2)
                 }
-
-                statRow(label: "TEMPO", value: state.formattedElapsed, unit: nil)
-                statRow(label: "DIST", value: state.formattedDistance, unit: "km")
-                statRow(label: "PACE", value: state.formattedPace, unit: "/km")
-
-                // Secundários — linha compacta
-                HStack(spacing: 8) {
-                    miniStat(label: "BPM", value: state.bpm > 0 ? "\(state.bpm)" : "—")
-                    miniStat(label: "ELEV", value: "+\(Int(state.elevationM))m")
-                    miniStat(label: "CAL", value: "\(Int(state.caloriesKcal))")
-                }
-                .padding(.top, 2)
-
-                Divider()
-                    .background(.white.opacity(0.15))
-                    .padding(.vertical, 4)
-
+                .padding(.horizontal, 4)
+                .padding(.bottom, 6)
+            }
+            // Botões FIXOS no rodapé — fora do ScrollView pra evitar conflito
+            // de DragGesture (horizontal) vs pan vertical (rolagem).
+            VStack(spacing: 6) {
                 SlideToConfirmButton(
                     label: state.status == .paused ? "RETOMAR" : "PAUSAR",
                     color: .yellow,
@@ -66,6 +66,7 @@ struct ActiveRunScreen: View {
                 )
             }
             .padding(.horizontal, 4)
+            .padding(.bottom, 4)
         }
     }
 

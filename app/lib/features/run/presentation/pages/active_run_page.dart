@@ -10,6 +10,7 @@ import 'package:go_router/go_router.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:runnin/core/audio/coach_audio_player.dart';
 import 'package:runnin/core/debug/mock_gps_service.dart';
+import 'package:runnin/core/notifications/run_bg_notification_service.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/features/run/domain/entities/run.dart' show GpsPoint;
 import 'package:runnin/features/run/presentation/bloc/run_bloc.dart';
@@ -312,6 +313,37 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
                   const _IdleHeroBackground()
                 else
                   _RouteMap(points: state.points),
+                // Banner discreto quando Live Activities está desabilitada
+                // em Ajustes. Detectado pelo plugin retornando reason=
+                // activities_disabled — surfa pro user com instrução curta
+                // pra reativar (sem isso a notif fica pequena silenciosamente).
+                if (!isIdle && runBgNotificationService.isLiveActivityDisabled)
+                  Positioned(
+                    top: 12,
+                    left: 14,
+                    right: 14,
+                    child: SafeArea(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.65),
+                          border: Border.all(
+                            color: context.runninPalette.muted.withValues(alpha: 0.4),
+                            width: 1,
+                          ),
+                        ),
+                        child: Text(
+                          'Notificação ao vivo desligada · Ajustes → Notificações → Runnin → Atividades Ao Vivo',
+                          textAlign: TextAlign.center,
+                          style: context.runninType.labelCaps.copyWith(
+                            color: context.runninPalette.muted,
+                            fontSize: 9,
+                            letterSpacing: 0.8,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
                 // Coach banner: aparece quando cue novo + some após 10s.
                 // Posicionado bem mais abaixo pra não sobrepor os chips.
                 if (_bannerVisible &&
@@ -465,7 +497,10 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
                   Positioned(
                     left: 24,
                     right: 24,
-                    bottom: state.distanceM > 0 ? 440 : 300,
+                    // +80pt vs versão anterior (440/300) — user pediu pra subir
+                    // o cronômetro + label TEMPO ~2cm pra não ficar colado nos
+                    // chips abaixo. 80pt ≈ 2cm em densidades padrão iOS.
+                    bottom: state.distanceM > 0 ? 520 : 380,
                     child: Align(
                       // Alinhado à esquerda.
                       alignment: Alignment.centerLeft,

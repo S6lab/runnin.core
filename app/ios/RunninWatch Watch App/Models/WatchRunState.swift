@@ -16,7 +16,20 @@ class WatchRunState: ObservableObject {
         case idle, active, paused
     }
 
+    /// Estado de navegação LOCAL do Watch quando status==idle. Replica o
+    /// fluxo do prep_page do iPhone (Passo 1/5 → 5/5). Quando status sai
+    /// de idle (active/paused), localStep é irrelevante (ActiveRunScreen
+    /// toma conta) — reset pra .selectingType quando volta pra idle.
+    enum LocalStep: Equatable {
+        case selectingType
+        case briefing(SelectedRunType)
+    }
+
     @Published var status: Status = .idle
+    @Published var localStep: LocalStep = .selectingType
+    /// True enquanto a sendMessage("startRun") está em vôo — UI mostra
+    /// "INICIANDO…" no BriefingScreen.
+    @Published var starting: Bool = false
     @Published var elapsedS: Int = 0
     @Published var distanceM: Double = 0
     @Published var paceMinKm: Double = 0
@@ -36,6 +49,15 @@ class WatchRunState: ObservableObject {
         switch type {
         case "run_state":
             if let s = context["status"] as? String, let st = Status(rawValue: s) {
+                // Quando entra em active, derruba flag de "starting" e
+                // reseta o roteamento local pra próxima idle voltar pro
+                // TypeSelector limpo.
+                if st == .active && status != .active {
+                    starting = false
+                }
+                if st == .idle && status != .idle {
+                    localStep = .selectingType
+                }
                 status = st
             }
             if let v = context["elapsedS"] as? Int { elapsedS = v }
@@ -89,4 +111,15 @@ struct TodaySession: Equatable {
     let type: String
     let distanceKm: Double
     let planSessionId: String?
+}
+
+/// Tipo selecionado no Passo 1/5 (TypeSelectorScreen) que segue pra
+/// BriefingScreen (Passo 5/5). Distância só preenchida quando vem de
+/// Sessão do Dia; null pra Free Run.
+struct SelectedRunType: Equatable {
+    let type: String
+    let planSessionId: String?
+    let distanceKm: Double?
+
+    var isFree: Bool { planSessionId == nil }
 }

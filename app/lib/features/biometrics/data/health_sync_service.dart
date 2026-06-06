@@ -139,6 +139,11 @@ class HealthSyncService {
   /// checklist visual ao user (Sono ✓ / Batimentos ✓ / HRV ✗ etc).
   /// Chama N vezes `_health.hasPermissions([type])` — caro o suficiente pra
   /// rodar só em demanda (botão "VERIFICAR"), nunca no initState.
+  ///
+  /// ATENÇÃO: iOS retorna sempre null/false pra read permissions (privacy
+  /// by design — Apple não confirma quais permissions de saúde foram
+  /// granted, pra evitar deduzir condições). Use [permissionsBreakdownFromSamples]
+  /// no iOS pra resultados confiáveis via proxy de query.
   Future<Map<String, bool>> permissionsBreakdown() async {
     if (!isSupported) return const {};
     final granted = <String, bool>{};
@@ -151,6 +156,37 @@ class HealthSyncService {
       }
     }
     return granted;
+  }
+
+  /// Status per-type aproximado via "tem sample nos últimos 7d?". Bypass
+  /// pra quirk de iOS onde `hasPermissions` SEMPRE retorna null/false pra
+  /// read permissions (privacy by design Apple). Quando user tem permissão
+  /// + dado nos últimos 7d, o query retorna >0 samples = ✓.
+  ///
+  /// Limitação assumida: ✗ é AMBÍGUO — pode ser permission denied OU
+  /// sem dado disponível no período (ex: user nunca registrou SpO2). A UI
+  /// que consome esse método deixa essa ambiguidade explícita no subtítulo.
+  ///
+  /// Custo: ~200ms × N tipos via getHealthDataFromTypes = ~2s nos 12 tipos.
+  /// Aceitável só em demanda (botão VERIFICAR).
+  Future<Map<String, bool>> permissionsBreakdownFromSamples() async {
+    if (!isSupported) return const {};
+    final to = DateTime.now();
+    final from = to.subtract(const Duration(days: 7));
+    final result = <String, bool>{};
+    for (final t in _types) {
+      try {
+        final samples = await _health.getHealthDataFromTypes(
+          startTime: from,
+          endTime: to,
+          types: [t],
+        );
+        result[_typeMap[t] ?? t.name] = samples.isNotEmpty;
+      } catch (_) {
+        result[_typeMap[t] ?? t.name] = false;
+      }
+    }
+    return result;
   }
 
   Future<bool> hasPermissions() async {

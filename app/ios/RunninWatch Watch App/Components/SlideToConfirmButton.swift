@@ -54,7 +54,10 @@ struct SlideToConfirmButton: View {
                 .frame(width: thumbWidth, height: trackHeight)
                 .offset(x: dragX)
                 .animation(dragging ? nil : .spring(response: 0.3), value: dragX)
-                .gesture(
+                // highPriorityGesture vence o pan vertical do ScrollView pai
+                // — sem isso, arrastar o thumb horizontal era interpretado
+                // como tentativa de scroll e o slide nunca disparava.
+                .highPriorityGesture(
                     DragGesture(minimumDistance: 0)
                         .updating($dragging) { _, state, _ in state = true }
                         .onChanged { v in

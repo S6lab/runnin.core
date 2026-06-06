@@ -43,6 +43,23 @@ private let laLog = OSLog(subsystem: "ai.runnin.live_activity", category: "lifec
       } else {
         result(false)
       }
+    case "getDiagnostics":
+      // Consultado pela UI pra mostrar banner "Active ao Vivo desabilitada
+      // em Ajustes" quando applicable. Sem efeitos colaterais — read-only.
+      if #available(iOS 16.2, *) {
+        let activity = LiveActivityPlugin.currentActivity as? Activity<RunActivityAttributes>
+        result([
+          "areActivitiesEnabled": ActivityAuthorizationInfo().areActivitiesEnabled,
+          "currentActivityID": activity?.id ?? "",
+          "iosVersion": UIDevice.current.systemVersion,
+        ])
+      } else {
+        result([
+          "areActivitiesEnabled": false,
+          "currentActivityID": "",
+          "iosVersion": UIDevice.current.systemVersion,
+        ])
+      }
     case "start":
       if #available(iOS 16.2, *) {
         handleStart(call: call, result: result)
@@ -70,7 +87,10 @@ private let laLog = OSLog(subsystem: "ai.runnin.live_activity", category: "lifec
   private func handleStart(call: FlutterMethodCall, result: @escaping FlutterResult) {
     guard ActivityAuthorizationInfo().areActivitiesEnabled else {
       os_log("start.refused reason=activities_disabled", log: laLog, type: .error)
-      result(false)
+      // Payload estruturado em vez de só `false`: permite o Dart distinguir
+      // "user desligou Activities" de "request lançou exception" e reagir
+      // (mostrar banner orientativo na Active Run page).
+      result(["ok": false, "reason": "activities_disabled"])
       return
     }
     guard let args = call.arguments as? [String: Any] else {
@@ -106,14 +126,14 @@ private let laLog = OSLog(subsystem: "ai.runnin.live_activity", category: "lifec
       LiveActivityPlugin.currentActivity = activity
       os_log("start.success id=%{public}@ session=%{public}@", log: laLog, type: .info,
              activity.id, sessionType)
-      result(true)
+      result(["ok": true, "id": activity.id])
     } catch {
       // request lança quando: Live Activities desabilitadas pelo user
       // em Settings > <App> > Live Activities, ou cap atingido (apple
       // limita a quantidade simultânea).
       os_log("start.failed err=%{public}@", log: laLog, type: .error,
              error.localizedDescription)
-      result(false)
+      result(["ok": false, "reason": "request_threw", "error": error.localizedDescription])
     }
   }
 

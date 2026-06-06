@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart' show MethodChannel, PlatformException;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
+import 'package:runnin/core/analytics/analytics_service.dart';
 import 'package:runnin/core/logger/logger.dart';
 
 /// Notificação persistente que aparece na bandeja/lock screen enquanto a
@@ -51,6 +52,16 @@ class RunBgNotificationService {
   /// que cancel() chame end() no plugin e que updates subsequentes saibam
   /// que tem activity rodando (não precisam re-pedir start).
   bool _liveActivityStarted = false;
+  /// Setado quando o start retornou `activities_disabled` — user desligou
+  /// "Atividades Ao Vivo" em Ajustes → Runnin → Notificações. UI consulta
+  /// via [isLiveActivityDisabled] pra mostrar banner orientativo. Resetado
+  /// quando o user reativa e o start vai bem.
+  bool _liveActivityDisabled = false;
+
+  /// True quando a Live Activity está sendo bloqueada por config do user
+  /// (vs falha temporária de plataforma). UI (active_run_page) consulta e
+  /// renderiza banner discreto com instrução de como reativar.
+  bool get isLiveActivityDisabled => _liveActivityDisabled;
 
   bool get _isSupported => !kIsWeb && (Platform.isIOS || Platform.isAndroid);
 
@@ -177,25 +188,31 @@ class RunBgNotificationService {
     if (await _isLiveActivitySupported()) {
       try {
         final method = _liveActivityStarted ? 'update' : 'start';
-        final ok = await _liveActivityChannel.invokeMethod<bool>(method, {
+        // Plugin agora retorna Map {ok, reason?, error?, id?} pra desambiguar
+        // os modos de falha (activities_disabled vs request_threw). Versão
+        // antiga retornava só bool — defensive parse cobre os 2 formatos.
+        final res = await _liveActivityChannel.invokeMethod<Object>(method, {
           'distanceM': distanceM,
           'elapsedS': elapsedS,
           'paceMinKm': ?paceMinKm,
           'sessionType': ?sessionType,
         });
-        if (ok == true) {
+        final ok = res is Map ? res['ok'] == true : res == true;
+        if (ok) {
           if (!_liveActivityStarted) {
-            // Log info uma única vez por sessão pra confirmar em Console.app
-            // que Live Activity ficou de fato ativa (vs fallback silencioso
-            // pro flutter_local_notifications).
             Logger.info('live_activity.start.success');
+            _liveActivityDisabled = false;
           }
           _liveActivityStarted = true;
           return;
         }
-        // start/update retornou false (Live Activities desabilitada em
-        // Settings, ou cap atingido) — segue pro fallback de notif local.
-        Logger.warn('live_activity.$method.returned_false_falling_back');
+        // Falhou — distinguir motivo pra UI poder mostrar banner orientativo.
+        final reason = res is Map ? (res['reason'] as String? ?? 'unknown') : 'unknown';
+        Logger.warn('live_activity.$method.failed reason=$reason');
+        if (reason == 'activities_disabled' && !_liveActivityDisabled) {
+          _liveActivityDisabled = true;
+          analytics.logEvent('live_activity.disabled_by_user', params: const {});
+        }
       } on PlatformException catch (e, st) {
         Logger.error('live_activity.invoke_failed', e, st);
         // fall through pro fallback

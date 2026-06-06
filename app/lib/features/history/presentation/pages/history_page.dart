@@ -520,7 +520,11 @@ class _DataView extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(height: 16),
+          // Respiro maior antes da tabela de tendências (PACE/VOLUME/BPM/
+          // CORRIDAS com deltas) — user reportou que a tabela ficava "em
+          // cima" do ChartPanel das zonas. 32pt = 2x o spacing das outras
+          // seções, dá separação visual clara.
+          const SizedBox(height: 32),
         ],
 
         // Evolução Resumo — deltas vêm de /stats/aggregate quando disponível,

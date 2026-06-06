@@ -81,7 +81,11 @@ class _HealthDevicesPageState extends State<HealthDevicesPage> {
     setState(() => _permissionsLoading = true);
     analytics.logEvent('wearable_permissions_check_tapped', params: const {});
     try {
-      final result = await healthSyncService.permissionsBreakdown();
+      // permissionsBreakdownFromSamples = proxy via query 7d (iOS quirk:
+      // hasPermissions sempre retorna null/false pra reads). Aceita "sem
+      // dado no período" como "sem permissão" — limitação documentada no
+      // subtítulo do painel.
+      final result = await healthSyncService.permissionsBreakdownFromSamples();
       if (!mounted) return;
       setState(() {
         _permissionsCache = result;
@@ -104,6 +108,56 @@ class _HealthDevicesPageState extends State<HealthDevicesPage> {
     final uri = Uri.parse('app-settings:');
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri);
+    }
+  }
+
+  /// Apple não permite deep link direto pra "Ajustes → Saúde → Acesso a
+  /// Dados → Runnin". Tenta abrir Settings.app via `App-prefs:` (URL scheme
+  /// não-documentado mas histórico aceito) e, se falhar, mostra dialog com
+  /// caminho manual.
+  Future<void> _openHealthInstructions() async {
+    analytics.logEvent('wearable_health_app_tapped', params: const {});
+    final settingsUri = Uri.parse('App-prefs:');
+    var opened = false;
+    try {
+      if (await canLaunchUrl(settingsUri)) {
+        opened = await launchUrl(settingsUri);
+      }
+    } catch (_) {/* fall through */}
+    if (!opened && mounted) {
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: FigmaColors.surfaceCard,
+          title: Text(
+            'Abrir Saúde',
+            style: context.runninType.bodyMd.copyWith(
+              fontWeight: FontWeight.w500,
+              color: FigmaColors.textPrimary,
+            ),
+          ),
+          content: Text(
+            'O iOS não permite abrir essa página direto.\n\n'
+            'Vai em: Ajustes → Saúde → Dados → Runnin\n\n'
+            'Ative os tipos que aparecem com ✗ no painel.',
+            style: context.runninType.bodySm.copyWith(
+              height: 1.5,
+              color: FigmaColors.textSecondary,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: Text(
+                'OK',
+                style: context.runninType.labelMd.copyWith(
+                  color: context.runninPalette.primary,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
     }
   }
 
@@ -169,6 +223,7 @@ class _HealthDevicesPageState extends State<HealthDevicesPage> {
                       onCheck: _checkPermissions,
                       onRequestAgain: _requestMissingPermissions,
                       onOpenSettings: Platform.isIOS ? _openIOSSettings : null,
+                      onOpenHealth: Platform.isIOS ? _openHealthInstructions : null,
                     ),
                     const SizedBox(height: AppSpacing.xxl),
                   ],
@@ -435,6 +490,9 @@ class _PermissionsPanel extends StatelessWidget {
   final Future<void> Function() onCheck;
   final Future<void> Function() onRequestAgain;
   final Future<void> Function()? onOpenSettings;
+  /// Botão separado pra abrir Saúde (instruções) — quando iOS, mostra dialog
+  /// com caminho manual porque Apple não permite deep link direto.
+  final Future<void> Function()? onOpenHealth;
 
   const _PermissionsPanel({
     required this.data,
@@ -442,6 +500,7 @@ class _PermissionsPanel extends StatelessWidget {
     required this.onCheck,
     required this.onRequestAgain,
     required this.onOpenSettings,
+    required this.onOpenHealth,
   });
 
   @override
@@ -458,8 +517,9 @@ class _PermissionsPanel extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Veja quais tipos de dados de saúde o app está conseguindo ler. '
-            'Útil pra debugar quando algum dado (ex: sono) não aparece.',
+            'Verifica quais tipos de dados o app conseguiu LER nos últimos '
+            '7 dias. Tipos com ✗ podem estar sem permissão OU apenas sem '
+            'dado disponível no período (ambíguo, limitação da Apple).',
             style: context.runninType.bodyXs.copyWith(
               height: 1.5,
               color: FigmaColors.textMuted,
@@ -520,27 +580,39 @@ class _PermissionsPanel extends StatelessWidget {
           ),
         ),
       const SizedBox(height: AppSpacing.md),
-      Row(
-        children: [
-          Expanded(
-            child: _PermissionsCtaButton(
-              label: 'SOLICITAR NOVAMENTE',
-              onTap: onRequestAgain,
-              primary: true,
-            ),
-          ),
-          if (onOpenSettings != null) ...[
-            const SizedBox(width: AppSpacing.sm),
-            Expanded(
-              child: _PermissionsCtaButton(
-                label: 'CONFIGURAÇÕES',
-                onTap: onOpenSettings!,
-                primary: false,
-              ),
-            ),
-          ],
-        ],
+      _PermissionsCtaButton(
+        label: 'SOLICITAR NOVAMENTE',
+        onTap: onRequestAgain,
+        primary: true,
       ),
+      const SizedBox(height: AppSpacing.sm),
+      // Row de 2 botões secundários: Saúde (instruções) + Ajustes do app.
+      // Ordem: Saúde primeiro porque é o caso de uso real do user que
+      // precisa ativar tipos faltantes; Ajustes do App é caminho geral
+      // (notifications etc) e raramente é o que ele quer.
+      if (onOpenHealth != null || onOpenSettings != null)
+        Row(
+          children: [
+            if (onOpenHealth != null)
+              Expanded(
+                child: _PermissionsCtaButton(
+                  label: 'ABRIR SAÚDE',
+                  onTap: onOpenHealth!,
+                  primary: false,
+                ),
+              ),
+            if (onOpenHealth != null && onOpenSettings != null)
+              const SizedBox(width: AppSpacing.sm),
+            if (onOpenSettings != null)
+              Expanded(
+                child: _PermissionsCtaButton(
+                  label: 'AJUSTES DO APP',
+                  onTap: onOpenSettings!,
+                  primary: false,
+                ),
+              ),
+          ],
+        ),
       const SizedBox(height: AppSpacing.sm),
       _PermissionsCtaButton(
         label: 'VERIFICAR DE NOVO',

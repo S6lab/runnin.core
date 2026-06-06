@@ -1,26 +1,29 @@
 import SwiftUI
-import WatchConnectivity
 
-/// Jornada 1 — pre-run no Watch. User pode abrir Runnin direto no Watch e
-/// escolher tipo de corrida:
+/// Jornada 1, Passo 1/5 — TIPO de corrida. Espelha o Step 0 do prep_page do
+/// iPhone (TypeStep). User pode abrir Runnin direto no Watch e escolher:
 ///   - "SESSÃO DO DIA" (se houver plano com sessão pra hoje, vinda do iPhone)
 ///   - "CORRIDA LIVRE" (sempre disponível)
 ///
-/// Tap em qualquer um manda `startRun` pro iPhone via WCSession sendMessage.
-/// iPhone dispara StartRun no RunBloc → status muda pra active → Watch
-/// transiciona pra ActiveRunScreen automaticamente quando recebe o próximo
-/// applicationContext com status:"active".
+/// Tap NÃO inicia a corrida — apenas avança pra BriefingScreen (Passo 5/5).
+/// Esse desacoplamento garante que user lê o briefing antes de confirmar.
 struct PreRunScreen: View {
     @EnvironmentObject var state: WatchRunState
-    @State private var sending: Bool = false
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .center, spacing: 12) {
-                RunninLogo()
-                    .padding(.top, 4)
+            VStack(alignment: .center, spacing: 10) {
+                HStack {
+                    RunninLogo()
+                    Spacer()
+                    Text("1/5")
+                        .font(.system(size: 9, weight: .medium, design: .monospaced))
+                        .tracking(0.8)
+                        .foregroundStyle(.white.opacity(0.45))
+                }
+                .padding(.top, 4)
 
-                Text("ESCOLHA")
+                Text("ESCOLHA O TIPO")
                     .font(.system(size: 9, weight: .medium, design: .monospaced))
                     .tracking(1.5)
                     .foregroundStyle(.white.opacity(0.5))
@@ -30,27 +33,26 @@ struct PreRunScreen: View {
                     runButton(
                         title: "SESSÃO DO DIA",
                         subtitle: "\(session.type) · \(formattedKm(session.distanceKm))",
-                        color: .cyan,
                         accent: true
                     ) {
-                        sendStart(type: session.type, planSessionId: session.planSessionId)
+                        state.localStep = .briefing(SelectedRunType(
+                            type: session.type,
+                            planSessionId: session.planSessionId,
+                            distanceKm: session.distanceKm
+                        ))
                     }
                 }
 
                 runButton(
                     title: "CORRIDA LIVRE",
-                    subtitle: "Sem plano · à vontade",
-                    color: .white,
+                    subtitle: "Sem plano · sem alvo",
                     accent: false
                 ) {
-                    sendStart(type: "Free Run", planSessionId: nil)
-                }
-
-                if sending {
-                    Text("INICIANDO…")
-                        .font(.system(size: 10, weight: .medium, design: .monospaced))
-                        .foregroundStyle(.cyan)
-                        .padding(.top, 6)
+                    state.localStep = .briefing(SelectedRunType(
+                        type: "Free Run",
+                        planSessionId: nil,
+                        distanceKm: nil
+                    ))
                 }
             }
             .padding(.horizontal, 4)
@@ -59,7 +61,7 @@ struct PreRunScreen: View {
 
     @ViewBuilder
     private func runButton(
-        title: String, subtitle: String, color: Color, accent: Bool,
+        title: String, subtitle: String, accent: Bool,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
@@ -75,39 +77,14 @@ struct PreRunScreen: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.vertical, 8)
             .padding(.horizontal, 10)
-            .background(accent ? color : Color.white.opacity(0.08))
+            .background(accent ? Color.cyan : Color.white.opacity(0.08))
             .overlay(
                 RoundedRectangle(cornerRadius: 6)
-                    .stroke(accent ? Color.clear : color.opacity(0.3), lineWidth: 1)
+                    .stroke(accent ? Color.clear : Color.cyan.opacity(0.3), lineWidth: 1)
             )
             .clipShape(RoundedRectangle(cornerRadius: 6))
         }
         .buttonStyle(.plain)
-        .disabled(sending)
-    }
-
-    private func sendStart(type: String, planSessionId: String?) {
-        guard !sending else { return }
-        sending = true
-        guard WCSession.isSupported() else { sending = false; return }
-        let session = WCSession.default
-        guard session.activationState == .activated else { sending = false; return }
-        var msg: [String: Any] = [
-            "action": "startRun",
-            "type": type,
-            "isPremium": true, // futuro: passa via context do iPhone
-        ]
-        if let id = planSessionId { msg["planSessionId"] = id }
-        if session.isReachable {
-            session.sendMessage(msg, replyHandler: { _ in
-                Task { @MainActor in sending = false }
-            }, errorHandler: { _ in
-                Task { @MainActor in sending = false }
-            })
-        } else {
-            session.transferUserInfo(msg)
-            sending = false
-        }
     }
 
     private func formattedKm(_ km: Double) -> String {
