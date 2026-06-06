@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:health/health.dart';
@@ -76,6 +77,11 @@ class HealthSyncService {
         'provider': _sourceLabel,
         'granted': ok,
       });
+      // Diagnóstico per-type: iOS deixa o user marcar "Allow All" e depois
+      // revogar tipos individuais (ex: Sono) em Configurações > Saúde >
+      // Runnin. `requestAuthorization` retorna `true` mesmo nesses casos —
+      // por isso medimos a granted-list separadamente.
+      unawaited(_logPermissionsBreakdown(stage: 'after_request'));
       return ok;
     } catch (e, st) {
       analytics.recordError(
@@ -108,6 +114,32 @@ class HealthSyncService {
       );
       return false;
     }
+  }
+
+  /// Emite `wearable_permissions_breakdown` com 1 boolean por tipo (mapeado
+  /// pelo nome canônico server-side: bpm, resting_bpm, hrv, sleep_hours, ...).
+  /// Necessário porque `requestAuthorization` retorna um único `granted` mesmo
+  /// quando o user revogou tipos individuais — o Apple Health no iOS permite
+  /// negar tipos específicos via Configurações sem invalidar a autorização
+  /// geral. Ajuda a explicar "Sono = --" na home quando outros tipos estão
+  /// chegando normalmente.
+  Future<void> _logPermissionsBreakdown({required String stage}) async {
+    if (!isSupported) return;
+    final granted = <String, bool>{};
+    for (final t in _types) {
+      try {
+        final ok = await _health.hasPermissions([t], permissions: [HealthDataAccess.READ]);
+        granted[_typeMap[t] ?? t.name] = ok ?? false;
+      } catch (_) {
+        granted[_typeMap[t] ?? t.name] = false;
+      }
+    }
+    analytics.logEvent('wearable_permissions_breakdown', params: {
+      'platform': _platformLabel,
+      'provider': _sourceLabel,
+      'stage': stage,
+      ...granted.map((k, v) => MapEntry('granted_$k', v ? 1 : 0)),
+    });
   }
 
   /// Lê o BPM mais recente dos últimos [withinSeconds] segundos. Usado pra
@@ -188,6 +220,15 @@ class HealthSyncService {
       final key = _typeMap[p.type] ?? p.type.name;
       byType[key] = (byType[key] ?? 0) + 1;
     }
+    // Por tipo dos samples MAPEADOS (pós-_mapToInput) — diff vs fetched mostra
+    // quantos o plugin entregou com value=null ou tipo não mapeado. Não dá pra
+    // medir "saved per type" diretamente porque `_ds.ingest` retorna só total,
+    // mas em ingest bem-sucedido total_saved == samples.length, então
+    // mapped_<type> serve como proxy útil.
+    final mappedByType = <String, int>{};
+    for (final s in samples) {
+      mappedByType[s.type] = (mappedByType[s.type] ?? 0) + 1;
+    }
 
     if (samples.isEmpty) {
       await _saveLastSync(to);
@@ -197,6 +238,7 @@ class HealthSyncService {
         'samples_saved': 0,
         'samples_fetched': raw.length,
         ...byType.map((k, v) => MapEntry('fetched_$k', v)),
+        ...mappedByType.map((k, v) => MapEntry('mapped_$k', v)),
       });
       return 0;
     }
@@ -232,6 +274,7 @@ class HealthSyncService {
       'samples_fetched': raw.length,
       'failed_batches': failedBatches,
       ...byType.map((k, v) => MapEntry('fetched_$k', v)),
+      ...mappedByType.map((k, v) => MapEntry('mapped_$k', v)),
     });
     return totalSaved;
   }
@@ -240,10 +283,21 @@ class HealthSyncService {
     final type = _typeMap[p.type];
     if (type == null) return null;
     final rawValue = p.value;
-    final value = rawValue is NumericHealthValue
+    var value = rawValue is NumericHealthValue
         ? rawValue.numericValue
         : double.tryParse(rawValue.toString());
     if (value == null) return null;
+
+    // Patch de unidade: plugin `health` 13.x entrega SLEEP_ASLEEP/SLEEP_DEEP
+    // como duração em MINUTOS (somatório de samples de HKCategoryValueSleep
+    // entre start e end), mas o server agrega `sleep_hours` assumindo horas.
+    // Sem essa conversão, depois que a primeira noite de sono chega, o card
+    // mostra "480h" em vez de "8h". Mantemos `_unitMap` como 'hours' e
+    // dividimos aqui.
+    if (p.type == HealthDataType.SLEEP_ASLEEP ||
+        p.type == HealthDataType.SLEEP_DEEP) {
+      value = value / 60.0;
+    }
 
     return BiometricSampleInput(
       type: type,

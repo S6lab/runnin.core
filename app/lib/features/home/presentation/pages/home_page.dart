@@ -1454,23 +1454,41 @@ class _StatusCorporalSectionState extends State<_StatusCorporalSection> {
               ),
               const SizedBox(width: 8),
               Expanded(
-                child: MetricCard(
-                  label: 'SONO',
-                  value: hasSleepData
-                      ? widget.data.biometric!.avgSleepHours!.toStringAsFixed(1)
-                      : '--',
-                  unit: hasSleepData ? 'h' : null,
-                  valueColor: FigmaColors.textPrimary,
-                  sub: hasSleepData
-                      ? 'Média 7 dias via Apple Health / Health Connect'
-                      : profile?.hasWearable == true
-                          ? 'Sem sono sincronizado via Health'
-                          : 'Sem origem de sono conectada',
-                  chart: TextButton(
-                    onPressed: () => context.push('/profile/edit'),
-                    child: Text(hasSleepData ? 'VER DETALHES' : 'REVISAR PERFIL'),
-                  ),
-                ),
+                child: Builder(builder: (_) {
+                  // Diferencia 3 estados: (a) tem sono, (b) wearable conectado
+                  // mas sono ausente E outros sinais presentes = provável
+                  // permissão de "Sono" não concedida no iOS, (c) sem origem
+                  // alguma de saúde. O caso (b) leva direto pra /profile/health
+                  // pra revisar permissão, em vez de /profile/edit.
+                  final sleepGap = _hasSleepPermissionGap(widget.data);
+                  return MetricCard(
+                    label: 'SONO',
+                    value: hasSleepData
+                        ? widget.data.biometric!.avgSleepHours!.toStringAsFixed(1)
+                        : '--',
+                    unit: hasSleepData ? 'h' : null,
+                    valueColor: FigmaColors.textPrimary,
+                    sub: hasSleepData
+                        ? 'Média 7 dias via Apple Health / Health Connect'
+                        : sleepGap
+                            ? "Permita 'Sono' em Saúde do iPhone"
+                            : profile?.hasWearable == true
+                                ? 'Sem sono sincronizado via Health'
+                                : 'Sem origem de sono conectada',
+                    chart: TextButton(
+                      onPressed: () => context.push(
+                        sleepGap ? '/profile/health' : '/profile/edit',
+                      ),
+                      child: Text(
+                        hasSleepData
+                            ? 'VER DETALHES'
+                            : sleepGap
+                                ? 'REVISAR PERMISSÕES'
+                                : 'REVISAR PERFIL',
+                      ),
+                    ),
+                  );
+                }),
               ),
             ],
           ),
@@ -1801,6 +1819,17 @@ bool _hasRealBpmData(HomeData data) {
 bool _hasRealSleepData(HomeData data) {
   final hours = data.biometric?.avgSleepHours;
   return hours != null && hours > 0;
+}
+
+/// True quando o user sincronizou OUTROS dados de saúde (BPM resting ou
+/// max) mas sono está ausente — sinal forte de que concedeu HK no geral mas
+/// negou (ou nunca registrou) o tipo "Sono". Driver do banner SONO da home
+/// pedir pra revisar permissão.
+bool _hasSleepPermissionGap(HomeData data) {
+  final bio = data.biometric;
+  if (bio == null) return false;
+  if (bio.avgSleepHours != null && bio.avgSleepHours! > 0) return false;
+  return bio.avgRestingBpm != null || bio.maxBpm != null;
 }
 
 String _weeklyRecommendation(HomeData data) {

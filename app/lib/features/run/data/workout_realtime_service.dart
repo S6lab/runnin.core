@@ -149,6 +149,35 @@ class WorkoutRealtimeService {
     }
   }
 
+  /// Pede ao nativo pra recriar a `HKAnchoredObjectQuery` (iOS) ou recadastrar
+  /// o callback de medição (Android) preservando a `HKWorkoutSession`/Workout
+  /// em andamento. Caminho de resgate quando o stream BPM "morre em silêncio"
+  /// — comum no HealthKit quando o Watch perde conexão por uns segundos. Chama
+  /// `_methodChannel.invokeMethod('restart')`; o lado nativo deve preservar o
+  /// anchor pra não duplicar amostras antigas. Idempotente — em estado idle/
+  /// stopping é no-op.
+  Future<void> restart() async {
+    if (!_isSupported) return;
+    if (_state == WorkoutSessionState.idle ||
+        _state == WorkoutSessionState.stopping) {
+      return;
+    }
+    try {
+      await _methodChannel.invokeMethod('restart');
+      Logger.info('workout_realtime.restart', context: const {'reason': 'stale_or_lost'});
+    } on PlatformException catch (e, st) {
+      // MissingPluginException é subclasse de PlatformException — sinaliza
+      // que o nativo ainda não tem o handler `restart`. Não há tratamento
+      // diferente além de logar: o flag de staleness + fallback poll já
+      // cobrem o gap.
+      if (e is MissingPluginException) {
+        Logger.info('workout_realtime.restart_unsupported');
+      } else {
+        Logger.error('workout_realtime.restart_failed', e, st, {'code': e.code});
+      }
+    }
+  }
+
   /// Encerra a sessão. Crítico: garante que o workout vai pro Activity Ring
   /// (iOS) sem ficar "aberto". Idempotente — chamada em `idle/stopping` é
   /// no-op.

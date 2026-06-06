@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:runnin/core/analytics/analytics_service.dart';
 import 'package:runnin/core/audio/telemetry_tts.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 import 'package:runnin/features/biometrics/data/health_sync_service.dart';
@@ -112,6 +113,17 @@ class CoachTalkStop extends RunEvent {}
 // ── State ────────────────────────────────────────────────────────────────────
 enum RunStatus { idle, starting, active, paused, completing, completed, error }
 
+/// Estágios de "vivacidade" do stream BPM. Permite à UI mostrar avisos
+/// intermediários em vez de cair direto pra "desconectado" quando a fonte
+/// apenas atrasa.
+///
+/// Transições no [RunBloc]:
+///   - chega sample com value>0     → fresh
+///   - 15s sem sample                → stale (UI: último valor + "?")
+///   - 45s sem sample                → lost  (UI: "—")
+///   - sample nulo / source caiu     → lost imediato
+enum BpmStaleness { fresh, stale, lost }
+
 class RunState {
   final RunStatus status;
   final String? runId;
@@ -141,11 +153,12 @@ class RunState {
   final int? currentBpm;
   /// BPM máximo visto durante a corrida atual. Reset em _onStart.
   final int? maxBpmSeen;
-  /// True quando a fonte BPM (Watch/strap) emitiu sample nos últimos
-  /// [BPM_STALE_SECONDS]s. False quando o wearable caiu / perdeu conexão /
-  /// nunca emitiu. UI usa pra exibir ícone "desativado" em vez de manter
-  /// o último valor cacheado (que dava sensação de valor mockado).
-  final bool bpmSourceActive;
+  /// Vivacidade do stream BPM — `fresh` (sample recente), `stale` (sem sample
+  /// há 15s, ainda mostra último valor com aviso), `lost` (sem sample há
+  /// 45s, UI mostra "—"). Substituiu o antigo `bpmSourceActive` boolean —
+  /// continua exposto como getter pra back-compat com a UI antiga e o coach
+  /// cue `high_bpm`.
+  final BpmStaleness bpmStaleness;
   /// Origem do sample BPM ativo: 'realtime' (WorkoutRealtimeService, Watch/
   /// Wear OS pareado), 'fallback' (polling do HealthKit/Health Connect quando
   /// realtime não inicia), ou 'none' (sem nenhuma fonte). UI mostra ícone
@@ -171,9 +184,14 @@ class RunState {
     this.noMovementPrompt = false,
     this.currentBpm,
     this.maxBpmSeen,
-    this.bpmSourceActive = false,
+    this.bpmStaleness = BpmStaleness.lost,
     this.bpmSource = 'none',
   });
+
+  /// Compat com a UI antiga e o gating de coach cue `high_bpm`: ativo quando
+  /// estamos em fresh ou stale (último sample relativamente recente). Só false
+  /// em `lost` — quando UI deve mostrar "—" e o coach não disparar cue.
+  bool get bpmSourceActive => bpmStaleness != BpmStaleness.lost;
 
   RunState copyWith({
     RunStatus? status,
@@ -194,7 +212,7 @@ class RunState {
     bool? noMovementPrompt,
     int? currentBpm,
     int? maxBpmSeen,
-    bool? bpmSourceActive,
+    BpmStaleness? bpmStaleness,
     String? bpmSource,
   }) => RunState(
     status: status ?? this.status,
@@ -215,7 +233,7 @@ class RunState {
     noMovementPrompt: noMovementPrompt ?? this.noMovementPrompt,
     currentBpm: currentBpm ?? this.currentBpm,
     maxBpmSeen: maxBpmSeen ?? this.maxBpmSeen,
-    bpmSourceActive: bpmSourceActive ?? this.bpmSourceActive,
+    bpmStaleness: bpmStaleness ?? this.bpmStaleness,
     bpmSource: bpmSource ?? this.bpmSource,
   );
 
@@ -459,6 +477,8 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
     // Reset acumuladores de BPM por km e inicia stream nativo. Idempotente —
     // se a service estiver active de uma run anterior, é no-op.
     _kmBpmSamples.clear();
+    _lastBpmAtMs = null;
+    _bpmStaleLogged = false;
     _bpmSub?.cancel();
     _bpmSub = workoutRealtimeService.bpmStream.listen(
       (v) => add(_BpmTick(v)),
@@ -757,18 +777,17 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
 
   void _onTimerTick(_TimerTick event, Emitter<RunState> emit) {
     if (state.status != RunStatus.active) return;
-    // Staleness check: se o último sample BPM foi há mais de _bpmStaleThresholdMs,
-    // marca a fonte como inativa pra UI exibir "—" em vez de manter valor
-    // antigo. Watch pode escrever samples esporádicos (1 a cada poucos
-    // segundos) — 20s tolera bem isso e ainda detecta perda real.
-    final bpmStale = _lastBpmAtMs != null &&
-        DateTime.now().millisecondsSinceEpoch - _lastBpmAtMs! > _bpmStaleThresholdMs;
+    // Staleness em 3 estados:
+    //   - fresh: último sample em até _bpmStaleSecs (15s)
+    //   - stale: 15-45s — UI mostra último valor com aviso "?" e dispara
+    //     1 retry do fallback poll
+    //   - lost:  >45s — UI mostra "—", fallback poll periódico arrancado e
+    //     iOS query reiniciada via workoutRealtimeService.restart()
     final newElapsed = state.elapsedS + 1;
-    if (bpmStale && state.bpmSourceActive) {
-      emit(state.copyWith(
-        elapsedS: newElapsed,
-        bpmSourceActive: false,
-      ));
+    final target = _resolveBpmStaleness();
+    if (target != state.bpmStaleness) {
+      _onBpmStalenessTransition(target);
+      emit(state.copyWith(elapsedS: newElapsed, bpmStaleness: target));
     } else {
       emit(state.copyWith(elapsedS: newElapsed));
     }
@@ -1220,6 +1239,8 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
     if (value != null && value > 0) {
       _kmBpmSamples.add(value);
       _lastBpmAtMs = DateTime.now().millisecondsSinceEpoch;
+      // BPM voltou — autoriza o próximo flip pra stale a logar de novo.
+      _bpmStaleLogged = false;
       final newMax = (state.maxBpmSeen == null || value > state.maxBpmSeen!)
           ? value
           : state.maxBpmSeen!;
@@ -1234,7 +1255,7 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
       emit(state.copyWith(
         currentBpm: value,
         maxBpmSeen: newMax,
-        bpmSourceActive: true,
+        bpmStaleness: BpmStaleness.fresh,
         bpmSource: source,
       ));
 
@@ -1262,16 +1283,77 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
       // de manter o último valor mockado. Mantém o `currentBpm` no state
       // (pra historico em-memória), mas a UI usa `bpmSourceActive` pra gatear.
       _lastBpmAtMs = null;
-      if (state.bpmSourceActive) {
-        emit(state.copyWith(bpmSourceActive: false, bpmSource: 'none'));
+      if (state.bpmStaleness != BpmStaleness.lost) {
+        emit(state.copyWith(bpmStaleness: BpmStaleness.lost, bpmSource: 'none'));
       }
     }
   }
 
   /// Timestamp em ms do último sample BPM recebido. Usado em [_onTimerTick]
-  /// pra marcar a fonte como inativa após [_bpmStaleThresholdMs] sem update.
+  /// pra calcular a [BpmStaleness] atual via [_resolveBpmStaleness].
   int? _lastBpmAtMs;
-  static const _bpmStaleThresholdMs = 20 * 1000; // 20s sem sample → stale
+
+  /// Thresholds em ms pra cada degrau de staleness.
+  /// `_bpmStaleAfterMs`: fresh → stale (chip mostra último valor com "?").
+  /// `_bpmLostAfterMs`:  stale → lost  (chip mostra "—", restart da iOS query).
+  /// Antes era 1 threshold único de 20s — derrubava o chip muito cedo em
+  /// jitter normal do Watch.
+  static const _bpmStaleAfterMs = 15 * 1000;
+  static const _bpmLostAfterMs = 45 * 1000;
+
+  /// True quando já logamos `run.bpm.stale.detected` na transição atual pra
+  /// stale. Reseta quando BPM volta fresh. Evita inflar analytics enquanto
+  /// segue stale na mesma corrida.
+  bool _bpmStaleLogged = false;
+
+  /// Calcula o degrau de staleness pelo tempo desde o último sample.
+  BpmStaleness _resolveBpmStaleness() {
+    if (_lastBpmAtMs == null) return BpmStaleness.lost;
+    final age = DateTime.now().millisecondsSinceEpoch - _lastBpmAtMs!;
+    if (age < _bpmStaleAfterMs) return BpmStaleness.fresh;
+    if (age < _bpmLostAfterMs) return BpmStaleness.stale;
+    return BpmStaleness.lost;
+  }
+
+  /// Side-effects na entrada em cada degrau:
+  ///   fresh: nada — só atualiza o state.
+  ///   stale: 1 tentativa imediata do fallback poll (barata) + log analytics.
+  ///   lost:  arranca o fallback poll periódico (se não tiver rodando) +
+  ///          restart da iOS query (tentativa de resgatar HKAnchoredObjectQuery
+  ///          que pode ter morrido em silêncio).
+  void _onBpmStalenessTransition(BpmStaleness target) {
+    switch (target) {
+      case BpmStaleness.fresh:
+        break;
+      case BpmStaleness.stale:
+        if (!_bpmStaleLogged) {
+          _bpmStaleLogged = true;
+          analytics.logEvent('run.bpm.stale.detected', params: {
+            'elapsed_s': state.elapsedS,
+            'last_source': state.bpmSource,
+          });
+        }
+        // ignore: avoid_print
+        print('run.bpm.fallback.start reason=staleness');
+        unawaited(_pollBpmOnce());
+        break;
+      case BpmStaleness.lost:
+        if (_bpmFallbackPollTimer == null && state.status == RunStatus.active) {
+          // ignore: avoid_print
+          print('run.bpm.fallback.start reason=lost');
+          unawaited(_pollBpmOnce());
+          _bpmFallbackPollTimer = Timer.periodic(
+            const Duration(seconds: _bpmFallbackIntervalSec),
+            (_) => _pollBpmOnce(),
+          );
+        }
+        // Tenta resgatar a iOS query — `HKAnchoredObjectQuery` morre em
+        // silêncio com alguma frequência (Watch perde sinal, app suspende).
+        // Restart preserva anchor (vide plugin nativo) pra não duplicar.
+        unawaited(workoutRealtimeService.restart());
+        break;
+    }
+  }
 
   /// Polling de BPM via healthSyncService.latestBpm() quando o stream
   /// nativo de workout não emite (Watch offline, permission negada).
@@ -1356,6 +1438,11 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
     _stallCheckTimer = null;
     _coachRotationSafetyTimer = null;
     _bpmFallbackPollTimer = null;
+    // Zera a janela de staleness BPM: ao resumir, dá warmup novo antes de
+    // decidir se a fonte sumiu. Sem isso, o primeiro tick pós-resume já
+    // estoura `lost` se a pausa durou >45s.
+    _lastBpmAtMs = null;
+    _bpmStaleLogged = false;
     unawaited(workoutRealtimeService.pause());
     emit(state.copyWith(status: RunStatus.paused));
   }
@@ -1388,7 +1475,15 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
   Future<void> _onResume(ResumeRun event, Emitter<RunState> emit) async {
     if (state.status != RunStatus.paused) return;
     unawaited(workoutRealtimeService.resume());
-    emit(state.copyWith(status: RunStatus.active));
+    // Resume começa em estado neutro de BPM (lost) e a UI vai mostrar "—"
+    // até o primeiro sample chegar. Sem isso a UI carrega o último staleness
+    // do pause, que poderia ser `fresh` mas com sample já velho.
+    _lastBpmAtMs = null;
+    _bpmStaleLogged = false;
+    emit(state.copyWith(
+      status: RunStatus.active,
+      bpmStaleness: BpmStaleness.lost,
+    ));
     _timer = Timer.periodic(
       const Duration(seconds: 1),
       (_) => add(_TimerTick()),
@@ -1493,6 +1588,12 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
           // ignore: avoid_print
           print('run.lifecycle.catchup gapS=$gapS');
           add(_TimerCatchUp(gapS));
+          // Reseta a janela de staleness BPM no foreground com gap >1s.
+          // Sem isso o `_resolveBpmStaleness` no próximo tick estoura `lost`
+          // de cara (o tempo wall-clock passou enquanto o Dart isolate
+          // estava suspenso), mostrando "BPM · —" mesmo com Watch ativo.
+          _lastBpmAtMs = null;
+          _bpmStaleLogged = false;
         }
       }
       // ignore: avoid_print

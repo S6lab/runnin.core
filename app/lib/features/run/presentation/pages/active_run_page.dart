@@ -414,28 +414,9 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
                                       : palette.secondary,
                               pulsing: _coachAudioPlaying,
                             ),
-                            _StatusChip(
-                              // Realtime (Watch/Strap) = coração pulsando.
-                              // Fallback (polling do HealthKit/Health Connect) =
-                              // ícone de relógio: tem dado mas latência alta.
-                              // Sem fonte = coração contornado, sem pulse.
-                              icon: state.bpmSourceActive && state.currentBpm != null
-                                  ? (state.bpmSource == 'fallback'
-                                      ? Icons.history
-                                      : Icons.favorite)
-                                  : Icons.favorite_outline,
-                              label: state.bpmSourceActive && state.currentBpm != null
-                                  ? 'BPM · ${state.currentBpm}'
-                                  : state.bpmSource == 'none' &&
-                                          state.status == RunStatus.active
-                                      ? 'BPM · sem fonte'
-                                      : 'BPM · —',
-                              color: state.bpmSourceActive && state.currentBpm != null
-                                  ? palette.secondary
-                                  : palette.muted,
-                              pulsing: state.bpmSourceActive &&
-                                  state.currentBpm != null &&
-                                  state.bpmSource == 'realtime',
+                            _BpmStatusChip(
+                              state: state,
+                              palette: palette,
                             ),
                           ],
                         ),
@@ -607,6 +588,69 @@ class _StatusChip extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Chip BPM com 3 estados visuais derivados de [RunState.bpmStaleness]:
+///   - fresh: realtime → coração pulsando + cor secundária; fallback → relógio.
+///   - stale: cor de aviso (warning), label "BPM · X ?" pra sinalizar dado
+///     possivelmente velho mas sem cair pra "—" e perder a leitura útil.
+///   - lost:  coração contornado + label "BPM · —" ou "BPM · sem fonte".
+///
+/// Antes era um único `_StatusChip` inline com 2 ramos lógicos; com 3
+/// estados ficou complexo o bastante pra merecer widget próprio. UX:
+/// usuário não vê o chip "piscando" pra "—" em cada jitter do Watch.
+class _BpmStatusChip extends StatelessWidget {
+  final RunState state;
+  final RunninPalette palette;
+  const _BpmStatusChip({required this.state, required this.palette});
+
+  @override
+  Widget build(BuildContext context) {
+    final value = state.currentBpm;
+    final staleness = state.bpmStaleness;
+    final source = state.bpmSource;
+    final hasValue = value != null && value > 0;
+
+    IconData icon;
+    String label;
+    Color color;
+    bool pulsing;
+    String? suffix;
+
+    switch (staleness) {
+      case BpmStaleness.fresh:
+        icon = source == 'fallback' ? Icons.history : Icons.favorite;
+        color = palette.secondary;
+        pulsing = hasValue && source == 'realtime';
+        label = hasValue ? 'BPM · $value' : 'BPM · —';
+        break;
+      case BpmStaleness.stale:
+        // Mantém o último valor (informação útil) com sufixo "?" + cor
+        // de aviso (recorre ao secondary com opacidade menor — sem token
+        // de warning dedicado no palette atual).
+        icon = Icons.help_outline;
+        color = palette.secondary.withValues(alpha: 0.65);
+        pulsing = false;
+        label = hasValue ? 'BPM · $value' : 'BPM · —';
+        suffix = ' ?';
+        break;
+      case BpmStaleness.lost:
+        icon = Icons.favorite_outline;
+        color = palette.muted;
+        pulsing = false;
+        label = source == 'none' && state.status == RunStatus.active
+            ? 'BPM · sem fonte'
+            : 'BPM · —';
+        break;
+    }
+
+    return _StatusChip(
+      icon: icon,
+      label: suffix != null ? '$label$suffix' : label,
+      color: color,
+      pulsing: pulsing,
     );
   }
 }

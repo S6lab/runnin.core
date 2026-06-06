@@ -82,6 +82,8 @@ private let hrLog = OSLog(subsystem: "ai.runnin.workout", category: "hr")
       resumeQuery(result: result)
     case "stop":
       stop(result: result)
+    case "restart":
+      restartQuery(result: result)
     default:
       result(FlutterMethodNotImplemented)
     }
@@ -226,6 +228,27 @@ private let hrLog = OSLog(subsystem: "ai.runnin.workout", category: "hr")
     lastAnchor = nil
     emit(["type": "state", "value": "ended"])
     result(nil)
+  }
+
+  /// Recria a HKAnchoredObjectQuery preservando o anchor — caminho de
+  /// resgate quando a query "morre em silêncio" (Watch perde sinal, app
+  /// suspende). Diferente de stop+start: lastAnchor não é zerado, então
+  /// não duplicamos samples antigos. Idempotente quando query==nil
+  /// (chama startQueryInternal direto).
+  private func restartQuery(result: @escaping FlutterResult) {
+    os_log("query_restart anchor=%{public}@", log: hrLog, type: .info,
+           lastAnchor == nil ? "fresh" : "preserved")
+    if let q = query {
+      healthStore.stop(q)
+      query = nil
+    }
+    noSourceTimer?.invalidate()
+    noSourceTimer = nil
+    guard let hrType = HKQuantityType.quantityType(forIdentifier: .heartRate) else {
+      result(nil)
+      return
+    }
+    startQueryInternal(hrType: hrType, result: result)
   }
 
   // MARK: Helpers
