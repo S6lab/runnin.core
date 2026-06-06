@@ -44,10 +44,38 @@ class HealthSyncService {
 
   /// True quando o último sync rolou há mais de [maxAge]. Útil pra
   /// triggers idempotentes ("se a última sync ficou velha, refaz").
-  Future<bool> isStale({Duration maxAge = const Duration(hours: 6)}) async {
+  /// Default 30min: usuário ativo (que abre home algumas vezes por dia)
+  /// mantém summary fresco pra carga muscular/sono/recovery refletirem
+  /// dados do dia. Antes era 6h e a home aparecia desatualizada.
+  Future<bool> isStale({Duration maxAge = const Duration(minutes: 30)}) async {
     final last = await lastSyncedAt();
     if (last == null) return true;
     return DateTime.now().difference(last) > maxAge;
+  }
+
+  /// Idempotente — chama `requestAuthorization` com a lista completa de
+  /// [_types]. iOS HealthKit faz dedup automático: tipos já vistos pelo
+  /// user (granted ou denied) viram no-op; tipos NUNCA pedidos antes
+  /// (ex: SLEEP foi adicionado depois do user ter feito onboarding) abrem
+  /// o sheet. Sem isso o user só via "Batimentos" na lista de
+  /// Configurações → Saúde → Runnin e sleep/hrv/etc nunca chegavam.
+  ///
+  /// Chamada pela home no boot. Best-effort — erro silencioso (logs vão
+  /// pro Crashlytics via wearable_permission_error já existente).
+  Future<void> ensureAuthorizations() async {
+    if (!isSupported) return;
+    try {
+      final permissions = _types.map((_) => HealthDataAccess.READ).toList();
+      await _health.requestAuthorization(_types, permissions: permissions);
+      unawaited(_logPermissionsBreakdown(stage: 'after_ensure'));
+    } catch (e, st) {
+      analytics.recordError(
+        e,
+        st,
+        reason: 'wearable_ensure_authorizations_failed',
+        context: {'platform': _platformLabel},
+      );
+    }
   }
 
   String get _platformLabel {

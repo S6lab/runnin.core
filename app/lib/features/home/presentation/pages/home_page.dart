@@ -76,10 +76,11 @@ class _HomeView extends StatefulWidget {
   State<_HomeView> createState() => _HomeViewState();
 }
 
-class _HomeViewState extends State<_HomeView> {
+class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     // SEMPRE valida contra server, mesmo se cache local diz "onboarded=true".
     // Antes só checava quando cache != true → se Hive estava stale (ex: user
     // perdeu profile no server mas o flag local sobreviveu), home nunca
@@ -90,11 +91,36 @@ class _HomeViewState extends State<_HomeView> {
     // Audio route — escuta mudanças de fones/AirPods/BT no header da Home.
     // Idempotente; falha silenciosa em web.
     audioRouteService.init();
-    // Sleep + BPM histórico estavam zerados porque syncSince só rodava no
-    // onboarding. Refaz se a última sync ficou velha (> 6h). Fire-and-forget
-    // pra não bloquear o primeiro render — telemetria via analytics dá
-    // visibilidade do resultado.
-    _refreshHealthIfStale();
+    // Permissões + sync de saúde. ensureAuthorizations re-prompt iOS pra
+    // tipos novos (ex: SLEEP_ASLEEP) caso o user tenha feito onboarding
+    // antes desses tipos serem adicionados — sem isso, a lista de
+    // Configurações > Saúde > Runnin fica só com "Batimentos".
+    _bootstrapHealth();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    // Volta do background → checa staleness e ressincroniza se passou
+    // dos 30min. Permite captura "contínua" durante uso do app sem
+    // depender de background tasks nativas (mais complexo de configurar
+    // no iOS — BGTaskScheduler exige Info.plist + entitlement).
+    if (state == AppLifecycleState.resumed) {
+      _refreshHealthIfStale();
+    }
+  }
+
+  Future<void> _bootstrapHealth() async {
+    try {
+      await healthSyncService.ensureAuthorizations();
+      await _refreshHealthIfStale();
+    } catch (_) {/* best-effort, telemetria sai do service */}
   }
 
   Future<void> _refreshHealthIfStale() async {
