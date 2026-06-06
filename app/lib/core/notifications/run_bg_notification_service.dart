@@ -1,6 +1,7 @@
 import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/services.dart' show MethodChannel, PlatformException;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import 'package:runnin/core/logger/logger.dart';
@@ -34,11 +35,47 @@ class RunBgNotificationService {
   static const _channelDescription =
       'Notificação persistente exibida enquanto a corrida está rodando em background.';
 
+  /// Bridge pra ActivityKit no iOS 16.2+. Implementado em
+  /// `ios/Runner/LiveActivityPlugin.swift`. Em outros platforms o channel
+  /// existe mas `isSupported` retorna false e a gente cai pra notif local.
+  static const _liveActivityChannel = MethodChannel('runnin/live_activity');
+
   final _plugin = FlutterLocalNotificationsPlugin();
   bool _initialized = false;
   bool _permissionGranted = false;
+  /// Cache do isSupported da Live Activity — null antes da 1ª checagem.
+  /// Setado em [_isLiveActivitySupported] (uma vez por sessão) e usado pra
+  /// rotear update/cancel pro caminho certo.
+  bool? _liveActivitySupported;
+  /// True quando a Live Activity atual foi iniciada com sucesso. Garante
+  /// que cancel() chame end() no plugin e que updates subsequentes saibam
+  /// que tem activity rodando (não precisam re-pedir start).
+  bool _liveActivityStarted = false;
 
   bool get _isSupported => !kIsWeb && (Platform.isIOS || Platform.isAndroid);
+
+  /// Idempotente: chama plugin nativo no 1º call e cacheia. iOS < 16.2 e
+  /// não-iOS sempre retornam false. Falhas (plugin não registrado,
+  /// MissingPluginException) também caem em false silenciosamente.
+  Future<bool> _isLiveActivitySupported() async {
+    final cached = _liveActivitySupported;
+    if (cached != null) return cached;
+    if (kIsWeb || !Platform.isIOS) {
+      _liveActivitySupported = false;
+      return false;
+    }
+    try {
+      final res = await _liveActivityChannel.invokeMethod<bool>('isSupported');
+      _liveActivitySupported = res ?? false;
+    } on PlatformException catch (e, st) {
+      Logger.warn('live_activity.is_supported_err', context: {'err': '$e'});
+      Logger.error('live_activity.is_supported_err', e, st);
+      _liveActivitySupported = false;
+    } catch (_) {
+      _liveActivitySupported = false;
+    }
+    return _liveActivitySupported!;
+  }
 
   Future<void> init() async {
     if (_initialized || !_isSupported) return;
@@ -129,8 +166,36 @@ class RunBgNotificationService {
     required double distanceM,
     required int elapsedS,
     double? paceMinKm,
+    String? sessionType,
   }) async {
     if (!_isSupported) return;
+
+    // Caminho preferencial: Live Activity (iOS 16.2+). Renderiza card
+    // grande no lock screen + Dynamic Island com pace/km/tempo em mono
+    // bold. Quando suportado, NÃO disparamos a notif local (evita
+    // duplicação visual). Caller não precisa saber qual caminho rodou.
+    if (await _isLiveActivitySupported()) {
+      try {
+        final method = _liveActivityStarted ? 'update' : 'start';
+        final ok = await _liveActivityChannel.invokeMethod<bool>(method, {
+          'distanceM': distanceM,
+          'elapsedS': elapsedS,
+          'paceMinKm': ?paceMinKm,
+          'sessionType': ?sessionType,
+        });
+        if (ok == true) {
+          _liveActivityStarted = true;
+          return;
+        }
+        // start/update retornou false (Live Activities desabilitada em
+        // Settings, ou cap atingido) — segue pro fallback de notif local.
+        Logger.warn('live_activity.$method.returned_false');
+      } on PlatformException catch (e, st) {
+        Logger.error('live_activity.invoke_failed', e, st);
+        // fall through pro fallback
+      }
+    }
+
     if (!_initialized) await init();
     if (!_permissionGranted) {
       // Tenta pedir silenciosamente; iOS só mostra popup se ainda não viu.
@@ -192,6 +257,16 @@ class RunBgNotificationService {
   Future<void> cancel() async {
     if (!_isSupported) return;
     _lastPayload = null;
+    // Encerra a Live Activity primeiro (se rolou). dismissalPolicy
+    // .immediate no plugin nativo tira do lock screen na hora.
+    if (_liveActivityStarted) {
+      try {
+        await _liveActivityChannel.invokeMethod('end');
+      } catch (e, st) {
+        Logger.error('live_activity.end_failed', e, st);
+      }
+      _liveActivityStarted = false;
+    }
     try {
       await _plugin.cancel(_notifId);
     } catch (e, st) {

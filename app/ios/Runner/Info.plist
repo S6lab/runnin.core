@@ -22,12 +22,48 @@
 	<string>$(FLUTTER_BUILD_NAME)</string>
 	<key>CFBundleSignature</key>
 	<string>????</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.506126899076-vrt53k0kh9us2rq193jvspac0hhjnl44</string>
+			</array>
+		</dict>
+	</array>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
-	<key>LSRequiresIPhoneOS</key>
-	<true/>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>instagram-stories</string>
+		<string>whatsapp</string>
+		<string>twitter</string>
+		<string>fb</string>
+	</array>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>O runnin abre a câmera pra você fotografar exames médicos (laudos, ergometria, sangue) e enviar pra análise do coach.</string>
+	<key>NSHealthShareUsageDescription</key>
+	<string>O runnin lê seus dados de saúde (batimentos, sono, passos, peso) pra personalizar seu plano de treino e dar feedback do coach.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>O runnin pode salvar suas corridas no Apple Health pra centralizar seu histórico de atividades.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>O runnin continua rastreando sua corrida pelo GPS mesmo com o app em segundo plano ou a tela bloqueada, pra não perder distância nem ritmo.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>O runnin usa seu GPS pra medir distância, ritmo e traçado da sua corrida.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>O runnin usa o microfone pro Coach Live, onde você conversa por voz com o assistente AI durante e fora do treino.</string>
+	<key>NSMotionUsageDescription</key>
+	<string>O runnin usa os sensores de movimento pra contar passos e estimar sua atividade durante o treino.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>O runnin salva fotos das suas corridas (cards de share) na sua galeria pra você compartilhar quando quiser.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Usada para que você possa definir sua foto de perfil.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
@@ -51,6 +87,16 @@
 	</dict>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>location</string>
+		<string>audio</string>
+		<string>remote-notification</string>
+	</array>
+	<key>NSSupportsLiveActivities</key>
+	<true/>
+	<key>NSSupportsLiveActivitiesFrequentUpdates</key>
+	<true/>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>
@@ -67,48 +113,6 @@
 		<string>UIInterfaceOrientationPortraitUpsideDown</string>
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
-	</array>
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>O runnin usa seu GPS pra medir distância, ritmo e traçado da sua corrida.</string>
-	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>O runnin continua rastreando sua corrida pelo GPS mesmo com o app em segundo plano ou a tela bloqueada, pra não perder distância nem ritmo.</string>
-	<key>NSMotionUsageDescription</key>
-	<string>O runnin usa os sensores de movimento pra contar passos e estimar sua atividade durante o treino.</string>
-	<key>UIBackgroundModes</key>
-	<array>
-		<string>location</string>
-		<string>audio</string>
-		<string>remote-notification</string>
-	</array>
-	<key>NSHealthShareUsageDescription</key>
-	<string>O runnin lê seus dados de saúde (batimentos, sono, passos, peso) pra personalizar seu plano de treino e dar feedback do coach.</string>
-	<key>NSHealthUpdateUsageDescription</key>
-	<string>O runnin pode salvar suas corridas no Apple Health pra centralizar seu histórico de atividades.</string>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>O runnin usa o microfone pro Coach Live, onde você conversa por voz com o assistente AI durante e fora do treino.</string>
-	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Usada para que você possa definir sua foto de perfil.</string>
-	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>O runnin salva fotos das suas corridas (cards de share) na sua galeria pra você compartilhar quando quiser.</string>
-	<key>NSCameraUsageDescription</key>
-	<string>O runnin abre a câmera pra você fotografar exames médicos (laudos, ergometria, sangue) e enviar pra análise do coach.</string>
-	<key>LSApplicationQueriesSchemes</key>
-	<array>
-		<string>instagram-stories</string>
-		<string>whatsapp</string>
-		<string>twitter</string>
-		<string>fb</string>
-	</array>
-	<key>CFBundleURLTypes</key>
-	<array>
-		<dict>
-			<key>CFBundleTypeRole</key>
-			<string>Editor</string>
-			<key>CFBundleURLSchemes</key>
-			<array>
-				<string>com.googleusercontent.apps.506126899076-vrt53k0kh9us2rq193jvspac0hhjnl44</string>
-			</array>
-		</dict>
 	</array>
 </dict>
 </plist>

@@ -763,15 +763,16 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
     } else {
       emit(state.copyWith(elapsedS: newElapsed));
     }
-    // Atualiza a notificação persistente a 1Hz quando em bg pra ficar com
-    // cara de "ao vivo" (km · tempo · pace). Foreground não toca — o
-    // sistema mostraria badge desnecessário. Dedup interno em update()
-    // ignora payloads idênticos. ActivityKit (iOS) ficou de follow-up.
+    // Atualiza a notificação persistente / Live Activity a 1Hz quando
+    // em bg pra ficar "ao vivo" (km · tempo · pace). No iOS 16.2+ vai
+    // pra Live Activity (card grande no lock screen + Dynamic Island);
+    // demais platforms cai no flutter_local_notifications.
     if (_appInBackground) {
       unawaited(runBgNotificationService.update(
         distanceM: state.distanceM,
         elapsedS: newElapsed,
         paceMinKm: state.currentPaceMinKm,
+        sessionType: state.runType,
       ));
     }
   }
@@ -896,6 +897,7 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
           distanceM: newDistance,
           elapsedS: state.elapsedS,
           paceMinKm: smoothedPace,
+          sessionType: state.runType,
         ));
       }
       // Tempo do km que acabou de cruzar (não acumulado). Coach reporta
@@ -1450,6 +1452,7 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
           distanceM: state.distanceM,
           elapsedS: state.elapsedS,
           paceMinKm: state.currentPaceMinKm,
+          sessionType: state.runType,
         ));
       }
     } else if (lifecycle == AppLifecycleState.resumed && _appInBackground) {
