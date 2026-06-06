@@ -11,27 +11,27 @@ import WatchConnectivity
 /// Sem este app, o iPhone Runnin lê samples velhos (2-5min) durante a corrida.
 /// Quando user clica "Iniciar" no iPhone, ele manda `startWorkout` via
 /// WCSession — o `SessionDelegate` recebe e chama `WorkoutController.start()`.
+///
+/// Decisão: ativar WCSession no `init()` do struct App em vez de via
+/// `WKApplicationDelegateAdaptor`. WatchKit module deu "Unable to resolve
+/// module dependency" no Xcode 17 SDK (deployment target watchOS 10) — sem
+/// WKApplicationDelegate disponível. WCSession activation no init é
+/// idempotente e roda 1x no boot, mesma garantia funcional.
+@available(iOS 26.0, watchOS 10.0, *)
 @main
 struct RunninWatchApp: App {
-    @WKApplicationDelegateAdaptor(WatchAppDelegate.self) private var appDelegate
+    init() {
+        if WCSession.isSupported() {
+            let session = WCSession.default
+            session.delegate = SessionDelegate.shared
+            session.activate()
+        }
+    }
 
     var body: some Scene {
         WindowGroup {
             ContentView()
                 .environmentObject(WorkoutController.shared)
         }
-    }
-}
-
-/// AppDelegate é onde a `WCSession` é ativada no boot do Watch app — antes
-/// disso, mensagens enviadas pelo iPhone ficam encolhidas até o Watch app
-/// "acordar". Mantendo a ativação no delegate (e não na SwiftUI App init)
-/// garantimos que o lifecycle WatchConnectivity esteja gerenciado pelo runtime.
-class WatchAppDelegate: NSObject, WKApplicationDelegate {
-    func applicationDidFinishLaunching() {
-        guard WCSession.isSupported() else { return }
-        let session = WCSession.default
-        session.delegate = SessionDelegate.shared
-        session.activate()
     }
 }

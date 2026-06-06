@@ -3,6 +3,7 @@ import SwiftUI
 /// UI minimal do Watch app — só pra dar feedback visual que o workout está
 /// rodando. O user não interage aqui (start/stop vem do iPhone), o objetivo
 /// é apenas confirmar visualmente que o Watch está coletando BPM.
+@available(iOS 26.0, watchOS 10.0, *)
 struct ContentView: View {
     @EnvironmentObject var controller: WorkoutController
 
@@ -39,6 +40,7 @@ struct ContentView: View {
     }
 }
 
+@available(iOS 26.0, watchOS 10.0, *)
 #Preview {
     ContentView()
         .environmentObject(WorkoutController.shared)

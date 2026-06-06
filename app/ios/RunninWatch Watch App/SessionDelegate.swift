@@ -29,6 +29,16 @@ class SessionDelegate: NSObject, WCSessionDelegate {
                activationState.rawValue, error?.localizedDescription ?? "nil")
     }
 
+    // Métodos required em iOS — implementados pra resolver erro de conformance
+    // mesmo em build watchOS (Xcode 17 SDK aplica check cross-platform).
+    // Em watchOS NUNCA são chamados; em iOS recriam o session.
+    #if os(iOS)
+    func sessionDidBecomeInactive(_ session: WCSession) {}
+    func sessionDidDeactivate(_ session: WCSession) {
+        WCSession.default.activate()
+    }
+    #endif
+
     /// `sendMessage` no iPhone com replyHandler chega aqui. Mantemos a logica
     /// idempotente — chamar `start()` duas vezes seguido é seguro.
     func session(_ session: WCSession,
@@ -38,10 +48,14 @@ class SessionDelegate: NSObject, WCSessionDelegate {
         os_log("recv action=%{public}@", log: wsLog, type: .info, action)
         switch action {
         case "startWorkout":
-            WorkoutController.shared.start()
+            if #available(iOS 26.0, watchOS 10.0, *) {
+                WorkoutController.shared.start()
+            }
             replyHandler(["ok": true])
         case "stopWorkout":
-            WorkoutController.shared.stop()
+            if #available(iOS 26.0, watchOS 10.0, *) {
+                WorkoutController.shared.stop()
+            }
             replyHandler(["ok": true])
         case "ping":
             replyHandler(["pong": true])
@@ -58,9 +72,13 @@ class SessionDelegate: NSObject, WCSessionDelegate {
         os_log("recv.userInfo action=%{public}@", log: wsLog, type: .info, action)
         switch action {
         case "startWorkout":
-            WorkoutController.shared.start()
+            if #available(iOS 26.0, watchOS 10.0, *) {
+                WorkoutController.shared.start()
+            }
         case "stopWorkout":
-            WorkoutController.shared.stop()
+            if #available(iOS 26.0, watchOS 10.0, *) {
+                WorkoutController.shared.stop()
+            }
         default:
             break
         }

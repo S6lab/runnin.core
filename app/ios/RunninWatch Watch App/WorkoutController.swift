@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import HealthKit
 import OSLog
@@ -14,6 +15,7 @@ private let wcLog = OSLog(subsystem: "ai.runnin.workout", category: "workout-con
 ///
 /// Idempotência: chamadas redundantes a `start()` quando já há session ativa
 /// viram no-op silencioso (mesma garantia que o equivalente iPhone-side).
+@available(iOS 26.0, watchOS 10.0, *)
 class WorkoutController: NSObject, ObservableObject {
     static let shared = WorkoutController()
 
@@ -68,6 +70,11 @@ class WorkoutController: NSObject, ObservableObject {
     }
 
     private func startSessionInternal() {
+        // Gate de availability: Apple só expôs HKLiveWorkoutDataSource em
+        // iOS 26 (Xcode 17 SDK). No watchOS sempre existiu, mas o Swift
+        // compiler valida cross-platform. Como o app é watchOS-only, na
+        // prática esse gate sempre passa em runtime.
+        guard #available(iOS 26.0, watchOS 10.0, *) else { return }
         let config = HKWorkoutConfiguration()
         config.activityType = .running
         config.locationType = .outdoor
@@ -102,6 +109,7 @@ class WorkoutController: NSObject, ObservableObject {
     }
 
     func stop() {
+        guard #available(iOS 26.0, watchOS 10.0, *) else { return }
         guard let s = session else {
             os_log("stop.idempotent skip=no_session", log: wcLog, type: .info)
             return
@@ -121,6 +129,7 @@ class WorkoutController: NSObject, ObservableObject {
     }
 }
 
+@available(iOS 26.0, watchOS 10.0, *)
 extension WorkoutController: HKWorkoutSessionDelegate {
     func workoutSession(_ workoutSession: HKWorkoutSession,
                         didChangeTo toState: HKWorkoutSessionState,
@@ -141,6 +150,7 @@ extension WorkoutController: HKWorkoutSessionDelegate {
     }
 }
 
+@available(iOS 26.0, watchOS 10.0, *)
 extension WorkoutController: HKLiveWorkoutBuilderDelegate {
     func workoutBuilderDidCollectEvent(_ workoutBuilder: HKLiveWorkoutBuilder) {
         // No-op — sem eventos próprios pra registrar.
