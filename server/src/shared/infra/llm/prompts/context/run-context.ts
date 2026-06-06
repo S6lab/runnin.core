@@ -88,6 +88,15 @@ export function buildEventPrompt(ctx: RunContextInput): string {
     }
     case 'motivation':
       return `Mensagem de motivação no meio da corrida — nenhum alerta específico, apenas mantenha o corredor engajado. 1 frase curta, foco na constância.\n\n${base}`;
+    case 'check_in': {
+      // Regra canônica: coach DEVE estar presente a cada 500m ou 4min,
+      // mesmo quando tudo segue o plano. Diferente de motivation (motivacional
+      // genérica), check_in cita os números atuais (km/pace/tempo) pra mostrar
+      // ao user que o coach está acompanhando ativamente.
+      const curPace = formatPaceMmSs(ctx.currentPaceMinKm) ?? 'X:XX';
+      const km = typeof ctx.distanceM === 'number' ? (ctx.distanceM / 1000).toFixed(2) : '?';
+      return `Check-in de presença do coach. Em 1 frase curta (10-15 palavras), confirma que está acompanhando${ctx.athleteName ? ' ' + ctx.athleteName : ''} citando os números atuais ("você está em ${km}km, pace ${curPace}/km") e UMA observação rápida sobre o que está vendo (constância, ritmo estável, respiração — escolha 1 baseado no contexto). Sem alerta nem instrução — só presença. Não soe robótico: varia abertura ("Acompanhando", "${ctx.athleteName ? ctx.athleteName + ', tudo certo aqui' : 'Tudo certo'}", "Passando pra dizer", etc.).\n\n${base}`;
+    }
     case 'start':
       return `Corredor iniciando treino. Dê uma frase de largada com foco claro.\n\n${base}`;
     case 'finish':

@@ -1035,43 +1035,20 @@ class _StatsOverlay extends StatelessWidget {
       return;
     }
 
-    final choice = await showDialog<_ZeroDistanceChoice>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('SALVAR CORRIDA SEM DISTÂNCIA?'),
-        content: const Text(
-          'Você iniciou a corrida, mas o GPS não registrou deslocamento relevante. Salvar mesmo assim pode interferir nas métricas de pace, volume e progresso.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () =>
-                Navigator.of(dialogContext).pop(_ZeroDistanceChoice.discard),
-            child: const Text('DESCARTAR'),
-          ),
-          ElevatedButton(
-            onPressed: () =>
-                Navigator.of(dialogContext).pop(_ZeroDistanceChoice.save),
-            child: const Text('SALVAR MESMO'),
-          ),
-        ],
+    // Sem deslocamento → descarta direto, só informa. Antes abria dialog
+    // perguntando "salvar mesmo?" — mas se não tem distância, salvar
+    // suja os agregados (vide stats com pace 23:06/km) e o user nunca
+    // ganha nada com isso. Decisão automática + snackbar.
+    context.read<RunBloc>().add(AbandonRun());
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Corrida descartada — sem distância registrada.'),
+        duration: Duration(seconds: 3),
       ),
     );
-
-    if (!context.mounted || choice == null) return;
-
-    switch (choice) {
-      case _ZeroDistanceChoice.save:
-        context.read<RunBloc>().add(CompleteRun());
-        break;
-      case _ZeroDistanceChoice.discard:
-        context.read<RunBloc>().add(AbandonRun());
-        context.go('/home');
-        break;
-    }
+    context.go('/home');
   }
 }
-
-enum _ZeroDistanceChoice { save, discard }
 
 class _StatChip extends StatelessWidget {
   final String label, value, unit;

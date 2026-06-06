@@ -317,6 +317,15 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
   // isso, pace_alert disparava em CADA poll GPS (5s) quando user fora
   // do range — inundava o coach. 60s entre cues iguais é razoável.
   final Map<String, int> _lastCueAt = {};
+
+  // Regra canônica de presença do coach: ele DEVE falar com o user
+  // a cada 500m OU a cada 4min, o que vier primeiro. Trackers abaixo
+  // são atualizados após qualquer fala do coach (independente do
+  // evento) — assim qualquer cue zera os dois contadores.
+  int _lastCoachSpeechAtMs = 0;
+  double _lastCoachSpeechDistanceM = 0;
+  static const _checkInDistanceM = 500.0;
+  static const _checkInIdleSeconds = 240; // 4 min
   Timer? _motivationTimer;
   /// Cue `km_analysis` agendado pra ~10s depois de cada km_reached.
   /// Cancelado se outro km cruza antes (rare) OU se user pausa/abandona —
@@ -869,6 +878,21 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
         splits: updatedSplits,
       ),
     );
+
+    // Check-in canônico por distância: a cada 500m sem o coach falar,
+    // dispara um cue de presença. Junto com o check_in por tempo (4min,
+    // vide _startMotivationTimer), garante que o coach sempre acompanha
+    // o user mesmo quando tudo está conforme o plano.
+    if (state.status == RunStatus.active &&
+        _lastCoachSpeechAtMs > 0 &&
+        newDistance - _lastCoachSpeechDistanceM >= _checkInDistanceM) {
+      unawaited(_requestCoachCue(
+        event: 'check_in',
+        distanceM: newDistance,
+        elapsedS: state.elapsedS,
+        currentPaceMinKm: smoothedPace,
+      ));
+    }
 
     // Goal reached: a sessão planejada tem distanceKm > 0 e o user acabou
     // de cruzar esse alvo. Cue avisa "sua sessão termina aqui — se quiser
@@ -1544,29 +1568,31 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
     return elapsed >= seconds * 1000;
   }
 
-  /// Inicia timer de motivação: a cada 5min, se nenhum outro cue rolou
-  /// nos últimos 5min, dispara um cue motivacional. Mantém o coach
-  /// presente em corridas longas sem outros gatilhos.
+  /// Inicia timer da regra canônica POR TEMPO: a cada 4min sem o coach
+  /// falar, dispara um check_in. Junto com o trigger POR DISTÂNCIA
+  /// (500m, vide _onGpsUpdate), garante presença contínua do coach mesmo
+  /// quando a sessão segue o plano sem alertas.
+  ///
+  /// Mantém o nome _startMotivationTimer e o gate _alertPrefs['motivation']
+  /// (toggle do user) por compatibilidade — mas a janela mudou de 5min
+  /// fixo (motivation legado) pra 4min canônico (check_in).
   void _startMotivationTimer() {
     _motivationTimer?.cancel();
     if (_alertPrefs['motivation'] != true) return;
-    // Tick a cada 60s — decisão de disparar é feita em runtime baseada em
-    // "stationary" detection. Antes era Timer.periodic(5min) que perdia o
-    // primeiro ciclo se user estava na tela mas nada mais acontecia.
-    _motivationTimer = Timer.periodic(const Duration(seconds: 60), (_) {
+    _motivationTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       if (state.status != RunStatus.active || isClosed) return;
+      if (_lastCoachSpeechAtMs == 0) return; // saudação inicial ainda não saiu
       final now = DateTime.now().millisecondsSinceEpoch;
-      final lastAny = _lastCueAt.values.fold<int>(0, (a, b) => a > b ? a : b);
-      final elapsedSinceLastCue = now - lastAny;
-      final isStationary = _isStationary();
-      // Web stationary (typical em teste no desktop): 3min sem cue → motiva.
-      // Native ou web em movimento: mantém 5min legado.
-      final cooldownMs = (kIsWeb && isStationary) ? 3 * 60 * 1000 : 5 * 60 * 1000;
+      final elapsedS = (now - _lastCoachSpeechAtMs) / 1000;
       // ignore: avoid_print
-      print('coach.motivation.tick stationary=$isStationary elapsedSinceLastCue=${(elapsedSinceLastCue / 1000).round()}s cooldown=${cooldownMs ~/ 1000}s');
-      if (elapsedSinceLastCue < cooldownMs) return;
-      unawaited(_requestCoachCue(event: 'motivation'));
-      _lastCueAt['motivation'] = now;
+      print('coach.checkin.tick elapsedSinceLastSpeech=${elapsedS.round()}s threshold=${_checkInIdleSeconds}s');
+      if (elapsedS < _checkInIdleSeconds) return;
+      unawaited(_requestCoachCue(
+        event: 'check_in',
+        distanceM: state.distanceM,
+        elapsedS: state.elapsedS,
+        currentPaceMinKm: state.currentPaceMinKm,
+      ));
     });
   }
 
@@ -1587,26 +1613,6 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
       if (state.status != RunStatus.active) return;
       _maybeRotateLiveSession(trigger: 'safety_age_check');
     });
-  }
-
-  /// True se os últimos pontos GPS variam menos de 20m nos últimos 60s.
-  /// Web (WiFi triangulation) tipicamente fica jitterando ±5-10m sem
-  /// movimento real — esse threshold filtra ruído mas captura caminhada.
-  /// Sem pontos suficientes: assume stationary (conservador pra liberar
-  /// motivation cedo no início).
-  bool _isStationary() {
-    if (state.points.length < 2) return true;
-    final now = DateTime.now().millisecondsSinceEpoch;
-    final cutoff = now - 60 * 1000;
-    final recent = state.points.where((p) => p.ts >= cutoff).toList();
-    if (recent.length < 2) return true;
-    final first = recent.first;
-    double maxDist = 0;
-    for (final p in recent) {
-      final d = Geolocator.distanceBetween(first.lat, first.lng, p.lat, p.lng);
-      if (d > maxDist) maxDist = d;
-    }
-    return maxDist < 20.0;
   }
 
   /// Provoca UMA fala curta do coach na sessão Live. Toda a lógica de
@@ -1680,6 +1686,11 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
       elevationGainM: elevationGainM,
       kmAvgBpm: kmAvgBpm,
     ));
+    // Atualiza trackers da regra canônica (500m / 4min): qualquer fala do
+    // coach reseta os dois. Mantém a cadência prometida ao user mesmo quando
+    // a fala foi de outro evento (km_reached, pace_alert, etc.).
+    _lastCoachSpeechAtMs = DateTime.now().millisecondsSinceEpoch;
+    _lastCoachSpeechDistanceM = state.distanceM;
   }
 
   /// Em transições naturais (km_reached, segment_start, segment_end) avalia
@@ -1764,6 +1775,8 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
         return 'Coach, terminei a fase atual do roteiro. Como fui? $totals';
       case 'motivation':
         return 'Coach, como estou indo? $totals Me dá um gás pra manter a constância.';
+      case 'check_in':
+        return 'Coach, check-in: $totals Me acompanha — diz como estou indo no pace, na respiração, na constância. Mesmo se tudo OK, queremos te ouvir.';
       case 'high_bpm':
         return 'Coach, meu BPM tá em $kmAvgBpm — acima do meu limite confortável. Devo segurar o ritmo?';
       case 'no_movement':
