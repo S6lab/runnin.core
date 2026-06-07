@@ -16,6 +16,18 @@ const PERIOD_DAYS: Record<StatsPeriod, number> = {
   threeMonths: 90,
 };
 
+/**
+ * Corridas curtas (<30s) ou sem deslocamento (<100m) são ruído (user tocou
+ * INICIAR e fechou, ou GPS perdeu sinal). Filtra antes de agregar pra não
+ * sujar pace trend / averages / deltas da Home > Performance. Espelhado
+ * em get-stats-breakdown.use-case.ts.
+ */
+const MIN_VALID_DURATION_S = 30;
+const MIN_VALID_DISTANCE_M = 100;
+const isValidRun = (r: Run): boolean =>
+  (r.durationS ?? 0) >= MIN_VALID_DURATION_S &&
+  (r.distanceM ?? 0) >= MIN_VALID_DISTANCE_M;
+
 export class GetStatsAggregateUseCase {
   constructor(private readonly runs: RunRepository) {}
 
@@ -25,10 +37,12 @@ export class GetStatsAggregateUseCase {
     const from = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
     const prevFrom = new Date(from.getTime() - days * 24 * 60 * 60 * 1000);
 
-    const [current, previous] = await Promise.all([
+    const [currentRaw, previousRaw] = await Promise.all([
       this.runs.findByDateRange(userId, from, now),
       this.runs.findByDateRange(userId, prevFrom, from),
     ]);
+    const current = currentRaw.filter(isValidRun);
+    const previous = previousRaw.filter(isValidRun);
 
     return {
       totals: this.totals(current),

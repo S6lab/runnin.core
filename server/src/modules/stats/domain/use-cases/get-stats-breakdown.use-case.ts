@@ -16,6 +16,20 @@ interface Bucket {
   end: Date; // exclusive
 }
 
+/**
+ * Corridas curtas (<30s) ou sem deslocamento (<100m) são ignoradas pelas
+ * estatísticas. User abriu a tela de corrida e fechou rápido sem mover,
+ * testou o botão de iniciar, ou perdeu sinal de GPS — esse "ruído"
+ * distorcia o pace médio do período (pace de uma corrida de 5s com 2m é
+ * absurdo) e inflava o total de corridas em treino/dados.
+ *
+ * Os runs com <30s/<100m continuam armazenados; só ficam fora dos agregados
+ * mostrados em /stats/breakdown (Treino > Dados) e /stats/aggregate
+ * (Home > Performance). Espelhado em get-stats-aggregate.use-case.ts.
+ */
+const MIN_VALID_DURATION_S = 30;
+const MIN_VALID_DISTANCE_M = 100;
+
 // Curva de níveis — espelha app/lib/core/gamification/levels.dart.
 const LEVELS: { threshold: number; name: string }[] = [
   { threshold: 0, name: 'Iniciante' },
@@ -42,13 +56,22 @@ export class GetStatsBreakdownUseCase {
     const windowStart = buckets[0]!.start;
     const windowEnd = now;
 
-    const [periodRuns, allRuns, plans] = await Promise.all([
+    const [periodRunsRaw, allRuns, plans] = await Promise.all([
       this.runs.findByDateRange(userId, windowStart, windowEnd),
       this.runs.findByUser(userId, 1000),
       this.plans.listByUser(userId),
     ]);
 
-    const completedLifetime = allRuns.runs.filter((r) => r.status === 'completed');
+    // Filtra ruído: corridas curtas demais ou sem deslocamento sujam o pace
+    // médio e inflam o contador de corridas. Aplicado em períodos E lifetime
+    // — XP/level/streak também ignoram esses runs.
+    const isValidRun = (r: Run): boolean =>
+      (r.durationS ?? 0) >= MIN_VALID_DURATION_S &&
+      (r.distanceM ?? 0) >= MIN_VALID_DISTANCE_M;
+    const periodRuns = periodRunsRaw.filter(isValidRun);
+    const completedLifetime = allRuns.runs.filter(
+      (r) => r.status === 'completed' && isValidRun(r),
+    );
 
     const stats = this.buildStats(periodRuns, completedLifetime);
     const planned = expandPlans(plans);
