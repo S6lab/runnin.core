@@ -23,8 +23,14 @@ class FigmaZoneCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Antes era altura FIXA de 58.937 do Figma — fontes do Google Fonts
+    // (jetBrainsMono) com line-height 19.5/13 + 16.5/11 + paddings estouravam
+    // por ~2-3pt em todas as zonas, e Z3 estourava em 167pt (LinearProgress
+    // não respeitava constraint vertical sem altura clamp). Usar
+    // constraints.minHeight deixa crescer naturalmente quando necessário e
+    // mantém o visual baseline do Figma quando o conteúdo cabe.
     return Container(
-      height: 58.937,
+      constraints: const BoxConstraints(minHeight: 58.937),
       padding: const EdgeInsets.symmetric(horizontal: 13.718, vertical: 10),
       decoration: BoxDecoration(
         color: FigmaColors.surfaceCard,
@@ -65,7 +71,12 @@ class FigmaZoneCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '$bpmRange bpm',
+                  // Defensive: alguns call sites já passam "X-Y bpm" no
+                  // bpmRange (historico) e outros só "X-Y" (perfil/saude).
+                  // Detecta sufixo "bpm" pra não duplicar.
+                  bpmRange.trim().toLowerCase().endsWith('bpm')
+                      ? bpmRange
+                      : '$bpmRange bpm',
                   style: GoogleFonts.jetBrainsMono(
                     fontSize: 11,
                     height: 16.5 / 11,

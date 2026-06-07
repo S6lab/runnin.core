@@ -497,6 +497,9 @@ class _DataView extends StatelessWidget {
             subtitle: stats.zoneDistribution.isNotEmpty
                 ? 'Distribuição de tempo nas zonas'
                 : 'Referência — sem BPM nas corridas deste período',
+            // null = altura natural; 5 zone cards + distribution bar não
+            // cabem no default 160 (overflow 177px reportado pelo user).
+            height: null,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [

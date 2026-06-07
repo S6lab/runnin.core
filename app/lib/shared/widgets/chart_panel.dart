@@ -8,7 +8,11 @@ class ChartPanel extends StatelessWidget {
   final String title;
   final String? subtitle;
   final Widget child;
-  final double height;
+  // `null` = deixa o child crescer naturalmente (usado pra ZONAS CARDÍACAS
+  // onde os 5 FigmaZoneCard somam ~340pt). Default 160 mantém o look
+  // baseline dos charts (TwoLineChart, SimpleBarChart) que ocupam altura
+  // fixa do Figma.
+  final double? height;
 
   const ChartPanel({
     super.key,
@@ -38,7 +42,7 @@ class ChartPanel extends StatelessWidget {
             Text(subtitle!, style: type.bodySm),
           ],
           const SizedBox(height: 16),
-          SizedBox(height: height, child: child),
+          if (height != null) SizedBox(height: height, child: child) else child,
         ],
       ),
     );

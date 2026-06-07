@@ -40,6 +40,15 @@ class HealthSyncService {
     HealthDataType.WEIGHT,
     HealthDataType.ACTIVE_ENERGY_BURNED,
     HealthDataType.RESPIRATORY_RATE,
+    // Build 33 — bateria nova de permissões pedidas no perfil/saúde:
+    // ECG, pressão arterial (sys/dia), temperatura corporal, energia em
+    // repouso. Bday/altura ficaram fora (characteristics, API diferente —
+    // user preenche manualmente no perfil).
+    HealthDataType.BASAL_ENERGY_BURNED,
+    HealthDataType.BLOOD_PRESSURE_SYSTOLIC,
+    HealthDataType.BLOOD_PRESSURE_DIASTOLIC,
+    HealthDataType.BODY_TEMPERATURE,
+    HealthDataType.ELECTROCARDIOGRAM,
   ];
 
   bool get isSupported => !kIsWeb && (Platform.isIOS || Platform.isAndroid);
@@ -455,6 +464,11 @@ class HealthSyncService {
     HealthDataType.WEIGHT: 'weight',
     HealthDataType.ACTIVE_ENERGY_BURNED: 'calories_burned',
     HealthDataType.RESPIRATORY_RATE: 'respiratory_rate',
+    HealthDataType.BASAL_ENERGY_BURNED: 'calories_basal',
+    HealthDataType.BLOOD_PRESSURE_SYSTOLIC: 'bp_systolic',
+    HealthDataType.BLOOD_PRESSURE_DIASTOLIC: 'bp_diastolic',
+    HealthDataType.BODY_TEMPERATURE: 'body_temperature',
+    HealthDataType.ELECTROCARDIOGRAM: 'ecg',
   };
 
   static const _unitMap = <HealthDataType, String>{
@@ -470,6 +484,11 @@ class HealthSyncService {
     HealthDataType.WEIGHT: 'kg',
     HealthDataType.ACTIVE_ENERGY_BURNED: 'kcal',
     HealthDataType.RESPIRATORY_RATE: 'rpm',
+    HealthDataType.BASAL_ENERGY_BURNED: 'kcal',
+    HealthDataType.BLOOD_PRESSURE_SYSTOLIC: 'mmHg',
+    HealthDataType.BLOOD_PRESSURE_DIASTOLIC: 'mmHg',
+    HealthDataType.BODY_TEMPERATURE: 'celsius',
+    HealthDataType.ELECTROCARDIOGRAM: 'classification',
   };
 
   Future<DateTime?> _readLastSync() async {

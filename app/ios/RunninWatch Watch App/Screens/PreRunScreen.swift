@@ -16,15 +16,11 @@ struct PreRunScreen: View {
                 HStack {
                     RunninLogo()
                     Spacer()
-                    Text("1/5")
-                        .font(.system(size: 9, weight: .medium, design: .monospaced))
-                        .tracking(0.8)
-                        .foregroundStyle(.white.opacity(0.45))
                 }
                 .padding(.top, 4)
 
                 Text("ESCOLHA O TIPO")
-                    .font(.system(size: 9, weight: .medium, design: .monospaced))
+                    .font(state.scaledFont(size: 9, weight: .medium))
                     .tracking(1.5)
                     .foregroundStyle(.white.opacity(0.5))
                     .padding(.top, 4)
@@ -67,20 +63,20 @@ struct PreRunScreen: View {
         Button(action: action) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
-                    .font(.system(size: 12, weight: .heavy, design: .monospaced))
+                    .font(state.scaledFont(size: 12, weight: .heavy))
                     .tracking(1.0)
                     .foregroundStyle(accent ? Color.black : Color.white)
                 Text(subtitle)
-                    .font(.system(size: 9, weight: .medium, design: .monospaced))
+                    .font(state.scaledFont(size: 9, weight: .medium))
                     .foregroundStyle(accent ? Color.black.opacity(0.7) : Color.white.opacity(0.5))
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.vertical, 8)
             .padding(.horizontal, 10)
-            .background(accent ? Color.cyan : Color.white.opacity(0.08))
+            .background(accent ? state.accentColor : Color.white.opacity(0.08))
             .overlay(
                 RoundedRectangle(cornerRadius: 6)
-                    .stroke(accent ? Color.clear : Color.cyan.opacity(0.3), lineWidth: 1)
+                    .stroke(accent ? Color.clear : state.accentColor.opacity(0.3), lineWidth: 1)
             )
             .clipShape(RoundedRectangle(cornerRadius: 6))
         }

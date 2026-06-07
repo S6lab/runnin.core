@@ -38,8 +38,13 @@ private let laLog = OSLog(subsystem: "ai.runnin.live_activity", category: "lifec
   public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
     switch call.method {
     case "isSupported":
+      // Antes retornava `areActivitiesEnabled` que pode ser false em estado
+      // "não determinado" (user nunca prompted). Isso fazia o Dart pular o
+      // start e cair direto pra notif local pequena — usuário no TF não
+      // chegava a ver o prompt do iOS. Agora retornamos true se iOS >= 16.2
+      // e o start tenta de fato, permitindo iOS exibir o prompt nativo.
       if #available(iOS 16.2, *) {
-        result(ActivityAuthorizationInfo().areActivitiesEnabled)
+        result(true)
       } else {
         result(false)
       }
@@ -66,6 +71,17 @@ private let laLog = OSLog(subsystem: "ai.runnin.live_activity", category: "lifec
       } else {
         result(false)
       }
+    case "primePermission":
+      // Cria uma Activity dummy e encerra na mesma — força o iOS exibir o
+      // prompt "Permitir Atividades ao Vivo?" no lock screen. Usado pelo
+      // Dart no boot (1x por instalação) pra disparar o prompt de
+      // permissão sem precisar esperar a primeira corrida. Idempotente —
+      // chamadas subsequentes só retornam o estado atual.
+      if #available(iOS 16.2, *) {
+        handlePrimePermission(result: result)
+      } else {
+        result(["ok": false, "reason": "ios_too_old"])
+      }
     case "update":
       if #available(iOS 16.2, *) {
         handleUpdate(call: call, result: result)
@@ -83,16 +99,54 @@ private let laLog = OSLog(subsystem: "ai.runnin.live_activity", category: "lifec
     }
   }
 
+  /// Dispara o prompt nativo do iOS "Permitir Atividades ao Vivo?" criando
+  /// uma Activity dummy de 1.5s e encerrando. Necessário porque iOS NÃO
+  /// expõe uma API `requestAuthorization` pra Live Activities (diferente
+  /// de Health/Notifications/Location). O prompt só dispara via call real
+  /// de `Activity.request`. Chamamos no boot uma vez por instalação.
+  @available(iOS 16.2, *)
+  private func handlePrimePermission(result: @escaping FlutterResult) {
+    let enabled = ActivityAuthorizationInfo().areActivitiesEnabled
+    os_log("prime.attempt enabled=%d", log: laLog, type: .info, enabled ? 1 : 0)
+    let attributes = RunActivityAttributes(sessionType: "Preparando")
+    let content = RunActivityAttributes.ContentState(
+      distanceKm: 0,
+      elapsedSeconds: 0,
+      paceMinKmRaw: nil
+    )
+    do {
+      let activity = try Activity<RunActivityAttributes>.request(
+        attributes: attributes,
+        content: ActivityContent(state: content, staleDate: nil)
+      )
+      os_log("prime.activity_created id=%{public}@", log: laLog, type: .info, activity.id)
+      // Encerra após 1.5s — tempo suficiente do iOS rolar o prompt na lock
+      // screen. Mais curto pode cancelar antes do prompt aparecer.
+      Task {
+        try? await Task.sleep(nanoseconds: 1_500_000_000)
+        await activity.end(activity.content, dismissalPolicy: .immediate)
+        os_log("prime.activity_ended", log: laLog, type: .info)
+      }
+      result(["ok": true, "primed": true])
+    } catch {
+      // Lança quando user já tinha negado explicitamente, ou iOS bloqueou.
+      os_log("prime.failed err=%{public}@", log: laLog, type: .error,
+             error.localizedDescription)
+      result(["ok": false, "reason": "request_threw",
+              "error": error.localizedDescription])
+    }
+  }
+
   @available(iOS 16.2, *)
   private func handleStart(call: FlutterMethodCall, result: @escaping FlutterResult) {
-    guard ActivityAuthorizationInfo().areActivitiesEnabled else {
-      os_log("start.refused reason=activities_disabled", log: laLog, type: .error)
-      // Payload estruturado em vez de só `false`: permite o Dart distinguir
-      // "user desligou Activities" de "request lançou exception" e reagir
-      // (mostrar banner orientativo na Active Run page).
-      result(["ok": false, "reason": "activities_disabled"])
-      return
-    }
+    let enabled = ActivityAuthorizationInfo().areActivitiesEnabled
+    os_log("start.attempt enabled=%d", log: laLog, type: .info, enabled ? 1 : 0)
+    // Removido o `guard areActivitiesEnabled else { return }` original —
+    // em casos do iOS device real (TF), areActivitiesEnabled pode reportar
+    // false mesmo quando o user nunca foi prompted (estado "not_determined").
+    // Deixar Activity.request tentar: iOS exibe o prompt nativo na lock
+    // screen e propaga a decisão. Se realmente proibido, o request lança e
+    // caímos no catch com reason=request_threw.
     guard let args = call.arguments as? [String: Any] else {
       result(FlutterError(code: "bad_args", message: "args missing", details: nil))
       return

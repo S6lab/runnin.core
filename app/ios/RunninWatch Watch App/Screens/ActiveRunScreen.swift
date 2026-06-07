@@ -1,121 +1,298 @@
 import SwiftUI
 import WatchConnectivity
+import OSLog
+
+private let arsLog = OSLog(subsystem: "ai.runnin.workout", category: "active-screen")
 
 /// Jornada 2 — corrida ativa no Watch. Espelha o RunState do iPhone que vem
 /// via WCSession applicationContext (1Hz).
 ///
-/// Layout (estrutura split — ScrollView só pros stats, botões FIXOS no
-/// rodapé pra não competir com pan vertical do ScrollView quando user faz
-/// slide horizontal nos SlideToConfirmButton):
-///   - Topo (scrollable): Header + status PAUSADO + primários + secundários
-///   - Rodapé (fixo): SlideToConfirmButton PAUSAR/RETOMAR + PARAR
+/// Layout TabView paginado (swipe horizontal entre páginas, SEM indicador):
+///   - Pág 1: TODOS os stats (TEMPO, DIST, PACE, BPM, ELEV, CAL) — CABE
+///     INTEIRA sem scroll. Compacto pra viewport 46mm.
+///   - Pág 2: SOMENTE os 2 slide-buttons (PAUSAR + PARAR) — grandes
 struct ActiveRunScreen: View {
     @EnvironmentObject var state: WatchRunState
+    @State private var selectedPage = 0
 
     var body: some View {
-        VStack(spacing: 6) {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack {
-                        RunninLogo()
-                        Spacer()
-                        Text(state.runType.uppercased())
-                            .font(.system(size: 8, weight: .medium, design: .monospaced))
-                            .tracking(0.8)
-                            .foregroundStyle(.white.opacity(0.5))
-                    }
+        TabView(selection: $selectedPage) {
+            statsPage.tag(0)
+            controlsPage.tag(1)
+            splitsPage.tag(2)
+        }
+        // `.always` mantém as bolinhas (page indicator) sempre visíveis no
+        // rodapé. User pediu pra ser óbvio que há mais páginas além da que
+        // está na frente. `.automatic` fade depois de um tempo — preferi
+        // `.always` por ser mais didático no Watch.
+        .tabViewStyle(.page(indexDisplayMode: .always))
+    }
 
-                    if state.status == .paused {
-                        HStack(spacing: 4) {
-                            Circle().fill(Color.yellow).frame(width: 6, height: 6)
-                            Text("PAUSADO")
-                                .font(.system(size: 9, weight: .bold, design: .monospaced))
-                                .tracking(1.0)
-                                .foregroundStyle(.yellow)
+    // MARK: - Pages
+
+    private var statsPage: some View {
+        // VStack normal SEM ScrollView — força tudo a caber em uma tela.
+        // Spacings curtos + fonts comprimidas pro viewport 46mm (~186pt útil).
+        let isPaused = state.status == .paused
+        return VStack(alignment: .leading, spacing: 4) {
+            header
+            if isPaused {
+                pausedBanner
+            }
+            // Stats ficam dimmed quando pausado pra reforçar "tudo congelado".
+            VStack(alignment: .leading, spacing: 4) {
+                bigStat(label: "TEMPO", value: state.formattedElapsed, size: 30,
+                        valueColor: isPaused ? .yellow : .white)
+                HStack(spacing: 8) {
+                    // DIST=secondary, PACE=primary — mesma hierarquia
+                    // cromática do iPhone (active_run_page).
+                    mediumStat(label: "DIST", value: state.formattedDistance,
+                               unit: "km", valueColor: state.secondaryColor)
+                    mediumStat(label: "PACE", value: state.formattedPace,
+                               unit: "/km", valueColor: state.accentColor)
+                }
+                HStack(spacing: 8) {
+                    mediumStat(label: "BPM",
+                               value: state.bpm > 0 ? "\(state.bpm)" : "—",
+                               unit: nil, valueColor: state.secondaryColor)
+                    mediumStat(label: "CAL",
+                               value: "\(Int(state.caloriesKcal))",
+                               unit: nil, valueColor: .white)
+                }
+                smallStat(label: "ELEV", value: "+\(Int(state.elevationM))m")
+            }
+            .opacity(isPaused ? 0.55 : 1.0)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 6)
+        .padding(.top, 2)
+        .padding(.bottom, 4)
+    }
+
+    /// Pág 3 — lista de splits por km. Aparece ao swipe-LEFT na pág 2.
+    /// Scroll vertical se passar do viewport. Cada row mostra: KM | pace |
+    /// tempo | BPM | elev. Cores DIST/PACE/BPM seguindo o mesmo padrão da
+    /// statsPage (secondary, primary, secondary).
+    private var splitsPage: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            header
+            Text("SPLITS")
+                .font(state.scaledFont(size: 8, weight: .medium))
+                .tracking(1.5)
+                .foregroundStyle(.white.opacity(0.5))
+            if state.splits.isEmpty {
+                Spacer(minLength: 0)
+                VStack(spacing: 4) {
+                    Text("—")
+                        .font(state.scaledFont(size: 22, weight: .bold))
+                        .foregroundStyle(.white.opacity(0.3))
+                    Text("Termine o 1º km")
+                        .font(state.scaledFont(size: 9, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.5))
+                }
+                .frame(maxWidth: .infinity)
+                Spacer(minLength: 0)
+            } else {
+                ScrollView {
+                    VStack(spacing: 4) {
+                        ForEach(state.splits) { split in
+                            splitRow(split)
                         }
                     }
-
-                    statRow(label: "TEMPO", value: state.formattedElapsed, unit: nil)
-                    statRow(label: "DIST", value: state.formattedDistance, unit: "km")
-                    statRow(label: "PACE", value: state.formattedPace, unit: "/km")
-
-                    HStack(spacing: 8) {
-                        miniStat(label: "BPM", value: state.bpm > 0 ? "\(state.bpm)" : "—")
-                        miniStat(label: "ELEV", value: "+\(Int(state.elevationM))m")
-                        miniStat(label: "CAL", value: "\(Int(state.caloriesKcal))")
-                    }
-                    .padding(.top, 2)
                 }
-                .padding(.horizontal, 4)
-                .padding(.bottom, 6)
             }
-            // Botões FIXOS no rodapé — fora do ScrollView pra evitar conflito
-            // de DragGesture (horizontal) vs pan vertical (rolagem).
-            VStack(spacing: 6) {
-                SlideToConfirmButton(
-                    label: state.status == .paused ? "RETOMAR" : "PAUSAR",
-                    color: .yellow,
-                    action: {
-                        sendCommand(state.status == .paused ? "resumeRun" : "pauseRun")
-                    }
-                )
-                SlideToConfirmButton(
-                    label: "PARAR",
-                    color: .red,
-                    action: { sendCommand("abandonRun") }
-                )
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 4)
+    }
+
+    @ViewBuilder
+    private func splitRow(_ split: WatchSplit) -> some View {
+        HStack(spacing: 6) {
+            // Coluna 1: KM número
+            Text("KM\(split.km)")
+                .font(state.scaledFont(size: 11, weight: .heavy))
+                .foregroundStyle(state.accentColor)
+                .frame(width: 32, alignment: .leading)
+            // Coluna 2: pace + tempo
+            VStack(alignment: .leading, spacing: 0) {
+                Text(split.pace)
+                    .font(state.scaledFont(size: 12, weight: .bold))
+                    .foregroundStyle(.white)
+                Text(split.formattedDuration)
+                    .font(state.scaledFont(size: 8, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.5))
             }
-            .padding(.horizontal, 4)
-            .padding(.bottom, 4)
+            Spacer(minLength: 0)
+            // Coluna 3: BPM
+            if split.bpm > 0 {
+                VStack(alignment: .trailing, spacing: 0) {
+                    Text("\(split.bpm)")
+                        .font(state.scaledFont(size: 11, weight: .bold))
+                        .foregroundStyle(state.secondaryColor)
+                    Text("BPM")
+                        .font(state.scaledFont(size: 7, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.45))
+                }
+            }
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 5)
+        .background(Color.white.opacity(0.06))
+        .clipShape(RoundedRectangle(cornerRadius: 4))
+    }
+
+    private var controlsPage: some View {
+        VStack(spacing: 8) {
+            header
+            if state.status == .paused {
+                pausedBanner
+            }
+            Spacer(minLength: 0)
+            Text("CONTROLES")
+                .font(state.scaledFont(size: 8, weight: .medium))
+                .tracking(1.5)
+                .foregroundStyle(.white.opacity(0.5))
+            SlideToConfirmButton(
+                label: state.status == .paused ? "RETOMAR" : "PAUSAR",
+                color: .yellow,
+                action: {
+                    os_log("slide.fire action=%{public}@", log: arsLog, type: .info,
+                           state.status == .paused ? "resumeRun" : "pauseRun")
+                    sendCommand(state.status == .paused ? "resumeRun" : "pauseRun")
+                }
+            )
+            SlideToConfirmButton(
+                label: "PARAR",
+                color: .red,
+                action: {
+                    // PARAR no Watch = COMPLETE (salva + relatório), não
+                    // ABANDON (cancela sem salvar). User espera ver
+                    // RunCompletedScreen no Watch e /report no iPhone —
+                    // mesmo padrão do Apple Workout (botão End).
+                    os_log("slide.fire action=completeRun", log: arsLog, type: .info)
+                    sendCommand("completeRun")
+                }
+            )
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 4)
+    }
+
+    // MARK: - Reusable bits
+
+    private var header: some View {
+        HStack {
+            RunninLogo()
+            Spacer()
+            Text(state.runType.uppercased())
+                .font(state.scaledFont(size: 8, weight: .medium))
+                .tracking(0.8)
+                .foregroundStyle(.white.opacity(0.5))
+                .lineLimit(1)
+        }
+    }
+
+    /// Banner full-width amarelo, alto contraste — pra ser óbvio que a
+    /// corrida está pausada. Substituiu a antiga pill discreta (5px círculo
+    /// + texto 8pt amarelo) que user reportou imperceptível.
+    private var pausedBanner: some View {
+        HStack(spacing: 5) {
+            Image(systemName: "pause.fill")
+                .font(.system(size: 10, weight: .heavy))
+            Text("PAUSADO")
+                .font(state.scaledFont(size: 10, weight: .heavy))
+                .tracking(1.5)
+            Spacer(minLength: 0)
+        }
+        .foregroundStyle(.black)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .frame(maxWidth: .infinity)
+        .background(Color.yellow)
+        .clipShape(RoundedRectangle(cornerRadius: 4))
+    }
+
+    @ViewBuilder
+    private func bigStat(label: String, value: String, size: CGFloat,
+                         valueColor: Color = .white) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(label)
+                .font(state.scaledFont(size: 8, weight: .medium))
+                .tracking(0.8)
+                .foregroundStyle(.white.opacity(0.5))
+            Text(value)
+                .font(state.scaledFont(size: size, weight: .bold))
+                .foregroundStyle(valueColor)
+                .minimumScaleFactor(0.5)
+                .lineLimit(1)
         }
     }
 
     @ViewBuilder
-    private func statRow(label: String, value: String, unit: String?) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
+    private func mediumStat(label: String, value: String, unit: String?,
+                            valueColor: Color = .white) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
             Text(label)
-                .font(.system(size: 9, weight: .medium, design: .monospaced))
+                .font(state.scaledFont(size: 7, weight: .medium))
                 .tracking(0.8)
                 .foregroundStyle(.white.opacity(0.5))
-            HStack(alignment: .firstTextBaseline, spacing: 3) {
+            HStack(alignment: .firstTextBaseline, spacing: 2) {
                 Text(value)
-                    .font(.system(size: 26, weight: .bold, design: .monospaced))
-                    .foregroundStyle(.white)
-                    .minimumScaleFactor(0.7)
+                    .font(state.scaledFont(size: 18, weight: .bold))
+                    .foregroundStyle(valueColor)
+                    .minimumScaleFactor(0.5)
                     .lineLimit(1)
                 if let unit = unit {
                     Text(unit)
-                        .font(.system(size: 10, weight: .medium, design: .monospaced))
+                        .font(state.scaledFont(size: 8, weight: .medium))
                         .foregroundStyle(.white.opacity(0.5))
                 }
             }
         }
-    }
-
-    @ViewBuilder
-    private func miniStat(label: String, value: String) -> some View {
-        VStack(alignment: .leading, spacing: 1) {
-            Text(label)
-                .font(.system(size: 7, weight: .medium, design: .monospaced))
-                .tracking(0.8)
-                .foregroundStyle(.white.opacity(0.5))
-            Text(value)
-                .font(.system(size: 12, weight: .bold, design: .monospaced))
-                .foregroundStyle(.white)
-        }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    @ViewBuilder
+    private func smallStat(label: String, value: String) -> some View {
+        HStack(spacing: 4) {
+            Text(label)
+                .font(state.scaledFont(size: 7, weight: .medium))
+                .tracking(0.8)
+                .foregroundStyle(.white.opacity(0.45))
+            Text(value)
+                .font(state.scaledFont(size: 11, weight: .bold))
+                .foregroundStyle(.white.opacity(0.85))
+                .minimumScaleFactor(0.6)
+                .lineLimit(1)
+        }
+    }
+
     private func sendCommand(_ action: String) {
-        guard WCSession.isSupported() else { return }
+        os_log("slide.sendCommand action=%{public}@", log: arsLog, type: .info, action)
+        guard WCSession.isSupported() else {
+            os_log("slide.sendCommand.skip not_supported", log: arsLog, type: .error)
+            return
+        }
         let session = WCSession.default
-        guard session.activationState == .activated else { return }
+        guard session.activationState == .activated else {
+            os_log("slide.sendCommand.skip not_activated state=%d", log: arsLog, type: .error,
+                   session.activationState.rawValue)
+            return
+        }
         let msg: [String: Any] = ["action": action]
         if session.isReachable {
-            session.sendMessage(msg, replyHandler: nil, errorHandler: { _ in
+            session.sendMessage(msg, replyHandler: { reply in
+                os_log("slide.sendMessage.reply ok=%{public}@", log: arsLog, type: .info,
+                       String(describing: reply["ok"] ?? "nil"))
+            }, errorHandler: { err in
+                os_log("slide.sendMessage.fail err=%{public}@ falling_back_to_userInfo",
+                       log: arsLog, type: .error, err.localizedDescription)
                 session.transferUserInfo(msg)
             })
         } else {
+            os_log("slide.sendCommand.userInfo reachable=0", log: arsLog, type: .info)
             session.transferUserInfo(msg)
         }
     }

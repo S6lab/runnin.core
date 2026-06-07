@@ -12,6 +12,12 @@ import WatchConnectivity
 struct BriefingScreen: View {
     @EnvironmentObject var state: WatchRunState
     let selected: SelectedRunType
+    /// Timeout fallback: se status=active não chegar do iPhone em 10s,
+    /// libera o botão pra tentar de novo. Cobre cenários raros onde
+    /// applicationContext não entrega (Watch sleeping mid-transition,
+    /// iPhone background com WC restrito, etc.). No happy path leva 1-2s.
+    @State private var timeoutWorkItem: DispatchWorkItem?
+    @State private var startFailed: Bool = false
 
     var body: some View {
         ScrollView {
@@ -19,34 +25,37 @@ struct BriefingScreen: View {
                 HStack {
                     RunninLogo()
                     Spacer()
-                    Text("5/5")
-                        .font(.system(size: 9, weight: .medium, design: .monospaced))
-                        .tracking(0.8)
-                        .foregroundStyle(.white.opacity(0.45))
                 }
                 .padding(.top, 4)
 
                 Text(selected.type.uppercased())
-                    .font(.system(size: 14, weight: .heavy, design: .monospaced))
+                    .font(state.scaledFont(size: 14, weight: .heavy))
                     .tracking(1.0)
                     .foregroundStyle(.white)
 
                 if let km = selected.distanceKm {
                     Text("ALVO · \(formattedKm(km))")
-                        .font(.system(size: 9, weight: .medium, design: .monospaced))
+                        .font(state.scaledFont(size: 9, weight: .medium))
                         .tracking(1.2)
-                        .foregroundStyle(Color.cyan)
+                        .foregroundStyle(state.accentColor)
                 } else {
                     Text("SEM ALVO DE DISTÂNCIA")
-                        .font(.system(size: 9, weight: .medium, design: .monospaced))
+                        .font(state.scaledFont(size: 9, weight: .medium))
                         .tracking(1.2)
                         .foregroundStyle(.white.opacity(0.5))
                 }
 
                 Text(briefingText)
-                    .font(.system(size: 11, weight: .medium, design: .monospaced))
+                    .font(state.scaledFont(size: 11, weight: .medium))
                     .foregroundStyle(.white.opacity(0.75))
                     .padding(.top, 4)
+
+                if startFailed {
+                    Text("Sem resposta do iPhone. Verifique se o app está aberto e tente novamente.")
+                        .font(state.scaledFont(size: 9, weight: .medium))
+                        .foregroundStyle(.yellow)
+                        .padding(.top, 2)
+                }
 
                 Spacer(minLength: 6)
 
@@ -57,14 +66,14 @@ struct BriefingScreen: View {
                                 .controlSize(.mini)
                                 .tint(.black)
                         }
-                        Text(state.starting ? "INICIANDO…" : "INICIAR")
-                            .font(.system(size: 13, weight: .heavy, design: .monospaced))
+                        Text(buttonLabel)
+                            .font(state.scaledFont(size: 13, weight: .heavy))
                             .tracking(1.2)
                             .foregroundStyle(.black)
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 10)
-                    .background(Color.cyan)
+                    .background(state.accentColor)
                     .clipShape(RoundedRectangle(cornerRadius: 6))
                 }
                 .buttonStyle(.plain)
@@ -72,7 +81,7 @@ struct BriefingScreen: View {
 
                 Button(action: { state.localStep = .selectingType }) {
                     Text("VOLTAR")
-                        .font(.system(size: 10, weight: .medium, design: .monospaced))
+                        .font(state.scaledFont(size: 10, weight: .medium))
                         .tracking(1.0)
                         .foregroundStyle(.white.opacity(0.55))
                         .frame(maxWidth: .infinity)
@@ -83,6 +92,22 @@ struct BriefingScreen: View {
             }
             .padding(.horizontal, 4)
         }
+        // Quando status sai de idle (active/paused chegaram), cancela timeout
+        // — o caminho feliz disparou. Quando volta pra idle por outro motivo,
+        // reseta `startFailed` pro user poder tentar de novo limpo.
+        .onChange(of: state.status) { _, new in
+            if new != .idle {
+                timeoutWorkItem?.cancel()
+                timeoutWorkItem = nil
+                startFailed = false
+            }
+        }
+    }
+
+    private var buttonLabel: String {
+        if state.starting { return "INICIANDO…" }
+        if startFailed { return "TENTAR NOVAMENTE" }
+        return "INICIAR"
     }
 
     private var briefingText: String {
@@ -94,10 +119,29 @@ struct BriefingScreen: View {
 
     private func handleStart() {
         guard !state.starting else { return }
+        startFailed = false
         state.starting = true
-        guard WCSession.isSupported() else { state.starting = false; return }
+        // Arma timeout: se status=active não chegar do iPhone em 10s, libera
+        // o botão e mostra hint. Cancelado em onChange(of: state.status).
+        timeoutWorkItem?.cancel()
+        let work = DispatchWorkItem {
+            Task { @MainActor in
+                if state.status == .idle && state.starting {
+                    state.starting = false
+                    startFailed = true
+                }
+            }
+        }
+        timeoutWorkItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 10, execute: work)
+
+        guard WCSession.isSupported() else {
+            state.starting = false; startFailed = true; return
+        }
         let session = WCSession.default
-        guard session.activationState == .activated else { state.starting = false; return }
+        guard session.activationState == .activated else {
+            state.starting = false; startFailed = true; return
+        }
         var msg: [String: Any] = [
             "action": "startRun",
             "type": selected.type,
@@ -108,14 +152,15 @@ struct BriefingScreen: View {
             session.sendMessage(msg, replyHandler: { _ in
                 // iPhone vai mandar applicationContext com status=active
                 // logo em seguida; deixamos `starting` como true até o
-                // contexto chegar (WatchRunState reseta no update).
+                // contexto chegar (WatchRunState reseta no update) — ou
+                // até o timeout disparar.
             }, errorHandler: { _ in
                 session.transferUserInfo(msg)
-                Task { @MainActor in state.starting = false }
+                // sendMessage falhou — userInfo é fire-and-forget e demora;
+                // mantemos starting=true até timeout ou status active.
             })
         } else {
             session.transferUserInfo(msg)
-            Task { @MainActor in state.starting = false }
         }
     }
 

@@ -20,6 +20,8 @@ struct ContentView: View {
                 }
             case .active, .paused:
                 ActiveRunScreen()
+            case .completed:
+                RunCompletedScreen()
             }
         }
     }

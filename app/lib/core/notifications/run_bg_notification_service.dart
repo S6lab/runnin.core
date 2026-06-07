@@ -3,6 +3,7 @@ import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart' show MethodChannel, PlatformException;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 
 import 'package:runnin/core/analytics/analytics_service.dart';
 import 'package:runnin/core/logger/logger.dart';
@@ -86,6 +87,32 @@ class RunBgNotificationService {
       _liveActivitySupported = false;
     }
     return _liveActivitySupported!;
+  }
+
+  /// Dispara o prompt nativo do iOS "Permitir Atividades ao Vivo?" criando
+  /// uma Activity dummy e encerrando rapidamente. iOS NÃO expõe API
+  /// `requestAuthorization` pra Live Activities — o prompt só aparece via
+  /// `Activity.request` real. Idempotente — chamadas múltiplas não causam
+  /// efeito visual além do prompt inicial (uma vez por instalação iOS
+  /// lembra a escolha do user).
+  ///
+  /// Persiste flag em Hive pra não disparar de novo em boots subsequentes.
+  /// Best-effort: erro silencioso se o usuário negar / iOS bloquear.
+  Future<void> primeLiveActivityPermission() async {
+    if (!_isSupported || !Platform.isIOS) return;
+    try {
+      final box = Hive.isBoxOpen('runnin_settings')
+          ? Hive.box<dynamic>('runnin_settings')
+          : await Hive.openBox<dynamic>('runnin_settings');
+      final alreadyPrimed = box.get('live_activity_primed') == true;
+      if (alreadyPrimed) return;
+      final res = await _liveActivityChannel
+          .invokeMethod<Object>('primePermission');
+      Logger.info('live_activity.prime.attempted', context: {'res': '$res'});
+      await box.put('live_activity_primed', true);
+    } catch (e, st) {
+      Logger.error('live_activity.prime_failed', e, st);
+    }
   }
 
   Future<void> init() async {

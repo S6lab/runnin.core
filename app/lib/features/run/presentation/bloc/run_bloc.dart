@@ -388,6 +388,10 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
   /// pausar/abandonar a corrida via slide-to-confirm na ActiveRunScreen, ou
   /// iniciar uma corrida nova via tap na PreRunScreen.
   StreamSubscription<WatchCommand>? _watchCommandSub;
+  /// Subscription pra evento `watch_reconnected` (WCSession.isReachable flip
+  /// false→true). Usa pra force-restart da query de BPM em vez de esperar
+  /// o timer de staleness expirar (15s) — reduz gap visível de BPM live.
+  StreamSubscription<void>? _watchReconnectedSub;
 
   // Lifecycle: true quando o app está em background (paused/inactive/hidden).
   // Usado pra suprimir TTS/voice em bg (não brigar com Spotify) e pra logger.
@@ -472,6 +476,21 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
           case 'abandonRun':
             add(AbandonRun());
             break;
+          case 'completeRun':
+            // Watch tocou PARAR/encerrar → COMPLETE (salva + navega pra
+            // /report). Diferente de abandonRun (cancela sem salvar).
+            // Aceita só quando ativa ou pausada — outros estados ignora.
+            if (state.status == RunStatus.active ||
+                state.status == RunStatus.paused) {
+              add(CompleteRun());
+            }
+            break;
+          case 'acknowledgeComplete':
+            // User tocou OK na RunCompletedScreen do Watch. Empurra status=idle
+            // pra ele voltar ao TypeSelector (a UI do Watch já transicionou
+            // localmente; este push só confirma o estado canônico).
+            _pushStatusToWatch('idle');
+            break;
           case 'startRun':
             // Watch só pode iniciar quando idle (já tem corrida ativa? ignora).
             if (state.status == RunStatus.idle ||
@@ -485,6 +504,18 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
             }
             break;
         }
+      },
+    );
+    // Watch reconectou (reachability flip false→true) — força restart imediato
+    // da query nativa de BPM. Sem isso, user vê BPM "—" por até 15s após
+    // reconnect (timer de staleness expirar). Idempotente — restart() já é
+    // safe pra chamar quando query está active.
+    _watchReconnectedSub = workoutRealtimeService.watchReconnectedStream.listen(
+      (_) {
+        if (isClosed) return;
+        if (state.status != RunStatus.active) return;
+        Logger.info('run.bpm.watch_reconnected_restart');
+        unawaited(workoutRealtimeService.restart());
       },
     );
     on<StartRun>(_onStart);
@@ -514,6 +545,23 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
   }
 
   Future<void> _onStart(StartRun event, Emitter<RunState> emit) async {
+    // Push otimista status=active pro Watch IMEDIATAMENTE — antes mesmo
+    // de createRun ou checks de GPS. User pediu transição instantânea no
+    // Watch quando inicia pelo iPhone. Se algo falhar abaixo, status=idle
+    // é re-empurrado por _onAbandon/error.
+    unawaited(workoutRealtimeService.pushRunState({
+      'type': 'run_state',
+      'status': 'active',
+      'elapsedS': 0,
+      'distanceM': 0,
+      'paceMinKm': 0,
+      'bpm': 0,
+      'caloriesKcal': 0,
+      'elevationM': 0,
+      'runType': event.type,
+      'splits': const [],
+    }));
+
     // Consolida prefs: prioridade evento > profile > defaults. Sem isso,
     // _alertPrefs ficava nos defaults hardcoded e ignorava o que o user
     // selecionou no prep page. Fetch de profile é best-effort com
@@ -653,6 +701,12 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
           error: null,
         ),
       );
+      // Empurra status=active pro Watch IMEDIATAMENTE em vez de esperar
+      // o primeiro _onTimerTick (1Hz). Sem isso o Watch fica preso em
+      // "INICIANDO…" no BriefingScreen por até 1s — e às vezes mais
+      // (sim do Watch tem reachability intermitente). Idempotente quando
+      // Watch não pareado.
+      _pushStatusToWatch('active');
 
       _lastCoachKm = 0;
       _lastKmStartElapsedS = 0;
@@ -704,7 +758,12 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
         unawaited(TelemetryTts.instance.speak(greeting));
       }
 
-      // Timer de tempo decorrido
+      // Timer de tempo decorrido — cancela QUALQUER timer anterior. Sem
+      // isso, double-StartRun (ex: user clica TENTAR NOVAMENTE no Watch
+      // depois da corrida ter iniciado pelo telefone) cria 2 timers
+      // concorrentes que fazem elapsedS subir 2/sec — relógio "corre
+      // mais rápido".
+      _timer?.cancel();
       _timer = Timer.periodic(
         const Duration(seconds: 1),
         (_) => add(_TimerTick()),
@@ -864,18 +923,18 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
     } else {
       emit(state.copyWith(elapsedS: newElapsed));
     }
-    // Atualiza a notificação persistente / Live Activity a 1Hz quando
-    // em bg pra ficar "ao vivo" (km · tempo · pace). No iOS 16.2+ vai
-    // pra Live Activity (card grande no lock screen + Dynamic Island);
-    // demais platforms cai no flutter_local_notifications.
-    if (_appInBackground) {
-      unawaited(runBgNotificationService.update(
-        distanceM: state.distanceM,
-        elapsedS: newElapsed,
-        paceMinKm: state.currentPaceMinKm,
-        sessionType: state.runType,
-      ));
-    }
+    // Live Activity ALWAYS — não condiciona em background. Apple exige que
+    // `Activity.request()` seja chamado em FOREGROUND (lança em bg) — antes
+    // só chamávamos quando _appInBackground=true, ou seja, JÁ depois do
+    // app pra bg → request falhava silenciosamente e caía pra notif
+    // pequena. Agora chamamos a cada tick (1Hz) em ambos os estados;
+    // updates subsequentes (após o start) funcionam em bg sem problemas.
+    unawaited(runBgNotificationService.update(
+      distanceM: state.distanceM,
+      elapsedS: newElapsed,
+      paceMinKm: state.currentPaceMinKm,
+      sessionType: state.runType,
+    ));
     // Push state pro Watch — 1Hz. updateApplicationContext dedup automático
     // (entrega só o último valor se Watch tava offline). Idempotente quando
     // Watch app não instalado (plugin skips com log).
@@ -884,11 +943,25 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
       'status': 'active',
       'elapsedS': newElapsed,
       'distanceM': state.distanceM,
-      'paceMinKm': state.currentPaceMinKm,
+      // Fallbacks pra 0/Free Run — o pushRunState sanitiza nulls defensivamente,
+      // mas explicitar aqui deixa as intenções claras (paceMinKm fica null
+      // antes do primeiro km computar).
+      'paceMinKm': state.currentPaceMinKm ?? 0,
       'bpm': state.currentBpm ?? 0,
       'caloriesKcal': _approxCalories(state.distanceM),
       'elevationM': _approxElevationGain(state.splits),
       'runType': state.runType ?? 'Free Run',
+      // Splits compactados pra o Watch renderizar a pág 3 (Splits). Mantém
+      // só os campos essenciais — payload ≤ ~64KB do applicationContext.
+      'splits': state.splits
+          .map((s) => {
+                'km': s.kmIndex + 1,
+                'durationS': s.durationS,
+                'pace': s.avgPaceMinKm,
+                'bpm': s.avgBpm ?? 0,
+                'elev': s.elevationGain ?? 0,
+              })
+          .toList(),
     }));
   }
 
@@ -901,7 +974,8 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
       'status': status,
       'elapsedS': state.elapsedS,
       'distanceM': state.distanceM,
-      'paceMinKm': state.currentPaceMinKm,
+      // Mesmo defesa do _onTimerTick — paceMinKm é null antes do primeiro km.
+      'paceMinKm': state.currentPaceMinKm ?? 0,
       'bpm': state.currentBpm ?? 0,
       'caloriesKcal': _approxCalories(state.distanceM),
       'elevationM': _approxElevationGain(state.splits),
@@ -1050,17 +1124,14 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
     if (crossedKmBoundary) {
       final prevKm = _lastCoachKm;
       _lastCoachKm = kmReached;
-      // Atualiza notif persistente (se app está em bg) com distância nova.
-      // Em foreground, _appInBackground=false e o service só atualiza o
-      // payload existente — o sistema OS decide se mostra/atualiza.
-      if (_appInBackground) {
-        unawaited(runBgNotificationService.update(
-          distanceM: newDistance,
-          elapsedS: state.elapsedS,
-          paceMinKm: smoothedPace,
-          sessionType: state.runType,
-        ));
-      }
+      // Live Activity sempre — request precisa ser foreground (ver comentário
+      // em _onTimerTick). Updates sucessivos funcionam em qualquer estado.
+      unawaited(runBgNotificationService.update(
+        distanceM: newDistance,
+        elapsedS: state.elapsedS,
+        paceMinKm: smoothedPace,
+        sessionType: state.runType,
+      ));
       // Tempo do km que acabou de cruzar (não acumulado). Coach reporta
       // "1 km em X min" + server estima calorias do km (MET × peso × tempo).
       final kmDurationS = state.elapsedS - _lastKmStartElapsedS;
@@ -1282,7 +1353,30 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
     _runHealthSyncTimer?.cancel();
     _runHealthSyncTimer = null;
     unawaited(workoutRealtimeService.stop());
-    _pushStatusToWatch('idle');
+    // Empurra status=completed COM totais + splits pro Watch (em vez de idle
+    // direto). Watch mostra RunCompletedScreen até user reconhecer; só aí
+    // volta pra idle. Splits aqui são os locais — `computeKmSplits` final
+    // roda mais abaixo após coletar pontos pendentes.
+    unawaited(workoutRealtimeService.pushRunState({
+      'type': 'run_state',
+      'status': 'completed',
+      'elapsedS': state.elapsedS,
+      'distanceM': state.distanceM,
+      'paceMinKm': state.currentPaceMinKm ?? 0,
+      'bpm': state.currentBpm ?? 0,
+      'caloriesKcal': _approxCalories(state.distanceM),
+      'elevationM': _approxElevationGain(state.splits),
+      'runType': state.runType ?? 'Free Run',
+      'splits': state.splits
+          .map((s) => {
+                'km': s.kmIndex + 1,
+                'durationS': s.durationS,
+                'pace': s.avgPaceMinKm,
+                'bpm': s.avgBpm ?? 0,
+                'elev': s.elevationGain ?? 0,
+              })
+          .toList(),
+    }));
     if (state.distanceM >= stationaryDistanceThresholdM) {
       _requestCoachCue(event: 'finish');
       // Mantém a sessão Live aberta até o resumo terminar de tocar (premium).
@@ -1417,10 +1511,12 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
   /// Thresholds em ms pra cada degrau de staleness.
   /// `_bpmStaleAfterMs`: fresh → stale (chip mostra último valor com "?").
   /// `_bpmLostAfterMs`:  stale → lost  (chip mostra "—", restart da iOS query).
-  /// Antes era 1 threshold único de 20s — derrubava o chip muito cedo em
-  /// jitter normal do Watch.
-  static const _bpmStaleAfterMs = 15 * 1000;
-  static const _bpmLostAfterMs = 45 * 1000;
+  /// Reduzido pra 8s/15s (era 15s/45s) — user reportou "perde muita conexão";
+  /// 45s era pessimista demais, o gap visível de BPM frustrava. Agora detecta
+  /// stale em 8s e dispara restart em 15s. Watch geralmente bate 1Hz, então
+  /// 8s sem nenhum sample = problema real, vale logar/agir.
+  static const _bpmStaleAfterMs = 8 * 1000;
+  static const _bpmLostAfterMs = 15 * 1000;
 
   /// True quando já logamos `run.bpm.stale.detected` na transição atual pra
   /// stale. Reseta quando BPM volta fresh. Evita inflar analytics enquanto
@@ -1629,6 +1725,9 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
       status: RunStatus.active,
       bpmStaleness: BpmStaleness.lost,
     ));
+    // Idempotência: cancela timer anterior antes de criar novo (mesmo
+    // motivo do _onStart — duplo-tick em StartRun repetido).
+    _timer?.cancel();
     _timer = Timer.periodic(
       const Duration(seconds: 1),
       (_) => add(_TimerTick()),
@@ -1762,6 +1861,8 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
     _watchStatusSub = null;
     _watchCommandSub?.cancel();
     _watchCommandSub = null;
+    _watchReconnectedSub?.cancel();
+    _watchReconnectedSub = null;
     _bpmFallbackPollTimer?.cancel();
     _bpmFallbackPollTimer = null;
     _runHealthSyncTimer?.cancel();

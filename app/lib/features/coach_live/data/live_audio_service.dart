@@ -132,10 +132,22 @@ class LiveAudioService {
     }
   }
 
+  bool _disposed = false;
+
   Future<void> dispose() async {
+    // Idempotente — coach_session pode chamar close() múltiplas vezes
+    // (finish trigger + safety timer + abandon). Sem essa guarda, o 2º
+    // dispose lança "Player has not yet been created or has already been
+    // disposed." e quebra o flush final da corrida.
+    if (_disposed) return;
+    _disposed = true;
     await stopCapture();
-    await _player.dispose();
-    _recorder.dispose();
+    try {
+      await _player.dispose();
+    } catch (_) {/* já disposed pelo plugin nativo */}
+    try {
+      _recorder.dispose();
+    } catch (_) {/* idem */}
   }
 
   /// Constrói header WAV (RIFF) pra reprodução de PCM raw.

@@ -27,6 +27,20 @@ class SessionDelegate: NSObject, WCSessionDelegate {
                  error: Error?) {
         os_log("activation state=%d err=%{public}@", log: wsLog, type: .info,
                activationState.rawValue, error?.localizedDescription ?? "nil")
+        // Apple só dispara `didReceiveApplicationContext` em pushes NOVOS após
+        // activation. O snapshot mais recente já entregue fica em
+        // `receivedApplicationContext` (1 último valor, dedup). Sem aplicar
+        // aqui, o Watch abre cego ao estado conhecido (ex: TypeSelector mostra
+        // só CORRIDA LIVRE no primeiro abrir, sem SESSÃO DO DIA, mesmo que o
+        // iPhone já tenha empurrado o today_session no boot).
+        let cached = session.receivedApplicationContext
+        if !cached.isEmpty {
+            os_log("activation.apply_cached keys=%{public}@", log: wsLog, type: .info,
+                   cached.keys.joined(separator: ","))
+            Task { @MainActor in
+                WatchRunState.shared.update(from: cached)
+            }
+        }
     }
 
     // Métodos required em iOS — implementados pra resolver erro de conformance
@@ -44,8 +58,11 @@ class SessionDelegate: NSObject, WCSessionDelegate {
     /// `WatchRunState` que toda a UI Watch observa.
     func session(_ session: WCSession,
                  didReceiveApplicationContext applicationContext: [String: Any]) {
-        os_log("recv.context type=%{public}@", log: wsLog, type: .info,
-               (applicationContext["type"] as? String) ?? "?")
+        let typeStr = (applicationContext["type"] as? String) ?? "?"
+        let statusStr = (applicationContext["status"] as? String) ?? "-"
+        os_log("recv.context type=%{public}@ status=%{public}@ keys=%{public}@",
+               log: wsLog, type: .info, typeStr, statusStr,
+               applicationContext.keys.joined(separator: ","))
         Task { @MainActor in
             WatchRunState.shared.update(from: applicationContext)
         }

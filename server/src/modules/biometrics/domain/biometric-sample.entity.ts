@@ -14,9 +14,14 @@ export type BiometricSampleType =
   | 'steps'            // passos no período
   | 'spo2'             // saturação de oxigênio (%)
   | 'weight'           // peso (kg)
-  | 'calories_burned'  // kcal queimadas
+  | 'calories_burned'  // kcal queimadas (energia ativa)
+  | 'calories_basal'   // kcal queimadas em repouso (BMR)
   | 'vo2max'           // VO2 max estimado
-  | 'respiratory_rate';
+  | 'respiratory_rate'
+  | 'bp_systolic'      // pressão sistólica (mmHg)
+  | 'bp_diastolic'     // pressão diastólica (mmHg)
+  | 'body_temperature' // temperatura corporal (°C)
+  | 'ecg';             // eletrocardiograma (classification — sinusal/afib/etc)
 
 export type BiometricSource =
   | 'apple_health'

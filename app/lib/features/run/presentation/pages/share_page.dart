@@ -81,6 +81,11 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
   /// Chip "selecionado" pelo último toque (id). Usado pra desenhar
   /// affordance visual (borda). Null = nada selecionado.
   String? _selectedOverlayId;
+  /// id do chip que está sendo arrastado AGORA. Usado pra desabilitar o
+  /// scroll vertical do tab enquanto há drag em curso — sem isso, drag
+  /// horizontal/vertical do chip "vaza" pro SingleChildScrollView pai e
+  /// a tela scrolla junto. Null = nenhum drag ativo.
+  String? _activeDragId;
 
   Color _resolveOverlayColor(BuildContext ctx) {
     final p = ctx.runninPalette;
@@ -506,6 +511,13 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
                     Expanded(
                       child: TabBarView(
                         controller: _tabController,
+                        // Sem `NeverScrollableScrollPhysics` quando há chip
+                        // sendo arrastado, o swipe horizontal do drag rola
+                        // a tab inteira (MAPA ↔ FOTO) e o chip nem se move.
+                        // User troca de tab pelos botões do TabBar.
+                        physics: _activeDragId != null
+                            ? const NeverScrollableScrollPhysics()
+                            : null,
                         children: [
                           _buildMapTab(),
                           _buildOverlayTab(),
@@ -786,6 +798,12 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
 
   Widget _buildOverlayTab() {
     return SingleChildScrollView(
+      // Desabilita scroll vertical enquanto há chip sendo arrastado — sem
+      // isso o pan vertical do drag "vaza" pro ScrollView e a tela scrolla
+      // junto. Volta pro default quando o user solta o dedo.
+      physics: _activeDragId != null
+          ? const NeverScrollableScrollPhysics()
+          : null,
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1115,7 +1133,22 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
       selected: _selectedOverlayId == id,
       onOffsetChanged: (off) => setState(() => _overlayOffsets[id] = off),
       onScaleChanged: (s) => setState(() => _overlayScales[id] = s),
-      onTap: () => setState(() => _selectedOverlayId = id),
+      // Tap cicla tamanho do chip entre 3 níveis pré-definidos. Primeiro
+      // tap em chip não selecionado: só seleciona (sem mexer no tamanho).
+      // Toques subsequentes ciclam pequeno → médio → grande → pequeno...
+      // Pinça continua dando controle fino além desses 3 snaps.
+      onTap: () => setState(() {
+        const sizes = [0.7, 1.0, 1.4];
+        final justSelected = _selectedOverlayId != id;
+        _selectedOverlayId = id;
+        if (justSelected) return; // só seleciona, mantém escala atual
+        final current = _overlayScales[id] ?? 1.0;
+        final idx = sizes.indexWhere((s) => (s - current).abs() < 0.05);
+        final next = sizes[((idx == -1 ? 1 : idx) + 1) % sizes.length];
+        _overlayScales[id] = next;
+      }),
+      onDragStart: () => setState(() => _activeDragId = id),
+      onDragEnd: () => setState(() => _activeDragId = null),
       child: child,
     );
   }
@@ -1322,6 +1355,11 @@ class _DraggableOverlay extends StatefulWidget {
   final ValueChanged<Offset> onOffsetChanged;
   final ValueChanged<double> onScaleChanged;
   final VoidCallback onTap;
+  /// Disparado quando user encosta o primeiro dedo no chip (potencial
+  /// início de drag). Page usa pra desabilitar scroll do tab.
+  final VoidCallback? onDragStart;
+  /// Disparado quando user solta todos os dedos. Page reativa scroll.
+  final VoidCallback? onDragEnd;
   final Widget child;
 
   const _DraggableOverlay({
@@ -1334,6 +1372,8 @@ class _DraggableOverlay extends StatefulWidget {
     required this.onOffsetChanged,
     required this.onScaleChanged,
     required this.onTap,
+    this.onDragStart,
+    this.onDragEnd,
     required this.child,
   });
 
@@ -1349,8 +1389,10 @@ class _DraggableOverlayState extends State<_DraggableOverlay> {
   double? _pinchStartScale;
 
   void _onDown(PointerDownEvent e) {
+    final wasEmpty = _pointers.isEmpty;
     _pointers[e.pointer] = e.position;
     widget.onTap();
+    if (wasEmpty) widget.onDragStart?.call();
     if (_pointers.length == 2) {
       _pinchStartDistance = _distance(_pointers.values);
       _pinchStartScale = widget.scale;
@@ -1384,12 +1426,14 @@ class _DraggableOverlayState extends State<_DraggableOverlay> {
       _pinchStartDistance = null;
       _pinchStartScale = null;
     }
+    if (_pointers.isEmpty) widget.onDragEnd?.call();
   }
 
   void _onCancel(PointerCancelEvent e) {
     _pointers.remove(e.pointer);
     _pinchStartDistance = null;
     _pinchStartScale = null;
+    if (_pointers.isEmpty) widget.onDragEnd?.call();
   }
 
   double _distance(Iterable<Offset> pts) {

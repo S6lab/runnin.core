@@ -12,6 +12,9 @@ import 'package:runnin/core/notifications/run_bg_notification_service.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 import 'package:runnin/features/biometrics/data/health_sync_service.dart';
 import 'package:runnin/features/notifications/data/push_notifications_service.dart';
+import 'package:runnin/features/run/data/workout_realtime_service.dart';
+import 'package:runnin/features/run/watch_start_listener.dart';
+import 'package:runnin/features/run/watch_today_session_pusher.dart';
 import 'package:runnin/features/subscriptions/presentation/subscription_controller.dart';
 import 'package:runnin/core/remote_config/force_update_controller.dart';
 import 'package:runnin/features/force_update/presentation/pages/force_update_page.dart';
@@ -97,7 +100,43 @@ Future<void> _runApp() async {
 
     // FCM push: pede permissão + registra token no backend.
     Future.microtask(() => PushNotificationsService.instance.initAndRegister());
+
+    // Live Activities: dispara prompt nativo do iOS no 1º boot (1x por
+    // instalação). Sem isso, user só vê o prompt na primeira corrida em bg
+    // — e se a corrida durar pouco, o prompt pode passar despercebido.
+    Future.microtask(() => runBgNotificationService.primeLiveActivityPermission());
+
+    // Empurra a sessão planejada de HOJE pro Watch logo no boot + retries
+    // em 3s e 8s. Sem isso, race do iOS sim faz o primeiro push perder se
+    // Watch ainda está ativando WCSession; retries cobrem essa janela.
+    Future.microtask(() => watchTodaySessionPusher.pushTodayWithRetries());
   }
+
+  // Listener app-level pro comando startRun do Watch quando o iPhone está
+  // fora do shell de corrida (RunBloc só existe lá). Navega pra /run com
+  // autoStart=true e ActiveRunPage dispara StartRun no initState.
+  watchStartListener.start();
+
+  // Skin sync: quando user troca a skin no iPhone, empurra um
+  // applicationContext mínimo pra Watch refletir a nova cor de acento.
+  // pushRunState auto-injeta `accentColor` da skin atual.
+  themeController.addListener(() {
+    unawaited(workoutRealtimeService.pushRunState({'type': 'run_state'}));
+  });
+
+  // Watch app reinstalado (user removeu e voltou OU dev reinstalou em build):
+  // o cache de applicationContext do Watch é zerado. Re-empurra today_session
+  // pra ele recuperar SESSÃO DO DIA + skin + textScale sem precisar abrir
+  // /prep no iPhone manualmente.
+  workoutRealtimeService.watchAppInstalledStream.listen((_) {
+    unawaited(watchTodaySessionPusher.pushToday());
+  });
+
+  // Watch reconectou (reachable false→true): empurra today_session de novo
+  // pra cobrir race onde Watch ativou DEPOIS do iPhone empurrar.
+  workoutRealtimeService.watchReconnectedStream.listen((_) {
+    unawaited(watchTodaySessionPusher.pushToday());
+  });
 
   if (!kIsWeb) {
     FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;

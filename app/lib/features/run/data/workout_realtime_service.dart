@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart' show debugPrint, kIsWeb, visibleForTest
 import 'package:flutter/services.dart';
 
 import 'package:runnin/core/logger/logger.dart';
+import 'package:runnin/core/theme/theme_controller.dart';
 
 /// Estado da sessão de workout. O serviço mantém uma máquina de estados
 /// idempotente — start/pause/resume/stop não fazem nada se já estiverem
@@ -111,6 +112,23 @@ class WorkoutRealtimeService {
   /// e opcionalmente outros campos (ex: action=startRun → type, planSessionId).
   /// RunBloc se inscreve e dispatcha events correspondentes.
   final _watchCommandController = StreamController<WatchCommand>.broadcast();
+  /// Emite quando WCSession volta a reachable (flip false→true) durante uma
+  /// corrida ativa. RunBloc consome pra forçar restart imediato da query de
+  /// BPM em vez de esperar 15s de staleness.
+  final _watchReconnectedController = StreamController<void>.broadcast();
+  /// Emite quando o Watch app é reinstalado (`isWatchAppInstalled` flip
+  /// false→true). O reinstall zera o cache `receivedApplicationContext` no
+  /// Watch — todas as últimas pushes (today_session, run_state) são perdidas.
+  /// main.dart consome pra disparar `watchTodaySessionPusher.pushToday()`
+  /// novamente.
+  final _watchAppInstalledController = StreamController<void>.broadcast();
+
+  /// Snapshot da última sessão do dia empurrada. `updateApplicationContext`
+  /// é single-value (dedup) — quando um push de run_state vem depois, o cache
+  /// fica só com run_state e perde today_session. Reactivation do Watch lê
+  /// só do último cache → SESSÃO DO DIA some. Solução: TODA push leva
+  /// `today_session` junto, mesmo se o tipo principal for run_state.
+  Map<String, dynamic>? _lastTodaySession;
 
   /// Stream de BPMs do wearable. Emite `null` quando a fonte fica indisponível
   /// (Watch desligado, permission revogada). UI fica em '—' silenciosamente.
@@ -154,14 +172,93 @@ class WorkoutRealtimeService {
     return _watchCommandController.stream;
   }
 
+  /// Stream que emite quando WCSession reconecta após drop (ver
+  /// `_watchReconnectedController`). RunBloc usa pra forçar restart da
+  /// query de BPM imediatamente em vez de esperar staleness expirar.
+  Stream<void> get watchReconnectedStream {
+    _attachEventStream();
+    return _watchReconnectedController.stream;
+  }
+
+  /// Stream que emite quando o Watch app é reinstalado. main.dart usa pra
+  /// re-empurrar today_session (e qualquer outro state) imediatamente.
+  Stream<void> get watchAppInstalledStream {
+    _attachEventStream();
+    return _watchAppInstalledController.stream;
+  }
+
   /// Empurra snapshot do RunState atual pro Watch via WCSession applicationContext.
   /// Idempotente — chamado pelo RunBloc a cada `_onTimerTick` (1Hz) durante
   /// active/paused. Payload é Map serializável (sem tipos custom).
+  ///
+  /// Auto-injeta `accentColor` (hex da skin atual do iPhone) e `textScale`
+  /// (1.0 / 1.12 / 1.28) — caller não precisa passar; Watch usa accentColor
+  /// pra colorir botões e textScale pra escalar fontes refletindo a pele +
+  /// preferências de Configurações > Aparência.
+  ///
+  /// CRÍTICO: filtra entradas null do payload ANTES de mandar pro Swift.
+  /// `WCSession.updateApplicationContext` exige property-list types puros —
+  /// Map Dart com `null` vira `NSNull` em Swift, que faz a chamada lançar
+  /// `NSInvalidArgumentException` e o push inteiro falha em silêncio. Era a
+  /// causa do "Watch não muda de tela ao iniciar corrida" (paceMinKm=null
+  /// antes do primeiro km).
   Future<void> pushRunState(Map<String, dynamic> payload) async {
     if (!_isSupported) return;
     try {
-      await _methodChannel.invokeMethod('pushRunState', payload);
+      final clean = <String, dynamic>{};
+      payload.forEach((k, v) {
+        if (v != null) clean[k] = v;
+      });
+      if (!clean.containsKey('accentColor')) {
+        clean['accentColor'] = _hexFromColor(themeController.palette.primary);
+      }
+      if (!clean.containsKey('secondaryColor')) {
+        // Watch usa pra colorir DIST/BPM (mesmo padrão do iPhone — palette.secondary).
+        clean['secondaryColor'] = _hexFromColor(themeController.palette.secondary);
+      }
+      if (!clean.containsKey('textScale')) {
+        clean['textScale'] = themeController.textScaleFactor;
+      }
+      // Captura today_session quando vier explícita; injeta em pushes
+      // subsequentes pra ela não se perder no cache single-value do
+      // applicationContext.
+      // Importante: usa `payload` (original com nulls) em vez de `clean` (sanitizado)
+      // pra detectar `session: null` corretamente — o sanitize remove keys com
+      // null antes desse bloco, fazendo `clean['session']` parecer ausente.
+      if (payload['type'] == 'today_session') {
+        _lastTodaySession = {
+          'type': 'today_session',
+          'session': payload['session'], // pode ser null (sem sessão hoje)
+        };
+      } else if (_lastTodaySession != null &&
+          _lastTodaySession!['session'] != null && // ← NÃO injeta NSNull
+          !payload.containsKey('session') &&
+          clean['type'] != 'today_session') {
+        // Re-injeta today_session pra cada push (skin update, run_state, etc).
+        // Watch.update(from:) ignora `session` quando type != 'today_session',
+        // então passamos a session em campo dedicado `_attachedTodaySession`
+        // que o Watch sabe ler como fallback. Pulamos quando session é null
+        // — NSNull no payload faz `updateApplicationContext` lançar
+        // "Payload contains unsupported type" e DERRUBA O PUSH INTEIRO.
+        clean['_attachedTodaySession'] = _lastTodaySession!['session'];
+      }
+      await _methodChannel.invokeMethod('pushRunState', clean);
     } catch (_) {/* best-effort, plugin loga internamente */}
+  }
+
+  /// Converte Color → "#RRGGBB" (8-bit canais, sem alpha). Plugin nativo
+  /// repassa direto pro Watch via applicationContext.
+  String _hexFromColor(dynamic color) {
+    // Evita import direto de dart:ui — themeController.palette.primary é
+    // Color do Flutter; usamos .toARGB32() (substituto não-deprecado de .value)
+    // pra extrair canais. Math em int — alocação zero.
+    final v = (color as dynamic).toARGB32() as int;
+    final r = (v >> 16) & 0xFF;
+    final g = (v >> 8) & 0xFF;
+    final b = v & 0xFF;
+    return '#${r.toRadixString(16).padLeft(2, '0').toUpperCase()}'
+        '${g.toRadixString(16).padLeft(2, '0').toUpperCase()}'
+        '${b.toRadixString(16).padLeft(2, '0').toUpperCase()}';
   }
 
   int? get latestBpm => _latestBpm;
@@ -283,7 +380,11 @@ class WorkoutRealtimeService {
       Logger.error('workout_realtime.stop_failed', e, st, {'code': e.code});
     }
     _setState(WorkoutSessionState.idle);
-    _detachEventStream();
+    // NÃO desliga o event stream — Watch comandos (startRun, pauseRun, etc)
+    // E watch_status precisam continuar fluindo. Detachar aqui fazia o
+    // Plugin Swift's onCancel disparar (eventSink = nil) e droppar TODOS
+    // os eventos subsequentes silenciosamente — causa do "iniciar pelo
+    // Watch funciona uma vez só" bug. EventChannel fica vivo pra sempre.
     _emitBpm(null);
   }
 
@@ -391,6 +492,23 @@ class WorkoutRealtimeService {
         final cmd = WatchCommand.fromMap(raw);
         if (cmd.action.isNotEmpty && !_watchCommandController.isClosed) {
           _watchCommandController.add(cmd);
+        }
+        break;
+      case 'watch_reconnected':
+        // Emitido pelo plugin iOS quando WCSession.isReachable flip false→true.
+        // RunBloc consome pra restart imediato da query de BPM (sem esperar
+        // os 15s de staleness — gap visível pro user).
+        if (!_watchReconnectedController.isClosed) {
+          _watchReconnectedController.add(null);
+        }
+        break;
+      case 'watch_app_installed':
+        // Emitido pelo plugin iOS quando isWatchAppInstalled flip false→true
+        // (Watch app reinstalado pelo user OU pelo dev em build). O cache de
+        // applicationContext do Watch é zerado nessa transição, então
+        // qualquer push anterior (today_session) é perdido. main.dart re-empurra.
+        if (!_watchAppInstalledController.isClosed) {
+          _watchAppInstalledController.add(null);
         }
         break;
       default:

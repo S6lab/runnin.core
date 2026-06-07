@@ -47,6 +47,14 @@ private let wcLog = OSLog(subsystem: "ai.runnin.workout", category: "watch-bridg
   private var eventSink: FlutterEventSink?
   private var noSourceTimer: Timer?
   private var receivedAtLeastOne = false
+  /// Snapshot do `WCSession.isReachable` na última transição. Usado pelo
+  /// `sessionReachabilityDidChange` pra detectar flip false→true (reconnect)
+  /// e emitir `watch_reconnected` pro Dart forçar restart imediato.
+  private var _lastReachable: Bool = false
+  /// Snapshot pra detectar transição installed: false → true (Watch app
+  /// recém-instalado). Cache de applicationContext do Watch é zerado nessa
+  /// transição — Dart re-empurra today_session.
+  private var _lastInstalled: Bool = false
   // Throttling do os_log: 1 a cada 5 samples pra não inundar Console.app
   // durante runs longos (Apple Watch emite ~1Hz).
   private var sampleLogCounter = 0
@@ -124,15 +132,32 @@ private let wcLog = OSLog(subsystem: "ai.runnin.workout", category: "watch-bridg
   /// Chamado pelo Dart via MethodChannel `runnin/workout_realtime`
   /// method "pushRunState". Idempotente; é OK chamar a cada tick (1Hz).
   private func pushRunState(_ payload: [String: Any]) {
-    guard WCSession.isSupported() else { return }
+    guard WCSession.isSupported() else {
+      os_log("push_state.skip reason=not_supported", log: wcLog, type: .info)
+      return
+    }
     let session = WCSession.default
-    guard session.activationState == .activated else { return }
-    guard session.isPaired, session.isWatchAppInstalled else { return }
+    guard session.activationState == .activated else {
+      os_log("push_state.skip reason=not_activated state=%d", log: wcLog, type: .info,
+             session.activationState.rawValue)
+      return
+    }
+    let typeStr = payload["type"] as? String ?? "?"
+    let statusStr = payload["status"] as? String ?? "-"
     do {
       try session.updateApplicationContext(payload)
+      os_log("push_state.ok type=%{public}@ status=%{public}@ paired=%d installed=%d reachable=%d",
+             log: wcLog, type: .info, typeStr, statusStr,
+             session.isPaired ? 1 : 0,
+             session.isWatchAppInstalled ? 1 : 0,
+             session.isReachable ? 1 : 0)
     } catch {
-      os_log("push_state.failed err=%{public}@", log: wcLog, type: .error,
-             error.localizedDescription)
+      // Surface erro completo + chaves do payload pra diagnose. NSInvalidArgument
+      // = property-list violation (NSNull, classe custom). WCErrorCodeDeliveryFailed
+      // = bridge problem.
+      os_log("push_state.fail type=%{public}@ err=%{public}@ keys=%{public}@",
+             log: wcLog, type: .error, typeStr,
+             error.localizedDescription, payload.keys.joined(separator: ","))
     }
   }
 
@@ -436,6 +461,24 @@ extension WorkoutRealtimePlugin: WCSessionDelegate {
     replyHandler(["ok": false, "error": "no_action"])
   }
 
+  /// Fallback de delivery quando o Watch chamou `transferUserInfo` porque
+  /// `sendMessage` falhou (iPhone unreachable: bloqueado, em background,
+  /// app não-foreground, etc.). UserInfo é enfileirado e entregue quando
+  /// o iPhone está pronto. Sem este handler, comandos `startRun` enviados
+  /// via transferUserInfo eram silenciosamente droppados → Watch travava
+  /// em INICIANDO até timeout.
+  public func session(_ session: WCSession,
+                      didReceiveUserInfo userInfo: [String: Any] = [:]) {
+    if let action = userInfo["action"] as? String {
+      os_log("wc.recv.userInfo action=%{public}@", log: wcLog, type: .info, action)
+      emit([
+        "type": "watch_command",
+        "action": action,
+        "payload": userInfo,
+      ])
+    }
+  }
+
   public func sessionDidBecomeInactive(_ session: WCSession) {
     os_log("wc.inactive", log: wcLog, type: .info)
   }
@@ -447,16 +490,31 @@ extension WorkoutRealtimePlugin: WCSessionDelegate {
   }
 
   public func sessionWatchStateDidChange(_ session: WCSession) {
+    let nowInstalled = session.isWatchAppInstalled
     os_log("wc.watch_state_changed paired=%d installed=%d reachable=%d",
            log: wcLog, type: .info,
            session.isPaired ? 1 : 0,
-           session.isWatchAppInstalled ? 1 : 0,
+           nowInstalled ? 1 : 0,
            session.isReachable ? 1 : 0)
     emitWatchStatus()
+    if nowInstalled && !_lastInstalled {
+      os_log("wc.watch_app_installed.transition", log: wcLog, type: .info)
+      emit(["type": "watch_app_installed"])
+    }
+    _lastInstalled = nowInstalled
   }
 
   public func sessionReachabilityDidChange(_ session: WCSession) {
-    os_log("wc.reachability=%d", log: wcLog, type: .info, session.isReachable ? 1 : 0)
+    let nowReachable = session.isReachable
+    os_log("wc.reachability=%d", log: wcLog, type: .info, nowReachable ? 1 : 0)
     emitWatchStatus()
+    // Reconnect detector: quando reachability vira true depois de ter estado
+    // false, surfa um evento dedicado pro Dart forçar restart da query de
+    // BPM/HRV sem esperar o timer de staleness (15s). Sem isso o user vê
+    // gap visível de BPM toda vez que iPhone+Watch reconectam.
+    if nowReachable && _lastReachable == false {
+      emit(["type": "watch_reconnected"])
+    }
+    _lastReachable = nowReachable
   }
 }

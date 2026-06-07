@@ -39,12 +39,18 @@ class ActiveRunPage extends StatelessWidget {
   /// se a run abre coach AI ao vivo (premium) ou usa TTS de telemetria
   /// on-device a cada km (freemium).
   final bool? isPremium;
+  /// Quando true, dispara StartRun automaticamente no primeiro frame após
+  /// mount — sem aguardar tap manual no botão INICIAR. Usado pelo
+  /// WatchStartListener quando o Watch dispara `startRun` e o iPhone
+  /// estava fora do shell de corrida.
+  final bool autoStart;
   const ActiveRunPage({
     super.key,
     this.initialType = 'Free Run',
     this.planSessionId,
     this.alertPrefs,
     this.isPremium,
+    this.autoStart = false,
   });
 
   @override
@@ -65,6 +71,7 @@ class ActiveRunPage extends StatelessWidget {
         planSessionId: planSessionId,
         alertPrefs: alertPrefs,
         isPremium: isPremium,
+        autoStart: autoStart,
       ),
     );
   }
@@ -122,11 +129,15 @@ class _ActiveRunView extends StatefulWidget {
   final String? planSessionId;
   final Map<String, bool>? alertPrefs;
   final bool? isPremium;
+  /// Dispara StartRun no primeiro frame quando true. Usado pelo Watch que
+  /// inicia corrida com iPhone fora do shell (ver WatchStartListener).
+  final bool autoStart;
   const _ActiveRunView({
     required this.initialType,
     this.planSessionId,
     this.alertPrefs,
     this.isPremium,
+    this.autoStart = false,
   });
 
   @override
@@ -165,12 +176,32 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
       if (!mounted) return;
       final needsAction = _gpsStatus == _GpsStatus.denied ||
           _gpsStatus == _GpsStatus.off;
-      if (!needsAction) return;
-      final granted = await GpsPermissionModal.show(
-        context,
-        blocked: true,
-      );
-      if (granted && mounted) await _refreshGpsStatus();
+      // Quando autoStart (corrida iniciada pelo Watch), NÃO bloqueia com modal —
+      // user provavelmente está olhando pro Watch, não pro iPhone. RunBloc.
+      // _onStart trata permissão negada propagando erro pro state. Quando é
+      // tap manual no iPhone (autoStart=false) e GPS está bloqueado, modal
+      // ainda aparece pro user reagir.
+      if (needsAction && !widget.autoStart) {
+        final granted = await GpsPermissionModal.show(
+          context,
+          blocked: true,
+        );
+        if (granted && mounted) await _refreshGpsStatus();
+      }
+      // autoStart vem do Watch (via WatchStartListener) — não esperamos o
+      // user bater INICIAR. Dispatch direto após GPS resolver. Se permissão
+      // foi negada, RunBloc trata graciosamente (timer roda sem GPS).
+      if (widget.autoStart && mounted) {
+        unlockAudioContext();
+        final isPremium =
+            widget.isPremium ?? subscriptionController.isPro;
+        context.read<RunBloc>().add(StartRun(
+              type: widget.initialType,
+              planSessionId: widget.planSessionId,
+              alertPrefs: widget.alertPrefs,
+              isPremium: isPremium,
+            ));
+      }
     });
   }
 
