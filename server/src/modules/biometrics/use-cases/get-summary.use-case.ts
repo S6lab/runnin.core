@@ -9,6 +9,10 @@ export interface BiometricSummary {
   avgRestingBpm: number | null;
   maxBpm: number | null;
   avgSleepHours: number | null;
+  /// Horas dormidas na noite MAIS RECENTE (último dia com dados). null se
+  /// nenhuma noite no período tem sleep. UI usa pra "Sono última noite"
+  /// (distinto da média 7d).
+  lastNightSleepHours: number | null;
   /// Score 0-100 de qualidade do sono médio. Composição:
   ///   40 pts duração (target 8h): linear de 0h→0pts, 8h+→40pts
   ///   30 pts %deep (target 13-23% segundo Sleep Foundation): peak no meio
@@ -85,6 +89,14 @@ export class GetSummaryUseCase {
       avgRem: avgRemH,
     });
 
+    // Última noite = dia MAIS RECENTE no mapa de sleepByDay (não
+    // necessariamente ontem — user pode não ter dormido com Watch
+    // antes-de-ontem). Ordena chaves descrescente e pega a primeira.
+    const sleepDays = Array.from(sleepByDay.entries()).sort((a, b) =>
+      b[0].localeCompare(a[0]),
+    );
+    const lastNightSleepHours = sleepDays.length ? sleepDays[0]![1] : null;
+
     return {
       windowDays,
       from: from.toISOString(),
@@ -92,6 +104,7 @@ export class GetSummaryUseCase {
       avgRestingBpm: avg(restingBpms),
       maxBpm: maxBpms.length ? Math.max(...maxBpms) : null,
       avgSleepHours: avgTotal,
+      lastNightSleepHours,
       avgSleepQualityScore: qualityScore,
       avgSleepDeepH: avgDeepH,
       avgSleepRemH: avgRemH,
