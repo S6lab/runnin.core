@@ -24,6 +24,7 @@ android {
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
@@ -65,6 +66,7 @@ flutter {
 }
 
 dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
     // BPM realtime via Wear OS pareado durante a Run ativa.
     // Plugin nativo (WorkoutRealtimePlugin) usa MeasureClient pra streaming
     // 1Hz de heart rate. RC02 é a versão mais nova publicada (Maven Google);

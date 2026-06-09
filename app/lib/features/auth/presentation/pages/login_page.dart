@@ -238,6 +238,7 @@ class _LoginPageState extends State<LoginPage> {
             });
           },
           codeSent: (verificationId, resendToken) {
+            _phoneVerificationId = verificationId;
             if (!mounted) return;
             setState(() {
               _phoneMode = true;
