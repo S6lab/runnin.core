@@ -49,6 +49,12 @@ class _OnboardingPageState extends State<OnboardingPage> {
   @override
   void initState() {
     super.initState();
+    // Pré-preenche nome a partir do displayName do Firebase (Apple/Google
+    // já populam; SMS fica vazio para o usuário digitar).
+    final displayName = FirebaseAuth.instance.currentUser?.displayName?.trim() ?? '';
+    if (displayName.isNotEmpty) {
+      _nameCtrl.text = displayName;
+    }
     _nameCtrl.addListener(_handleFieldChange);
     _birthDateCtrl.addListener(_handleFieldChange);
     _weightCtrl.addListener(_handleFieldChange);
