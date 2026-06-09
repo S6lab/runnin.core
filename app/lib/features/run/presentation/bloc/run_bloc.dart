@@ -1194,10 +1194,13 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
         final dtMs = pos.timestamp.millisecondsSinceEpoch - last.ts;
         final dtSec = dtMs / 1000;
         final impliedSpeed = dtSec > 0 ? rawDistance / dtSec : 0;
-        const minMovementMs = 0.5; // 1.8 km/h
+        const minMovementMps = 0.5; // 1.8 km/h
         const minDeltaSec = 2.0;
         const maxImpliedSpeed = 8.0; // 28.8 km/h
-        final isRealMovement = (pos.speed >= minMovementMs) &&
+        // speed < 0 = desconhecido (emulador / GPS sem lock) — omite o gate
+        // de velocidade e confia só em dtSec + impliedSpeed.
+        final speedOk = pos.speed < 0 || pos.speed >= minMovementMps;
+        final isRealMovement = speedOk &&
             dtSec >= minDeltaSec &&
             impliedSpeed <= maxImpliedSpeed;
         if (isRealMovement) {
