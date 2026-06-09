@@ -50,9 +50,18 @@ export class GetStatsBreakdownUseCase {
     private readonly plans: PlanRepository,
   ) {}
 
-  async execute(userId: string, period: StatsPeriod): Promise<StatsBreakdown> {
+  async execute(
+    userId: string,
+    period: StatsPeriod,
+    /** Offset em minutos da TZ do user vs UTC (Dart: DateTime.now().timeZoneOffset.inMinutes;
+     *  POSITIVO ao leste, negativo ao oeste. BRT = -180). Sem isso o
+     *  server (Cloud Run = UTC) calculava "esta semana" usando meia-noite
+     *  UTC e cortava runs do user feitas tarde da noite local (que ficam
+     *  no dia UTC seguinte ou anterior). Default 0 = UTC (backwards-compat). */
+    tzOffsetMin: number = 0,
+  ): Promise<StatsBreakdown> {
     const now = new Date();
-    const buckets = buildBuckets(period, now);
+    const buckets = buildBuckets(period, now, tzOffsetMin);
     const windowStart = buckets[0]!.start;
     const windowEnd = now;
 
@@ -175,44 +184,65 @@ export class GetStatsBreakdownUseCase {
 
 // ── Buckets ──────────────────────────────────────────────────────────────────
 
-function buildBuckets(period: StatsPeriod, now: Date): Bucket[] {
+function buildBuckets(period: StatsPeriod, now: Date, tzOffsetMin: number): Bucket[] {
+  // Trabalha em "local-as-UTC": convertemos `now` UTC pra um Date que
+  // *parece* meia-noite local quando lido como UTC. Todas as funções de
+  // bucket usam getUTC* nesse Date. No final, voltamos pra UTC real
+  // subtraindo o offset. Sem essa gambiarra, getDate/getMonth nativos
+  // tentariam aplicar o TZ do processo (Cloud Run = UTC).
+  const offsetMs = tzOffsetMin * 60 * 1000;
+  const localNow = new Date(now.getTime() + offsetMs);
+  const toUtc = (localDate: Date): Date => new Date(localDate.getTime() - offsetMs);
+
   if (period === 'week') {
-    const monday = startOfWeekMonday(now);
+    const monday = startOfWeekMondayLocal(localNow);
     return Array.from({ length: 7 }, (_, i) => {
-      const start = addDays(monday, i);
-      return { label: DOW_PT[i]!, start, end: addDays(start, 1) };
+      const startLocal = addDaysUtc(monday, i);
+      const endLocal = addDaysUtc(monday, i + 1);
+      return { label: DOW_PT[i]!, start: toUtc(startLocal), end: toUtc(endLocal) };
     });
   }
   if (period === 'month') {
-    const y = now.getFullYear();
-    const m = now.getMonth();
-    const monthStart = new Date(y, m, 1);
-    const nextMonth = new Date(y, m + 1, 1);
+    const y = localNow.getUTCFullYear();
+    const m = localNow.getUTCMonth();
+    const monthStartLocal = new Date(Date.UTC(y, m, 1));
+    const nextMonthLocal = new Date(Date.UTC(y, m + 1, 1));
     const buckets: Bucket[] = [];
     let wk = 1;
     for (let day = 1; ; day += 7, wk++) {
-      const start = new Date(y, m, day);
-      if (start >= nextMonth) break;
-      let end = new Date(y, m, day + 7);
-      if (end > nextMonth) end = nextMonth;
-      buckets.push({ label: `S${wk}`, start, end });
+      const startLocal = new Date(Date.UTC(y, m, day));
+      if (startLocal >= nextMonthLocal) break;
+      let endLocal = new Date(Date.UTC(y, m, day + 7));
+      if (endLocal > nextMonthLocal) endLocal = nextMonthLocal;
+      buckets.push({ label: `S${wk}`, start: toUtc(startLocal), end: toUtc(endLocal) });
     }
+    void monthStartLocal;
     return buckets;
   }
   // threeMonths: mês atual + 2 anteriores.
   const buckets: Bucket[] = [];
+  const y = localNow.getUTCFullYear();
+  const m = localNow.getUTCMonth();
   for (let i = 2; i >= 0; i--) {
-    const start = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const end = new Date(now.getFullYear(), now.getMonth() - i + 1, 1);
-    buckets.push({ label: MONTHS_PT[start.getMonth()]!, start, end });
+    const startLocal = new Date(Date.UTC(y, m - i, 1));
+    const endLocal = new Date(Date.UTC(y, m - i + 1, 1));
+    buckets.push({
+      label: MONTHS_PT[startLocal.getUTCMonth()]!,
+      start: toUtc(startLocal),
+      end: toUtc(endLocal),
+    });
   }
   return buckets;
 }
 
-function startOfWeekMonday(d: Date): Date {
-  const date = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-  const dow = date.getDay() === 0 ? 7 : date.getDay(); // Mon=1..Sun=7
-  return addDays(date, -(dow - 1));
+function startOfWeekMondayLocal(d: Date): Date {
+  const date = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+  const dow = date.getUTCDay() === 0 ? 7 : date.getUTCDay(); // Mon=1..Sun=7
+  return addDaysUtc(date, -(dow - 1));
+}
+
+function addDaysUtc(d: Date, n: number): Date {
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + n));
 }
 
 // ── Plano (planejado) ──────────────────────────────────────────────────────

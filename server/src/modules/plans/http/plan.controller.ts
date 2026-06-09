@@ -47,23 +47,59 @@ async function detectCompletion(plan: Plan): Promise<Plan> {
 }
 
 /**
- * Garante que cada sessão tem executionSegments populados. Planos antigos
- * (gerados antes do builder determinístico) podem ter [] ou 1 segment
- * solto vindo do LLM. Regenera in-memory na leitura sem mutar Firestore
- * — migration silenciosa só pra resposta.
+ * Garante que cada sessão tem recheio completo: executionSegments,
+ * hydrationLiters, nutritionPre/Post. Rede de segurança no read pra
+ * sessões revisadas em que o LLM omitiu algum campo (apesar de Fix 4c
+ * hidratar no apply). Planos antigos (pré-builder) também passam aqui.
+ *
+ * Não escreve no Firestore — só patcha in-memory pra resposta. Lazy.
  */
 async function ensureSessionSegments(plan: Plan): Promise<Plan> {
   let patched = false;
   const tpl = await getRoteiroTemplates();
-  const weeks = plan.weeks.map((w) => ({
-    ...w,
-    sessions: w.sessions.map((s: PlanSession) => {
-      if ((s.executionSegments?.length ?? 0) >= 2) return s;
-      patched = true;
-      return { ...s, executionSegments: buildExecutionSegments(s, tpl) };
-    }),
-  }));
-  return patched ? { ...plan, weeks } : plan;
+  const patchWeeks = (weeks: Plan['weeks']): Plan['weeks'] =>
+    weeks.map((w) => ({
+      ...w,
+      sessions: w.sessions.map((s: PlanSession) => {
+        const needsSegments = (s.executionSegments?.length ?? 0) < 2;
+        const needsHydration = !s.hydrationLiters || s.hydrationLiters <= 0;
+        const needsPre = !s.nutritionPre || s.nutritionPre.trim().length === 0;
+        const needsPost = !s.nutritionPost || s.nutritionPost.trim().length === 0;
+        if (!needsSegments && !needsHydration && !needsPre && !needsPost) return s;
+        patched = true;
+        const next = { ...s };
+        if (needsSegments) next.executionSegments = buildExecutionSegments(s, tpl);
+        if (needsHydration) next.hydrationLiters = defaultHydrationFromDist(s.distanceKm);
+        if (needsPre) next.nutritionPre = defaultPreFor(s.type);
+        if (needsPost) next.nutritionPost = defaultPostFor(s.type);
+        return next;
+      }),
+    }));
+  const weeks = patchWeeks(plan.weeks);
+  const adjustedWeeks = plan.adjustedWeeks ? patchWeeks(plan.adjustedWeeks) : undefined;
+  return patched ? { ...plan, weeks, ...(adjustedWeeks ? { adjustedWeeks } : {}) } : plan;
+}
+
+function defaultHydrationFromDist(km: number): number {
+  if (km <= 4) return 1.5;
+  if (km <= 8) return 2.0;
+  return 2.5;
+}
+
+function defaultPreFor(type: string): string {
+  const t = type.toLowerCase();
+  if (t.includes('long') || t.includes('tempo')) return 'Banana com pasta de amendoim + café 45min antes.';
+  if (t.includes('tiro') || t.includes('interval') || t.includes('fartlek')) return 'Pão integral com mel + café 30-45min antes.';
+  if (t.includes('recovery') || t.includes('caminhada')) return 'Fruta + chá 20min antes.';
+  return 'Lanche leve 30-45min antes — banana ou pão integral com mel.';
+}
+
+function defaultPostFor(type: string): string {
+  const t = type.toLowerCase();
+  if (t.includes('long')) return 'Refeição completa em 30min: proteína + carbo + fruta.';
+  if (t.includes('tiro') || t.includes('interval')) return 'Shake proteico ou iogurte com frutas em 30min.';
+  if (t.includes('recovery') || t.includes('caminhada')) return 'Hidratação + fruta — recuperação ativa.';
+  return 'Refeição balanceada em até 1h: proteína + carbo + hidratação.';
 }
 
 export async function getCurrentPlan(req: Request, res: Response, next: NextFunction): Promise<void> {

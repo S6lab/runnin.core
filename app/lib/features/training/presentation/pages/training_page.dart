@@ -133,7 +133,7 @@ class _TrainingPageState extends State<TrainingPage> {
           if (plan != null &&
               !(plan.isGenerating) &&
               !_weekAutoSelected &&
-              plan.weeks.isNotEmpty) {
+              plan.effectiveWeeks.isNotEmpty) {
             _selectedWeek = _currentPlanWeekIndex(plan);
             _weekAutoSelected = true;
           }
@@ -249,7 +249,7 @@ class _TrainingPageState extends State<TrainingPage> {
         _lastPlanCheckAt = DateTime.now();
         if (!plan.isGenerating &&
             !_weekAutoSelected &&
-            plan.weeks.isNotEmpty) {
+            plan.effectiveWeeks.isNotEmpty) {
           _selectedWeek = _currentPlanWeekIndex(plan);
           _weekAutoSelected = true;
         }
@@ -911,7 +911,7 @@ class _PlanTab extends StatelessWidget {
             onWeekTap: (weekNumber) {
               // Volta pra visão SEMANAL com a semana clicada selecionada.
               // weekNumber é 1-based; selectedWeek é 0-based.
-              onWeekChanged((weekNumber - 1).clamp(0, plan.weeks.length - 1));
+              onWeekChanged((weekNumber - 1).clamp(0, plan.effectiveWeeks.length - 1));
               onPlanModeChanged(_PlanMode.weekly);
             },
           ),
@@ -1015,8 +1015,11 @@ class _WeeklyPlanView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final week = plan.weeks.isNotEmpty
-        ? plan.weeks[selectedWeek.clamp(0, plan.weeks.length - 1)]
+    // TREINO/SEMANAL espelha o estado VIGENTE do plano (com ajustes da
+    // revisão semanal). "VER PLANO BASE" tem rota dedicada que lê weeks.
+    final weeks = plan.effectiveWeeks;
+    final week = weeks.isNotEmpty
+        ? weeks[selectedWeek.clamp(0, weeks.length - 1)]
         : null;
     final orderedSessions = [...?week?.sessions]
       ..sort((a, b) => a.dayOfWeek.compareTo(b.dayOfWeek));
@@ -1032,15 +1035,15 @@ class _WeeklyPlanView extends StatelessWidget {
           height: 40,
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
-            itemCount: plan.weeks.length,
+            itemCount: weeks.length,
             itemBuilder: (_, index) {
               final isSelected = index == selectedWeek;
               final isCurrent = index == plan.currentWeekIndex();
               // Última semana é a SEMANA DA META quando o plano tem
               // sessão-alvo marcada (RACE). Mostra label "META" abaixo.
-              final isLastWeek = index == plan.weeks.length - 1;
+              final isLastWeek = index == weeks.length - 1;
               final hasTarget = isLastWeek &&
-                  plan.weeks[index].sessions.any((s) => s.isTarget);
+                  weeks[index].sessions.any((s) => s.isTarget);
               return _WeekChip(
                 weekNumber: index + 1,
                 selected: isSelected,
@@ -1129,7 +1132,7 @@ class _WeeklyPlanView extends StatelessWidget {
         // Última semana: card de fechamento (CHEGADA pra race, FECHAMENTO
         // pra flow). Aparece DEPOIS dos 7 dias pra fechar visualmente
         // a semana com o objetivo atingido.
-        if (week != null && selectedWeek == plan.weeks.length - 1) ...[
+        if (week != null && selectedWeek == weeks.length - 1) ...[
           const SizedBox(height: 12),
           PlanClosingCard(plan: plan, lastWeek: week),
         ],
@@ -1289,7 +1292,7 @@ class _MonthlyPlanView extends StatelessWidget {
         // detalhadas (skeleton) aparecem com cadeado e dialog ao tocar; a
         // regra D+15 é entregue pelo server via detailLevel + enrichTwoTier
         // a cada checkpoint aceito.
-        ...plan.weeks.asMap().entries.map((entry) {
+        ...plan.effectiveWeeks.asMap().entries.map((entry) {
           final weekIndex = entry.key;
           final week = entry.value;
           final currentWeekIndex = _currentPlanWeekIndex(plan);
@@ -1326,7 +1329,7 @@ class _MonthlyPlanView extends StatelessWidget {
         // Limitamos a 4 aqui pra o gráfico não virar uma fileira ilegível em
         // planos longos — a leitura semana-a-semana acontece nos cards acima.
         _CargaBars(
-          weeks: plan.weeks.take(4).toList(),
+          weeks: plan.effectiveWeeks.take(4).toList(),
           currentWeekIndex: _currentPlanWeekIndex(plan),
         ),
         const SizedBox(height: 16),
@@ -2092,11 +2095,12 @@ class _RunFeedback {
 }
 
 _MonthlyStats _buildMonthlyStats(Plan plan) {
-  final totalSessions = plan.weeks.fold<int>(
+  final weeks = plan.effectiveWeeks;
+  final totalSessions = weeks.fold<int>(
     0,
     (sum, week) => sum + week.sessions.length,
   );
-  final totalKm = plan.weeks.fold<double>(
+  final totalKm = weeks.fold<double>(
     0,
     (sum, week) =>
         sum +
@@ -2108,7 +2112,7 @@ _MonthlyStats _buildMonthlyStats(Plan plan) {
   return _MonthlyStats(
     totalKm: totalKm,
     totalSessions: totalSessions,
-    restDays: (plan.weeks.length * 7) - totalSessions,
+    restDays: (weeks.length * 7) - totalSessions,
   );
 }
 

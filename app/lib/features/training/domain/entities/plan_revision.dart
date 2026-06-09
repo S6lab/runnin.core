@@ -33,10 +33,14 @@ class PlanRevision {
   factory PlanRevision.fromJson(Map<String, dynamic> j) => PlanRevision(
     id: j['id'] as String,
     planId: j['planId'] as String,
-    type: j['type'] as String,
+    // Server entity chama o campo `requestType` (PlanRevisionRequestType).
+    // App esperava `type` e o cast lançava NoSuchMethodError silenciado no
+    // catch — UI mostrava "Erro ao carregar histórico" sem rastro. Aceita
+    // ambos pra ser compat com docs antigos que possam ter `type`.
+    type: (j['requestType'] ?? j['type'] ?? 'other') as String,
     subOption: j['subOption'] as String?,
     freeText: j['freeText'] as String?,
-    coachExplanation: j['coachExplanation'] as String,
+    coachExplanation: j['coachExplanation'] as String? ?? '',
     status: j['status'] as String,
     weekIndex: (j['weekIndex'] as num).toInt(),
     createdAt: j['createdAt'] as String,

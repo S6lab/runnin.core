@@ -57,7 +57,12 @@ class NotificationsCubit extends Cubit<NotificationsState> {
     try {
       final page = await _ds.list();
       if (isClosed) return;
-      emit(NotificationsLoaded(page.items, nextCursor: page.nextCursor));
+      // Fix TF 59: dedup defensivo na primeira página. User reportou cards
+      // duplicados — bug raiz no server (dedupeKey volátil), mas dedup do
+      // front-end protege em qualquer regressão futura.
+      final seen = <String>{};
+      final unique = page.items.where((n) => seen.add(n.id)).toList();
+      emit(NotificationsLoaded(unique, nextCursor: page.nextCursor));
     } catch (_) {
       if (isClosed) return;
       emit(const NotificationsError('Erro ao carregar notificações.'));

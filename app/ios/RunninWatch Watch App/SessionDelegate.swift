@@ -93,6 +93,41 @@ class SessionDelegate: NSObject, WCSessionDelegate {
         }
     }
 
+    /// Push de BPM Watch→iPhone via WCSession. iOS suspende
+    /// HKAnchoredObjectQuery no phone em background, então delegar a entrega
+    /// pro HealthKit sync deixava o app cego ao BPM com tela bloqueada.
+    ///
+    /// Estratégia: `updateApplicationContext` (em vez de sendMessage). Por quê?
+    /// `sendMessage` exige `session.isReachable=true`, que falha em background,
+    /// quando o app Watch tá em uma complication, e SEMPRE no simulador.
+    /// `updateApplicationContext` entrega com dedup automático (último valor
+    /// vence) — perfeito pra BPM live a 1Hz: phone só precisa do sample
+    /// atual, não do histórico. Throttle 1Hz na chamada pra match.
+    private var lastPushAt: TimeInterval = 0
+    private static let bpmPushIntervalS: TimeInterval = 1.0
+    func pushBpmToPhone(_ bpm: Int) {
+        guard bpm > 0 else { return }
+        let now = Date().timeIntervalSince1970
+        if now - lastPushAt < Self.bpmPushIntervalS { return }
+        lastPushAt = now
+        let session = WCSession.default
+        guard session.activationState == .activated else { return }
+        let payload: [String: Any] = [
+            "type": "bpm_update",
+            "bpm": bpm,
+            "ts": Int(now * 1000),
+        ]
+        do {
+            try session.updateApplicationContext(payload)
+        } catch {
+            os_log("bpm.push.ctx_failed err=%{public}@", log: wsLog, type: .error,
+                   error.localizedDescription)
+            // Last-resort: enfileira como userInfo (entrega garantida mas
+            // FIFO, então em rajada de N atualizações pode acumular).
+            session.transferUserInfo(payload)
+        }
+    }
+
     /// Fallback: iPhone usa `transferUserInfo` quando Watch não está reachable.
     /// Entrega quando Watch acorda — ótimo pra stopWorkout em fim de corrida
     /// (se Watch estava no pulso e foi desligado mid-corrida).

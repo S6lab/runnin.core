@@ -8,7 +8,7 @@ import { RunRepository } from '@modules/runs/domain/run.repository';
 import { CheckpointAnalysisStrategy } from './checkpoint-analysis.strategy';
 import { CreateNotificationUseCase } from '@modules/notifications/domain/use-cases/create-notification.use-case';
 import { SendUserPushUseCase } from '@modules/notifications/domain/use-cases/send-user-push.use-case';
-import { PlanRevision as PlanRevisionLog } from '../domain/plan.entity';
+import { PlanRevision as PlanRevisionLog, effectivePlanWeeks } from '../domain/plan.entity';
 import {
   buildChangesSnapshot,
   buildCheckpointProposal,
@@ -19,6 +19,9 @@ import {
   PlanNotReadyError,
 } from './checkpoint-shared';
 import { enforceRevisionInvariants } from './enforce-race-week-structure';
+import { clampRevisionMagnitude } from './clamp-revision-magnitude';
+import { hydrateRevisedSessions } from './hydrate-revised-sessions';
+import { FirestoreUserRepository } from '@modules/users/infra/firestore-user.repository';
 import { NotFoundError } from '@shared/errors/app-error';
 import { logger } from '@shared/logger/logger';
 
@@ -81,14 +84,19 @@ export class ApplyWeeklyRevisionUseCase {
     // newWeeksSnapshot=[] pra a UI distinguir do caso ajustado.
     const noChanges = proposal.newWeeks.length === 0;
     const now = new Date().toISOString();
+    // Parte do estado VIGENTE (adjustedWeeks ?? weeks) — nunca da base.
+    // Cada revisão é cumulativa sobre o snapshot anterior.
+    const previousEffective = effectivePlanWeeks(plan);
     const mergedWeeks = noChanges
-      ? plan.weeks
-      : mergeProposedWeeks(plan, weekNumber, proposal.newWeeks);
+      ? previousEffective
+      : mergeProposedWeeks(
+          { ...plan, weeks: previousEffective },
+          weekNumber,
+          proposal.newWeeks,
+        );
 
-    // Pós-merge: garante invariantes da âncora da prova (race week intocada,
-    // weeksCount preservado, passado intacto). Se o LLM violou, repara e
-    // segue — não bloqueia a revisão. Log `plan.revision.repaired` captura
-    // drift pra debug.
+    // Pós-merge passo 1: invariantes da âncora da prova (race+taper, weeksCount,
+    // passado). Compara contra a BASE (plan.weeks) pra detectar drift estrutural.
     const enforced = noChanges
       ? { weeks: mergedWeeks, changes: [] as string[] }
       : enforceRevisionInvariants(mergedWeeks, {
@@ -96,7 +104,27 @@ export class ApplyWeeklyRevisionUseCase {
           originalWeeks: plan.weeks,
           currentWeekNumber: weekNumber,
         });
-    const newPlanWeeks = enforced.weeks;
+
+    // Pós-merge passo 2: cap absoluto de magnitude (70%-110% vs semana anterior).
+    // Cobre LLM que ignora a regra "deload 15-30%" e manda 83% de corte.
+    const clampedResult = noChanges
+      ? { weeks: enforced.weeks, clamped: [] }
+      : clampRevisionMagnitude(enforced.weeks, previousEffective, weekNumber, {
+          planId,
+          userId,
+        });
+
+    // Pós-merge passo 3: hidrata recheio das sessões revisadas (executionSegments,
+    // hidratação, nutrição, targetPace) + força detailLevel + fallback narrative.
+    // Sessões em weeks > current+2 ficam como skeleton (locked é OK ali).
+    const profile = await this._loadProfile(userId);
+    const newAdjustedWeeks = noChanges
+      ? clampedResult.weeks
+      : await hydrateRevisedSessions(clampedResult.weeks, {
+          currentWeekNumber: weekNumber,
+          profile,
+          plan,
+        });
 
     const revision: PlanRevision = {
       id: uuid(),
@@ -127,8 +155,11 @@ export class ApplyWeeklyRevisionUseCase {
         : buildChangesSnapshot(proposal.oldFollowingWeeks, proposal.newWeeks),
     };
 
+    // ATENÇÃO: NÃO mexer em `plan.weeks` — é a BASE IMUTÁVEL exibida em
+    // "VER PLANO BASE". Salva o snapshot novo em `adjustedWeeks`, que é
+    // o que as telas de treino vigente leem via `effectivePlanWeeks`.
     await this.planRepo.update(planId, userId, {
-      weeks: newPlanWeeks,
+      adjustedWeeks: newAdjustedWeeks,
       revisions: [...(plan.revisions ?? []), logEntry],
       updatedAt: now,
     });
@@ -149,10 +180,13 @@ export class ApplyWeeklyRevisionUseCase {
       : 'O coach ajustou as próximas 2 semanas com base na sua jornada. Toque pra ver o que mudou.';
 
     try {
+      // dedupeKey estável por (semana, plano) — antes era revision.id (UUID),
+      // que gerava notif nova cada vez que o cron re-rodava com retry/race.
+      // Agora 2 calls com mesmo (week, plan) viram 1 doc.
       await this.createNotification.execute({
         userId,
         type: 'plan_updated',
-        dedupeKey: revision.id,
+        dedupeKey: `weekly_w${weekNumber}_${planId}`,
         title: notifTitle,
         body: notifBody,
         icon: 'auto_awesome',
@@ -183,5 +217,21 @@ export class ApplyWeeklyRevisionUseCase {
       planId, userId, weekNumber, revisionId: revision.id, noChanges,
     });
     return { revision };
+  }
+
+  /** Carrega o perfil pra usar peso (hidratação) + level (pace defaults).
+   *  Best-effort: se falhar, hidrata com defaults conservadores. */
+  private async _loadProfile(userId: string): Promise<{ weight?: number; level?: string } | null> {
+    try {
+      const repo = new FirestoreUserRepository();
+      const profile = await repo.findById(userId);
+      if (!profile) return null;
+      return {
+        weight: typeof profile.weight === 'number' ? profile.weight : undefined,
+        level: typeof profile.level === 'string' ? profile.level : undefined,
+      };
+    } catch {
+      return null;
+    }
   }
 }

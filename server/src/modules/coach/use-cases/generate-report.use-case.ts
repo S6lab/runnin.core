@@ -11,7 +11,7 @@ import { CoachReport, CoachReportSections } from '../domain/coach-report.entity'
 import { CoachReportRepository } from '../domain/coach-report.repository';
 import { CoachRuntimeContextService } from './coach-runtime-context.service';
 import { getFirestore } from '@shared/infra/firebase/firebase.client';
-import { Plan, PlanRevision } from '@modules/plans/domain/plan.entity';
+import { Plan, PlanRevision, PlanSession, effectivePlanWeeks } from '@modules/plans/domain/plan.entity';
 
 /**
  * Geração two-phase do relatório pós-corrida:
@@ -77,6 +77,40 @@ export class GenerateReportUseCase {
       `- BPM máximo: ${run.maxBpm ?? 'N/A'}`,
     ];
     if (run.targetPace) summaryLines.push(`- Pace alvo: ${run.targetPace}/km`);
+
+    // Comparativo META vs FEITO da sessão planejada. Sem essas linhas,
+    // o coach gerava o relatório sem saber se o user cumpriu/passou/
+    // ficou abaixo do plano — análises ficavam genéricas. Free Run
+    // (planSessionId == null) pula esse bloco.
+    if (run.planSessionId) {
+      try {
+        const fullPlan = await this._fetchCurrentPlan(userId);
+        const planned = fullPlan
+          ? _findPlannedSession(fullPlan, run.planSessionId)
+          : null;
+        if (planned) {
+          summaryLines.push('- META vs FEITO da sessão planejada:');
+          summaryLines.push(
+            `  · Distância: planejado ${planned.distanceKm.toFixed(1)}km, feito ${dist}km`,
+          );
+          if (planned.targetPace) {
+            summaryLines.push(
+              `  · Pace: planejado ${planned.targetPace}/km, feito ${run.avgPace ?? 'N/A'}/km`,
+            );
+          }
+          if (planned.durationMin != null) {
+            summaryLines.push(
+              `  · Duração: planejado ${Math.round(planned.durationMin)}min, feito ${minutes}min`,
+            );
+          }
+        }
+      } catch (err) {
+        logger.warn('coach.report.planned_compare_failed', {
+          runId: run.id,
+          err: String(err),
+        });
+      }
+    }
 
     const planContext = runtime.currentPlan
       ? `Plano: ${runtime.currentPlan.goal} (${runtime.currentPlan.level}, semana atual ${runtime.currentPlan.currentWeek?.weekNumber ?? 'N/A'})`
@@ -266,9 +300,12 @@ export class GenerateReportUseCase {
   }
 
   /** Plano com semana anterior, atual e próxima — recortado pra caber
-   *  no prompt sem inflar 200 sessões inteiras. */
+   *  no prompt sem inflar 200 sessões inteiras. Usa o snapshot VIGENTE
+   *  (adjustedWeeks) pra o relatório refletir o plano que o atleta tá
+   *  realmente seguindo, não a base imutável. */
   private _buildEnrichedPlanContext(plan: Plan | null): string {
-    if (!plan || plan.status !== 'ready' || plan.weeks.length === 0) {
+    const weeks = plan ? effectivePlanWeeks(plan) : [];
+    if (!plan || plan.status !== 'ready' || weeks.length === 0) {
       return 'Sem plano ativo.';
     }
     const createdAt = Date.parse(plan.createdAt);
@@ -276,12 +313,12 @@ export class GenerateReportUseCase {
       ? 0
       : Math.min(
           Math.floor((Date.now() - createdAt) / (7 * 86_400_000)),
-          plan.weeks.length - 1,
+          weeks.length - 1,
         );
     const slice = [
-      plan.weeks[idx - 1],
-      plan.weeks[idx],
-      plan.weeks[idx + 1],
+      weeks[idx - 1],
+      weeks[idx],
+      weeks[idx + 1],
     ].filter((w): w is NonNullable<typeof w> => !!w);
     const lines = [
       `Plano: ${plan.goal} (${plan.level}, ${plan.weeksCount} semanas)`,
@@ -347,4 +384,21 @@ export class GenerateReportUseCase {
       return null;
     }
   }
+}
+
+/** Lookup linear da PlanSession por id em todas as semanas.
+ *  Olha primeiro o vigente; cai pra base se a revisão removeu a sessão
+ *  mas a run histórica ainda aponta pra ela. */
+function _findPlannedSession(plan: Plan, sessionId: string): PlanSession | null {
+  for (const week of effectivePlanWeeks(plan)) {
+    const s = week.sessions.find((s) => s.id === sessionId);
+    if (s) return s;
+  }
+  if (plan.adjustedWeeks && plan.adjustedWeeks.length > 0) {
+    for (const week of plan.weeks) {
+      const s = week.sessions.find((s) => s.id === sessionId);
+      if (s) return s;
+    }
+  }
+  return null;
 }

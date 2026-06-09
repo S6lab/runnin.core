@@ -141,7 +141,20 @@ export interface Plan {
    * Default = createdAt date.
    */
   startDate?: string;
+  /**
+   * BASE IMUTÁVEL — semanas geradas na criação do plano. Nunca alteradas
+   * por revisões/checkpoints. Tela "VER PLANO BASE" lê DAQUI. Permite ao
+   * atleta sempre comparar o que foi planejado vs. o que está vigente.
+   */
   weeks: PlanWeek[];
+  /**
+   * SEMANAS VIGENTES (snapshot acumulado das revisões aplicadas). Quando
+   * null/ausente, equivale a `weeks` (sem nenhuma revisão aplicada ainda).
+   * Telas de treino / RUN 1-5 / progresso semanal / mensal leem DAQUI via
+   * helper `effectivePlanWeeks(plan)`. Cada revisão semanal regrava esse
+   * campo; `weeks` permanece intocada.
+   */
+  adjustedWeeks?: PlanWeek[];
   mesocycleNarrative?: string; // texto LLM do mesociclo (3-4 frases)
   /**
    * Avaliação honesta do objetivo declarado pelo atleta: o coach analisa o
@@ -193,4 +206,16 @@ export interface Plan {
   completedAt?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+/**
+ * Semanas VIGENTES (com revisões aplicadas). Fallback: `weeks` base quando
+ * nenhum ajuste foi registrado. Todos os consumers (treino, RUN 1-5, stats,
+ * coach context) DEVEM usar este helper em vez de `plan.weeks` diretamente —
+ * caso contrário a UI ignora os ajustes do cron semanal.
+ */
+export function effectivePlanWeeks(plan: Pick<Plan, 'weeks' | 'adjustedWeeks'>): PlanWeek[] {
+  return plan.adjustedWeeks && plan.adjustedWeeks.length > 0
+    ? plan.adjustedWeeks
+    : plan.weeks;
 }

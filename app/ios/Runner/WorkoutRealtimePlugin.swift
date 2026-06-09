@@ -58,6 +58,19 @@ private let wcLog = OSLog(subsystem: "ai.runnin.workout", category: "watch-bridg
   // Throttling do os_log: 1 a cada 5 samples pra não inundar Console.app
   // durante runs longos (Apple Watch emite ~1Hz).
   private var sampleLogCounter = 0
+  /// Fix TF 59: ring buffer dos últimos request_ids processados pra dedup
+  /// dos WatchCommands. transferUserInfo enfileirado offline podia entregar
+  /// 2x → iPhone processava 2 pause/resume consecutivos. Watch passa
+  /// `request_id` desde TF 59; pré-TF59 não tem request_id e cai no
+  /// caminho old-behavior (sem dedup).
+  private var _processedRequestIds: [String] = []
+  private func _isDuplicateRequest(_ payload: [String: Any]) -> Bool {
+    guard let rid = payload["request_id"] as? String else { return false }
+    if _processedRequestIds.contains(rid) { return true }
+    _processedRequestIds.append(rid)
+    if _processedRequestIds.count > 20 { _processedRequestIds.removeFirst() }
+    return false
+  }
 
   public static func register(with registrar: FlutterPluginRegistrar) {
     let instance = WorkoutRealtimePlugin()
@@ -448,7 +461,25 @@ extension WorkoutRealtimePlugin: WCSessionDelegate {
   public func session(_ session: WCSession,
                       didReceiveMessage message: [String: Any],
                       replyHandler: @escaping ([String: Any]) -> Void) {
+    // BPM push direto do Watch (via SessionDelegate.pushBpmToPhone). Roteia
+    // pro mesmo EventChannel que o realtime HK usa — o Dart consome igual.
+    // HKAnchoredObjectQuery do phone é suspensa em background; WCSession
+    // continua entregando mesmo com tela bloqueada, mantendo o BPM da UI
+    // vivo durante toda a corrida.
+    if let kind = message["type"] as? String, kind == "bpm_update",
+       let bpm = message["bpm"] as? Int {
+      let ts = (message["ts"] as? Int) ?? Int(Date().timeIntervalSince1970 * 1000)
+      emit(["type": "bpm", "value": bpm, "ts": ts, "source": "watch_wc"])
+      receivedAtLeastOne = true
+      replyHandler(["ok": true])
+      return
+    }
     if let action = message["action"] as? String {
+      if _isDuplicateRequest(message) {
+        os_log("wc.recv.dup action=%{public}@ dropped", log: wcLog, type: .info, action)
+        replyHandler(["ok": true, "dedup": true])
+        return
+      }
       os_log("wc.recv action=%{public}@", log: wcLog, type: .info, action)
       emit([
         "type": "watch_command",
@@ -469,13 +500,38 @@ extension WorkoutRealtimePlugin: WCSessionDelegate {
   /// em INICIANDO até timeout.
   public func session(_ session: WCSession,
                       didReceiveUserInfo userInfo: [String: Any] = [:]) {
+    if let kind = userInfo["type"] as? String, kind == "bpm_update",
+       let bpm = userInfo["bpm"] as? Int {
+      let ts = (userInfo["ts"] as? Int) ?? Int(Date().timeIntervalSince1970 * 1000)
+      emit(["type": "bpm", "value": bpm, "ts": ts, "source": "watch_wc_userinfo"])
+      receivedAtLeastOne = true
+      return
+    }
     if let action = userInfo["action"] as? String {
+      if _isDuplicateRequest(userInfo) {
+        os_log("wc.recv.userInfo.dup action=%{public}@ dropped", log: wcLog, type: .info, action)
+        return
+      }
       os_log("wc.recv.userInfo action=%{public}@", log: wcLog, type: .info, action)
       emit([
         "type": "watch_command",
         "action": action,
         "payload": userInfo,
       ])
+    }
+  }
+
+  /// Watch empurra BPM via `updateApplicationContext` (dedup, entrega sempre)
+  /// pra não depender de `isReachable=true` que falha no sim + bg + complica-
+  /// tion ativa. Mesma payload {type: "bpm_update", bpm, ts} do path de
+  /// sendMessage / userInfo.
+  public func session(_ session: WCSession,
+                      didReceiveApplicationContext applicationContext: [String: Any]) {
+    if let kind = applicationContext["type"] as? String, kind == "bpm_update",
+       let bpm = applicationContext["bpm"] as? Int {
+      let ts = (applicationContext["ts"] as? Int) ?? Int(Date().timeIntervalSince1970 * 1000)
+      emit(["type": "bpm", "value": bpm, "ts": ts, "source": "watch_wc_ctx"])
+      receivedAtLeastOne = true
     }
   }
 

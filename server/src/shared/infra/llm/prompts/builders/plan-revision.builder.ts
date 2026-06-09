@@ -9,7 +9,7 @@ import { BuiltPrompt } from './types';
 
 export interface PlanRevisionBuildInput {
   profile: Partial<UserProfile> | null | undefined;
-  plan: Pick<Plan, 'goal' | 'level' | 'weeksCount' | 'weeks' | 'raceDate' | 'raceDayOfWeek'>;
+  plan: Pick<Plan, 'goal' | 'level' | 'weeksCount' | 'weeks' | 'adjustedWeeks' | 'raceDate' | 'raceDayOfWeek'>;
   revision: { type: string; subOption?: string; freeText?: string };
   /** Semana corrente (1-based). Revisão só pode mexer em currentWeekNumber+1 e +2. */
   currentWeekNumber?: number;
@@ -70,7 +70,9 @@ export async function buildPlanRevisionPrompt(args: PlanRevisionBuildInput): Pro
       goal: args.plan.goal,
       level: args.plan.level,
       weeksCount: args.plan.weeksCount,
-      weeksJson: JSON.stringify(args.plan.weeks),
+      // Manda o estado VIGENTE (com ajustes) pro LLM trabalhar em cima
+      // do que está sendo executado, não da base intocada.
+      weeksJson: JSON.stringify(args.plan.adjustedWeeks ?? args.plan.weeks),
       raceDate: args.plan.raceDate ?? '',
       raceDayOfWeek: args.plan.raceDayOfWeek ?? '',
     },

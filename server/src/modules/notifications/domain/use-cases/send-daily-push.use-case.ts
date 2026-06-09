@@ -1,19 +1,21 @@
 import { UserRepository } from '@modules/users/domain/user.repository';
 import { PlanRepository } from '@modules/plans/domain/plan.repository';
-import { PlanSession } from '@modules/plans/domain/plan.entity';
+import { PlanSession, PlanWeek, effectivePlanWeeks } from '@modules/plans/domain/plan.entity';
 import { FirestoreDeviceRepository } from '../../infra/firestore-device.repository';
 import { getMessaging } from '@shared/infra/firebase/firebase.client';
 import { logger } from '@shared/logger/logger';
 import { GetUserFeaturesUseCase } from '@modules/subscriptions/use-cases/get-user-features.use-case';
 
 function pickCurrentWeekSessions(
-  plan: { weeks: { sessions: PlanSession[] }[]; createdAt: string } | null,
+  plan: { weeks: PlanWeek[]; adjustedWeeks?: PlanWeek[]; createdAt: string } | null,
 ): PlanSession[] {
-  if (!plan || plan.weeks.length === 0) return [];
+  if (!plan) return [];
+  const weeks = effectivePlanWeeks(plan);
+  if (weeks.length === 0) return [];
   const created = new Date(plan.createdAt);
   const days = Math.floor((Date.now() - created.getTime()) / 86_400_000);
-  const idx = Math.max(0, Math.min(plan.weeks.length - 1, Math.floor(days / 7)));
-  return plan.weeks[idx]?.sessions ?? [];
+  const idx = Math.max(0, Math.min(weeks.length - 1, Math.floor(days / 7)));
+  return weeks[idx]?.sessions ?? [];
 }
 
 function todaySessionFor(sessions: PlanSession[]): PlanSession | null {

@@ -41,7 +41,27 @@ export class GetSummaryUseCase {
     const to = new Date();
     const from = new Date(to.getTime() - windowDays * 24 * 3600 * 1000);
 
-    const samples = await this.repo.findByDateRange(userId, undefined, from, to);
+    // Só carrega os tipos que o agregado realmente usa. Em 30d com user
+    // ativo, findByDateRange sem filtro pode trazer 260k+ samples (BPM
+    // live + steps + 19 tipos de atividade/mobilidade/vitais novos) e
+    // travar a query Firestore — tela ficava em loading infinito.
+    const summaryTypes: BiometricSampleType[] = [
+      'resting_bpm',
+      'max_bpm',
+      'sleep_hours',
+      'sleep_deep',
+      'sleep_rem',
+      'sleep_light',
+      'steps',
+      'hrv',
+      'weight',
+    ];
+    const samples = await this.repo.findByDateRangeAndTypes(
+      userId,
+      summaryTypes,
+      from,
+      to,
+    );
 
     const byType = (type: BiometricSampleType) => samples.filter((s) => s.type === type);
     const avg = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
@@ -58,18 +78,32 @@ export class GetSummaryUseCase {
     const sleepDeep = byType('sleep_deep').map((s) => s.value);
     const sleepRem = byType('sleep_rem').map((s) => s.value);
     const sleepLight = byType('sleep_light').map((s) => s.value);
-    // Sleep médio por DIA, não por sample. Agrupa por dia (YYYY-MM-DD) e
-    // soma as horas dentro do dia; depois tira média entre os dias.
-    const sleepByDay = new Map<string, number>();
-    const addSample = (s: { recordedAt: string; value: number }) => {
+    // Fix TF 60: agregação multi-nível por dia. Antes somava deep+rem+light
+    // direto, mas Watch SE / sleep schedule sem detection emite SÓ inBed
+    // (sem stages) — total ficava 0 e user via "sem sono" mesmo dormindo.
+    // Agora cascateia: stages > (inBed - awake) > sleep_hours legacy.
+    type SleepDay = { stages: number; inBed: number; awake: number; legacy: number };
+    const sleepByDay = new Map<string, SleepDay>();
+    const bump = (
+      s: { recordedAt: string; value: number },
+      key: 'stages' | 'inBed' | 'awake' | 'legacy',
+    ) => {
       const day = s.recordedAt.substring(0, 10);
-      sleepByDay.set(day, (sleepByDay.get(day) ?? 0) + s.value);
+      const e = sleepByDay.get(day) ?? { stages: 0, inBed: 0, awake: 0, legacy: 0 };
+      e[key] += s.value;
+      sleepByDay.set(day, e);
     };
-    byType('sleep_hours').forEach(addSample);
-    byType('sleep_deep').forEach(addSample);
-    byType('sleep_rem').forEach(addSample);
-    byType('sleep_light').forEach(addSample);
-    const sleepDaily = Array.from(sleepByDay.values());
+    byType('sleep_deep').forEach(s => bump(s, 'stages'));
+    byType('sleep_rem').forEach(s => bump(s, 'stages'));
+    byType('sleep_light').forEach(s => bump(s, 'stages'));
+    byType('sleep_in_bed').forEach(s => bump(s, 'inBed'));
+    byType('sleep_awake').forEach(s => bump(s, 'awake'));
+    byType('sleep_hours').forEach(s => bump(s, 'legacy'));
+    const sleepDaily = Array.from(sleepByDay.values()).map(e => {
+      if (e.stages > 0) return e.stages;
+      if (e.inBed > 0) return Math.max(0, e.inBed - e.awake);
+      return e.legacy;
+    });
     const steps = byType('steps').map((s) => s.value);
     const hrvs = byType('hrv').map((s) => s.value);
     const weights = byType('weight')
@@ -92,10 +126,18 @@ export class GetSummaryUseCase {
     // Última noite = dia MAIS RECENTE no mapa de sleepByDay (não
     // necessariamente ontem — user pode não ter dormido com Watch
     // antes-de-ontem). Ordena chaves descrescente e pega a primeira.
+    // Mesma cascata stages > inBed-awake > legacy.
     const sleepDays = Array.from(sleepByDay.entries()).sort((a, b) =>
       b[0].localeCompare(a[0]),
     );
-    const lastNightSleepHours = sleepDays.length ? sleepDays[0]![1] : null;
+    const lastNightSleepHours = sleepDays.length
+      ? (() => {
+          const e = sleepDays[0]![1];
+          if (e.stages > 0) return e.stages;
+          if (e.inBed > 0) return Math.max(0, e.inBed - e.awake);
+          return e.legacy > 0 ? e.legacy : null;
+        })()
+      : null;
 
     return {
       windowDays,

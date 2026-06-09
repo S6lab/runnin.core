@@ -18,11 +18,37 @@ export interface FeedbackFlags {
 
 export function computeAge(birthDate?: string): number | undefined {
   if (!birthDate) return undefined;
-  const d = new Date(birthDate);
-  if (Number.isNaN(d.getTime())) return undefined;
-  const ageMs = Date.now() - d.getTime();
-  const years = Math.floor(ageMs / 31_557_600_000);
+  // Fix TF 60: parser robusto. Antes só new Date(birthDate) — falha em
+  // formato BR "18/02/1983" (Invalid Date) → coach LLM chuta idade.
+  // Aceita: ISO "1983-02-18", BR "18/02/1983", BR "18/02/83".
+  const d = _parseBirthDate(birthDate);
+  if (!d || Number.isNaN(d.getTime())) return undefined;
+  // Aniversário ainda não chegou esse ano? Subtrai 1.
+  const now = new Date();
+  let years = now.getFullYear() - d.getFullYear();
+  const monthDiff = now.getMonth() - d.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && now.getDate() < d.getDate())) {
+    years--;
+  }
   return years > 0 && years < 120 ? years : undefined;
+}
+
+function _parseBirthDate(s: string): Date | null {
+  // ISO "1983-02-18" ou "1983-02-18T..."
+  const iso = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(s);
+  if (iso) {
+    return new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]));
+  }
+  // BR "18/02/1983" ou "18/02/83"
+  const br = /^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/.exec(s);
+  if (br) {
+    let y = Number(br[3]);
+    if (y < 100) y += y < 30 ? 2000 : 1900; // 25 → 2025, 80 → 1980
+    return new Date(y, Number(br[2]) - 1, Number(br[1]));
+  }
+  // Fallback: deixa Date tentar (ISO datetime extendido etc).
+  const d = new Date(s);
+  return Number.isNaN(d.getTime()) ? null : d;
 }
 
 export function formatProfileContext(profile: Partial<UserProfile> | null | undefined): string {

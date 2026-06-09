@@ -18,6 +18,16 @@ import 'package:runnin/features/biometrics/data/biometric_remote_datasource.dart
 class HealthSyncService {
   static const _hiveBoxName = 'runnin_settings';
   static const _lastSyncKey = 'biometrics_last_sync_at';
+  /// Flag de backfill one-time. Set true depois que rodamos um sync com
+  /// `from=30d` pra recuperar samples antigos que falharam por incompat
+  /// de Zod no server. Ver comentário em syncSince.
+  ///
+  /// v1 → v2 (TF 42): bumped depois que descobrimos que o sleep value
+  /// era o INT do enum HKCategoryValueSleepAnalysis (não duração).
+  /// Backfill v1 sincronizou dados buggy. Server tinha 458 samples
+  /// quebrados que deletamos via admin script. v2 força new backfill
+  /// com a fórmula correta (dateTo - dateFrom).
+  static const _backfillFlagKey = 'biometrics_backfill_v2';
 
   final _health = Health();
   final _ds = BiometricRemoteDatasource();
@@ -29,26 +39,56 @@ class HealthSyncService {
     // SLEEP_ASLEEP é o agregado total (iPhone Health). Em iOS 16+, Apple
     // Watch reporta sleep stages granulares (DEEP/REM/LIGHT) e ASLEEP pode
     // vir vazio mesmo com user concedendo Sono. Por isso pegamos as 3 fases
-    // e o server agrega total = DEEP + REM + LIGHT. SLEEP_AWAKE intencional-
-    // mente fora — não conta como tempo dormido.
+    // e o server agrega total = DEEP + REM + LIGHT.
+    // Fix TF 60: incluímos SLEEP_IN_BED e SLEEP_AWAKE. Apple Watch SE / Watch
+    // pré-Series 7 / modos de sleep schedule sem detection completa emitem
+    // SOMENTE inBed. Sem esses tipos no request, plugin não retorna nada e
+    // user vê "sem sono" mesmo dormindo com Watch. Server agrega total como:
+    //   1) stages (deep+rem+light) se houver;
+    //   2) fallback: inBed - awake;
+    //   3) último recurso: sleep_hours legacy.
     HealthDataType.SLEEP_ASLEEP,
     HealthDataType.SLEEP_DEEP,
     HealthDataType.SLEEP_REM,
     HealthDataType.SLEEP_LIGHT,
+    HealthDataType.SLEEP_IN_BED,
+    HealthDataType.SLEEP_AWAKE,
     HealthDataType.STEPS,
     HealthDataType.BLOOD_OXYGEN,
     HealthDataType.WEIGHT,
     HealthDataType.ACTIVE_ENERGY_BURNED,
     HealthDataType.RESPIRATORY_RATE,
-    // Build 33 — bateria nova de permissões pedidas no perfil/saúde:
-    // ECG, pressão arterial (sys/dia), temperatura corporal, energia em
-    // repouso. Bday/altura ficaram fora (characteristics, API diferente —
-    // user preenche manualmente no perfil).
     HealthDataType.BASAL_ENERGY_BURNED,
     HealthDataType.BLOOD_PRESSURE_SYSTOLIC,
     HealthDataType.BLOOD_PRESSURE_DIASTOLIC,
     HealthDataType.BODY_TEMPERATURE,
     HealthDataType.ELECTROCARDIOGRAM,
+    // Build 42 — bateria expandida cobrindo 4 cápsulas do Apple Health:
+    //   Atividade completa: distância caminhada/corrida + ciclismo, lances
+    //     de escada, tempo de exercício, Move/Stand do Apple Watch.
+    //   Mobilidade: velocidade de caminhada + BPM em caminhada.
+    //   Medidas corporais: altura, % gordura, BMI, massa magra, cintura.
+    //   Sinais vitais avançados: HRV RMSSD, eventos de FC alta/baixa,
+    //     fibrilação atrial, temperatura da pele.
+    HealthDataType.DISTANCE_WALKING_RUNNING,
+    HealthDataType.DISTANCE_CYCLING,
+    HealthDataType.FLIGHTS_CLIMBED,
+    HealthDataType.EXERCISE_TIME,
+    HealthDataType.APPLE_MOVE_TIME,
+    HealthDataType.APPLE_STAND_TIME,
+    HealthDataType.WALKING_SPEED,
+    HealthDataType.WALKING_HEART_RATE,
+    HealthDataType.HEIGHT,
+    HealthDataType.BODY_FAT_PERCENTAGE,
+    HealthDataType.BODY_MASS_INDEX,
+    HealthDataType.LEAN_BODY_MASS,
+    HealthDataType.WAIST_CIRCUMFERENCE,
+    HealthDataType.HEART_RATE_VARIABILITY_RMSSD,
+    HealthDataType.HIGH_HEART_RATE_EVENT,
+    HealthDataType.LOW_HEART_RATE_EVENT,
+    HealthDataType.IRREGULAR_HEART_RATE_EVENT,
+    HealthDataType.ATRIAL_FIBRILLATION_BURDEN,
+    HealthDataType.SKIN_TEMPERATURE,
   ];
 
   bool get isSupported => !kIsWeb && (Platform.isIOS || Platform.isAndroid);
@@ -303,34 +343,74 @@ class HealthSyncService {
 
   /// Sincroniza samples desde `since` (ou desde o último sync, ou últimos 7d
   /// se primeira vez). Retorna número de samples enviados.
+  ///
+  /// Backfill one-time: clientes mais velhos sincronizaram com servidores
+  /// que rejeitavam sleep_rem/sleep_light/etc no Zod. Os samples vieram do
+  /// HK mas o batch ingest falhou; `_lastSync` foi atualizado mesmo assim,
+  /// deixando esses dados "perdidos" pra sempre da perspectiva do app.
+  /// Detectamos pela ausência da flag `biometrics_backfill_v1`: se faltar,
+  /// força from=30d e seta a flag. Próximos syncs voltam ao normal.
   Future<int> syncSince([DateTime? since]) async {
     if (!isSupported) return 0;
-    final from = since ?? await _readLastSync() ?? DateTime.now().subtract(const Duration(days: 7));
+    DateTime? effectiveSince = since;
+    if (effectiveSince == null) {
+      final box = Hive.isBoxOpen(_hiveBoxName)
+          ? Hive.box<dynamic>(_hiveBoxName)
+          : await Hive.openBox<dynamic>(_hiveBoxName);
+      final backfillDone = box.get(_backfillFlagKey) == true;
+      if (!backfillDone) {
+        effectiveSince = DateTime.now().subtract(const Duration(days: 30));
+        await box.put(_backfillFlagKey, true);
+        analytics.logEvent('wearable_backfill_triggered', params: const {
+          'window_days': 30,
+        });
+      }
+    }
+    // BUG histórico: `_readLastSync` era usado DIRETO como `startTime`. O
+    // plugin `health` retorna só samples com `dateFrom >= startTime`. Sono
+    // começa ANTES do lastSync (user dormiu 23h, syncou 23:30 → next sync
+    // de manhã com lastSync=23:30 perde o sono inteiro, dateFrom 23h < 23:30).
+    // Fix: subtrair 36h pra cobrir overnight sleep. Server dedupa por
+    // `{type}_{recordedAt}` (doc id), então overlap é idempotente.
+    final lastSync = await _readLastSync();
+    final from = effectiveSince
+        ?? (lastSync != null
+            ? lastSync.subtract(const Duration(hours: 36))
+            : DateTime.now().subtract(const Duration(days: 7)));
     final to = DateTime.now();
 
-    List<HealthDataPoint> raw;
-    try {
-      raw = await _health.getHealthDataFromTypes(
-        startTime: from,
-        endTime: to,
-        types: _types,
-      );
-    } catch (e, st) {
-      analytics.recordError(
-        e,
-        st,
-        reason: 'wearable_fetch_failed',
-        context: {
-          'platform': _platformLabel,
-          'provider': _sourceLabel,
-          'window_days': to.difference(from).inDays,
-        },
-      );
+    // Fix TF 63: query POR TIPO em vez de batch. O plugin `health` lança
+    // exception no PRIMEIRO tipo unsupported (ex: HRV_RMSSD em iOS) e ABORTA
+    // a query inteira — sleep_deep/rem/light nem chegam a ser processados.
+    // Iterando, um tipo ruim não mata os outros.
+    final raw = <HealthDataPoint>[];
+    final perTypeErrors = <String>[];
+    for (final t in _types) {
+      try {
+        final batch = await _health.getHealthDataFromTypes(
+          startTime: from,
+          endTime: to,
+          types: [t],
+        );
+        raw.addAll(batch);
+      } catch (e) {
+        final key = _typeMap[t] ?? t.name;
+        perTypeErrors.add('$key:${e.toString().substring(0, e.toString().length.clamp(0, 80))}');
+      }
+    }
+    if (raw.isEmpty && perTypeErrors.length == _types.length) {
+      // Todos falharam — provavelmente permissão revogada ou platform bug.
       analytics.logEvent('wearable_sync_failed', params: {
-        'stage': 'fetch',
+        'stage': 'fetch_all_failed',
         'platform': _platformLabel,
         'provider': _sourceLabel,
       });
+      unawaited(_ds.postSyncTelemetry(
+        from: from, to: to, lastSync: lastSync,
+        hkFetchedTotal: -1, mappedTotal: 0,
+        byType: {'_error': perTypeErrors.length},
+        errorMsg: perTypeErrors.take(3).join(' | '),
+      ));
       return 0;
     }
 
@@ -369,6 +449,12 @@ class HealthSyncService {
         ...byType.map((k, v) => MapEntry('fetched_$k', v)),
         ...mappedByType.map((k, v) => MapEntry('mapped_$k', v)),
       });
+      // Telemetry pro server logar o estado da sync (debug do "sono não atualiza").
+      unawaited(_ds.postSyncTelemetry(
+        from: from, to: to, lastSync: lastSync,
+        hkFetchedTotal: raw.length, mappedTotal: 0,
+        byType: byType, mappedByType: mappedByType,
+      ));
       return 0;
     }
 
@@ -405,7 +491,19 @@ class HealthSyncService {
       ...byType.map((k, v) => MapEntry('fetched_$k', v)),
       ...mappedByType.map((k, v) => MapEntry('mapped_$k', v)),
     });
+    unawaited(_ds.postSyncTelemetry(
+      from: from, to: to, lastSync: lastSync,
+      hkFetchedTotal: raw.length, mappedTotal: samples.length,
+      byType: byType, mappedByType: mappedByType,
+    ));
     return totalSaved;
+  }
+
+  /// Safety net: força janela de 7d ignorando lastSync. Usado quando a
+  /// sync padrão retorna 0 samples de sono e o user reclama que sono não
+  /// atualizou — bypass do bug "lastSync fresco demais".
+  Future<int> forceFullResync() async {
+    return syncSince(DateTime.now().subtract(const Duration(days: 7)));
   }
 
   BiometricSampleInput? _mapToInput(HealthDataPoint p) {
@@ -417,17 +515,20 @@ class HealthSyncService {
         : double.tryParse(rawValue.toString());
     if (value == null) return null;
 
-    // Patch de unidade: plugin `health` 13.x entrega SLEEP_ASLEEP/SLEEP_DEEP
-    // como duração em MINUTOS (somatório de samples de HKCategoryValueSleep
-    // entre start e end), mas o server agrega `sleep_hours` assumindo horas.
-    // Sem essa conversão, depois que a primeira noite de sono chega, o card
-    // mostra "480h" em vez de "8h". Mantemos `_unitMap` como 'hours' e
-    // dividimos aqui.
+    // FIX CRÍTICO: pra SLEEP_*, o plugin `health` retorna o VALOR DE CATEGORIA
+    // (HKCategoryValueSleepAnalysis enum: 3=light, 4=deep, 5=REM), NÃO a
+    // duração. User reportou que dormiu 5h18 e o app mostrava 0.3h — porque
+    // estavamos somando o int da categoria dividido por 60.
+    // Solução correta: usar `dateTo - dateFrom` que dá a duração real do
+    // sample em segundos → converter pra horas.
     if (p.type == HealthDataType.SLEEP_ASLEEP ||
         p.type == HealthDataType.SLEEP_DEEP ||
         p.type == HealthDataType.SLEEP_REM ||
-        p.type == HealthDataType.SLEEP_LIGHT) {
-      value = value / 60.0;
+        p.type == HealthDataType.SLEEP_LIGHT ||
+        p.type == HealthDataType.SLEEP_IN_BED ||
+        p.type == HealthDataType.SLEEP_AWAKE) {
+      final durationS = p.dateTo.difference(p.dateFrom).inSeconds;
+      value = durationS / 3600.0; // segundos → horas
     }
 
     return BiometricSampleInput(
@@ -459,6 +560,8 @@ class HealthSyncService {
     HealthDataType.SLEEP_DEEP: 'sleep_deep',
     HealthDataType.SLEEP_REM: 'sleep_rem',
     HealthDataType.SLEEP_LIGHT: 'sleep_light',
+    HealthDataType.SLEEP_IN_BED: 'sleep_in_bed',
+    HealthDataType.SLEEP_AWAKE: 'sleep_awake',
     HealthDataType.STEPS: 'steps',
     HealthDataType.BLOOD_OXYGEN: 'spo2',
     HealthDataType.WEIGHT: 'weight',
@@ -469,6 +572,25 @@ class HealthSyncService {
     HealthDataType.BLOOD_PRESSURE_DIASTOLIC: 'bp_diastolic',
     HealthDataType.BODY_TEMPERATURE: 'body_temperature',
     HealthDataType.ELECTROCARDIOGRAM: 'ecg',
+    HealthDataType.DISTANCE_WALKING_RUNNING: 'distance_walking_running',
+    HealthDataType.DISTANCE_CYCLING: 'distance_cycling',
+    HealthDataType.FLIGHTS_CLIMBED: 'flights_climbed',
+    HealthDataType.EXERCISE_TIME: 'exercise_time',
+    HealthDataType.APPLE_MOVE_TIME: 'apple_move_time',
+    HealthDataType.APPLE_STAND_TIME: 'apple_stand_time',
+    HealthDataType.WALKING_SPEED: 'walking_speed',
+    HealthDataType.WALKING_HEART_RATE: 'walking_bpm',
+    HealthDataType.HEIGHT: 'height',
+    HealthDataType.BODY_FAT_PERCENTAGE: 'body_fat_pct',
+    HealthDataType.BODY_MASS_INDEX: 'bmi',
+    HealthDataType.LEAN_BODY_MASS: 'lean_body_mass',
+    HealthDataType.WAIST_CIRCUMFERENCE: 'waist_circumference',
+    HealthDataType.HEART_RATE_VARIABILITY_RMSSD: 'hrv_rmssd',
+    HealthDataType.HIGH_HEART_RATE_EVENT: 'high_hr_event',
+    HealthDataType.LOW_HEART_RATE_EVENT: 'low_hr_event',
+    HealthDataType.IRREGULAR_HEART_RATE_EVENT: 'irregular_hr_event',
+    HealthDataType.ATRIAL_FIBRILLATION_BURDEN: 'afib_burden',
+    HealthDataType.SKIN_TEMPERATURE: 'skin_temperature',
   };
 
   static const _unitMap = <HealthDataType, String>{
@@ -479,6 +601,8 @@ class HealthSyncService {
     HealthDataType.SLEEP_DEEP: 'hours',
     HealthDataType.SLEEP_REM: 'hours',
     HealthDataType.SLEEP_LIGHT: 'hours',
+    HealthDataType.SLEEP_IN_BED: 'hours',
+    HealthDataType.SLEEP_AWAKE: 'hours',
     HealthDataType.STEPS: 'count',
     HealthDataType.BLOOD_OXYGEN: '%',
     HealthDataType.WEIGHT: 'kg',
@@ -489,6 +613,25 @@ class HealthSyncService {
     HealthDataType.BLOOD_PRESSURE_DIASTOLIC: 'mmHg',
     HealthDataType.BODY_TEMPERATURE: 'celsius',
     HealthDataType.ELECTROCARDIOGRAM: 'classification',
+    HealthDataType.DISTANCE_WALKING_RUNNING: 'm',
+    HealthDataType.DISTANCE_CYCLING: 'm',
+    HealthDataType.FLIGHTS_CLIMBED: 'count',
+    HealthDataType.EXERCISE_TIME: 'min',
+    HealthDataType.APPLE_MOVE_TIME: 'min',
+    HealthDataType.APPLE_STAND_TIME: 'min',
+    HealthDataType.WALKING_SPEED: 'm/s',
+    HealthDataType.WALKING_HEART_RATE: 'bpm',
+    HealthDataType.HEIGHT: 'm',
+    HealthDataType.BODY_FAT_PERCENTAGE: '%',
+    HealthDataType.BODY_MASS_INDEX: 'kg/m2',
+    HealthDataType.LEAN_BODY_MASS: 'kg',
+    HealthDataType.WAIST_CIRCUMFERENCE: 'm',
+    HealthDataType.HEART_RATE_VARIABILITY_RMSSD: 'ms',
+    HealthDataType.HIGH_HEART_RATE_EVENT: 'count',
+    HealthDataType.LOW_HEART_RATE_EVENT: 'count',
+    HealthDataType.IRREGULAR_HEART_RATE_EVENT: 'count',
+    HealthDataType.ATRIAL_FIBRILLATION_BURDEN: '%',
+    HealthDataType.SKIN_TEMPERATURE: 'celsius',
   };
 
   Future<DateTime?> _readLastSync() async {

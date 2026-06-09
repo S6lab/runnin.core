@@ -4,8 +4,9 @@ import {
   PlanRevision as PlanRevisionLog,
   PlanSession,
   PlanWeek,
+  effectivePlanWeeks,
 } from '../domain/plan.entity';
-import { buildExecutionSegments } from './build-execution-segments';
+import { buildExecutionSegments, resolveEffectiveSessionType } from './build-execution-segments';
 import {
   getRoteiroTemplates,
   RoteiroTemplates,
@@ -20,6 +21,7 @@ import {
   CheckpointWeekRun,
 } from './checkpoint-analysis.strategy';
 import { AppError } from '@shared/errors/app-error';
+import { BiometricSummary } from '@modules/biometrics/use-cases/get-summary.use-case';
 import { logger } from '@shared/logger/logger';
 
 /**
@@ -41,6 +43,16 @@ const _forbiddenSessionTypeTerms = [
   'musculac', 'strength', 'forca', 'weight',
   'crossfit', 'yoga', 'pilates',
 ];
+
+/** Pace médio em min/km ponderado pela DISTÂNCIA total — espelha a fórmula
+ *  do history page (totalS / totalDist). Antes era média aritmética simples
+ *  e divergia do app (9:11 server vs 8:26 history pra mesma janela). */
+function weightedPace(runs: Array<{ distanceKm: number; durationS: number }>): number | undefined {
+  const totalDist = runs.reduce((s, r) => s + r.distanceKm, 0);
+  const totalDur = runs.reduce((s, r) => s + r.durationS, 0);
+  if (totalDist <= 0 || totalDur <= 0) return undefined;
+  return (totalDur / 60) / totalDist;
+}
 
 function _normalizeText(s: string): string {
   // Strip combining diacriticals (U+0300..U+036F) — usar \u escape em vez
@@ -65,6 +77,52 @@ export function sanitizeSessionType(
     ...ctx,
   });
   return { type: 'Caminhada', distanceKm: clampedDistance, wasNormalized: true };
+}
+
+/** Allowlist por nível. Iniciante NÃO PODE Fartlek/Intervalado/Tempo/Tiros —
+ *  exigem base aeróbica + técnica de respiração que o iniciante não tem;
+ *  prescrever é convidar lesão e frustração. */
+const _ALLOWED_BY_LEVEL: Record<string, RegExp[]> = {
+  iniciante: [
+    /\beasy\b/i, /\blong\b/i, /\brecovery\b/i, /\bregenerat/i,
+    /\bcaminhada\b/i, /\bprogress/i,
+  ],
+  intermediario: [
+    /\beasy\b/i, /\blong\b/i, /\brecovery\b/i, /\bregenerat/i,
+    /\bcaminhada\b/i, /\bprogress/i, /\btempo\b/i, /\bfartlek\b/i, /\blimiar\b/i,
+  ],
+  avancado: [/.*/], // tudo
+};
+
+/** Mapeia tipos não permitidos pro level pra alternativas seguras.
+ *  Fartlek/Tempo → Progressivo (variação leve, mantém intenção de variar).
+ *  Intervalado/Tiros → Easy Run (sem qualidade — iniciante não tem base). */
+function _downgradeToSafe(rawType: string): string {
+  const t = rawType.toLowerCase();
+  if (t.includes('fartlek') || t.includes('tempo') || t.includes('limiar')) return 'Progressivo';
+  if (t.includes('intervalado') || t.includes('interval') || t.includes('tiro')) return 'Easy Run';
+  return 'Easy Run';
+}
+
+/** Verifica + corrige type por nível. Loga substituição. */
+export function enforceLevelTypeAllowlist(
+  rawType: string,
+  level: string | undefined,
+  ctx: { planId?: string; weekNumber?: number; dayOfWeek?: number } = {},
+): { type: string; wasDowngraded: boolean } {
+  const lvl = (level ?? 'iniciante').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  const allowed = _ALLOWED_BY_LEVEL[lvl] ?? _ALLOWED_BY_LEVEL.iniciante!;
+  const normRaw = rawType.toLowerCase();
+  const ok = allowed.some((rx) => rx.test(normRaw));
+  if (ok) return { type: rawType, wasDowngraded: false };
+  const downgraded = _downgradeToSafe(rawType);
+  logger.warn('plan.session.type.level_downgraded', {
+    rawType,
+    level: lvl,
+    downgraded,
+    ...ctx,
+  });
+  return { type: downgraded, wasDowngraded: true };
 }
 
 /**
@@ -129,15 +187,34 @@ export async function buildCheckpointProposal(
 ): Promise<CheckpointProposal> {
   const { runs, metrics } = await computeWeekData(deps.runRepo, plan, weekNumber, userId);
 
+  // Snapshot biométrico 7d — sono, recovery, BPM repouso, HRV, passos.
+  // Best-effort: se HealthKit não conectado / sync velha / erro, segue
+  // sem biometrics (strategy lida com null). Sem isso o checkpoint
+  // decidia overload/underload sem nenhum sinal fisiológico além das
+  // próprias corridas.
+  let biometricSummary: BiometricSummary | null = null;
+  try {
+    const { container } = await import('@shared/container');
+    biometricSummary = await container.useCases.getBiometricSummary.execute(userId, 7);
+  } catch (err) {
+    logger.warn('checkpoint.biometrics_fetch_failed', {
+      userId, weekNumber, err: err instanceof Error ? err.message : String(err),
+    });
+  }
+
   const analysisOut = await deps.strategy.analyze({
     plan,
     weekNumber,
     userInputs: mergedInputs,
     weekRuns: runs,
     weekMetrics: metrics,
+    biometricSummary,
   });
 
-  const oldFollowingWeeks = plan.weeks.filter((w) => w.weekNumber > weekNumber);
+  // `oldFollowingWeeks` reflete o estado VIGENTE (com revisões aplicadas),
+  // não a base imutável. Cada revisão vê o plano "como está" hoje.
+  const effective = effectivePlanWeeks(plan);
+  const oldFollowingWeeks = effective.filter((w) => w.weekNumber > weekNumber);
 
   let newWeeks = analysisOut.newWeeks;
   if (newWeeks.length > 0) {
@@ -162,6 +239,9 @@ export function mergeProposedWeeks(
   weekNumber: number,
   newWeeks: PlanWeek[],
 ): PlanWeek[] {
+  // Caller já passa plan.weeks como SNAPSHOT VIGENTE (effectivePlanWeeks)
+  // pra cumulatividade. Aqui só aplicamos o diff: passado intacto, futuras
+  // recebem replacement se o LLM mandou.
   if (newWeeks.length === 0) return plan.weeks;
   return plan.weeks.map((w) => {
     if (w.weekNumber <= weekNumber) return w;
@@ -245,10 +325,11 @@ export async function computeWeekData(
     avgPace: r.avgPace ?? undefined,
     avgBpm: r.avgBpm ?? undefined,
     maxBpm: r.maxBpm ?? undefined,
+    planSessionId: r.planSessionId ?? null,
     userFeedback: r.userFeedback?.length ? r.userFeedback : undefined,
   }));
 
-  const week = plan.weeks.find((w) => w.weekNumber === weekNumber);
+  const week = effectivePlanWeeks(plan).find((w) => w.weekNumber === weekNumber);
   const plannedSessions = week?.sessions.length ?? 0;
   const plannedDistanceKm = week
     ? week.sessions.reduce((s, x) => s + x.distanceKm, 0)
@@ -259,9 +340,21 @@ export async function computeWeekData(
   const avgBpm = bpmValues.length
     ? Math.round(bpmValues.reduce((a, b) => a + b, 0) / bpmValues.length)
     : undefined;
-  const avgPaceMinPerKm = runs.length
-    ? runs.reduce((s, r) => s + r.durationS / 60 / r.distanceKm, 0) / runs.length
-    : undefined;
+  // Pace médio = duração TOTAL / distância TOTAL (média ponderada pelo
+  // volume), igual ao history page. Antes era média aritmética simples
+  // das paces de cada run, que infla o resultado quando há mix de runs
+  // curtas lentas e longas rápidas (uma run de 1km em 10min pesa igual
+  // a uma de 8km em 50min na conta de média simples).
+  const avgPaceMinPerKm = weightedPace(runs);
+
+  // Split planejado vs free. Sem essa separação o coach não distingue
+  // "fez o plano" de "fez free runs que compensam o déficit".
+  const plannedRuns = runs.filter((r) => r.planSessionId);
+  const freeRuns = runs.filter((r) => !r.planSessionId);
+  const plannedRunsDistanceKm = plannedRuns.reduce((s, r) => s + r.distanceKm, 0);
+  const freeRunsDistanceKm = freeRuns.reduce((s, r) => s + r.distanceKm, 0);
+  const plannedRunsAvgPaceMinPerKm = weightedPace(plannedRuns);
+  const freeRunsAvgPaceMinPerKm = weightedPace(freeRuns);
 
   return {
     runs,
@@ -270,9 +363,13 @@ export async function computeWeekData(
       completedRuns: runs.length,
       plannedDistanceKm,
       actualDistanceKm,
+      plannedRunsDistanceKm,
+      freeRunsDistanceKm,
       completionRate,
       avgBpm,
       avgPaceMinPerKm,
+      plannedRunsAvgPaceMinPerKm,
+      freeRunsAvgPaceMinPerKm,
     },
   };
 }
@@ -303,8 +400,11 @@ export function enrichTwoTier(
         weekNumber: w.weekNumber,
         dayOfWeek: s.dayOfWeek,
       });
-      const type = sanitized.type;
+      // Resolve o tipo "efetivo": se distância não acomoda a fórmula do
+      // tipo solicitado (ex: Tiros 2.5km), rebatiza pra Easy Run pra UI
+      // e roteiro ficarem coerentes.
       const distanceKm = sanitized.distanceKm;
+      const type = resolveEffectiveSessionType(sanitized.type, distanceKm);
       if (isFull) {
         const base = {
           id,
@@ -318,10 +418,13 @@ export function enrichTwoTier(
           nutritionPost: s.nutritionPost,
           notes: s.notes ?? '',
         } satisfies Omit<PlanSession, 'executionSegments'>;
-        const segs =
-          (s.executionSegments?.length ?? 0) > 0
-            ? s.executionSegments
-            : buildExecutionSegments(base, roteiroTpl);
+        // SEMPRE regenera via builder determinístico. Antes preservávamos
+        // segments quando o LLM mandava, mas observamos sessão "Tiros"
+        // ganhando roteiro de Easy Run quando o LLM gerava as duas coisas
+        // desalinhadas (wk3 dow3 do plano do user em 2026-06-08). O builder
+        // usa templates curados (Dossiê 4) e cobre todos os tipos, então
+        // não há vantagem em confiar no LLM aqui — só vetor de regressão.
+        const segs = buildExecutionSegments(base, roteiroTpl);
         return { ...base, executionSegments: segs } satisfies PlanSession;
       }
       return {
@@ -350,12 +453,14 @@ export function enrichTwoTier(
 }
 
 export function emptyMetrics(plan: Plan, weekNumber: number): CheckpointWeekMetrics {
-  const week = plan.weeks.find((w) => w.weekNumber === weekNumber);
+  const week = effectivePlanWeeks(plan).find((w) => w.weekNumber === weekNumber);
   return {
     plannedSessions: week?.sessions.length ?? 0,
     completedRuns: 0,
     plannedDistanceKm: week?.sessions.reduce((s, x) => s + x.distanceKm, 0) ?? 0,
     actualDistanceKm: 0,
+    plannedRunsDistanceKm: 0,
+    freeRunsDistanceKm: 0,
     completionRate: 0,
   };
 }
@@ -390,13 +495,36 @@ function parseISO(s: string): Date | null {
 }
 
 /** Resumo curto (1-2 frases) pra renderizar em _RevisionsSection. */
+/** Apenas semanas presentes em AMBOS (mesmo weekNumber). Sem essa
+ *  intersecção, comparar `oldFollowingWeeks` (todas as seguintes) com
+ *  `newWeeks` (só current+1 e +2 desde Fix 7) gera delta apples-to-oranges
+ *  (ex: -236km quando na verdade só 2 semanas mudaram suavemente). */
+function intersectByWeekNumber(
+  oldWeeks: PlanWeek[],
+  newWeeks: PlanWeek[],
+): { oldKm: number; newKm: number; oldCount: number; newCount: number } {
+  const newByNumber = new Map(newWeeks.map((w) => [w.weekNumber, w]));
+  let oldKm = 0;
+  let newKm = 0;
+  let oldCount = 0;
+  let newCount = 0;
+  for (const o of oldWeeks) {
+    const n = newByNumber.get(o.weekNumber);
+    if (!n) continue;
+    oldKm += o.sessions.reduce((a, x) => a + (x.distanceKm ?? 0), 0);
+    newKm += n.sessions.reduce((a, x) => a + (x.distanceKm ?? 0), 0);
+    oldCount += o.sessions.length;
+    newCount += n.sessions.length;
+  }
+  return { oldKm, newKm, oldCount, newCount };
+}
+
 export function buildLogSummary(
   inputs: CheckpointInput[],
   oldWeeks: PlanWeek[],
   newWeeks: PlanWeek[],
 ): string {
-  const oldKm = oldWeeks.reduce((s, w) => s + w.sessions.reduce((a, x) => a + x.distanceKm, 0), 0);
-  const newKm = newWeeks.reduce((s, w) => s + w.sessions.reduce((a, x) => a + x.distanceKm, 0), 0);
+  const { oldKm, newKm } = intersectByWeekNumber(oldWeeks, newWeeks);
   const delta = newKm - oldKm;
   const deltaStr =
     Math.abs(delta) < 0.5
@@ -404,21 +532,19 @@ export function buildLogSummary(
       : delta > 0
         ? `volume +${delta.toFixed(1)}km`
         : `volume ${delta.toFixed(1)}km`;
+  const weeksAdjusted = newWeeks.length;
   const triggerLabels = inputs.length
     ? inputs.map((i) => i.type).slice(0, 3).join(', ')
     : 'sem inputs (análise automática)';
-  return `Revisão semanal — ${triggerLabels}. ${deltaStr} nas semanas seguintes.`;
+  return `Revisão semanal — ${triggerLabels}. ${deltaStr} nas ${weeksAdjusted} próximas semanas.`;
 }
 
 export function buildChangesSnapshot(
   oldWeeks: PlanWeek[],
   newWeeks: PlanWeek[],
 ): PlanRevisionLog['changes'] {
-  const oldKm = oldWeeks.reduce((s, w) => s + w.sessions.reduce((a, x) => a + x.distanceKm, 0), 0);
-  const newKm = newWeeks.reduce((s, w) => s + w.sessions.reduce((a, x) => a + x.distanceKm, 0), 0);
+  const { oldKm, newKm, oldCount, newCount } = intersectByWeekNumber(oldWeeks, newWeeks);
   const volumeDelta = +(newKm - oldKm).toFixed(1);
-  const oldCount = oldWeeks.reduce((s, w) => s + w.sessions.length, 0);
-  const newCount = newWeeks.reduce((s, w) => s + w.sessions.length, 0);
   const intensityShift: 'increased' | 'decreased' | 'unchanged' =
     volumeDelta > 0.5 ? 'increased' : volumeDelta < -0.5 ? 'decreased' : 'unchanged';
   return {

@@ -12,12 +12,15 @@ import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 import 'package:runnin/features/run/data/workout_realtime_service.dart';
 import 'package:runnin/features/location_weather/data/location_weather_controller.dart';
 import 'package:runnin/features/run/data/datasources/run_coach_remote_datasource.dart';
+import 'package:runnin/features/run/data/datasources/run_remote_datasource.dart';
+import 'package:runnin/features/run/domain/entities/run.dart';
 import 'package:runnin/features/run/presentation/bloc/run_bloc.dart';
 import 'package:runnin/features/training/data/datasources/plan_remote_datasource.dart';
 import 'package:runnin/features/training/domain/entities/plan.dart';
 import 'package:runnin/features/subscriptions/presentation/subscription_controller.dart';
 import 'package:runnin/features/training/presentation/widgets/execution_timeline.dart';
 import 'package:runnin/features/run/presentation/widgets/gps_permission_modal.dart';
+import 'package:runnin/shared/widgets/planned_vs_actual_row.dart';
 import 'package:runnin/shared/widgets/runnin_app_bar.dart';
 
 class PrepPage extends StatelessWidget {
@@ -38,12 +41,16 @@ class _PrepViewState extends State<_PrepView> {
   final _coachRemote = RunCoachRemoteDatasource();
   final _userRemote = UserRemoteDatasource();
   final _planRemote = PlanRemoteDatasource();
+  final _runRemote = RunRemoteDatasource();
   // Tipo selecionado: 'Free Run' (sempre disponível) ou o type da sessão
   // do plano do dia (quando premium + plano + sessão hoje).
   String _selectedType = 'Free Run';
   // Sessão do plano de HOJE, se existir. Null = freemium OU sem plano OU
   // sem sessão hoje. Mostra o card "Sessão do Plano" no seletor.
   PlanSession? _planTodaySession;
+  // Run que executou a sessão do dia (quando session.executedRunId != null).
+  // Usado pra mostrar planejado vs feito no card e badge "CONCLUÍDA".
+  Run? _executedRunToday;
 
   StreamSubscription<CoachCue>? _coachSub;
   // Vira true ao navegar pra /run. PrepPage segue montada (push), então
@@ -197,32 +204,57 @@ class _PrepViewState extends State<_PrepView> {
       final plan = await _planRemote.getCurrentPlan();
       if (!mounted || plan == null || !plan.isReady) return;
       final today = DateTime.now().weekday; // 1=Mon..7=Sun
-      // Calcula a semana atual baseado em startDate.
+      // Semana civil (seg→dom). Antes usávamos floor(daysFromStart/7) que
+      // colocava 1 dia após start na "semana 0" (errado quando o plano
+      // começa num domingo e hoje é segunda: deveria ser semana 2, não
+      // semana 1). Mesma fórmula do server `currentWeekNumber`.
       final start = plan.effectiveStartDate;
-      final daysFromStart = DateTime.now().difference(start).inDays;
-      final weekIdx = (daysFromStart / 7).floor().clamp(0, plan.weeks.length - 1);
-      final week = plan.weeks[weekIdx];
+      final mondayOfStart = _startOfCivilWeek(start);
+      final mondayOfToday = _startOfCivilWeek(DateTime.now());
+      final diffWeeks = mondayOfToday.difference(mondayOfStart).inDays ~/ 7;
+      // RUN 1/5 mostra a sessão do dia DO SNAPSHOT VIGENTE (revisão semanal
+      // pode ter trocado a sessão de hoje vs o plano base).
+      final weeksRef = plan.effectiveWeeks;
+      final weekNumber = (diffWeeks + 1).clamp(1, weeksRef.length);
+      final week = weeksRef
+          .firstWhere((w) => w.weekNumber == weekNumber, orElse: () => weeksRef.first);
       final session = week.sessions
           .where((s) => s.dayOfWeek == today)
           .cast<PlanSession?>()
           .firstWhere((_) => true, orElse: () => null);
       if (mounted && session != null) {
+        // Se já foi executada, default vira Free Run (user pode rodar uma
+        // segunda sessão livre pra complementar carga); senão, pré-seleciona
+        // a sessão do plano como antes.
         setState(() {
           _planTodaySession = session;
-          // Default: pré-selecionado a sessão do plano (user pode trocar
-          // pra Free Run se quiser).
-          _selectedType = session.type;
+          _selectedType = session.isExecuted ? 'Free Run' : session.type;
         });
         _loadExercises();
+        // Se a sessão foi executada, busca a Run vinculada pra alimentar
+        // o comparativo planejado vs feito no card. Best-effort — falha
+        // silenciosa deixa o card sem stats do feito (ainda mostra badge
+        // CONCLUÍDA via session.isExecuted).
+        if (session.isExecuted) {
+          unawaited(() async {
+            try {
+              final run = await _runRemote.getRun(session.executedRunId!);
+              if (mounted) setState(() => _executedRunToday = run);
+            } catch (_) {/* segue sem stats do feito */}
+          }());
+        }
         // Empurra a sessão pro Watch pra ele mostrar "SESSÃO DO DIA" no
         // TypeSelectorScreen. Best-effort — Watch app pode não estar
-        // instalado, plugin skipa silenciosamente.
+        // instalado, plugin skipa silenciosamente. Quando isExecuted=true,
+        // o Watch troca o botão "INICIAR SESSÃO" por badge "CONCLUÍDA"
+        // e deixa só a Free Run disponível como ação.
         unawaited(workoutRealtimeService.pushRunState({
           'type': 'today_session',
           'session': {
             'type': session.type,
             'distanceKm': session.distanceKm,
             'planSessionId': session.id,
+            'isExecuted': session.isExecuted,
           },
         }));
       } else if (mounted) {
@@ -233,6 +265,15 @@ class _PrepViewState extends State<_PrepView> {
         }));
       }
     } catch (_) {/* Sem plano OU erro de network — segue free run */}
+  }
+
+  /// Segunda-feira 00:00 LOCAL da semana civil que contém [d]. Espelha
+  /// `startOfCivilWeek` do server (checkpoint-shared.ts) pra avaliação
+  /// de semana atual coerente entre os dois lados.
+  DateTime _startOfCivilWeek(DateTime d) {
+    final local = DateTime(d.year, d.month, d.day);
+    final back = local.weekday - 1; // weekday: Mon=1..Sun=7 → back 0..6
+    return local.subtract(Duration(days: back));
   }
 
   /// Se profile.coachIntroSeen != true, manda o user pro briefing inicial
@@ -484,6 +525,7 @@ class _PrepViewState extends State<_PrepView> {
             session: session,
             selected: _selectedType == session.type,
             onTap: () => _selectType(session.type),
+            executedRun: _executedRunToday,
           ),
           const SizedBox(height: 12),
           // Free Run continua disponível, mas como opção secundária menor.
@@ -1221,12 +1263,17 @@ class _PlanSessionHeroCard extends StatelessWidget {
   final VoidCallback onTap;
   final bool isFreeOnly;
   final bool isPro;
+  /// Run que executou a sessão, quando session.isExecuted. Habilita o
+  /// modo "CONCLUÍDA" com 3 linhas de planejado vs feito (distância,
+  /// pace, duração).
+  final Run? executedRun;
   const _PlanSessionHeroCard({
     required this.session,
     required this.selected,
     required this.onTap,
     this.isFreeOnly = false,
     this.isPro = false,
+    this.executedRun,
   });
 
   String _fmtKm(double km) =>
@@ -1236,6 +1283,7 @@ class _PlanSessionHeroCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final palette = context.runninPalette;
     final type = context.runninType;
+    final isExecuted = !isFreeOnly && (session?.isExecuted ?? false);
     final label = isFreeOnly ? 'FREE RUN' : 'SESSÃO DO PLANO';
     final title = (isFreeOnly
             ? 'Corrida livre'
@@ -1247,7 +1295,9 @@ class _PlanSessionHeroCard extends StatelessWidget {
         ? (isPro
             ? 'Sem sessão planejada hoje. Coach observa o que você faz.'
             : 'Versão grátis. Plano AI personalizado é premium ↗')
-        : 'Coach IA irá te guiar durante toda a sessão ↗';
+        : (isExecuted
+            ? 'Sessão concluída — você pode sair pra uma Free Run pra complementar a carga da semana.'
+            : 'Coach IA irá te guiar durante toda a sessão ↗');
     final borderColor = selected
         ? context.runninPalette.primary
         : context.runninPalette.primary.withValues(alpha: 0.4);
@@ -1285,9 +1335,11 @@ class _PlanSessionHeroCard extends StatelessWidget {
                       horizontal: 10,
                       vertical: 6,
                     ),
-                    color: context.runninPalette.primary,
+                    color: isExecuted
+                        ? context.runninPalette.success
+                        : context.runninPalette.primary,
                     child: Text(
-                      'RECOMENDADO',
+                      isExecuted ? 'CONCLUÍDA' : 'RECOMENDADO',
                       style: type.labelCaps.copyWith(
                         color: palette.background,
                         fontWeight: FontWeight.w600,
@@ -1306,7 +1358,38 @@ class _PlanSessionHeroCard extends StatelessWidget {
                 letterSpacing: -0.6,
               ),
             ),
-            if (dist != null || pace != null) ...[
+            if (isExecuted && session != null) ...[
+              const SizedBox(height: 20),
+              // Sessão concluída: 3 linhas META vs FEITO. Quando executedRun
+              // ainda não chegou (request em flight), só mostra META.
+              PlannedVsActualRow(
+                label: 'DISTÂNCIA',
+                planned: _fmtKm(session!.distanceKm),
+                actual: executedRun != null
+                    ? '${(executedRun!.distanceM / 1000).toStringAsFixed(1)}K'
+                    : null,
+              ),
+              const SizedBox(height: 6),
+              PlannedVsActualRow(
+                label: 'PACE',
+                planned: session!.targetPace != null
+                    ? '${session!.targetPace}/km'
+                    : '—',
+                actual: executedRun?.avgPace != null
+                    ? '${executedRun!.avgPace}/km'
+                    : null,
+              ),
+              const SizedBox(height: 6),
+              PlannedVsActualRow(
+                label: 'DURAÇÃO',
+                planned: session!.durationMin != null
+                    ? '${session!.durationMin!.round()}min'
+                    : '—',
+                actual: executedRun != null
+                    ? '${(executedRun!.durationS / 60).round()}min'
+                    : null,
+              ),
+            ] else if (dist != null || pace != null) ...[
               const SizedBox(height: 20),
               // 2-column stat grid: DIST | PACE ALV.
               Row(

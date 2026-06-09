@@ -1,4 +1,4 @@
-import { Plan } from '../domain/plan.entity';
+import { Plan, effectivePlanWeeks } from '../domain/plan.entity';
 import { PlanRepository } from '../domain/plan.repository';
 import { PlanRevisionRepository } from '../domain/plan-revision.repository';
 import { UserRepository } from '@modules/users/domain/user.repository';
@@ -52,7 +52,7 @@ export class AdaptPlanUseCase {
         0,
       );
       const currentWeekIndex = this._getCurrentWeekIndex(plan);
-      const currentWeek = plan.weeks[currentWeekIndex];
+      const currentWeek = effectivePlanWeeks(plan)[currentWeekIndex];
       const plannedSessions = currentWeek?.sessions.length ?? 0;
       const completedCount = completed.length;
       const aderence = plannedSessions > 0
@@ -130,7 +130,7 @@ export class AdaptPlanUseCase {
       if (!plan || plan.status !== 'ready') return;
       const yesterdayDow = ((new Date(Date.now() - 86_400_000).getDay()) || 7);
       const currentWeekIndex = this._getCurrentWeekIndex(plan);
-      const currentWeek = plan.weeks[currentWeekIndex];
+      const currentWeek = effectivePlanWeeks(plan)[currentWeekIndex];
       if (!currentWeek) return;
       const sessionYesterday = currentWeek.sessions.find(
         s => s.dayOfWeek === yesterdayDow,

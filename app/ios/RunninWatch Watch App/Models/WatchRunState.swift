@@ -58,11 +58,120 @@ class WatchRunState: ObservableObject {
 
     /// Sessão planejada do dia (vinda do iPhone quando idle). null = só
     /// "Corrida Livre" disponível no PreRunScreen.
-    @Published var todaySession: TodaySession? = nil
+    /// Fix TF 59: persistida em UserDefaults com TTL 24h. Antes era só
+    /// @Published in-memory — fechar+abrir Watch app perdia a sessão
+    /// (didReceiveApplicationContext não re-disparava). Agora restaura
+    /// instantaneamente no boot e sobrevive a app restart.
+    @Published var todaySession: TodaySession? = nil {
+        didSet {
+            Self.persistTodaySession(todaySession)
+        }
+    }
 
-    private init() {}
+    private static let _todaySessionDefaultsKey = "today_session_v1"
+    private static let _todaySessionTimestampKey = "today_session_v1_at"
+    private static let _todaySessionTtlSeconds: TimeInterval = 24 * 60 * 60
+
+    static func persistTodaySession(_ s: TodaySession?) {
+        let d = UserDefaults.standard
+        if let s = s {
+            if let data = try? JSONEncoder().encode(s) {
+                d.set(data, forKey: _todaySessionDefaultsKey)
+                d.set(Date().timeIntervalSince1970, forKey: _todaySessionTimestampKey)
+            }
+        } else {
+            d.removeObject(forKey: _todaySessionDefaultsKey)
+            d.removeObject(forKey: _todaySessionTimestampKey)
+        }
+    }
+
+    static func loadPersistedTodaySession() -> TodaySession? {
+        let d = UserDefaults.standard
+        let ts = d.double(forKey: _todaySessionTimestampKey)
+        if ts > 0, Date().timeIntervalSince1970 - ts > _todaySessionTtlSeconds {
+            // TTL 24h estouro: cache de ontem não vale.
+            d.removeObject(forKey: _todaySessionDefaultsKey)
+            d.removeObject(forKey: _todaySessionTimestampKey)
+            return nil
+        }
+        guard let data = d.data(forKey: _todaySessionDefaultsKey) else { return nil }
+        return try? JSONDecoder().decode(TodaySession.self, from: data)
+    }
+
+    /// True quando passou >`orphanThresholdS` segundos sem applicationContext
+    /// do iPhone DURANTE uma run ativa/pausada. Indica que o app do iPhone
+    /// foi morto (swipe-up, crash, sleep agressivo) e o Watch ficou sozinho
+    /// com a última leitura cacheada. ActiveRunScreen mostra overlay com
+    /// botão "Encerrar e voltar" pra destravar.
+    @Published var isOrphaned: Bool = false
+    /// Timestamp (Date) do último applicationContext processado. Usado pelo
+    /// orphan checker (Timer 5s) pra detectar perda de conexão prolongada
+    /// mesmo quando o iOS não dispara `sessionReachabilityDidChange`.
+    private var lastContextAt: Date?
+    /// Janela de tolerância. iPhone empurra ~1Hz; 25s cobre múltiplos
+    /// ciclos perdidos sem assustar em soluços de 2-3s normais.
+    private let orphanThresholdS: TimeInterval = 25
+    private var orphanCheckTimer: Timer?
+
+    private init() {
+        // Fix TF 59: restaura a última sessão do dia do UserDefaults antes
+        // do iPhone re-empurrar via WCSession. Garante que abrir o Watch
+        // app já mostra a sessão certa sem esperar push.
+        if let restored = Self.loadPersistedTodaySession() {
+            self.todaySession = restored
+        }
+    }
+
+    /// Inicia o monitor de orfão. Idempotente — chama uma vez no boot do
+    /// app Watch e o timer roda pela vida do processo. Quando status volta
+    /// pra idle, reseta isOrphaned silenciosamente (UI re-renderiza).
+    func startOrphanMonitor() {
+        orphanCheckTimer?.invalidate()
+        orphanCheckTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                guard let self = self else { return }
+                // Só sinaliza orfão durante run ativa/pausada.
+                guard self.status == .active || self.status == .paused else {
+                    if self.isOrphaned { self.isOrphaned = false }
+                    return
+                }
+                let last = self.lastContextAt ?? Date.distantPast
+                let gap = Date().timeIntervalSince(last)
+                let nowOrphaned = gap > self.orphanThresholdS
+                if nowOrphaned != self.isOrphaned {
+                    self.isOrphaned = nowOrphaned
+                }
+            }
+        }
+    }
+
+    /// Limpa o estado da corrida e volta pro TypeSelector. Chamado pelo
+    /// botão "Encerrar e voltar" do overlay de orfão e pelo botão FINALIZAR
+    /// normal. Para a HKWorkoutSession local pra não vazar bateria/Activity
+    /// Ring fragmentado.
+    func resetToIdle() {
+        if #available(iOS 26.0, watchOS 10.0, *) {
+            WorkoutController.shared.stop()
+        }
+        status = .idle
+        starting = false
+        elapsedS = 0
+        distanceM = 0
+        paceMinKm = 0
+        bpm = 0
+        caloriesKcal = 0
+        elevationM = 0
+        splits = []
+        isOrphaned = false
+        localStep = .selectingType
+    }
 
     func update(from context: [String: Any]) {
+        // Qualquer payload do iPhone re-arma o orphan watchdog. Mesmo
+        // mensagens não-state (skin update, today_session) provam que o
+        // canal tá vivo.
+        lastContextAt = Date()
+        if isOrphaned { isOrphaned = false }
         guard let type = context["type"] as? String else { return }
         // applicationContext do iPhone é single-value dedup — quando ele
         // empurra `run_state` após `today_session`, o cache fica só com
@@ -74,9 +183,13 @@ class WatchRunState: ObservableObject {
             todaySession = TodaySession(
                 type: attached["type"] as? String ?? "",
                 distanceKm: attached["distanceKm"] as? Double ?? 0,
-                planSessionId: attached["planSessionId"] as? String
+                planSessionId: attached["planSessionId"] as? String,
+                isExecuted: attached["isExecuted"] as? Bool ?? false
             )
-        } else if context["_attachedTodaySession"] is NSNull {
+        } else if context["_attachedTodaySession"] is NSNull,
+                  context["rest_day"] as? Bool == true {
+            // Fix TF 61: igual ao case "today_session" — só limpa em
+            // rest_day confirmado, nunca em transient.
             todaySession = nil
         }
         switch type {
@@ -87,9 +200,20 @@ class WatchRunState: ObservableObject {
                 // TypeSelector limpo.
                 if st == .active && status != .active {
                     starting = false
+                    // Auto-start HKWorkoutSession quando o iPhone reporta
+                    // status=active. Evita depender de `sendMessage` (que no
+                    // simulador / Watch sem complication ativa falha por
+                    // `isReachable=false`), garantindo que o BPM live (mock
+                    // no sim, sensor real no device) começa a fluir.
+                    if #available(iOS 26.0, watchOS 10.0, *) {
+                        WorkoutController.shared.start()
+                    }
                 }
                 if st == .idle && status != .idle {
                     localStep = .selectingType
+                    if #available(iOS 26.0, watchOS 10.0, *) {
+                        WorkoutController.shared.stop()
+                    }
                 }
                 status = st
             }
@@ -133,11 +257,19 @@ class WatchRunState: ObservableObject {
                 todaySession = TodaySession(
                     type: dict["type"] as? String ?? "",
                     distanceKm: dict["distanceKm"] as? Double ?? 0,
-                    planSessionId: dict["planSessionId"] as? String
+                    planSessionId: dict["planSessionId"] as? String,
+                    isExecuted: dict["isExecuted"] as? Bool ?? false
                 )
-            } else {
+            } else if context["rest_day"] as? Bool == true {
+                // Fix TF 61: SÓ limpa quando iPhone confirma rest day
+                // (plano carregado + semana sem session pro dayOfWeek).
+                // Antes, qualquer transient (rede, exception, plano em
+                // load) empurrava session: null e nuked UserDefaults →
+                // Watch perdia sessão no próximo boot.
                 todaySession = nil
             }
+            // Se vier session: null SEM rest_day flag → IGNORA. Mantém
+            // o que tinha no cache local (UserDefaults).
         default:
             break
         }
@@ -206,10 +338,14 @@ struct WatchSplit: Equatable, Identifiable {
     }
 }
 
-struct TodaySession: Equatable {
+struct TodaySession: Equatable, Codable {
     let type: String
     let distanceKm: Double
     let planSessionId: String?
+    /// Sessão do plano já executada hoje. Watch usa pra mostrar badge
+    /// "CONCLUÍDA" no TypeSelector em vez do botão de iniciar, e default
+    /// pra Free Run (igual o iPhone).
+    let isExecuted: Bool
 }
 
 /// Tipo selecionado no Passo 1/5 (TypeSelectorScreen) que segue pra

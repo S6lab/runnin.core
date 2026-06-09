@@ -13,19 +13,70 @@ private let arsLog = OSLog(subsystem: "ai.runnin.workout", category: "active-scr
 ///   - Pág 2: SOMENTE os 2 slide-buttons (PAUSAR + PARAR) — grandes
 struct ActiveRunScreen: View {
     @EnvironmentObject var state: WatchRunState
+    /// BPM local da HKWorkoutSession do Watch — fallback quando o push do
+    /// iPhone (state.bpm) está zerado ou stale. Em device real travou em
+    /// 94 porque `state.bpm` ficou no primeiro valor empurrado e o delegate
+    /// `didCollectDataOf` não disparou novos updates pro phone. Aqui a UI
+    /// passa a usar o valor local do builder, que o polling 3s atualiza.
+    @ObservedObject var workout: WorkoutController = WorkoutController.shared
     @State private var selectedPage = 0
 
     var body: some View {
-        TabView(selection: $selectedPage) {
-            statsPage.tag(0)
-            controlsPage.tag(1)
-            splitsPage.tag(2)
+        ZStack {
+            TabView(selection: $selectedPage) {
+                statsPage.tag(0)
+                controlsPage.tag(1)
+                splitsPage.tag(2)
+            }
+            // `.always` mantém as bolinhas (page indicator) sempre visíveis no
+            // rodapé. User pediu pra ser óbvio que há mais páginas além da que
+            // está na frente. `.automatic` fade depois de um tempo — preferi
+            // `.always` por ser mais didático no Watch.
+            .tabViewStyle(.page(indexDisplayMode: .always))
+
+            // Overlay de orfão: tela trava na corrida quando iPhone morre.
+            // Watchdog em WatchRunState marca isOrphaned=true após 25s
+            // sem applicationContext. Botão volta pro TypeSelector e para
+            // o WorkoutController local (libera Activity Ring).
+            if state.isOrphaned {
+                orphanOverlay
+            }
         }
-        // `.always` mantém as bolinhas (page indicator) sempre visíveis no
-        // rodapé. User pediu pra ser óbvio que há mais páginas além da que
-        // está na frente. `.automatic` fade depois de um tempo — preferi
-        // `.always` por ser mais didático no Watch.
-        .tabViewStyle(.page(indexDisplayMode: .always))
+    }
+
+    /// Resolve o BPM mostrado preferindo o local (WorkoutController) quando
+    /// disponível e maior — evita "—" quando o phone trava sem empurrar.
+    private var displayedBpm: Int {
+        if workout.lastHeartRate > 0 { return workout.lastHeartRate }
+        return state.bpm
+    }
+
+    private var orphanOverlay: some View {
+        ZStack {
+            Color.black.opacity(0.85).ignoresSafeArea()
+            VStack(spacing: 10) {
+                Text("APP DO IPHONE OFFLINE")
+                    .font(state.scaledFont(size: 11, weight: .heavy))
+                    .tracking(1.2)
+                    .foregroundStyle(Color.orange)
+                Text("Sem dados há 25s. Encerrar e voltar?")
+                    .font(state.scaledFont(size: 10, weight: .medium))
+                    .multilineTextAlignment(.center)
+                    .foregroundStyle(.white.opacity(0.7))
+                Button(action: { state.resetToIdle() }) {
+                    Text("ENCERRAR")
+                        .font(state.scaledFont(size: 12, weight: .heavy))
+                        .tracking(1.0)
+                        .foregroundStyle(Color.black)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                        .background(Color.orange)
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 12)
+        }
     }
 
     // MARK: - Pages
@@ -53,7 +104,7 @@ struct ActiveRunScreen: View {
                 }
                 HStack(spacing: 8) {
                     mediumStat(label: "BPM",
-                               value: state.bpm > 0 ? "\(state.bpm)" : "—",
+                               value: displayedBpm > 0 ? "\(displayedBpm)" : "—",
                                unit: nil, valueColor: state.secondaryColor)
                     mediumStat(label: "CAL",
                                value: "\(Int(state.caloriesKcal))",
@@ -281,7 +332,12 @@ struct ActiveRunScreen: View {
                    session.activationState.rawValue)
             return
         }
-        let msg: [String: Any] = ["action": action]
+        // Fix TF 59: anexa `request_id` único pra dedup do iPhone-side.
+        // Antes, transferUserInfo enfileirado offline podia entregar 2x
+        // (durante o fallback após sendMessage falhar) → iPhone processava
+        // dois pause/resume seguidos.
+        let requestId = UUID().uuidString
+        let msg: [String: Any] = ["action": action, "request_id": requestId]
         if session.isReachable {
             session.sendMessage(msg, replyHandler: { reply in
                 os_log("slide.sendMessage.reply ok=%{public}@", log: arsLog, type: .info,

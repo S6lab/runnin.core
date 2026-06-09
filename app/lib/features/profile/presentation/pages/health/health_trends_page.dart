@@ -3,6 +3,7 @@ import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 import 'package:runnin/features/biometrics/data/biometric_remote_datasource.dart';
+import 'package:runnin/features/biometrics/data/health_sync_service.dart';
 import 'package:runnin/features/biometrics/domain/recovery_score.dart';
 import 'package:runnin/features/run/data/datasources/run_remote_datasource.dart';
 import 'package:runnin/features/run/domain/entities/run.dart';
@@ -16,7 +17,7 @@ class HealthTrendsPage extends StatefulWidget {
   State<HealthTrendsPage> createState() => _HealthTrendsPageState();
 }
 
-class _HealthTrendsPageState extends State<HealthTrendsPage> {
+class _HealthTrendsPageState extends State<HealthTrendsPage> with WidgetsBindingObserver {
   final _remoteRuns = RunRemoteDatasource();
   final _remoteUser = UserRemoteDatasource();
   final _remoteBiometrics = BiometricRemoteDatasource();
@@ -28,7 +29,35 @@ class _HealthTrendsPageState extends State<HealthTrendsPage> {
   @override
   void initState() {
     super.initState();
-    _load();
+    WidgetsBinding.instance.addObserver(this);
+    // 1) Dispara sync HK em paralelo (best-effort, sem bloquear load inicial).
+    // 2) Carrega o que já tem no server. 3) Quando sync termina, recarrega.
+    _refreshHealthAndLoad();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    if (state == AppLifecycleState.resumed) {
+      _refreshHealthAndLoad();
+    }
+  }
+
+  /// Puxa samples novos do HK pro server e em seguida refaz a query da
+  /// summary. Sem isso, abrir Tendências de manhã mostrava sono da noite
+  /// anterior porque o sample do Watch ainda não tinha sido enviado.
+  Future<void> _refreshHealthAndLoad() async {
+    try {
+      await healthSyncService.syncSince();
+    } catch (_) {/* best-effort */}
+    if (!mounted) return;
+    await _load();
   }
 
   Future<void> _load() async {
@@ -308,11 +337,19 @@ class _Body extends StatelessWidget {
               ),
               _HealthCard(
                 label: 'Sono médio',
+                // Formato h:mm (mesma representação do Apple Health).
                 value: sleepHours != null
-                    ? '${sleepHours.toStringAsFixed(1)}h'
+                    ? _hoursToHhMm(sleepHours)
                     : '—',
                 unit: '',
-                secondaryLabel: sleepHours != null ? null : 'Sem dados',
+                // Mostra qualidade quando há stages registradas (Apple Watch
+                // iOS 16+ writes sleep_deep + rem + light). Sem stages,
+                // mostra só "Média 7 dias" ou "Sem dados".
+                secondaryLabel: sleepHours != null
+                    ? biometricSummary?.avgSleepQualityScore != null
+                        ? 'Qualidade ${biometricSummary!.avgSleepQualityScore!.toInt()}/100'
+                        : 'Média 7 dias'
+                    : 'Sem dados',
                 valueColor: FigmaColors.brandGreen,
               ),
               _HealthCard(
@@ -417,4 +454,15 @@ class _SectionHeader extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Converte horas decimais pra formato "h:mm" (ex: 5.3h → "5:18").
+/// Espelha o que Apple Health mostra. Duplicado do home_page.dart porque
+/// não vale o overhead de criar um util compartilhado pra uma função
+/// de 4 linhas; quando virar 3 lugares, refatorar.
+String _hoursToHhMm(num hours) {
+  final totalMin = (hours * 60).round();
+  final h = totalMin ~/ 60;
+  final m = totalMin % 60;
+  return '$h:${m.toString().padLeft(2, '0')}';
 }

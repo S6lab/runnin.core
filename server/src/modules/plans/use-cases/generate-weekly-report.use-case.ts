@@ -8,7 +8,7 @@ import { CoachRuntimeContextService } from '@modules/coach/use-cases/coach-runti
 import { Run } from '@modules/runs/domain/run.entity';
 import { RunRepository } from '@modules/runs/domain/run.repository';
 import { PlanRepository } from '../domain/plan.repository';
-import { Plan, PlanWeek } from '../domain/plan.entity';
+import { Plan, PlanWeek, effectivePlanWeeks } from '../domain/plan.entity';
 import {
   WeeklyReport,
   WeeklyReportMetrics,
@@ -40,7 +40,7 @@ export class GenerateWeeklyReportUseCase {
     if (!plan || plan.userId !== userId) {
       throw new NotFoundError('Plan');
     }
-    const week = plan.weeks.find((w) => w.weekNumber === weekNumber);
+    const week = effectivePlanWeeks(plan).find((w) => w.weekNumber === weekNumber);
     if (!week) {
       throw new NotFoundError(`Plan week ${weekNumber}`);
     }
@@ -154,6 +154,8 @@ function emptyMetrics(week: PlanWeek): WeeklyReportMetrics {
     completedRuns: 0,
     plannedDistanceKm,
     actualDistanceKm: 0,
+    freeRunsDistanceKm: 0,
+    plannedRunsDistanceKm: 0,
     completionRate: 0,
     totalDurationS: 0,
   };
@@ -163,6 +165,13 @@ function computeMetrics(week: PlanWeek, runs: Run[]): WeeklyReportMetrics {
   const plannedDistanceKm = week.sessions.reduce((s, x) => s + (x.distanceKm ?? 0), 0);
   const actualDistanceM = runs.reduce((s, r) => s + (r.distanceM ?? 0), 0);
   const actualDistanceKm = actualDistanceM / 1000;
+  // Free runs (planSessionId == null) compensam déficit de sessões
+  // planejadas. Coach precisa enxergar essa separação pra creditar
+  // o user que ficou abaixo numa sessão mas correu livre depois.
+  const freeRunsM = runs
+    .filter((r) => !r.planSessionId)
+    .reduce((s, r) => s + (r.distanceM ?? 0), 0);
+  const plannedRunsM = actualDistanceM - freeRunsM;
   const totalDurationS = runs.reduce((s, r) => s + (r.durationS ?? 0), 0);
 
   const bpms = runs.map((r) => r.avgBpm).filter((b): b is number => typeof b === 'number');
@@ -183,6 +192,8 @@ function computeMetrics(week: PlanWeek, runs: Run[]): WeeklyReportMetrics {
     completedRuns,
     plannedDistanceKm,
     actualDistanceKm: Math.round(actualDistanceKm * 10) / 10,
+    freeRunsDistanceKm: Math.round((freeRunsM / 1000) * 10) / 10,
+    plannedRunsDistanceKm: Math.round((plannedRunsM / 1000) * 10) / 10,
     completionRate: Math.round(completionRate * 100) / 100,
     avgBpm,
     maxBpm,
@@ -218,14 +229,16 @@ function buildWeeklyReportValues(args: {
   const runsActual = runs.length === 0
     ? '  (nenhuma corrida registrada)'
     : runs
-        .map(
-          (r) =>
-            `  - ${r.createdAt.slice(0, 10)}: ${(r.distanceM / 1000).toFixed(1)}km, ${formatDuration(r.durationS)}, pace ${r.avgPace ?? '—'}, bpm ${r.avgBpm ?? '—'}`,
-        )
+        .map((r) => {
+          const tag = r.planSessionId ? '[PLANO]' : '[LIVRE]';
+          return `  - ${tag} ${r.createdAt.slice(0, 10)}: ${(r.distanceM / 1000).toFixed(1)}km, ${formatDuration(r.durationS)}, pace ${r.avgPace ?? '—'}, bpm ${r.avgBpm ?? '—'}`;
+        })
         .join('\n');
   const metricsBlock = [
     `- Distância planejada: ${metrics.plannedDistanceKm.toFixed(1)} km`,
-    `- Distância real: ${metrics.actualDistanceKm.toFixed(1)} km`,
+    `- Distância real total: ${metrics.actualDistanceKm.toFixed(1)} km`,
+    `  · em sessões do plano: ${metrics.plannedRunsDistanceKm.toFixed(1)} km`,
+    `  · em corridas livres (compensam déficit): ${metrics.freeRunsDistanceKm.toFixed(1)} km`,
     `- Taxa de aderência: ${Math.round(metrics.completionRate * 100)}%`,
     `- Sessões: ${metrics.completedRuns}/${metrics.plannedSessions}`,
     `- BPM médio: ${metrics.avgBpm ?? '—'}`,

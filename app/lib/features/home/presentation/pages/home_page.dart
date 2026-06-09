@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -8,6 +9,7 @@ import 'package:runnin/core/audio/audio_route_service.dart';
 import 'package:runnin/core/router/app_router.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
+import 'package:runnin/features/biometrics/data/biometric_remote_datasource.dart';
 import 'package:runnin/features/biometrics/data/bpm_polling_service.dart';
 import 'package:runnin/features/biometrics/data/health_sync_service.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
@@ -107,28 +109,46 @@ class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
-    // Volta do background → checa staleness e ressincroniza se passou
-    // dos 30min. Permite captura "contínua" durante uso do app sem
-    // depender de background tasks nativas (mais complexo de configurar
-    // no iOS — BGTaskScheduler exige Info.plist + entitlement).
+    // Volta do bg → puxa HK sem gate (user acorda, abre o app, espera ver
+    // sono atualizado). Antes tinha staleness de 30min que segurava o
+    // sync quando ele tinha aberto o app de noite e voltou de manhã com
+    // o sono do Watch chegando no HK só depois do limite.
     if (state == AppLifecycleState.resumed) {
-      _refreshHealthIfStale();
+      _refreshHealthAndReload();
     }
   }
 
   Future<void> _bootstrapHealth() async {
+    // Fix TF 60: ping incondicional ANTES de qualquer gate. Server loga
+    // `wearable.sync.ping` no Cloud Run — se ping não aparece nos logs, o
+    // user não chegou aqui. Se aparece mas telemetry não, syncSince morreu
+    // em algum lugar (= log do catch agora cobre).
+    unawaited(BiometricRemoteDatasource().syncPing(
+      tfHint: '60',
+      platform: 'ios',
+    ));
     try {
       await healthSyncService.ensureAuthorizations();
-      await _refreshHealthIfStale();
+      await _refreshHealthAndReload();
     } catch (_) {/* best-effort, telemetria sai do service */}
   }
 
-  Future<void> _refreshHealthIfStale() async {
+  /// Roda HK→server sync e, ao terminar, recarrega o HomeCubit pra
+  /// puxar a nova summary (sleep da noite, BPM repouso, HRV, 7d stats).
+  /// Sem `showLoading` pra não piscar a tela — atualização silenciosa.
+  /// Sempre dispara um `forceFullResync` em paralelo (janela 7d) como
+  /// safety-net: cobre o caso "lastSync recente perde sleep overnight"
+  /// reportado pelo user (sleep ficou em data congelada mesmo com fix 36h).
+  Future<void> _refreshHealthAndReload() async {
     try {
-      if (await healthSyncService.isStale()) {
-        await healthSyncService.syncSince();
-      }
+      await healthSyncService.syncSince();
+      // ignorando erro; safety net abaixo cobre o caso.
+      unawaited(healthSyncService.forceFullResync());
     } catch (_) {/* best-effort, eventos de erro já saem do service */}
+    if (!mounted) return;
+    try {
+      context.read<HomeCubit>().load(showLoading: false);
+    } catch (_) {/* cubit pode não estar disponível em alguns paths */}
   }
 
   Future<void> _checkOnboarding(bool? cachedStatus) async {
@@ -1434,7 +1454,6 @@ class _StatusCorporalSectionState extends State<_StatusCorporalSection> {
   Widget build(BuildContext context) {
     final profile = widget.data.profile;
     final hasBpmData = _hasRealBpmData(widget.data);
-    final hasSleepData = _hasRealSleepData(widget.data);
     final bmi = _calculateBmi(profile);
     final hasBodyData = bmi != null;
     final readinessScore = hasBodyData
@@ -1487,32 +1506,56 @@ class _StatusCorporalSectionState extends State<_StatusCorporalSection> {
                   // alguma de saúde. O caso (b) leva direto pra /profile/health
                   // pra revisar permissão, em vez de /profile/edit.
                   final sleepGap = _hasSleepPermissionGap(widget.data);
+                  // Última noite em destaque + média 7d no slot do chart.
+                  final bio = widget.data.biometric;
+                  final lastNight = bio?.lastNightSleepHours;
+                  final avg7d = bio?.avgSleepHours;
                   return MetricCard(
                     label: 'SONO',
-                    value: hasSleepData
-                        ? widget.data.biometric!.avgSleepHours!.toStringAsFixed(1)
+                    value: lastNight != null
+                        ? _hoursToHhMm(lastNight)
                         : '--',
-                    unit: hasSleepData ? 'h' : null,
+                    unit: null,
                     valueColor: FigmaColors.textPrimary,
-                    sub: hasSleepData
-                        ? 'Média 7 dias via Apple Health / Health Connect'
+                    sub: lastNight != null
+                        ? 'Última noite via Apple Health'
                         : sleepGap
                             ? "Permita 'Sono' em Saúde do iPhone"
                             : profile?.hasWearable == true
                                 ? 'Sem sono sincronizado via Health'
                                 : 'Sem origem de sono conectada',
-                    chart: TextButton(
-                      onPressed: () => context.push(
-                        sleepGap ? '/profile/health' : '/profile/edit',
-                      ),
-                      child: Text(
-                        hasSleepData
-                            ? 'VER DETALHES'
-                            : sleepGap
-                                ? 'REVISAR PERMISSÕES'
-                                : 'REVISAR PERFIL',
-                      ),
-                    ),
+                    chart: lastNight != null
+                        ? Row(
+                            mainAxisAlignment:
+                                MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                'Média 7d',
+                                style: TextStyle(
+                                  color: context.runninPalette.muted,
+                                  fontSize: 10,
+                                ),
+                              ),
+                              Text(
+                                avg7d != null ? _hoursToHhMm(avg7d) : '—',
+                                style: TextStyle(
+                                  color: context.runninPalette.primary,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          )
+                        : TextButton(
+                            onPressed: () => context.push(
+                              sleepGap ? '/profile/health' : '/profile/edit',
+                            ),
+                            child: Text(
+                              sleepGap
+                                  ? 'REVISAR PERMISSÕES'
+                                  : 'REVISAR PERFIL',
+                            ),
+                          ),
                   );
                 }),
               ),
@@ -1808,9 +1851,23 @@ class _UltimaCorrida extends StatelessWidget {
     );
   }
 }
+/// Converte horas decimais pra formato "h:mm" (ex: 5.3h → "5:18").
+/// Usado pra exibir tempo de sono e duração de corrida em padrão temporal
+/// claro (compatível com o que Apple Health mostra).
+String _hoursToHhMm(num hours) {
+  final totalMin = (hours * 60).round();
+  final h = totalMin ~/ 60;
+  final m = totalMin % 60;
+  return '$h:${m.toString().padLeft(2, '0')}';
+}
+
 String? _averagePace(List<Run> runs) {
+  // Filtro ruído: corridas curtas (<30s) ou sem deslocamento (<100m) são
+  // descartadas — espelha o filtro server (get-stats-aggregate.use-case.ts)
+  // pra os cards do app não divergirem da API. User tocou INICIAR e fechou,
+  // ou GPS perdeu sinal e a "corrida" ficou parada.
   final validRuns = runs
-      .where((run) => run.distanceM > 0 && run.durationS > 0)
+      .where((run) => run.distanceM >= 100 && run.durationS >= 30)
       .toList();
   if (validRuns.length < 2) {
     return validRuns.isEmpty ? null : validRuns.first.avgPace;
@@ -1840,11 +1897,6 @@ double _plannedWeeklyDistance(HomeData data) {
 
 bool _hasRealBpmData(HomeData data) {
   return data.completedRuns.any((run) => run.avgBpm != null);
-}
-
-bool _hasRealSleepData(HomeData data) {
-  final hours = data.biometric?.avgSleepHours;
-  return hours != null && hours > 0;
 }
 
 /// True quando o user sincronizou OUTROS dados de saúde (BPM resting ou
@@ -2533,6 +2585,13 @@ class _WeatherStrip extends StatelessWidget {
             icon: Icons.air,
             value: '${weather.windKmh.toStringAsFixed(0)}km/h',
           ),
+          if (weather.uvIndex != null) ...[
+            _WeatherDivider(),
+            _WeatherCell(
+              icon: Icons.wb_sunny_outlined,
+              value: 'UV ${weather.uvIndex!.toStringAsFixed(0)}',
+            ),
+          ],
         ],
       ),
     );

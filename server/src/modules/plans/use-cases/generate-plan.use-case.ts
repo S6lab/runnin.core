@@ -18,7 +18,7 @@ import { validateVolumeForGoal } from './validate-volume-for-goal';
 import { validateFrequencyForGoal, FrequencyError } from './validate-frequency-for-goal';
 import { validateAgeForGoal, AgeRestrictionError } from './validate-age-for-goal';
 import { validateMedicalForGoal, MedicalRestrictionError } from './validate-medical-for-goal';
-import { buildExecutionSegments } from './build-execution-segments';
+import { buildExecutionSegments, resolveEffectiveSessionType } from './build-execution-segments';
 import { deriveWeeksCountFromRaceDate, isoDateToDayOfWeek } from './race-date.helpers';
 import { enforceRaceWeekStructure } from './enforce-race-week-structure';
 import {
@@ -726,6 +726,11 @@ export class GeneratePlanUseCase {
       await this.repo.update(plan.id, plan.userId, {
         status: 'ready',
         weeks,
+        // Inicializa adjustedWeeks = weeks na criação. Isso simplifica
+        // toda a leitura subsequente (effectivePlanWeeks sempre tem snapshot
+        // vigente), e as revisões só sobrescrevem adjustedWeeks daqui pra
+        // frente — plan.weeks (BASE) permanece imutável.
+        adjustedWeeks: weeks,
         updatedAt: new Date().toISOString(),
       });
       // Notifica user que o plano está pronto (in-app + push). Dynamic
@@ -1005,8 +1010,13 @@ ${weeksDigest}`;
         };
       });
 
+      // Espelha enriquecimento de narrativa em adjustedWeeks (BASE foi
+      // recém-criada == adjustedWeeks neste momento, antes de qualquer
+      // revisão). Mantém ambos coerentes pra UI ler effective sem perder
+      // narrativas geradas pós-create.
       await this.repo.update(plan.id, plan.userId, {
         weeks: enriched,
+        adjustedWeeks: enriched,
         mesocycleNarrative: parsed.mesocycle,
         goalAssessment: parsed.goalAssessment,
         updatedAt: new Date().toISOString(),
@@ -1298,14 +1308,17 @@ ${repaired}`,
           Number(session.distanceKm.toFixed(1)),
           { weekNumber: week.weekNumber, dayOfWeek: session.dayOfWeek },
         );
-        const sessionType = sanitized.type;
         // Cap por nível (iniciante=14, intermediario=22, avancado=32).
         // Logado em plan.session.distance.clamped quando dispara.
         const sessionDistance = clampSessionDistance(sanitized.distanceKm, level, {
           weekNumber: week.weekNumber,
           dayOfWeek: session.dayOfWeek,
-          sessionType,
+          sessionType: sanitized.type,
         });
+        // Resolve o tipo "efetivo" DEPOIS do clamp: se a distância final
+        // não acomoda a fórmula (ex: clamp reduziu Tiros pra 2.5km),
+        // rebatiza pra Easy Run. Mantém UI e roteiro coerentes.
+        const sessionType = resolveEffectiveSessionType(sanitized.type, sessionDistance);
         if (isFull) {
           const base = {
             id: uuid(),
@@ -1319,13 +1332,16 @@ ${repaired}`,
             nutritionPost: session.nutritionPost,
             notes: session.notes,
           } satisfies Omit<PlanSession, 'executionSegments'>;
-          // Segments: prioriza o que LLM mandou (caso futuro o prompt
-          // volte a pedir), senão gera deterministicamente a partir de
-          // distância + tipo + pace. Sem LLM, instantâneo.
-          const segments: PlanSegment[] | undefined =
-            (session.executionSegments?.length ?? 0) > 0
-              ? (session.executionSegments as PlanSegment[])
-              : buildExecutionSegments(base, this._roteiroTpl);
+          // SEMPRE regenera via builder determinístico (templates curados
+          // do Dossiê 4). Antes preservávamos os segments quando o LLM
+          // mandava algo, mas observamos sessão "Tiros" ganhando roteiro
+          // de Easy Run quando o LLM gerava as duas peças desalinhadas
+          // (wk3 dow3 do user em 2026-06-08). O builder cobre todos os
+          // tipos especializados (interval/tempo/long/fartlek/recovery) +
+          // fallback easy — não há vantagem em confiar no LLM aqui.
+          const segments: PlanSegment[] = buildExecutionSegments(
+            base, this._roteiroTpl,
+          );
           return { ...base, executionSegments: segments } satisfies PlanSession;
         }
         // Skeleton: só tipo/distância/pace + notes curta. Sem hidratação/

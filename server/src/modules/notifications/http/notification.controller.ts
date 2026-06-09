@@ -36,6 +36,12 @@ const ensureDaily = new EnsureDailyInsightsUseCase(
 );
 const dailyPush = new SendDailyPushUseCase(userRepo, planRepo, container.useCases.getUserFeatures);
 
+// Cache em memória do último ensureDaily por uid pra evitar rodar 100x num
+// burst de abertura/refresh do painel. TTL 6h (cron diário roda 1x/dia +
+// painel pode chamar várias vezes a cada navegação).
+const _lastEnsuredAt = new Map<string, number>();
+const _ENSURE_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+
 export async function listNotifications(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const cursor = typeof req.query['cursor'] === 'string' ? req.query['cursor'] : undefined;
@@ -45,10 +51,15 @@ export async function listNotifications(req: Request, res: Response, next: NextF
     // ensureDaily só na primeira página — em loadMore não faz sentido
     // recriar os insights diários (e atrasaria a paginação).
     if (!cursor) {
-      try {
-        await ensureDaily.execute(req.uid);
-      } catch (err) {
-        logger.warn('notifications.ensure_daily_failed', { uid: req.uid, err: String(err) });
+      const lastAt = _lastEnsuredAt.get(req.uid) ?? 0;
+      const ageMs = Date.now() - lastAt;
+      if (ageMs > _ENSURE_CACHE_TTL_MS) {
+        try {
+          await ensureDaily.execute(req.uid);
+          _lastEnsuredAt.set(req.uid, Date.now());
+        } catch (err) {
+          logger.warn('notifications.ensure_daily_failed', { uid: req.uid, err: String(err) });
+        }
       }
     }
     const result = await listUseCase.execute(req.uid, { before: cursor, limit });

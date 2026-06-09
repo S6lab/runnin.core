@@ -6,7 +6,7 @@ import { PlanRevisionRepository } from '../domain/plan-revision.repository';
 import { UserRepository } from '@modules/users/domain/user.repository';
 import { PlanRevision, PlanRevisionRequestType, PlanRevisionStatus } from '../domain/plan-revision.entity';
 import { UserProfile } from '@modules/users/domain/user.entity';
-import { Plan, PlanWeek } from '../domain/plan.entity';
+import { Plan, PlanWeek, effectivePlanWeeks } from '../domain/plan.entity';
 import { logger } from '@shared/logger/logger';
 import { formatRunningKnowledgeContext } from '@shared/knowledge/running/running-knowledge';
 import { buildPlanRevisionPrompt } from '@shared/infra/llm/prompts';
@@ -103,14 +103,16 @@ export class RequestRevisionUseCase {
     }
 
     const currentWeekIndex = this._getCurrentWeekIndex(plan);
-    const oldWeeksSnapshot = [...plan.weeks];
+    // Estado VIGENTE: respeita revisões anteriores cumulativas.
+    const effectiveWeeks = effectivePlanWeeks(plan);
+    const oldWeeksSnapshot = [...effectiveWeeks];
 
     const knowledgeContext = await formatRunningKnowledgeContext(
       `${plan.goal} ${plan.level} corrida plano de ${plan.weeksCount} semanas`,
       5,
     );
 
-    const futureWeeks = plan.weeks.slice(currentWeekIndex);
+    const futureWeeks = effectiveWeeks.slice(currentWeekIndex);
 
     const built = await buildPlanRevisionPrompt({
       profile,
@@ -147,9 +149,9 @@ export class RequestRevisionUseCase {
 
       const parsed = this._parseRevisionResponse(raw);
       coachExplanation = parsed.coachExplanation;
-      const merged = this._mergeWeeks(plan.weeks, parsed.newWeeks, currentWeekIndex);
-      // Garante invariantes da âncora da prova quando RACE — repara se o LLM
-      // mexer na race week ou mudar weeksCount mesmo com instrução no prompt.
+      // Merge sobre o snapshot VIGENTE (cumulativo). plan.weeks é a BASE
+      // imutável; comparamos contra ela só pra invariantes estruturais.
+      const merged = this._mergeWeeks(effectiveWeeks, parsed.newWeeks, currentWeekIndex);
       const enforced = enforceRevisionInvariants(merged, {
         plan,
         originalWeeks: plan.weeks,
@@ -165,14 +167,17 @@ export class RequestRevisionUseCase {
       throw new Error('Failed to generate revision: ' + (err instanceof Error ? err.message : String(err)));
     }
 
+    // ARQUITETURA: plan.weeks (BASE) é IMUTÁVEL. Revisões — manuais ou auto —
+    // só tocam em `adjustedWeeks`, que é o snapshot vigente lido por
+    // `effectivePlanWeeks` em todas as telas de treino atual.
     const updatedPlan = {
       ...plan,
-      weeks: newWeeks,
+      adjustedWeeks: newWeeks,
       updatedAt: new Date().toISOString(),
     };
 
     await this.plans.update(plan.id, userId, {
-      weeks: updatedPlan.weeks,
+      adjustedWeeks: updatedPlan.adjustedWeeks,
       updatedAt: updatedPlan.updatedAt,
     });
 
@@ -188,7 +193,7 @@ export class RequestRevisionUseCase {
       subOption: input.subOption,
       freeText: input.freeText,
       oldWeeksSnapshot,
-      newWeeksSnapshot: updatedPlan.weeks.slice(currentWeekIndex),
+      newWeeksSnapshot: updatedPlan.adjustedWeeks.slice(currentWeekIndex),
       coachExplanation,
       status: 'applied',
       createdAt,

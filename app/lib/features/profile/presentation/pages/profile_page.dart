@@ -1,6 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
@@ -646,14 +647,17 @@ class _FieldLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final palette = context.runninPalette;
-
+    // Padrão de section heading da Home (`_BigHeading`). Antes era fontSize:10
+    // mute, que destoava de STATUS CORPORAL / PERFORMANCE / etc. Agora alinha
+    // visualmente com o resto do app.
     return Text(
       label,
-      style: context.runninType.labelCaps.copyWith(
-        fontSize: 10,
-        color: palette.muted,
-        letterSpacing: 0.1,
+      style: GoogleFonts.jetBrainsMono(
+        fontSize: 22,
+        height: 24.2 / 22,
+        letterSpacing: -0.44,
+        fontWeight: FontWeight.w500,
+        color: FigmaColors.textPrimary,
       ),
     );
   }
@@ -691,12 +695,26 @@ class _StatCard extends StatelessWidget {
             ),
           ),
           SizedBox(height: big ? 10 : 8),
-          Text(
-            value,
-            style: (big ? context.runninType.displayLg : context.runninType.displaySm)
-                .copyWith(
-              color: palette.text,
-              letterSpacing: -0.02,
+          // FittedBox scale-down evita "10.4" quebrar em "10.\n4" quando o
+          // displayLg (52pt) não cabe na coluna. Mesmo padrão usado em
+          // MetricCard (home: PRONTIDÃO / SONO). fontSize:36 = matching
+          // MetricCard "filled" pra consistência visual com o resto do app.
+          SizedBox(
+            height: big ? 44 : 30,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.bottomLeft,
+              child: Text(
+                value,
+                maxLines: 1,
+                style: TextStyle(
+                  fontSize: big ? 36 : 24,
+                  height: 1.0,
+                  fontWeight: FontWeight.w500,
+                  color: palette.text,
+                  letterSpacing: -0.02,
+                ),
+              ),
             ),
           ),
         ],

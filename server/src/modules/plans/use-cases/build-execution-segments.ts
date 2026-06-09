@@ -60,6 +60,38 @@ function instr(
 }
 
 /**
+ * Resolve o tipo "efetivo" de uma sessão pra fins de roteiro. Quando a
+ * distância é incompatível com a fórmula do tipo solicitado (ex: "Tiros"
+ * com 2.5km não acomoda warm + reps + cool), retorna "Easy Run" pra UI
+ * e roteiro ficarem alinhados. Sem isso, vimos sessão wk3 dow3=Tiros
+ * 2.5km exibida com roteiro de Easy Run — type mostra uma coisa, segments
+ * descrevem outra.
+ *
+ * Thresholds espelham as condições internas do `buildExecutionSegments`:
+ *  - interval/tiros : dist >= warmKm(1.5) + coolKm(1) + remaining(0.8+) = 3.3
+ *  - tempo/limiar   : dist > warmKm(~1.2) + coolKm(1) ≈ 2.3
+ *  - long           : dist > warmKm(1) + coolKm(1) = 2
+ *  - fartlek        : dist > warmKm + coolKm ≈ 2.3
+ *  - recovery / easy: sempre OK
+ */
+export function resolveEffectiveSessionType(
+  type: string | undefined,
+  distanceKm: number | undefined,
+): string {
+  const t = (type ?? '').toLowerCase();
+  const dist = distanceKm ?? 0;
+  const isInterval = t.includes('interval') || t.includes('tiro');
+  const isTempo = t.includes('tempo') || t.includes('limiar');
+  const isLong = t.includes('long') || t.includes('longão') || t.includes('longao');
+  const isFartlek = t.includes('fartlek');
+  if (isInterval && dist < 3.3) return 'Easy Run';
+  if (isTempo && dist < 2.3) return 'Easy Run';
+  if (isLong && dist < 2.1) return 'Easy Run';
+  if (isFartlek && dist < 2.3) return 'Easy Run';
+  return type ?? 'Easy Run';
+}
+
+/**
  * `templates`: por padrão usa o default versionado. Os use-cases passam o
  * override do Firestore (via getRoteiroTemplates) pra refletir edições do
  * admin sem deploy.

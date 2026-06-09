@@ -26,23 +26,33 @@ struct PreRunScreen: View {
                     .padding(.top, 4)
 
                 if let session = state.todaySession {
-                    runButton(
-                        title: "SESSÃO DO DIA",
-                        subtitle: "\(session.type) · \(formattedKm(session.distanceKm))",
-                        accent: true
-                    ) {
-                        state.localStep = .briefing(SelectedRunType(
-                            type: session.type,
-                            planSessionId: session.planSessionId,
-                            distanceKm: session.distanceKm
-                        ))
+                    if session.isExecuted {
+                        // Badge não-tocável "CONCLUÍDA" no lugar do botão de
+                        // iniciar. Default visual vira Corrida Livre (accent),
+                        // pra completar a carga com uma free run extra.
+                        completedSessionCard(session: session)
+                    } else {
+                        runButton(
+                            title: "SESSÃO DO DIA",
+                            subtitle: "\(session.type) · \(formattedKm(session.distanceKm))",
+                            accent: true
+                        ) {
+                            state.localStep = .briefing(SelectedRunType(
+                                type: session.type,
+                                planSessionId: session.planSessionId,
+                                distanceKm: session.distanceKm
+                            ))
+                        }
                     }
                 }
 
                 runButton(
                     title: "CORRIDA LIVRE",
                     subtitle: "Sem plano · sem alvo",
-                    accent: false
+                    // Quando a sessão do dia já foi feita, Free Run vira
+                    // a opção principal (accent) — espelha o default do
+                    // iPhone (prep_page seleciona Free Run nesse cenário).
+                    accent: state.todaySession?.isExecuted ?? false
                 ) {
                     state.localStep = .briefing(SelectedRunType(
                         type: "Free Run",
@@ -86,5 +96,32 @@ struct PreRunScreen: View {
     private func formattedKm(_ km: Double) -> String {
         if km == km.rounded() { return "\(Int(km))km" }
         return String(format: "%.1fkm", km)
+    }
+
+    @ViewBuilder
+    private func completedSessionCard(session: TodaySession) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                Text("✓")
+                    .font(state.scaledFont(size: 11, weight: .heavy))
+                    .foregroundStyle(Color.green)
+                Text("SESSÃO CONCLUÍDA")
+                    .font(state.scaledFont(size: 10, weight: .heavy))
+                    .tracking(1.0)
+                    .foregroundStyle(Color.green)
+            }
+            Text("\(session.type) · \(formattedKm(session.distanceKm))")
+                .font(state.scaledFont(size: 9, weight: .medium))
+                .foregroundStyle(.white.opacity(0.55))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 8)
+        .padding(.horizontal, 10)
+        .background(Color.green.opacity(0.08))
+        .overlay(
+            RoundedRectangle(cornerRadius: 6)
+                .stroke(Color.green.opacity(0.45), lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 6))
     }
 }

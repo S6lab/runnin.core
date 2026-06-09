@@ -955,6 +955,20 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
               color: const Color(0xFF1A1A2E),
               border: Border.all(color: FigmaColors.borderDefault, width: 1),
             ),
+            // Tap em área "vazia" da foto (fora dos chips) deseleciona o
+            // chip ativo. Antes, uma vez selecionado, o chip ficava
+            // "selecionado" pra sempre — user reportou que não conseguia
+            // des-selecionar o último chip movido. behavior=deferToChild
+            // garante que taps em cima dos chips sigam pra o onTap deles
+            // (selecionar / ciclar tamanho) e SÓ taps que escapam todos os
+            // filhos disparam esse onTap pai.
+            child: GestureDetector(
+              behavior: HitTestBehavior.deferToChild,
+              onTap: () {
+                if (_selectedOverlayId != null) {
+                  setState(() => _selectedOverlayId = null);
+                }
+              },
             child: Stack(
               fit: StackFit.expand,
               children: [
@@ -1108,6 +1122,7 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
                   ),
                 ),
               ],
+            ),
             ),
           );
         },

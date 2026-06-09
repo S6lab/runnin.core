@@ -26,6 +26,12 @@ struct RunninWatchApp: App {
             session.delegate = SessionDelegate.shared
             session.activate()
         }
+        // Inicia o watchdog que detecta quando o iPhone parou de empurrar
+        // contexto (app morto/swipe-up) durante uma run ativa — UI mostra
+        // overlay "ENCERRAR" pra destravar a tela travada com último valor.
+        Task { @MainActor in
+            WatchRunState.shared.startOrphanMonitor()
+        }
     }
 
     var body: some Scene {

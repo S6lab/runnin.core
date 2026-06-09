@@ -393,10 +393,20 @@ class _UserInfoCards extends StatelessWidget {
 
   static int? _ageFromBirthDate(String? birthDate) {
     if (birthDate == null || birthDate.isEmpty) return null;
-    // expected "dd/mm/yyyy"
-    final m = RegExp(r'^(\d{2})/(\d{2})/(\d{4})$').firstMatch(birthDate);
-    if (m == null) return null;
-    final birth = DateTime(int.parse(m.group(3)!), int.parse(m.group(2)!), int.parse(m.group(1)!));
+    // Aceita ISO "1983-02-18" (canônico) e BR "18/02/1983" (legacy onboarding).
+    DateTime? birth;
+    final iso = RegExp(r'^(\d{4})-(\d{1,2})-(\d{1,2})').firstMatch(birthDate);
+    if (iso != null) {
+      birth = DateTime(int.parse(iso.group(1)!), int.parse(iso.group(2)!), int.parse(iso.group(3)!));
+    } else {
+      final br = RegExp(r'^(\d{1,2})/(\d{1,2})/(\d{2,4})$').firstMatch(birthDate);
+      if (br != null) {
+        var y = int.parse(br.group(3)!);
+        if (y < 100) y += y < 30 ? 2000 : 1900;
+        birth = DateTime(y, int.parse(br.group(2)!), int.parse(br.group(1)!));
+      }
+    }
+    if (birth == null) return null;
     final now = DateTime.now();
     var age = now.year - birth.year;
     if (now.month < birth.month || (now.month == birth.month && now.day < birth.day)) age--;

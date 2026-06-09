@@ -5,6 +5,7 @@ import { NotFoundError } from '@shared/errors/app-error';
 import { FirestoreUserRepository } from '@modules/users/infra/firestore-user.repository';
 import { GetProfileUseCase } from '@modules/users/domain/use-cases/get-profile.use-case';
 import { FirestorePlanRepository } from '@modules/plans/infra/firestore-plan.repository';
+import { effectivePlanWeeks } from '@modules/plans/domain/plan.entity';
 import { logger } from '@shared/logger/logger';
 
 const KmSplitInputSchema = z.object({
@@ -21,6 +22,13 @@ const KmSplitInputSchema = z.object({
   isPartial: z.boolean().optional(),
 });
 
+const TelemetryPointSchema = z.object({
+  tMs: z.number().int().nonnegative(),
+  distM: z.number().nonnegative(),
+  bpm: z.number().int().optional(),
+  paceSec: z.number().int().optional(),
+});
+
 export const CompleteRunSchema = z.object({
   distanceM: z.number().nonnegative(),
   durationS: z.number().nonnegative(),
@@ -30,6 +38,9 @@ export const CompleteRunSchema = z.object({
    *  cada split com `calories` (MET escalonado por pace × peso × tempo do km)
    *  antes de persistir. */
   splits: z.array(KmSplitInputSchema).optional(),
+  /** Telemetria sincronizada {bpm, pace, dist} a cada 30s. Opcional — runs
+   *  antigas ou cliente legacy pode não enviar. */
+  telemetryTimeline: z.array(TelemetryPointSchema).max(1500).optional(),
 });
 
 export type CompleteRunInput = z.infer<typeof CompleteRunSchema>;
@@ -130,9 +141,32 @@ export class CompleteRunUseCase {
       xpEarned: calcXp(input.distanceM, input.durationS),
       completedAt: new Date().toISOString(),
       ...(enrichedSplits && enrichedSplits.length > 0 ? { splits: enrichedSplits } : {}),
+      ...(input.telemetryTimeline && input.telemetryTimeline.length > 0
+        ? { telemetryTimeline: input.telemetryTimeline }
+        : {}),
     };
 
     await this.runRepo.update(runId, userId, updates);
+
+    // Fix TF 60: auto-bump do profile.maxBpm quando a corrida bate mais
+    // alto. User reportou "zonas ignoram FC máxima de 150 porque profile
+    // está em 145". Now zonas e prompts reusam o valor real (não trava
+    // no chute inicial de onboarding). Best-effort: falha silenciosa.
+    if (typeof input.maxBpm === 'number' && input.maxBpm > 0) {
+      try {
+        const userRepo = new FirestoreUserRepository();
+        const profile = await userRepo.findById(userId);
+        const currentMax = typeof profile?.maxBpm === 'number' ? profile.maxBpm : 0;
+        if (input.maxBpm > currentMax) {
+          await userRepo.updatePartial(userId, { maxBpm: input.maxBpm });
+          logger.info('user.maxBpm.bumped', {
+            userId, runId, before: currentMax, after: input.maxBpm,
+          });
+        }
+      } catch (err) {
+        logger.warn('user.maxBpm.bump_failed', { userId, runId, err: String(err) });
+      }
+    }
 
     // Marca a sessão do plano como executada quando a run carrega um
     // planSessionId. Permite o app destacar a sessão "feita" na agenda
@@ -163,8 +197,12 @@ export class CompleteRunUseCase {
     const planRepo = new FirestorePlanRepository();
     const plan = await planRepo.findCurrent(userId);
     if (!plan) return;
+    // ARQUITETURA: plan.weeks (BASE) é IMUTÁVEL. Flag de execução
+    // (executedRunId/executedAt) vai SEMPRE em adjustedWeeks. Se ainda
+    // não houver, promove um clone de weeks pra adjustedWeeks com a flag.
+    const base = effectivePlanWeeks(plan);
     let touched = false;
-    const updatedWeeks = plan.weeks.map(w => ({
+    const updatedWeeks = base.map(w => ({
       ...w,
       sessions: w.sessions.map(s => {
         if (s.id !== planSessionId) return s;
@@ -173,7 +211,7 @@ export class CompleteRunUseCase {
       }),
     }));
     if (!touched) return;
-    await planRepo.update(plan.id, userId, { weeks: updatedWeeks });
+    await planRepo.update(plan.id, userId, { adjustedWeeks: updatedWeeks });
     logger.info('plan.session.flagged_executed', { planSessionId, runId, planId: plan.id });
   }
 

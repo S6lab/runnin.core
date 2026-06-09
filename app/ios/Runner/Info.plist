@@ -49,7 +49,7 @@
 	<key>NSCameraUsageDescription</key>
 	<string>O runnin abre a câmera pra você fotografar exames médicos (laudos, ergometria, sangue) e enviar pra análise do coach.</string>
 	<key>NSHealthShareUsageDescription</key>
-	<string>O runnin lê seus dados de saúde (batimentos, sono, passos, peso) pra personalizar seu plano de treino e dar feedback do coach.</string>
+	<string>O runnin lê seus dados de saúde (batimentos, sono, passos, atividade, mobilidade, medidas corporais e sinais vitais) pra personalizar seu plano de treino e dar feedback do coach.</string>
 	<key>NSHealthUpdateUsageDescription</key>
 	<string>O runnin pode salvar suas corridas no Apple Health pra centralizar seu histórico de atividades.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>

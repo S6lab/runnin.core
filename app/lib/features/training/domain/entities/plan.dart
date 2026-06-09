@@ -206,6 +206,11 @@ class Plan {
   final int weeksCount;
   final String status;
   final List<PlanWeek> weeks;
+  /// Snapshot VIGENTE do plano (revisões semanais cumulativas e flags de
+  /// execução vivem aqui). `weeks` (BASE) é IMUTÁVEL — exibido só em
+  /// "VER PLANO BASE". Todas as telas de treino corrente leem
+  /// `effectiveWeeks` que devolve `adjustedWeeks` quando presente.
+  final List<PlanWeek>? adjustedWeeks;
   final String createdAt;
   /// D0 escolhida pelo user no onboarding (ISO YYYY-MM-DD). Periodização
   /// (semana 1 dia 1, mesociclo end) é calculada a partir daqui.
@@ -242,6 +247,7 @@ class Plan {
     required this.weeksCount,
     required this.status,
     required this.weeks,
+    this.adjustedWeeks,
     required this.createdAt,
     this.startDate,
     this.coachRationale,
@@ -263,6 +269,11 @@ class Plan {
         weeks: ((j['weeks'] as List?) ?? [])
             .map((w) => PlanWeek.fromJson(w as Map<String, dynamic>))
             .toList(),
+        adjustedWeeks: j['adjustedWeeks'] == null
+            ? null
+            : ((j['adjustedWeeks'] as List)
+                .map((w) => PlanWeek.fromJson(w as Map<String, dynamic>))
+                .toList()),
         createdAt: j['createdAt'] as String,
         startDate: j['startDate'] as String?,
         coachRationale: j['coachRationale'] as String?,
@@ -280,6 +291,13 @@ class Plan {
   bool get isReady => status == 'ready';
   bool get isGenerating => status == 'generating';
   bool get isCompleted => status == 'completed';
+
+  /// Snapshot VIGENTE do plano: `adjustedWeeks` se houver, caindo pra `weeks`
+  /// (BASE) caso contrário. **Toda tela de treino corrente** (RUN 1/5, TREINO,
+  /// HISTÓRICO, DETALHE) deve ler daqui, NUNCA de `weeks` direto — `weeks` é
+  /// só pra "VER PLANO BASE" / auditoria.
+  List<PlanWeek> get effectiveWeeks =>
+      (adjustedWeeks != null && adjustedWeeks!.isNotEmpty) ? adjustedWeeks! : weeks;
 
   /// D0 efetiva: startDate (escolhida no onboarding) ou createdAt como
   /// fallback pra planos legados.
@@ -303,7 +321,8 @@ class Plan {
   /// Sem alinhamento civil, a UI mostraria semana errada do dia da semana de
   /// hoje vs. dia da semana da criação do plano.
   int currentWeekIndex({DateTime? now}) {
-    if (weeks.isEmpty) return 0;
+    final ws = effectiveWeeks;
+    if (ws.isEmpty) return 0;
     final start = effectiveStartDate;
     final startMonday = DateTime(start.year, start.month, start.day)
         .subtract(Duration(days: start.weekday - 1));
@@ -311,6 +330,6 @@ class Plan {
     final todayMonday = DateTime(today.year, today.month, today.day)
         .subtract(Duration(days: today.weekday - 1));
     final diffDays = todayMonday.difference(startMonday).inDays;
-    return (diffDays ~/ 7).clamp(0, weeks.length - 1);
+    return (diffDays ~/ 7).clamp(0, ws.length - 1);
   }
 }

@@ -17,6 +17,7 @@ import 'package:runnin/features/run/domain/entities/run.dart';
 import 'package:runnin/features/training/data/datasources/plan_remote_datasource.dart';
 import 'package:runnin/features/training/domain/entities/plan.dart';
 import 'package:runnin/shared/widgets/chart_panel.dart';
+import 'package:runnin/shared/widgets/planned_vs_actual_row.dart';
 import 'package:runnin/shared/widgets/two_tone_bar_chart.dart';
 import 'package:runnin/shared/widgets/two_line_chart.dart';
 import 'package:runnin/shared/widgets/figma/export.dart';
@@ -469,13 +470,15 @@ class _DataView extends StatelessWidget {
           subtitle: _paceSubtitle(period),
           height: 200,
           child: TwoLineChart(
-            data: (breakdown?.pace ?? [])
-                .map((b) => TwoLineData(
-                      label: b.label,
-                      lineA: b.projectedPaceSec?.toDouble(),
-                      lineB: b.avgPaceSec?.toDouble(),
-                    ))
-                .toList(),
+            data: breakdown != null
+                ? breakdown!.pace
+                    .map((b) => TwoLineData(
+                          label: b.label,
+                          lineA: b.projectedPaceSec?.toDouble(),
+                          lineB: b.avgPaceSec?.toDouble(),
+                        ))
+                    .toList()
+                : _buildPaceBuckets(period, range, plan, runs),
           ),
         ),
         const SizedBox(height: 16),
@@ -872,10 +875,16 @@ List<TwoToneBarData> _bucketByDayOfWeek(
   // civil (se houver). Pode dar 0 quando range está fora do mesociclo.
   final plannedByDay = <int, double>{};
   if (plan != null && plan.isReady) {
-    final daysFromStart = monday.difference(plan.effectiveStartDate).inDays;
-    final weekIdx = (daysFromStart / 7).floor();
-    if (weekIdx >= 0 && weekIdx < plan.weeks.length) {
-      for (final s in plan.weeks[weekIdx].sessions) {
+    // Semana civil (seg→dom). Plan.weeks é 1-based; weekNumber = N quando
+    // o monday do range está na N-ésima segunda após (ou na mesma que)
+    // a segunda da civil-week de effectiveStartDate. Espelha o server.
+    final mondayOfStart = _mondayOf(plan.effectiveStartDate);
+    final diffWeeks = monday.difference(mondayOfStart).inDays ~/ 7;
+    final weekNumber = diffWeeks + 1;
+    // Histórico/Dados compara executado vs VIGENTE (com revisões), não vs base.
+    final week = plan.effectiveWeeks.where((w) => w.weekNumber == weekNumber).firstOrNull;
+    if (week != null) {
+      for (final s in week.sessions) {
         plannedByDay[s.dayOfWeek] = (plannedByDay[s.dayOfWeek] ?? 0) + s.distanceKm;
       }
     }
@@ -924,11 +933,13 @@ List<TwoToneBarData> _bucketByWeekOfMonth(
     final end = start.add(const Duration(days: 6));
     double planned = 0;
     if (plan != null && plan.isReady) {
-      final daysFromStart = start.difference(plan.effectiveStartDate).inDays;
-      final weekIdx = (daysFromStart / 7).floor();
-      if (weekIdx >= 0 && weekIdx < plan.weeks.length) {
-        planned = plan.weeks[weekIdx].sessions
-            .fold(0.0, (a, s) => a + s.distanceKm);
+      final mondayOfStart = _mondayOf(plan.effectiveStartDate);
+      final diffWeeks = start.difference(mondayOfStart).inDays ~/ 7;
+      final week = plan.effectiveWeeks
+          .where((w) => w.weekNumber == diffWeeks + 1)
+          .firstOrNull;
+      if (week != null) {
+        planned = week.sessions.fold(0.0, (a, s) => a + s.distanceKm);
       }
     }
     double executed = 0;
@@ -963,12 +974,13 @@ List<TwoToneBarData> _bucketByMonth(
         .subtract(const Duration(days: 1));
     double planned = 0;
     if (plan != null && plan.isReady) {
-      for (var wi = 0; wi < plan.weeks.length; wi++) {
+      final weeks = plan.effectiveWeeks;
+      for (var wi = 0; wi < weeks.length; wi++) {
         final weekStart = plan.effectiveStartDate.add(Duration(days: wi * 7));
         if (weekStart.isBefore(month) || weekStart.isAfter(monthEnd)) {
           continue;
         }
-        planned += plan.weeks[wi].sessions
+        planned += weeks[wi].sessions
             .fold(0.0, (a, s) => a + s.distanceKm);
       }
     }
@@ -984,6 +996,201 @@ List<TwoToneBarData> _bucketByMonth(
       planned: planned,
       executed: executed,
       label: monthLabels[month.month - 1],
+    );
+  });
+}
+
+/// Pace por bucket — fallback client-side quando `_loadBreakdown` zera
+/// `_breakdown` em janela histórica (`_periodCursor != 0`). Espelha
+/// `get-stats-breakdown.use-case.ts:buildSeries`:
+///  - projectedPaceSec = média simples dos targetPace planejados do bucket.
+///  - avgPaceSec = totalDuracao / totalDistancia (weighted) das runs do bucket.
+List<TwoLineData> _buildPaceBuckets(
+  _Period period,
+  ({DateTime start, DateTime end}) range,
+  Plan? plan,
+  List<Run> runs,
+) {
+  switch (period) {
+    case _Period.week:
+      return _bucketPaceByDayOfWeek(range, plan, runs);
+    case _Period.month:
+      return _bucketPaceByWeekOfMonth(range, plan, runs);
+    case _Period.threeMonths:
+      return _bucketPaceByMonth(range, plan, runs);
+  }
+}
+
+int? _paceStrToSec(String? p) {
+  if (p == null || p.isEmpty) return null;
+  final parts = p.split(':');
+  if (parts.length != 2) return null;
+  final m = int.tryParse(parts[0]);
+  final s = int.tryParse(parts[1]);
+  if (m == null || s == null) return null;
+  return m * 60 + s;
+}
+
+({int? projected, int? realized}) _aggregatePace({
+  required List<int> plannedPaceSecs,
+  required int totalDurS,
+  required double totalDistKm,
+}) {
+  final projected = plannedPaceSecs.isEmpty
+      ? null
+      : (plannedPaceSecs.reduce((a, b) => a + b) / plannedPaceSecs.length).round();
+  final realized = totalDistKm > 0 && totalDurS > 0
+      ? (totalDurS / totalDistKm).round()
+      : null;
+  return (projected: projected, realized: realized);
+}
+
+List<TwoLineData> _bucketPaceByDayOfWeek(
+  ({DateTime start, DateTime end}) range,
+  Plan? plan,
+  List<Run> runs,
+) {
+  const dayLabels = ['SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB', 'DOM'];
+  final monday = DateTime(range.start.year, range.start.month, range.start.day);
+  final plannedByDay = <int, List<int>>{};
+  if (plan != null && plan.isReady) {
+    final mondayOfStart = _mondayOf(plan.effectiveStartDate);
+    final diffWeeks = monday.difference(mondayOfStart).inDays ~/ 7;
+    final weekNumber = diffWeeks + 1;
+    final week = plan.effectiveWeeks.where((w) => w.weekNumber == weekNumber).firstOrNull;
+    if (week != null) {
+      for (final s in week.sessions) {
+        final sec = _paceStrToSec(s.targetPace);
+        if (sec != null) {
+          (plannedByDay[s.dayOfWeek] ??= []).add(sec);
+        }
+      }
+    }
+  }
+
+  final durByDay = <int, int>{};
+  final distByDay = <int, double>{};
+  for (final r in runs) {
+    final d = DateTime.tryParse(r.createdAt);
+    if (d == null) continue;
+    final local = d.toLocal();
+    if (local.isBefore(range.start) || !local.isBefore(range.end)) continue;
+    final dow = local.weekday;
+    durByDay[dow] = (durByDay[dow] ?? 0) + r.durationS;
+    distByDay[dow] = (distByDay[dow] ?? 0) + r.distanceM / 1000;
+  }
+
+  return List.generate(7, (i) {
+    final dow = i + 1;
+    final agg = _aggregatePace(
+      plannedPaceSecs: plannedByDay[dow] ?? const [],
+      totalDurS: durByDay[dow] ?? 0,
+      totalDistKm: distByDay[dow] ?? 0,
+    );
+    return TwoLineData(
+      label: dayLabels[i],
+      lineA: agg.projected?.toDouble(),
+      lineB: agg.realized?.toDouble(),
+    );
+  });
+}
+
+List<TwoLineData> _bucketPaceByWeekOfMonth(
+  ({DateTime start, DateTime end}) range,
+  Plan? plan,
+  List<Run> runs,
+) {
+  final firstOfMonth = range.start;
+  final lastOfMonth = range.end.subtract(const Duration(days: 1));
+  final weekStarts = <DateTime>[];
+  var cursor = firstOfMonth.subtract(Duration(days: firstOfMonth.weekday - 1));
+  while (!cursor.isAfter(lastOfMonth)) {
+    weekStarts.add(cursor);
+    cursor = cursor.add(const Duration(days: 7));
+  }
+  return List.generate(weekStarts.length, (i) {
+    final start = weekStarts[i];
+    final end = start.add(const Duration(days: 7));
+    final plannedPaces = <int>[];
+    if (plan != null && plan.isReady) {
+      final mondayOfStart = _mondayOf(plan.effectiveStartDate);
+      final diffWeeks = start.difference(mondayOfStart).inDays ~/ 7;
+      final week = plan.effectiveWeeks
+          .where((w) => w.weekNumber == diffWeeks + 1)
+          .firstOrNull;
+      if (week != null) {
+        for (final s in week.sessions) {
+          final sec = _paceStrToSec(s.targetPace);
+          if (sec != null) plannedPaces.add(sec);
+        }
+      }
+    }
+    int totalDurS = 0;
+    double totalDistKm = 0;
+    for (final r in runs) {
+      final d = DateTime.tryParse(r.createdAt);
+      if (d == null) continue;
+      final local = d.toLocal();
+      final localDate = DateTime(local.year, local.month, local.day);
+      if (localDate.isBefore(start) || !localDate.isBefore(end)) continue;
+      totalDurS += r.durationS;
+      totalDistKm += r.distanceM / 1000;
+    }
+    final agg = _aggregatePace(
+      plannedPaceSecs: plannedPaces,
+      totalDurS: totalDurS,
+      totalDistKm: totalDistKm,
+    );
+    return TwoLineData(
+      label: 'S${i + 1}',
+      lineA: agg.projected?.toDouble(),
+      lineB: agg.realized?.toDouble(),
+    );
+  });
+}
+
+List<TwoLineData> _bucketPaceByMonth(
+  ({DateTime start, DateTime end}) range,
+  Plan? plan,
+  List<Run> runs,
+) {
+  const monthLabels = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN',
+      'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
+  return List.generate(3, (i) {
+    final month = DateTime(range.start.year, range.start.month + i, 1);
+    final plannedPaces = <int>[];
+    if (plan != null && plan.isReady) {
+      final weeks = plan.effectiveWeeks;
+      for (var wi = 0; wi < weeks.length; wi++) {
+        final weekStart = plan.effectiveStartDate.add(Duration(days: wi * 7));
+        if (weekStart.year != month.year || weekStart.month != month.month) {
+          continue;
+        }
+        for (final s in weeks[wi].sessions) {
+          final sec = _paceStrToSec(s.targetPace);
+          if (sec != null) plannedPaces.add(sec);
+        }
+      }
+    }
+    int totalDurS = 0;
+    double totalDistKm = 0;
+    for (final r in runs) {
+      final d = DateTime.tryParse(r.createdAt);
+      if (d == null) continue;
+      final local = d.toLocal();
+      if (local.year != month.year || local.month != month.month) continue;
+      totalDurS += r.durationS;
+      totalDistKm += r.distanceM / 1000;
+    }
+    final agg = _aggregatePace(
+      plannedPaceSecs: plannedPaces,
+      totalDurS: totalDurS,
+      totalDistKm: totalDistKm,
+    );
+    return TwoLineData(
+      label: monthLabels[month.month - 1],
+      lineA: agg.projected?.toDouble(),
+      lineB: agg.realized?.toDouble(),
     );
   });
 }
@@ -1097,6 +1304,15 @@ class _RunHistoryCard extends StatelessWidget {
   ({int week, int idx, int total})? _planPos() {
     final pid = run.planSessionId;
     if (pid == null || plan == null) return null;
+    for (final w in plan!.effectiveWeeks) {
+      final ordered = [...w.sessions]
+        ..sort((a, b) => a.dayOfWeek.compareTo(b.dayOfWeek));
+      final i = ordered.indexWhere((s) => s.id == pid);
+      if (i >= 0) {
+        return (week: w.weekNumber, idx: i + 1, total: ordered.length);
+      }
+    }
+    // Fallback: sessão pode estar só no BASE se foi removida por revisão.
     for (final w in plan!.weeks) {
       final ordered = [...w.sessions]
         ..sort((a, b) => a.dayOfWeek.compareTo(b.dayOfWeek));
@@ -1108,11 +1324,32 @@ class _RunHistoryCard extends StatelessWidget {
     return null;
   }
 
-  // Data no formato brasileiro: dd/MM/yyyy (ex.: 21/05/2026).
+  /// PlanSession da run, pra render comparativo META/FEITO. Null em runs
+  /// livres ou se a sessão não está no plano carregado.
+  PlanSession? _plannedSession() {
+    final pid = run.planSessionId;
+    if (pid == null || plan == null) return null;
+    for (final w in plan!.effectiveWeeks) {
+      for (final s in w.sessions) {
+        if (s.id == pid) return s;
+      }
+    }
+    for (final w in plan!.weeks) {
+      for (final s in w.sessions) {
+        if (s.id == pid) return s;
+      }
+    }
+    return null;
+  }
+
+  // Data + hora local: "21/05/2026 · 06:38". User pediu hora junto pra
+  // diferenciar runs do mesmo dia (Free Run de complemento, treino x corrida).
   String _fmtDate(String iso) {
     final d = DateTime.tryParse(iso)?.toLocal();
     if (d == null) return '';
-    return '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
+    final date = '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
+    final time = '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
+    return '$date · $time';
   }
 
   String _fmtDur(int s) {
@@ -1122,6 +1359,39 @@ class _RunHistoryCard extends StatelessWidget {
     return h > 0
         ? '${h}h${m.toString().padLeft(2, '0')}'
         : '$m:${sec.toString().padLeft(2, '0')}';
+  }
+
+  /// 3 linhas META vs FEITO pra distância/pace/duração. Usado só em runs
+  /// vinculadas a sessão do plano. Free Runs pulam.
+  List<Widget> _buildPlannedVsActualRows() {
+    final s = _plannedSession();
+    if (s == null) return const [];
+    final actualKm = run.distanceM / 1000;
+    final actualKmStr =
+        '${actualKm.toStringAsFixed(actualKm % 1 == 0 ? 0 : 1)}K';
+    final plannedKmStr =
+        '${s.distanceKm.toStringAsFixed(s.distanceKm % 1 == 0 ? 0 : 1)}K';
+    final actualMin = (run.durationS / 60).round();
+    final plannedMin = s.durationMin?.round();
+    return [
+      PlannedVsActualRow(
+        label: 'DISTÂNCIA',
+        planned: plannedKmStr,
+        actual: actualKmStr,
+      ),
+      const SizedBox(height: 6),
+      PlannedVsActualRow(
+        label: 'PACE',
+        planned: s.targetPace != null ? '${s.targetPace}/km' : '—',
+        actual: run.avgPace != null ? '${run.avgPace}/km' : null,
+      ),
+      const SizedBox(height: 6),
+      PlannedVsActualRow(
+        label: 'DURAÇÃO',
+        planned: plannedMin != null ? '${plannedMin}min' : '—',
+        actual: '${actualMin}min',
+      ),
+    ];
   }
 
   @override
@@ -1255,6 +1525,14 @@ class _RunHistoryCard extends StatelessWidget {
             const SizedBox(height: 14),
             // Divisor horizontal fino.
             Container(height: 1, color: palette.border.withValues(alpha: 0.6)),
+            // Sessão do plano: 3 linhas META/FEITO antes das métricas
+            // brutas. Não aparece em Free Run.
+            if (isPlan) ...[
+              const SizedBox(height: 14),
+              ..._buildPlannedVsActualRows(),
+              const SizedBox(height: 14),
+              Container(height: 1, color: palette.border.withValues(alpha: 0.6)),
+            ],
             const SizedBox(height: 14),
             // Métricas: PACE · DURAÇÃO · BPM AVG · XP.
             Row(
@@ -1413,4 +1691,13 @@ String _fmtDeltaInt(int? n) {
   if (n == null) return '--';
   final sign = n > 0 ? '+' : '';
   return '$sign$n';
+}
+
+/// Segunda 00:00 LOCAL da semana civil que contém [d]. Espelha o
+/// `startOfCivilWeek` do server pra alinhar a numeração de semana N
+/// entre cliente e backend (evita off-by-one quando o plano começa
+/// num domingo e hoje é segunda).
+DateTime _mondayOf(DateTime d) {
+  final local = DateTime(d.year, d.month, d.day);
+  return local.subtract(Duration(days: local.weekday - 1));
 }

@@ -35,7 +35,15 @@ export async function getStatsBreakdown(req: Request, res: Response, next: NextF
       res.status(400).json({ error: `Invalid period. Use one of: ${VALID_PERIODS.join(', ')}` });
       return;
     }
-    const result = await getBreakdown.execute(req.uid, period as StatsPeriod);
+    // Cliente envia `tzOffsetMin` (DateTime.now().timeZoneOffset.inMinutes)
+    // pra server calcular buckets na TZ do user. BRT = -180. Cloud Run roda
+    // em UTC; sem isso, runs feitas tarde da noite local caíam no dia UTC
+    // seguinte e sumiam da "semana atual" reportada pela tela hist/dados.
+    const tzRaw = req.query['tzOffsetMin'];
+    const tzOffsetMin = typeof tzRaw === 'string' && /^-?\d+$/.test(tzRaw)
+      ? Math.max(-840, Math.min(840, Number(tzRaw)))
+      : 0;
+    const result = await getBreakdown.execute(req.uid, period as StatsPeriod, tzOffsetMin);
     res.json(result);
   } catch (err) {
     next(err);

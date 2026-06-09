@@ -53,13 +53,21 @@ export class FirestoreRunRepository implements RunRepository {
   }
 
   async findByUser(userId: string, limit: number, cursor?: string): Promise<{ runs: Run[]; nextCursor?: string }> {
-    let query = this.col(userId).orderBy('createdAt', 'desc').limit(limit + 1);
+    // Fetch com buffer 3x pra absorver descarte de runs curtas e ainda
+    // entregar `limit` válidas. User reportou que runs descartadas (<30s
+    // ou <100m) entravam no histórico e poluíam pace por todo o app —
+    // filtrar AQUI cobre TODOS os callers (home/profile/histórico/zonas).
+    // O cursor segue sendo o último createdAt entregue.
+    const fetchSize = (limit + 1) * 3;
+    let query = this.col(userId).orderBy('createdAt', 'desc').limit(fetchSize);
     if (cursor) query = query.startAfter(cursor);
 
     const snap = await query.get();
-    const docs = snap.docs;
-    const hasMore = docs.length > limit;
-    const runs = docs.slice(0, limit).map(d => ({ id: d.id, userId, ...d.data() }) as Run);
+    const valid = snap.docs
+      .map(d => ({ id: d.id, userId, ...d.data() }) as Run)
+      .filter(_isValidRun);
+    const hasMore = valid.length > limit;
+    const runs = valid.slice(0, limit);
     return { runs, nextCursor: hasMore ? runs[runs.length - 1].createdAt : undefined };
   }
 
@@ -74,11 +82,16 @@ export class FirestoreRunRepository implements RunRepository {
       .get();
     return snap.docs
       .map(d => ({ id: d.id, userId, ...d.data() }) as Run)
-      // distanceM >= 100m exclui runs "stationary" (start sem GPS / abandono
-      // mascarado como completed). Sem esse filtro, uma run com 0km mas 38min
-      // de duração distorcia agregados de pace médio (caso real reportado).
-      // 100m é o mesmo threshold semântico do stationaryDistanceThresholdM
-      // que o RunBloc usa pra decidir se vale falar "finish" pro coach.
-      .filter(r => r.status === 'completed' && (r.distanceM ?? 0) >= 100);
+      .filter(_isValidRun);
   }
+}
+
+/// Critério canônico de "run analisável": completed + >=30s + >=100m.
+/// Mesmos thresholds aplicados no client (get_home_data_use_case.dart) e
+/// nos stats endpoints (get-stats-aggregate/breakdown). Mantém histórico
+/// e médias de pace livres de starts acidentais e abandonos curtos.
+function _isValidRun(r: Run): boolean {
+  return r.status === 'completed'
+    && (r.distanceM ?? 0) >= 100
+    && (r.durationS ?? 0) >= 30;
 }

@@ -5,6 +5,13 @@ export interface WeeklyReportMetrics {
   completedRuns: number;
   plannedDistanceKm: number;
   actualDistanceKm: number;
+  /// Distância feita em runs livres (sem planSessionId). Subset de
+  /// actualDistanceKm. Coach usa pra explicar: "você ficou 1km abaixo
+  /// no easy de quarta mas correu 1km livre depois — fechou o volume".
+  freeRunsDistanceKm: number;
+  /// Distância feita em sessões vinculadas ao plano (com planSessionId).
+  /// plannedRunsDistanceKm + freeRunsDistanceKm == actualDistanceKm.
+  plannedRunsDistanceKm: number;
   completionRate: number; // 0-1
   avgBpm?: number;
   maxBpm?: number;

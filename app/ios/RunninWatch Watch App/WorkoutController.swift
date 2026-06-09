@@ -27,6 +27,21 @@ class WorkoutController: NSObject, ObservableObject {
     private let healthStore = HKHealthStore()
     private var session: HKWorkoutSession?
     private var builder: HKLiveWorkoutBuilder?
+    /// Mock BPM no simulador: HKLiveWorkoutBuilder emite valor sintético
+    /// estático/zerado e impede testar zonas/coach end-to-end. Timer roda
+    /// só em #if targetEnvironment(simulator) — em device físico, lê o
+    /// sensor real e este timer nem é criado.
+    #if targetEnvironment(simulator)
+    private var mockBpmTimer: Timer?
+    private var mockBpmBase: Double = 140
+    #endif
+    /// Polling defensivo: a cada 3s lê o último BPM do builder.statistics()
+    /// e empurra. Resolve casos onde o delegate `didCollectDataOf` para de
+    /// ser chamado silenciosamente (tela apagou, watchOS pausou updates) —
+    /// statistics() continua retornando o último sample coletado. Em device
+    /// real travou em 94 nos testes; com polling o último valor disponível
+    /// sempre flui pro phone via WCSession.
+    private var bpmPollingTimer: Timer?
 
     private override init() {
         super.init()
@@ -102,10 +117,67 @@ class WorkoutController: NSObject, ObservableObject {
             DispatchQueue.main.async {
                 self.isActive = true
             }
+            startBpmPolling()
+            #if targetEnvironment(simulator)
+            startMockBpm()
+            #endif
         } catch {
             os_log("session.create_failed err=%{public}@", log: wcLog, type: .error,
                    error.localizedDescription)
         }
+    }
+
+    #if targetEnvironment(simulator)
+    /// Gera BPM com variação leve em torno de uma base que drifta lenta-
+    /// mente (warmup/esforço). Pra cada tick (1Hz) joga um valor entre
+    /// `base ± 4` e desloca a base em ±0.5 por tick com clamp 110-175.
+    /// Suficiente pra exercitar staleness, zonas (Z2-Z4 típicas) e cues
+    /// de high_bpm sem precisar de device físico.
+    private func startMockBpm() {
+        mockBpmTimer?.invalidate()
+        mockBpmBase = Double.random(in: 130...145)
+        mockBpmTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+            guard let self = self, self.isActive else { return }
+            self.mockBpmBase = max(110, min(175, self.mockBpmBase + Double.random(in: -1.5...2.0)))
+            let bpm = Int((self.mockBpmBase + Double.random(in: -4...4)).rounded())
+            DispatchQueue.main.async { self.lastHeartRate = bpm }
+            SessionDelegate.shared.pushBpmToPhone(bpm)
+        }
+        os_log("mock_bpm.started base=%.0f", log: wcLog, type: .info, mockBpmBase)
+    }
+
+    private func stopMockBpm() {
+        mockBpmTimer?.invalidate()
+        mockBpmTimer = nil
+    }
+    #endif
+
+    /// Lê o último BPM do builder a cada 3s e empurra pra UI + iPhone.
+    /// HKLiveWorkoutBuilder.statistics() sempre retorna o último sample
+    /// disponível — mesmo quando o delegate `didCollectDataOf` para de
+    /// ser invocado (Watch tela apagada, sample drift). Em device real,
+    /// resolve o "BPM travou em 94" reportado.
+    private func startBpmPolling() {
+        bpmPollingTimer?.invalidate()
+        bpmPollingTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: true) { [weak self] _ in
+            guard let self = self, self.isActive else { return }
+            guard #available(iOS 26.0, watchOS 10.0, *), let b = self.builder else { return }
+            guard let hrType = HKObjectType.quantityType(forIdentifier: .heartRate),
+                  let stats = b.statistics(for: hrType),
+                  let mostRecent = stats.mostRecentQuantity()?.doubleValue(
+                      for: HKUnit.count().unitDivided(by: .minute())
+                  ) else { return }
+            let bpm = Int(mostRecent.rounded())
+            guard bpm > 0 else { return }
+            DispatchQueue.main.async { self.lastHeartRate = bpm }
+            SessionDelegate.shared.pushBpmToPhone(bpm)
+        }
+        os_log("bpm_polling.started interval=3s", log: wcLog, type: .info)
+    }
+
+    private func stopBpmPolling() {
+        bpmPollingTimer?.invalidate()
+        bpmPollingTimer = nil
     }
 
     func stop() {
@@ -114,6 +186,10 @@ class WorkoutController: NSObject, ObservableObject {
             os_log("stop.idempotent skip=no_session", log: wcLog, type: .info)
             return
         }
+        stopBpmPolling()
+        #if targetEnvironment(simulator)
+        stopMockBpm()
+        #endif
         s.end()
         builder?.endCollection(withEnd: Date()) { [weak self] _, _ in
             self?.builder?.finishWorkout { _, _ in
@@ -168,9 +244,15 @@ extension WorkoutController: HKLiveWorkoutBuilderDelegate {
               let stats = workoutBuilder.statistics(for: hrType) else { return }
         let unit = HKUnit.count().unitDivided(by: .minute())
         if let mostRecent = stats.mostRecentQuantity()?.doubleValue(for: unit) {
+            let bpm = Int(mostRecent.rounded())
             DispatchQueue.main.async {
-                self.lastHeartRate = Int(mostRecent.rounded())
+                self.lastHeartRate = bpm
             }
+            // Push pro iPhone via WCSession. Sem isso, o phone depende da
+            // sync HealthKit que iOS suspende em background, deixando o
+            // BPM da UI congelado com tela bloqueada (causa de zonas
+            // brancas e avgBpm==maxBpm no relatório).
+            SessionDelegate.shared.pushBpmToPhone(bpm)
         }
     }
 }

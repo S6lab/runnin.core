@@ -114,8 +114,17 @@ class GetHomeDataUseCase {
     final plan = results[1] as Plan?;
     final runs = results[2] as List<Run>;
     final biometric = results[3] as BiometricSummary?;
+    // Filtra ruído: corridas <30s ou <100m são descartadas dos agregados
+    // da home (resumo semanal, atalho "última corrida", weeklyDistanceKm).
+    // Espelha o filtro server (get-stats-aggregate / get-stats-breakdown).
+    // Mantém consistência: o que /stats já não conta, aqui também não.
     final completedRuns =
-        runs.where((run) => run.status == 'completed').toList()
+        runs
+            .where((run) =>
+                run.status == 'completed' &&
+                run.durationS >= 30 &&
+                run.distanceM >= 100)
+            .toList()
           ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
     final today = DateTime.now();
@@ -130,8 +139,11 @@ class GetHomeDataUseCase {
     }).toList();
 
     PlanWeek? currentPlanWeek;
-    if (plan != null && plan.weeks.isNotEmpty) {
-      currentPlanWeek = plan.weeks[plan.currentWeekIndex(now: today)];
+    if (plan != null) {
+      final eff = plan.effectiveWeeks;
+      if (eff.isNotEmpty) {
+        currentPlanWeek = eff[plan.currentWeekIndex(now: today)];
+      }
     }
 
     PlanSession? todaySession;

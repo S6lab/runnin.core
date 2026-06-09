@@ -22,6 +22,14 @@ class StubRepo implements BiometricSampleRepository {
   ) {
     return this.samples;
   }
+  async findByDateRangeAndTypes(
+    _userId: string,
+    types: BiometricSampleType[],
+    _from: Date,
+    _to: Date,
+  ) {
+    return this.samples.filter((s) => types.includes(s.type));
+  }
   async deleteByUser(_userId: string) {
     return 0;
   }

@@ -4,6 +4,7 @@ export interface CurrentWeather {
   temperatureC: number;
   humidityPercent: number;
   windKmh: number;
+  uvIndex: number;
   fetchedAt: string;
 }
 
@@ -33,7 +34,7 @@ export async function getCurrentWeather(lat: number, lng: number): Promise<Curre
   const url =
     `https://api.open-meteo.com/v1/forecast` +
     `?latitude=${lat}&longitude=${lng}` +
-    `&current=temperature_2m,relative_humidity_2m,wind_speed_10m` +
+    `&current=temperature_2m,relative_humidity_2m,wind_speed_10m,uv_index` +
     `&wind_speed_unit=kmh&timezone=auto`;
 
   try {
@@ -47,6 +48,7 @@ export async function getCurrentWeather(lat: number, lng: number): Promise<Curre
         temperature_2m?: number;
         relative_humidity_2m?: number;
         wind_speed_10m?: number;
+        uv_index?: number;
       };
     };
     const c = data.current;
@@ -58,6 +60,7 @@ export async function getCurrentWeather(lat: number, lng: number): Promise<Curre
       temperatureC: Math.round(c.temperature_2m * 10) / 10,
       humidityPercent: Math.round(c.relative_humidity_2m ?? 0),
       windKmh: Math.round((c.wind_speed_10m ?? 0) * 10) / 10,
+      uvIndex: Math.round((c.uv_index ?? 0) * 10) / 10,
       fetchedAt: new Date(now).toISOString(),
     };
     cache.set(key, { value, expiresAt: now + CACHE_TTL_MS });

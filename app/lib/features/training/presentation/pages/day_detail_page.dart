@@ -72,7 +72,10 @@ class _DayDetailPageState extends State<DayDetailPage> {
   }
 
   PlanWeek? get _week =>
-      _plan?.weeks.cast<PlanWeek?>().firstWhere(
+      // VIGENT (adjustedWeeks ?? weeks). Sem isso, a wk revisada (que ganhou
+      // detailLevel='full' + recheio no apply-weekly-revision) aparecia
+      // travada porque BASE.weeks ainda tem detailLevel='skeleton'.
+      _plan?.effectiveWeeks.cast<PlanWeek?>().firstWhere(
             (w) => w?.weekNumber == widget.weekNumber,
             orElse: () => null,
           );

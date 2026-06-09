@@ -51,11 +51,11 @@ class LiveRunCoachSession {
 
   static const _voiceDefault = 'Charon';
 
-  // Rotação adaptativa. Threshold de age reduzido pra 6min depois de
-  // observar Gemini Live caindo com code 1011 em sessões de exatos
-  // ~10min — 6min dá ~4min de folga pra rotação completar antes do cap.
+  // Rotação adaptativa. Fix TF 59 — user reportou queda do coach em 8:40
+  // (rev 56). Reduzido pra 4min: margem dupla antes do cap ~8min do Gemini
+  // Live, garantindo rotação completar antes da queda natural.
   static const int rotationTurnThreshold = 6;
-  static const Duration rotationAgeThreshold = Duration(minutes: 6);
+  static const Duration rotationAgeThreshold = Duration(minutes: 4);
   // Token efêmero dura 30min — refetch quando faltam <5min pra evitar
   // que o token vire pumpkin no meio de uma rotação.
   static const Duration _tokenStaleThreshold = Duration(minutes: 5);
@@ -75,7 +75,9 @@ class LiveRunCoachSession {
   /// tentando reabrir infinito (vimos attempt 28+ nos logs), consumindo
   /// bateria e bandwidth. Após esse cap, a session fica em estado fechado
   /// silente — RunBloc captura `coach.cue.skipped_session_closed` no log.
-  static const int _maxReconnectAttempts = 5;
+  /// Fix TF 59: aumentado de 5 → 10 (user reportou sessão "morrendo cedo"
+  /// em rede móvel; backoff 30s no tail dá ~8min total de retries).
+  static const int _maxReconnectAttempts = 10;
 
   LiveSession? _session;
   final _transcriptsCtrl = StreamController<String>.broadcast();
@@ -250,6 +252,11 @@ class LiveRunCoachSession {
               });
               _open = false;
               unawaited(_beacon('ws_close', code: code, reason: reason));
+              // Fix TF 59: NÃO solta o ducking aqui. User reportou "música
+              // sobe quando coach cai" em 8:40 — porque queda 1011 disparava
+              // releaseDucking imediato mesmo se reconnect ia ter sucesso 1-2s
+              // depois. Música abafada por 1-2s é melhor que clicks de volume.
+              // Ducking só é liberado quando reconnect ESGOTA (vide _maybeScheduleReconnect).
               _maybeScheduleReconnect(code: code, reason: reason);
             },
           ),
@@ -269,14 +276,14 @@ class LiveRunCoachSession {
           newSession.sendText(preamble);
         } catch (_) {/* ignore */}
       }
-      // Drena fila de sends que ficaram pendentes durante reconexão.
+      // Fix TF 59: drena fila com throttle 2s entre sends. Antes drenava
+      // tudo em sequência imediata → 2 cues viram 2 áudios sobrepostos.
+      // Agora cada cue do drain espera 2s pro coach falar (e o anterior
+      // terminar). Remove o sufixo `[trigger]` que foi adicionado pra dedup.
       if (_pendingSends.isNotEmpty) {
-        for (final txt in List<String>.from(_pendingSends)) {
-          try {
-            newSession.sendText(txt);
-          } catch (_) {/* ignore */}
-        }
+        final queued = List<String>.from(_pendingSends);
         _pendingSends.clear();
+        unawaited(_drainPendingSequential(newSession, queued));
       }
       if (!ready.isCompleted) ready.complete(true);
       return true;
@@ -304,6 +311,17 @@ class LiveRunCoachSession {
     // sessão de 10min do Gemini Live fechou e reconnect não disparou,
     // sem beacon explicando qual guard barrou).
     String? skipReason;
+    // Códigos não-clean (1001/1006/1011/etc) e erros (SocketException, etc)
+    // indicam queda real do socket — não dá pra esperar `_talking` virar
+    // false porque o canal de fala já morreu. Forçamos stop da fala em
+    // curso e reconectamos. Pra close limpo (1000) ou rotação, mantemos o
+    // guard intacto.
+    final isUnrecoverableTalking = _talking &&
+        (err != null || (code != null && code != 1000));
+    if (isUnrecoverableTalking) {
+      _talking = false;
+      unawaited(_beacon('talking_force_clear', code: code));
+    }
     if (_disposed) {
       skipReason = 'disposed';
     } else if (_intentionalClose) {
@@ -327,6 +345,14 @@ class LiveRunCoachSession {
         reason: skipReason,
         code: code,
       ));
+      // Fix TF 59: SÓ libera ducking quando reconnect REALMENTE morreu
+      // (esgotou attempts). Música sobe = "coach morreu de verdade",
+      // não "ele tá reconectando".
+      if (skipReason == 'max_attempts_exhausted') {
+        // ignore: avoid_print
+        print('run.coach.live.reconnect_exhausted attempts=$_reconnectAttempt code=$code');
+        unawaited(_audio.releaseDucking());
+      }
       return;
     }
 
@@ -535,12 +561,44 @@ class LiveRunCoachSession {
       }
       return;
     }
+    // Fix TF 59: dedup por trigger + cap 3. User reportou "2 áudios quase
+    // iguais no início" — drain enfileirado disparava 2 cues consecutivos.
+    // Agora 2 `check_in` em fila viram 1 (último vence), e o array nunca
+    // passa de 3 cues (drop oldest se exceder).
+    final triggerHint = _currentTrigger;
+    if (triggerHint != null) {
+      _pendingSends.removeWhere((t) => t.startsWith('[$triggerHint]'));
+      _pendingSends.add('[$triggerHint] $text');
+    } else {
+      _pendingSends.add(text);
+    }
+    while (_pendingSends.length > 3) {
+      _pendingSends.removeAt(0);
+    }
     // ignore: avoid_print
-    print('run.coach.live.send_queued (reconnecting)');
-    _pendingSends.add(text);
-    // Garante que tem reconnect agendado (caso onClose tenha caído antes de
-    // chegar aqui por timing).
+    print('run.coach.live.send_queued queue=${_pendingSends.length}');
     _maybeScheduleReconnect();
+  }
+
+  /// Drena fila de sends sequencialmente com throttle 2s entre cada.
+  /// Evita "2 áudios sobrepostos" quando reconnect recupera 2+ cues
+  /// enfileirados — cada um espera o anterior soltar antes de sair.
+  Future<void> _drainPendingSequential(
+    LiveSession session,
+    List<String> queued,
+  ) async {
+    for (var i = 0; i < queued.length; i++) {
+      if (!_open || _disposed) return;
+      final raw = queued[i];
+      // Remove sufixo `[trigger] ` injetado em sendTelemetry pra dedup.
+      final clean = raw.startsWith('[') ? raw.substring(raw.indexOf(']') + 2) : raw;
+      try {
+        session.sendText(clean);
+      } catch (_) {/* ignore */}
+      if (i < queued.length - 1) {
+        await Future<void>.delayed(const Duration(seconds: 2));
+      }
+    }
   }
 
   /// Abre janela de fala (push-to-talk): streama o mic pra sessão. NÃO usa

@@ -26,6 +26,14 @@ class InMemoryBiometricRepo implements BiometricSampleRepository {
   ) {
     return [];
   }
+  async findByDateRangeAndTypes(
+    _userId: string,
+    _types: BiometricSample['type'][],
+    _from: Date,
+    _to: Date,
+  ) {
+    return [];
+  }
   async deleteByUser(_userId: string) {
     return 0;
   }

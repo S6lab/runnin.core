@@ -1,5 +1,5 @@
 import { getFirestore } from '@shared/infra/firebase/firebase.client';
-import { Plan, PlanSession, PlanWeek } from '@modules/plans/domain/plan.entity';
+import { Plan, PlanSession, PlanWeek, effectivePlanWeeks } from '@modules/plans/domain/plan.entity';
 import { Run } from '@modules/runs/domain/run.entity';
 import { UserProfile } from '@modules/users/domain/user.entity';
 import { logger } from '@shared/logger/logger';
@@ -240,9 +240,17 @@ export class CoachRuntimeContextService {
 }
 
 function findSessionById(plan: Plan, sessionId: string): PlanSession | null {
-  for (const week of plan.weeks) {
+  // Olha primeiro o vigente (pode ter sido ajustado); cai pra base se não achar
+  // (revisão pode ter removido a sessão, mas o link da run aponta pra ela).
+  for (const week of effectivePlanWeeks(plan)) {
     const session = week.sessions.find((s) => s.id === sessionId);
     if (session) return session;
+  }
+  if (plan.adjustedWeeks && plan.adjustedWeeks.length > 0) {
+    for (const week of plan.weeks) {
+      const session = week.sessions.find((s) => s.id === sessionId);
+      if (session) return session;
+    }
   }
   return null;
 }
@@ -253,10 +261,11 @@ function latestPlan(plans: Plan[]): Plan | null {
 }
 
 function currentPlanWeek(plan: Plan): PlanWeek | null {
-  if (plan.weeks.length === 0) return null;
+  const weeks = effectivePlanWeeks(plan);
+  if (weeks.length === 0) return null;
   const createdAt = Date.parse(plan.createdAt);
-  if (Number.isNaN(createdAt)) return plan.weeks[0] ?? null;
+  if (Number.isNaN(createdAt)) return weeks[0] ?? null;
   const elapsedDays = Math.max(0, Math.floor((Date.now() - createdAt) / 86_400_000));
-  const weekIndex = Math.min(Math.floor(elapsedDays / 7), plan.weeks.length - 1);
-  return plan.weeks[weekIndex] ?? plan.weeks[0] ?? null;
+  const weekIndex = Math.min(Math.floor(elapsedDays / 7), weeks.length - 1);
+  return weeks[weekIndex] ?? weeks[0] ?? null;
 }

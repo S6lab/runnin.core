@@ -1515,7 +1515,9 @@ class _ActiveStatsLayoutState extends State<_ActiveStatsLayout> {
               ),
               const SizedBox(height: 8),
               SizedBox(
-                height: 86,
+                // 86 estourava 7px quando o card mostrava "em andamento"
+                // (texto longo + line-height do labelCaps quebra em 2 linhas).
+                height: 96,
                 child: ListView.separated(
                   scrollDirection: Axis.horizontal,
                   itemCount:

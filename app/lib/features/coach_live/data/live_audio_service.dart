@@ -132,6 +132,42 @@ class LiveAudioService {
     }
   }
 
+  /// Libera o ducking sobre apps de música quando a sessão do coach cai
+  /// inesperadamente (close non-1000). Sem isso, a categoria `playback +
+  /// duckOthers` continua segurando o volume do Spotify/Apple Music
+  /// abafado mesmo depois do coach ficar mudo — user reportou "música
+  /// ficou mais alta" no instante em que a sessão caiu, e o oposto
+  /// (música continuar baixa) é igualmente ruim quando o coach simples-
+  /// mente para de tocar. Trocar pra `ambient` desativa o duck.
+  ///
+  /// Best-effort: silenciosa se o player ainda não foi inicializado.
+  Future<void> releaseDucking() async {
+    try {
+      await AudioPlayer.global.setAudioContext(
+        AudioContext(
+          iOS: AudioContextIOS(
+            category: AVAudioSessionCategory.ambient,
+            options: const {AVAudioSessionOptions.mixWithOthers},
+          ),
+          android: AudioContextAndroid(
+            isSpeakerphoneOn: false,
+            stayAwake: false,
+            contentType: AndroidContentType.speech,
+            usageType: AndroidUsageType.assistanceNavigationGuidance,
+            audioFocus: AndroidAudioFocus.none,
+          ),
+        ),
+      );
+      // Próxima fala do coach (após reconnect) re-aplica playback+duck via
+      // _configureAudioContext (controlado por _audioContextConfigured).
+      _audioContextConfigured = false;
+      Logger.info('live_audio.ducking_released');
+    } catch (e, st) {
+      Logger.warn('live_audio.release_ducking_failed', context: {'err': '$e'});
+      Logger.info('live_audio.release_ducking_stack', context: {'st': st.toString().split('\n').first});
+    }
+  }
+
   bool _disposed = false;
 
   Future<void> dispose() async {

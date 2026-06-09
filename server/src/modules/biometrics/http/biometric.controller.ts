@@ -21,6 +21,73 @@ export async function postIngestSamples(
   }
 }
 
+/**
+ * POST /v1/biometrics/sync-ping — heartbeat de abertura do app.
+ * Chamado UNCONDICIONALMENTE pelo Home bootstrap, antes de qualquer
+ * gate. Permite distinguir nos logs:
+ *  - Ping sim, telemetry não → syncSince morre em algum lugar
+ *  - Ping não → user não abriu Home OU app sem conectividade
+ *  - Ping + telemetry → flow rodou, dá pra ver byType counts
+ */
+export async function postSyncPing(
+  req: Request,
+  _res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const { logger } = await import('@shared/logger/logger');
+    logger.info('wearable.sync.ping', {
+      uid: req.uid,
+      tfHint: (req.body as { tf?: string })?.tf,
+      platform: (req.body as { platform?: string })?.platform,
+    });
+    _res.status(204).end();
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * POST /v1/biometrics/sync-telemetry — diagnóstico de sync.
+ * Recebe metadata sobre uma chamada syncSince (window, counts) e loga.
+ * Permite ver em produção se o plugin está retornando 0 samples
+ * mesmo com HK populado.
+ */
+export async function postSyncTelemetry(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const body = req.body as {
+      fromIso?: string;
+      toIso?: string;
+      hkFetchedTotal?: number;
+      mappedTotal?: number;
+      byType?: Record<string, number>;
+      mappedByType?: Record<string, number>;
+      lastSyncIso?: string | null;
+      errorMsg?: string;
+    };
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { logger } = await import('@shared/logger/logger');
+    logger.info('wearable.sync.telemetry', {
+      uid: req.uid,
+      fromIso: body.fromIso,
+      toIso: body.toIso,
+      lastSyncIso: body.lastSyncIso ?? null,
+      hkFetchedTotal: body.hkFetchedTotal ?? 0,
+      mappedTotal: body.mappedTotal ?? 0,
+      byType: body.byType ?? {},
+      mappedByType: body.mappedByType ?? {},
+      errorMsg: body.errorMsg ?? null,
+    });
+    res.status(204).end();
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function getLatestByType(
   req: Request,
   res: Response,

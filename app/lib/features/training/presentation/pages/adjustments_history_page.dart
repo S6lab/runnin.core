@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:runnin/core/logger/logger.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/features/training/data/plan_revision_remote_datasource.dart';
 import 'package:runnin/features/training/domain/entities/plan.dart';
@@ -52,7 +53,12 @@ class _AdjustmentsHistoryPageState extends State<AdjustmentsHistoryPage> {
         _revisions = revisions;
         _loading = false;
       });
-    } catch (_) {
+    } catch (e, st) {
+      // Antes engolíamos o erro silenciosamente — uma regressão de schema
+      // (server passou a chamar `requestType` mas client esperava `type`)
+      // ficou meses escondida com a UI mostrando só "Erro ao carregar
+      // histórico". Manda pro Crashlytics pra diagnose futura.
+      Logger.error('adjustments_history.load_failed', e, st);
       if (!mounted) return;
       setState(() {
         _error = 'Erro ao carregar histórico.';
@@ -189,7 +195,7 @@ class _RevisionCard extends StatelessWidget {
 
     final title = noChanges
         ? 'Plano completo da semana'
-        : 'Semana ${revision.weekIndex + 1} revisada';
+        : 'Semana ${revision.weekIndex} revisada';
     final badgeLabel = noChanges ? 'SEM AJUSTES' : 'AJUSTADO';
     final badgeColor = noChanges ? palette.muted : palette.primary;
     final borderColor = noChanges
@@ -218,7 +224,7 @@ class _RevisionCard extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            'Semana ${revision.weekIndex + 1} · $dateLabel',
+            'Semana ${revision.weekIndex} · $dateLabel',
             style: context.runninType.bodyXs.copyWith(color: palette.muted),
           ),
           const SizedBox(height: 12),

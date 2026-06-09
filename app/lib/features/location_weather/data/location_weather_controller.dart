@@ -9,12 +9,14 @@ class WeatherSnapshot {
   final double temperatureC;
   final int humidityPercent;
   final double windKmh;
+  final double? uvIndex;
   final DateTime fetchedAt;
 
   const WeatherSnapshot({
     required this.temperatureC,
     required this.humidityPercent,
     required this.windKmh,
+    required this.uvIndex,
     required this.fetchedAt,
   });
 
@@ -22,6 +24,7 @@ class WeatherSnapshot {
         temperatureC: (j['temperatureC'] as num).toDouble(),
         humidityPercent: (j['humidityPercent'] as num).toInt(),
         windKmh: (j['windKmh'] as num).toDouble(),
+        uvIndex: (j['uvIndex'] as num?)?.toDouble(),
         fetchedAt: DateTime.parse(j['fetchedAt'] as String),
       );
 }

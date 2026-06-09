@@ -66,14 +66,70 @@ export class FirestoreBiometricSampleRepository
     from: Date,
     to: Date,
   ): Promise<BiometricSample[]> {
+    // Paginate cursor-based: numa janela de 7d com BPM live + steps + sleep,
+    // chegamos a dezenas de milhares de samples. Limit fixo de 500 ordenado
+    // ASC pegava só os primeiros — sleep ficava de fora porque vem depois
+    // (mais recente). Iteramos por páginas de 1000 até esgotar, com hard cap
+    // de 50k pra evitar runaway. Custo ~50k reads = ~$0.03/chamada do summary,
+    // chamada poucas vezes por sessão (cache client-side).
+    const PAGE = 1000;
+    const HARD_CAP = 50000;
     let q = this.col(userId)
       .where('recordedAt', '>=', from.toISOString())
       .where('recordedAt', '<=', to.toISOString());
     if (type) q = q.where('type', '==', type);
-    const snap = await q.orderBy('recordedAt', 'asc').limit(500).get();
-    return snap.docs.map(
-      (d) => ({ id: d.id, userId, ...d.data() } as BiometricSample),
-    );
+    q = q.orderBy('recordedAt', 'asc');
+
+    const all: BiometricSample[] = [];
+    let lastDoc: FirebaseFirestore.QueryDocumentSnapshot | undefined;
+    while (all.length < HARD_CAP) {
+      let pageQ = q.limit(PAGE);
+      if (lastDoc) pageQ = pageQ.startAfter(lastDoc);
+      const snap = await pageQ.get();
+      if (snap.empty) break;
+      for (const d of snap.docs) {
+        all.push({ id: d.id, userId, ...d.data() } as BiometricSample);
+      }
+      if (snap.size < PAGE) break;
+      lastDoc = snap.docs[snap.size - 1];
+    }
+    return all;
+  }
+
+  async findByDateRangeAndTypes(
+    userId: string,
+    types: BiometricSampleType[],
+    from: Date,
+    to: Date,
+  ): Promise<BiometricSample[]> {
+    if (types.length === 0) return [];
+    // Firestore `in` aceita até 30 valores. Se algum dia precisarmos de
+    // mais, dividir em chunks de 30 e fazer query paralela.
+    if (types.length > 30) {
+      throw new Error(`findByDateRangeAndTypes: max 30 types, got ${types.length}`);
+    }
+    const PAGE = 1000;
+    const HARD_CAP = 50000;
+    const q = this.col(userId)
+      .where('recordedAt', '>=', from.toISOString())
+      .where('recordedAt', '<=', to.toISOString())
+      .where('type', 'in', types)
+      .orderBy('recordedAt', 'asc');
+
+    const all: BiometricSample[] = [];
+    let lastDoc: FirebaseFirestore.QueryDocumentSnapshot | undefined;
+    while (all.length < HARD_CAP) {
+      let pageQ = q.limit(PAGE);
+      if (lastDoc) pageQ = pageQ.startAfter(lastDoc);
+      const snap = await pageQ.get();
+      if (snap.empty) break;
+      for (const d of snap.docs) {
+        all.push({ id: d.id, userId, ...d.data() } as BiometricSample);
+      }
+      if (snap.size < PAGE) break;
+      lastDoc = snap.docs[snap.size - 1];
+    }
+    return all;
   }
 
   async deleteByUser(userId: string): Promise<number> {

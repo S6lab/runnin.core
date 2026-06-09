@@ -17,8 +17,15 @@ class StatsRemoteDatasource {
   }
 
   /// Stats consolidados (11 métricas) + buckets de volume/pace por período.
+  /// `tzOffsetMin` é o offset local do device vs UTC (BRT = -180). Sem ele
+  /// o server (UTC) calculava "esta semana" começando segunda 00h UTC e
+  /// runs feitas tarde da noite local sumiam.
   Future<StatsBreakdown> getBreakdown(String period) async {
-    final res = await _dio.get('/stats/breakdown', queryParameters: {'period': period});
+    final tz = DateTime.now().timeZoneOffset.inMinutes;
+    final res = await _dio.get(
+      '/stats/breakdown',
+      queryParameters: {'period': period, 'tzOffsetMin': tz},
+    );
     return StatsBreakdown.fromJson(res.data as Map<String, dynamic>);
   }
 }

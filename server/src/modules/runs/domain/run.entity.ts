@@ -31,6 +31,20 @@ export interface GpsPoint {
   bpm?: number;
 }
 
+/** Tick 30s da corrida com bpm + pace + distância JUNTOS, no mesmo instante.
+ *  Necessário pra coach ler "como foi os últimos 500m" e pra max BPM real
+ *  (que pode ser perdido se só olhar split.avgBpm). */
+export interface TelemetryPoint {
+  /** ms desde start da corrida (relativo). */
+  tMs: number;
+  /** distância acumulada até esse instante. */
+  distM: number;
+  /** batimento instantâneo do tick mais recente. */
+  bpm?: number;
+  /** pace instantâneo em segundos/km, calculado dos últimos ~50m. */
+  paceSec?: number;
+}
+
 export interface Run {
   id: string;
   userId: string;
@@ -53,6 +67,10 @@ export interface Run {
   xpEarned?: number;
   coachReportId?: string;
   splits?: KmSplit[];
+  /** Telemetria sincronizada {bpm, pace, dist} a cada 30s. Diferente de
+   *  splits (1x/km), captura curva contínua + picos. Usado pelo coach in-run
+   *  (cue de 500m lê últimos N ticks) e pelos relatórios pós-run. */
+  telemetryTimeline?: TelemetryPoint[];
   /** Feedback subjetivo do user submetido na ReportPage logo após a corrida.
    *  Reusa o shape do CheckpointInput (8 chips + note opcional) — os mesmos
    *  inputs que antes vinham da página de checkpoint solto, agora vinculados

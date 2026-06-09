@@ -52,7 +52,7 @@ class DashboardDatasource {
     int planWeeksCompleted = 0;
     int planWeeksTotal = 0;
     if (plan != null && plan.isReady) {
-      planWeeksTotal = plan.weeks.length;
+      planWeeksTotal = plan.effectiveWeeks.length;
       final created = DateTime.tryParse(plan.createdAt);
       if (created != null) {
         final daysSince = DateTime.now().difference(created).inDays;

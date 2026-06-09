@@ -33,9 +33,17 @@ class FigmaStatTileWithDelta extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final deltaColor = deltaIsPositive
-        ? const Color(0xFF22C55E) // verde
-        : context.runninPalette.secondary; // laranja/vermelho para piora
+    // "Sem comparação" = delta == '--' (callers passam isso quando o
+    // aggregate do período corrente não está disponível, ex: janela
+    // histórica). Antes o widget mostrava SEMPRE verde "--↗" sugerindo
+    // melhora falsa, porque o callsite usava `?? 0` no booleano. Agora
+    // detectamos o placeholder e renderizamos cinza neutro (sem seta).
+    final isPlaceholder = delta.trim() == '--' || delta.trim().isEmpty;
+    final deltaColor = isPlaceholder
+        ? FigmaColors.textMuted
+        : deltaIsPositive
+            ? const Color(0xFF22C55E) // verde — melhora
+            : context.runninPalette.secondary; // laranja — piora
 
     return Container(
       padding: const EdgeInsets.all(13.718),
@@ -75,14 +83,15 @@ class FigmaStatTileWithDelta extends StatelessWidget {
                   color: deltaColor,
                 ),
               ),
-              Text(
-                ' ${deltaIsPositive ? '↗' : '↘'}',
-                style: GoogleFonts.jetBrainsMono(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                  color: deltaColor,
+              if (!isPlaceholder)
+                Text(
+                  ' ${deltaIsPositive ? '↗' : '↘'}',
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: deltaColor,
+                  ),
                 ),
-              ),
             ],
           ),
           if (unit != null) ...[

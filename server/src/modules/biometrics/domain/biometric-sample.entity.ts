@@ -11,6 +11,8 @@ export type BiometricSampleType =
   | 'sleep_deep'       // horas em sono profundo
   | 'sleep_rem'        // horas em sono REM
   | 'sleep_light'      // horas em sono light (combinada com deep+rem = total moderno)
+  | 'sleep_in_bed'     // horas na cama (fallback p/ Watch SE / modos sem stages)
+  | 'sleep_awake'      // horas acordado na cama (usado pra calcular inBed - awake)
   | 'steps'            // passos no período
   | 'spo2'             // saturação de oxigênio (%)
   | 'weight'           // peso (kg)
@@ -21,7 +23,30 @@ export type BiometricSampleType =
   | 'bp_systolic'      // pressão sistólica (mmHg)
   | 'bp_diastolic'     // pressão diastólica (mmHg)
   | 'body_temperature' // temperatura corporal (°C)
-  | 'ecg';             // eletrocardiograma (classification — sinusal/afib/etc)
+  | 'ecg'              // eletrocardiograma (classification — sinusal/afib/etc)
+  // Atividade completa
+  | 'distance_walking_running' // m percorridos andando/correndo no dia
+  | 'distance_cycling'         // m pedalando
+  | 'flights_climbed'          // lances de escada
+  | 'exercise_time'            // min de exercício (Apple anel)
+  | 'apple_move_time'          // min do anel Move
+  | 'apple_stand_time'         // min de pé (Stand)
+  // Mobilidade
+  | 'walking_speed'            // velocidade média de caminhada (m/s)
+  | 'walking_bpm'              // BPM durante caminhada
+  // Medidas corporais
+  | 'height'                   // altura (m)
+  | 'body_fat_pct'             // % gordura corporal
+  | 'bmi'                      // body mass index (kg/m²)
+  | 'lean_body_mass'           // massa magra (kg)
+  | 'waist_circumference'      // cintura (m)
+  // Sinais vitais avançados
+  | 'hrv_rmssd'                // HRV RMSSD (ms) — complementar ao SDNN
+  | 'high_hr_event'            // evento FC alta em repouso
+  | 'low_hr_event'             // evento FC baixa
+  | 'irregular_hr_event'       // ritmo irregular detectado
+  | 'afib_burden'              // % do tempo em fibrilação atrial
+  | 'skin_temperature';        // temperatura da pele (Apple Watch Series 8+)
 
 export type BiometricSource =
   | 'apple_health'
