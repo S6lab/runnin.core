@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
@@ -205,12 +206,6 @@ class _LoginPageState extends State<LoginPage> {
           AppleIDAuthorizationScopes.email,
           AppleIDAuthorizationScopes.fullName,
         ],
-        webAuthenticationOptions: WebAuthenticationOptions(
-          clientId: 'com.s6lab.runnin',
-          redirectUri: Uri.parse(
-            'https://runnin-494520.firebaseapp.com/__/auth/handler',
-          ),
-        ),
       );
       // Apple só envia nome na PRIMEIRA autenticação. Captura antes do
       // signInWithCredential para evitar race com authStateChanges → provisionMe.
@@ -439,10 +434,12 @@ class _LoginPageState extends State<LoginPage> {
                   FigmaGoogleSignInButton(
                     onPressed: _loading ? null : _signInWithGoogle,
                   ),
-                  const SizedBox(height: 12),
-                  FigmaAppleSignInButton(
-                    onPressed: _loading ? null : _signInWithApple,
-                  ),
+                  if (!kIsWeb && Platform.isIOS) ...[
+                    const SizedBox(height: 12),
+                    FigmaAppleSignInButton(
+                      onPressed: _loading ? null : _signInWithApple,
+                    ),
+                  ],
                   const SizedBox(height: 28),
                   const FigmaFormFieldLabel(text: 'OU DIGITE SEU TELEFONE'),
                   const SizedBox(height: 8),

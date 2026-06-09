@@ -58,6 +58,35 @@ Firebase Console:
 
 5. **Commit** + push em `release-android` pra disparar build novo.
 
+## 🔴 Pendências — Login com Apple (iOS only)
+
+O código Flutter está pronto e o botão só aparece em iOS (`Platform.isIOS`).
+Faltam as configurações no Apple Developer Console e Firebase.
+
+### 1. Apple Developer Console — Habilitar Sign In with Apple no App ID
+- [developer.apple.com](https://developer.apple.com/account) → Certificates, Identifiers & Profiles → Identifiers
+- Selecionar `com.s6lab.runnin` → habilitar **Sign In with Apple** → Save
+- Baixar o novo provisioning profile e atualizar no Codemagic
+
+### 2. Apple Developer Console — Criar Key
+- Keys → **+** → nome: `Runnin Sign In with Apple`
+- Habilitar **Sign In with Apple** → Configure → Primary App ID: `com.s6lab.runnin` → Save
+- Register → **Download o .p8 imediatamente** (só pode baixar uma vez)
+- Anotar **Key ID** (10 caracteres na tela) e **Team ID** (canto superior direito do portal)
+
+### 3. Firebase Console — Configurar provider Apple
+- Authentication → Sign-in method → Apple → Enable
+- Preencher:
+  - **Apple Team ID**: (do passo 2)
+  - **Key ID**: (do passo 2)
+  - **Private Key (.p8)**: conteúdo do arquivo baixado
+- Salvar
+
+### 4. Testar
+- Testar em **device físico iOS** (Apple Sign-In não funciona em simulador)
+
+---
+
 ## 🟡 Refinamentos pendentes (depois do auth)
 
 ### Background mode (item #5 do user feedback)
