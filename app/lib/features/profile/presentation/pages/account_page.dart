@@ -1016,7 +1016,7 @@ class _LogoutConfirmSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: const BoxDecoration(
-        color: FigmaColors.surfaceCard,
+        color: FigmaColors.navBottombarBg,
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       padding: const EdgeInsets.fromLTRB(24, 20, 24, 40),
@@ -1043,7 +1043,7 @@ class _LogoutConfirmSheet extends StatelessWidget {
             'Você precisará fazer login novamente para acessar o app.',
             textAlign: TextAlign.center,
             style: context.runninType.bodyMd.copyWith(
-              color: FigmaColors.textGhost,
+              color: FigmaColors.textSecondary,
               fontSize: 13,
             ),
           ),
