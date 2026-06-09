@@ -110,6 +110,12 @@ class LiveRunCoachSession {
   String _lastSendKind = 'idle';
   int _lastSendAtMs = 0;
 
+  // TF 70: último motivo de close conhecido. Usado pelo rotateSession fix
+  // pra detectar se o close anterior foi por TTL (new_session_expire_time)
+  // e forçar refetch de token no reconnect — sem isso o token Gemini fica
+  // stale e o reconnect entra em loop infinito.
+  String? _lastCloseReason;
+
   /// Cada item é o transcript de UMA fala completa do coach (texto == voz).
   Stream<String> get transcripts => _transcriptsCtrl.stream;
   bool get isOpen => _open;
@@ -193,6 +199,14 @@ class LiveRunCoachSession {
         // silenciava pelo resto da run (padrão visto na corrida do Eduardo).
         if (!_open) {
           _rotating = false; // libera antes do _maybeScheduleReconnect ler
+          // TF 70: se o close anterior foi por TTL (new_session_expire_time),
+          // força refetch de token antes do reconnect. Sem isso o token
+          // Gemini fica stale, reconnect tenta com config antiga e entra
+          // em loop infinito (observado em prod TF 69 do Eduardo).
+          if (_lastCloseReason != null &&
+              _lastCloseReason!.contains('new_session_expire_time')) {
+            _tokenExpiresAt = DateTime.now().subtract(const Duration(minutes: 1));
+          }
           _maybeScheduleReconnect(reason: 'rotate_failed_after_close');
         }
         return false;
@@ -268,6 +282,10 @@ class LiveRunCoachSession {
                 'sys_instr_len': cfg.systemInstruction?.length ?? 0,
               });
               _open = false;
+              // TF 70: registra o motivo do close. rotateSession lê quando
+              // falha de rotação, pra forçar refetch de token se o close
+              // foi por TTL (Gemini new_session_expire_time).
+              _lastCloseReason = reason;
               unawaited(_beacon('ws_close', code: code, reason: reason));
               // Fix TF 59: NÃO solta o ducking aqui. User reportou "música
               // sobe quando coach cai" em 8:40 — porque queda 1011 disparava

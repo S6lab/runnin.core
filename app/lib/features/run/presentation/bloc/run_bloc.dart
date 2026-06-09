@@ -500,6 +500,12 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
     _watchStatusSub = workoutRealtimeService.watchStatusStream.listen(
       (status) {
         if (!isClosed) add(_WatchStatusChanged(status));
+        // TF 70: informa o bg notif service que Watch está ativo. Suprime
+        // o fallback de UNLocalNotification que mirroreava pro Watch como
+        // "Abrir no iPhone" (cenário do teste TF 69 do Eduardo: 2 notifs
+        // sobrepondo). Live Activity (iPhone) + Watch ActiveRunScreen
+        // cobrem o display sem precisar de local notif.
+        runBgNotificationService.setWatchHandlesDisplay(status.isOptimal);
       },
     );
     on<_WatchStatusChanged>(
@@ -1165,12 +1171,44 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
           pos.accuracy <= _accuracyThreshold &&
           last.accuracy <= _accuracyThreshold;
       if (accurateEnough) {
-        addedDistance = Geolocator.distanceBetween(
+        final rawDistance = Geolocator.distanceBetween(
           last.lat,
           last.lng,
           pos.latitude,
           pos.longitude,
         );
+        // TF 70: filtro anti-drift GPS indoor. Sem isso, GPS indoor faz
+        // pontos pingarem entre torres e acumulamos distância fake mesmo
+        // user parado. Coach disparou cue "500m completados" no teste
+        // TF 69 do Eduardo sem ele sair do lugar.
+        //
+        // Gate triplo:
+        //   1) pos.speed >= 0.5 m/s (1.8 km/h, mais lento que caminhar
+        //      muito devagar — implies user parado ou ruído)
+        //   2) deltaTms >= 2s (impede que samples muito próximos somem)
+        //   3) implied speed (delta/dt) <= 8 m/s (28.8 km/h, mais rápido
+        //      que sprint humano — implies teleporte de drift)
+        //
+        // pos.speed=0 vem do iOS quando navegação não tem confiança no
+        // movimento. Aceitamos quando pos.speed > minMovement.
+        final dtMs = pos.timestamp.millisecondsSinceEpoch - last.ts;
+        final dtSec = dtMs / 1000;
+        final impliedSpeed = dtSec > 0 ? rawDistance / dtSec : 0;
+        const minMovementMs = 0.5; // 1.8 km/h
+        const minDeltaSec = 2.0;
+        const maxImpliedSpeed = 8.0; // 28.8 km/h
+        final isRealMovement = (pos.speed >= minMovementMs) &&
+            dtSec >= minDeltaSec &&
+            impliedSpeed <= maxImpliedSpeed;
+        if (isRealMovement) {
+          addedDistance = rawDistance;
+        } else {
+          // ignore: avoid_print
+          print('gps.drift.rejected raw=${rawDistance.toStringAsFixed(1)}m '
+              'speed=${pos.speed.toStringAsFixed(2)} '
+              'dt=${dtSec.toStringAsFixed(1)}s '
+              'implied=${impliedSpeed.toStringAsFixed(2)}m/s');
+        }
       }
     }
 
@@ -1558,6 +1596,19 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
           },
         }));
       }
+      // TF 70: push EXPLÍCITO de run_state=completed pro Watch. Sem isso,
+      // Watch só descobria via próximo telemetry tick (30s) — user via
+      // PreRunScreen com isExecuted ainda falso até o tick chegar. Agora
+      // a transição é imediata: Watch sai pra RunCompletedScreen no exato
+      // momento que iPhone marca completo. _attachedTodaySession do
+      // workout_realtime_service garante que o todaySession atualizado
+      // (com isExecuted=true setado no push anterior) vá junto.
+      unawaited(workoutRealtimeService.pushRunState({
+        'type': 'run_state',
+        'status': 'completed',
+        'elapsedS': state.elapsedS,
+        'distanceM': state.distanceM,
+      }));
       emit(state.copyWith(status: RunStatus.completed, completedRun: run));
     } catch (e) {
       emit(state.copyWith(status: RunStatus.error, error: e.toString()));

@@ -47,12 +47,19 @@ class WatchTodaySessionPusher {
           .cast<dynamic>()
           .firstWhere((_) => true, orElse: () => null);
       if (session != null) {
+        // TF 70: inclui isExecuted derivado de completedAt. Sem isso, Watch
+        // mostrava sessão como pendente mesmo após user finalizar no iPhone
+        // (cenário Eduardo TF 69: voltou pra TypeSelector mostrando Easy
+        // Run como não-feita).
+        final isExecuted = session.completedAt != null
+            && (session.completedAt as String).isNotEmpty;
         await workoutRealtimeService.pushRunState({
           'type': 'today_session',
           'session': {
             'type': session.type,
             'distanceKm': session.distanceKm,
             'planSessionId': session.id,
+            'isExecuted': isExecuted,
           },
         });
       } else {

@@ -22,6 +22,12 @@ void _ensureElement() {
     ..crossOrigin = 'anonymous';
 }
 
+Future<void> stopCoachAudio() async {
+  try {
+    _persistentAudio?.pause();
+  } catch (_) {/* best-effort */}
+}
+
 void unlockAudioContext() {
   if (_audioUnlocked) return;
   try {

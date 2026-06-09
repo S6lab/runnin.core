@@ -87,5 +87,14 @@ Future<void> playCoachAudio(
   }
 }
 
+/// Para o player imediatamente. TF 70: PrepPage chama ao navegar pra
+/// /run pra evitar 2 áudios sobrepostos (pre_run ainda tocando quando
+/// saudação da run dispara — "2 coaches simultâneos").
+Future<void> stopCoachAudio() async {
+  try {
+    await _player.stop();
+  } catch (_) {/* best-effort */}
+}
+
 /// No-op em mobile — destrava autoplay só faz sentido em web.
 void unlockAudioContext() {}

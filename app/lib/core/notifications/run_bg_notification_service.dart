@@ -53,6 +53,23 @@ class RunBgNotificationService {
   /// que cancel() chame end() no plugin e que updates subsequentes saibam
   /// que tem activity rodando (não precisam re-pedir start).
   bool _liveActivityStarted = false;
+  /// TF 70: quando Watch app está pareado+instalado+ativo, suprimimos o
+  /// fallback de local notification iOS pra não duplicar visualmente
+  /// (Watch já mostra ActiveRunScreen, iPhone tem Live Activity, local
+  /// notif redundante + mirrora pro Watch com "Abrir no iPhone" confuso).
+  /// Setado por `RunBloc` no listener de `watchStatusStream`.
+  bool _watchHandlesDisplay = false;
+
+  /// Sinaliza que o Watch app companion está ativo e cuidando do display.
+  /// Quando true, fallback de UNLocalNotification é suprimido — Live
+  /// Activity (iPhone lock screen) + Watch ActiveRunScreen já cobrem.
+  /// Idempotente; pode chamar a cada watchStatus update.
+  void setWatchHandlesDisplay(bool value) {
+    if (_watchHandlesDisplay == value) return;
+    _watchHandlesDisplay = value;
+    Logger.info('run_bg_notif.watch_handles_display=$value');
+  }
+
   /// Setado quando o start retornou `activities_disabled` — user desligou
   /// "Atividades Ao Vivo" em Ajustes → Runnin → Notificações. UI consulta
   /// via [isLiveActivityDisabled] pra mostrar banner orientativo. Resetado
@@ -244,6 +261,15 @@ class RunBgNotificationService {
         Logger.error('live_activity.invoke_failed', e, st);
         // fall through pro fallback
       }
+    }
+
+    // TF 70: quando Watch app ativo, suprimimos o fallback. Watch já mostra
+    // ActiveRunScreen + iPhone tenta Live Activity acima. Sem isso, local
+    // notif mirroreia pro Watch como "Abrir no iPhone" (cenário Eduardo
+    // reportou 2 notifs no Watch).
+    if (_watchHandlesDisplay && Platform.isIOS) {
+      Logger.info('run_bg_notif.skip_local_fallback reason=watch_active');
+      return;
     }
 
     if (!_initialized) await init();

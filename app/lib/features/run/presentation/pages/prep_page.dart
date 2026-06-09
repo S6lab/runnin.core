@@ -863,6 +863,11 @@ class _PrepViewState extends State<_PrepView> {
     _coachDebounce?.cancel();
     _coachSub?.cancel();
     _coachSub = null;
+    // TF 70: para o player IMEDIATAMENTE. Antes só cancelávamos a stream
+    // do server (parava de receber chunks novos), mas o áudio em andamento
+    // continuava tocando — sobrepondo a saudação 'start' do bloco. Cenário
+    // "2 cues treparam" reportado no teste TF 69 do Eduardo.
+    unawaited(stopCoachAudio());
     context.push('/run', extra: extra);
   }
 

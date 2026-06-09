@@ -166,22 +166,86 @@ class WorkoutController: NSObject, ObservableObject {
     /// disponível — mesmo quando o delegate `didCollectDataOf` para de
     /// ser invocado (Watch tela apagada, sample drift). Em device real,
     /// resolve o "BPM travou em 94" reportado.
+    ///
+    /// TF 70: além do builder, faz HKSampleQuery direto no HK store como
+    /// FALLBACK quando o builder não atualiza. Observado em prod TF 69:
+    /// Watch lendo 91 estático enquanto outro HR app mostrava 77 real.
+    /// Builder.statistics().mostRecentQuantity() pode ficar travado se o
+    /// HKLiveWorkoutDataSource para de receber callbacks (low-power dim,
+    /// sensor lost-contact-reacquire). HKSampleQuery direto sempre lê
+    /// fresh do store.
     private func startBpmPolling() {
         bpmPollingTimer?.invalidate()
         bpmPollingTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: true) { [weak self] _ in
             guard let self = self, self.isActive else { return }
-            guard #available(iOS 26.0, watchOS 10.0, *), let b = self.builder else { return }
-            guard let hrType = HKObjectType.quantityType(forIdentifier: .heartRate),
-                  let stats = b.statistics(for: hrType),
-                  let mostRecent = stats.mostRecentQuantity()?.doubleValue(
-                      for: HKUnit.count().unitDivided(by: .minute())
-                  ) else { return }
-            let bpm = Int(mostRecent.rounded())
-            guard bpm > 0 else { return }
+            guard #available(iOS 26.0, watchOS 10.0, *) else { return }
+            guard let hrType = HKObjectType.quantityType(forIdentifier: .heartRate) else { return }
+
+            // Tenta o builder primeiro (rota normal, eficiente).
+            var bpm: Int = 0
+            var bpmSourceFresh = false
+            if let b = self.builder,
+               let stats = b.statistics(for: hrType),
+               let mostRecent = stats.mostRecentQuantity()?.doubleValue(
+                   for: HKUnit.count().unitDivided(by: .minute())
+               ) {
+                let candidate = Int(mostRecent.rounded())
+                // Verifica se o sample é recente: stats.endDate é o timestamp
+                // do último sample colhido. Se > 10s atrás, o builder tá
+                // travado e o valor é stale.
+                let ageSec = abs(stats.endDate.timeIntervalSinceNow)
+                if candidate > 0 && ageSec < 10 {
+                    bpm = candidate
+                    bpmSourceFresh = true
+                }
+            }
+
+            if !bpmSourceFresh {
+                // Fallback: HKSampleQuery direto do HK store. Pega o sample
+                // mais recente da janela 30s — não depende do builder estar
+                // atualizado. Custa mais (query I/O), mas garante fresh.
+                self.queryFreshBpmFromStore(hrType: hrType) { freshBpm in
+                    guard let bpm = freshBpm, bpm > 0 else { return }
+                    DispatchQueue.main.async { self.lastHeartRate = bpm }
+                    SessionDelegate.shared.pushBpmToPhone(bpm)
+                }
+                return
+            }
+
             DispatchQueue.main.async { self.lastHeartRate = bpm }
             SessionDelegate.shared.pushBpmToPhone(bpm)
         }
-        os_log("bpm_polling.started interval=3s", log: wcLog, type: .info)
+        os_log("bpm_polling.started interval=3s mode=builder+store_fallback", log: wcLog, type: .info)
+    }
+
+    /// HKSampleQuery direto no HK store — fallback quando o builder não
+    /// está atualizando. Limita a samples dos últimos 30s pra não pegar
+    /// dado velho que ficou no store.
+    private func queryFreshBpmFromStore(hrType: HKQuantityType, completion: @escaping (Int?) -> Void) {
+        let now = Date()
+        let predicate = HKQuery.predicateForSamples(
+            withStart: now.addingTimeInterval(-30),
+            end: now,
+            options: .strictEndDate
+        )
+        let sortDescriptor = NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)
+        let query = HKSampleQuery(
+            sampleType: hrType,
+            predicate: predicate,
+            limit: 1,
+            sortDescriptors: [sortDescriptor]
+        ) { _, samples, error in
+            guard error == nil,
+                  let sample = samples?.first as? HKQuantitySample else {
+                completion(nil)
+                return
+            }
+            let bpm = Int(sample.quantity.doubleValue(
+                for: HKUnit.count().unitDivided(by: .minute())
+            ).rounded())
+            completion(bpm)
+        }
+        healthStore.execute(query)
     }
 
     private func stopBpmPolling() {

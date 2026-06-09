@@ -1684,6 +1684,10 @@ class _WeeklySessionRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // TF 70 UX: dia + tipo na mesma linha após o ícone. Antes
+                // tinha "Segunda" + linha abaixo "Easy Run"; agora vira
+                // "Segunda · Easy Run" / "Segunda · Descanso" — economiza
+                // altura do card sem perder informação.
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.baseline,
                   textBaseline: TextBaseline.alphabetic,
@@ -1692,11 +1696,29 @@ class _WeeklySessionRow extends StatelessWidget {
                       Icon(statusIcon, size: 14, color: cellFg),
                       const SizedBox(width: 6),
                     ],
-                    Text(
-                      _dayNames[dayOfWeek],
-                      style: context.runninType.displaySm.copyWith(
-                        fontSize: 18,
-                        color: isPast && !isToday ? palette.muted : palette.text,
+                    Flexible(
+                      child: RichText(
+                        overflow: TextOverflow.ellipsis,
+                        text: TextSpan(
+                          children: [
+                            TextSpan(
+                              text: _dayNames[dayOfWeek],
+                              style: context.runninType.displaySm.copyWith(
+                                fontSize: 18,
+                                color: isPast && !isToday ? palette.muted : palette.text,
+                              ),
+                            ),
+                            TextSpan(
+                              text: '  ${isRest ? 'Descanso' : session!.type}',
+                              style: context.runninType.bodyMd.copyWith(
+                                color: palette.muted,
+                                decoration:
+                                    isExecuted ? TextDecoration.lineThrough : null,
+                                decorationColor: palette.muted,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                     if (isExecuted || (isPast && !isToday)) ...[
@@ -1712,18 +1734,6 @@ class _WeeklySessionRow extends StatelessWidget {
                       ),
                     ],
                   ],
-                ),
-                const SizedBox(height: 4),
-                // Só o tipo da sessão (sem hidratação/nutrição/duração — vide PNG).
-                // Sessão já executada → tipo aparece SOBRETACHADO (riscado).
-                Text(
-                  isRest ? 'Descanso' : session!.type,
-                  style: context.runninType.bodyMd.copyWith(
-                    color: palette.muted,
-                    decoration:
-                        isExecuted ? TextDecoration.lineThrough : null,
-                    decorationColor: palette.muted,
-                  ),
                 ),
               ],
             ),
