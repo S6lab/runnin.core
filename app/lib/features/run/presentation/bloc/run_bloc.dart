@@ -1215,7 +1215,14 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
       }
     }
 
-    final newPoints = [...state.points, newPoint];
+    // Só adiciona pontos aceitos pelo filtro de drift. computeKmSplits usa
+    // haversine em todos os pontos sem filtrar — se drift points entrassem
+    // aqui, cumDist divergia de state.distanceM e os kmIndex ficavam errados
+    // (ex: KM07/KM08 com distância real de 4km e speeds de 34 km/h).
+    // Primeiro ponto sempre entra (âncora inicial sem ponto anterior).
+    final newPoints = (state.points.isEmpty || addedDistance > 0)
+        ? [...state.points, newPoint]
+        : state.points;
     final newDistance = state.distanceM + addedDistance;
 
     // Pace instantâneo pela distância/tempo real dos últimos ~30m (robusto
