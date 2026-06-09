@@ -1,108 +1,84 @@
 # runnin.core
 
-Monorepo do runnin.ai — AI Running Coach.
+Monorepo do **runnin.ai** — AI Running Coach.
+
+App Flutter (iOS + Apple Watch + Android + Web) + backend Node em Cloud Run, com geração de plano via Gemini Pro, coach voz ao vivo via Gemini Live, RAGs global + per-user (exames OCR), e revisão semanal automática.
 
 ## Estrutura
 
 ```
-app/     Flutter (iOS + Android + Web)
-server/  Node + Express + Firestore
-docs/    Postman, GCP, notifications, etc
+app/              Flutter (iOS first, Android, Web)
+  ios/RunninWatch Apple Watch companion (Swift)
+server/           Node + Express + TypeScript em Cloud Run
+docs/
+  architecture/   📘 Arquitetura E2E — comece aqui
+  DEPLOY.md       Deploy + CI/CD (branches, Codemagic, Cloud Build)
+  coach-ai-v3/    Especificação de design dos momentos IA
 ```
 
-## Branches = ambientes
+## 📘 Arquitetura completa
 
-A convenção é "1 branch = 1 ambiente". Cada push numa branch protegida dispara o pipeline correspondente automaticamente, sem necessidade de tag — versão é controlada via bump em `app/pubspec.yaml` (e/ou `server/package.json`). Mobile tem branches **separadas por plataforma** pra publicar iOS e Android de forma independente.
+Documentação técnica vive em [`/docs/architecture/`](docs/architecture/). Começa pelo [README](docs/architecture/README.md) que tem o big-picture do fluxo IA E2E e índice dos sub-docs:
 
-| Branch             | Server (Cloud Run)              | Mobile                              | Web (Firebase Hosting)              |
-|---                 |---                              |---                                  |---                                  |
-| `main`             | —                               | —                                   | prod (`Deploy Production`)          |
-| `release`          | prod `runnin-api`               | —                                   | —                                   |
-| `release-ios`      | —                               | TestFlight (Codemagic `ios-release`) | —                                   |
-| `release-android`  | —                               | Play Internal (Codemagic `android-release`) | —                                   |
-| `homologation`     | staging `runnin-api-staging`    | —                                   | staging (`Deploy Staging`)          |
+- [00-overview](docs/architecture/00-overview.md) — Visão geral, stack, princípios
+- [01-coach-ai](docs/architecture/01-coach-ai.md) — Gemini Live, cues, rotação, ducking
+- [02-plan-generation](docs/architecture/02-plan-generation.md) — Pipeline 5-fase + weekly revision
+- [03-rags](docs/architecture/03-rags.md) — RAG global + per-user (exames)
+- [04-prompts](docs/architecture/04-prompts.md) — config-store, defaults, personas, knobs
+- [05-app-protocols](docs/architecture/05-app-protocols.md) — REST + WS + WCSession
+- [06-telemetry](docs/architecture/06-telemetry.md) — Telemetry timeline, biometric sync
+- [07-observability](docs/architecture/07-observability.md) — Logging, token tracking, admin
 
-Os workflows estão configurados em:
+## Como rodar localmente
 
-- Server + Web: [`.github/workflows/`](.github/workflows/) (GitHub Actions)
-- Mobile (iOS + Android): [`codemagic.yaml`](codemagic.yaml) (Codemagic)
-
-Build number do IPA/AAB vem de `PROJECT_BUILD_NUMBER` (variável incremental do Codemagic), então cada push em `release` gera um build único no TestFlight / Play Internal mesmo se o `pubspec.yaml` não mudou.
-
-## Rodando localmente
-
-Em um terminal, suba o server:
+Server:
 
 ```bash
 cd server
-npm run dev
+npm install
+npm run dev      # localhost:3000
 ```
 
-Em outro terminal, rode o app no Chrome apontando para o server local:
+App (Chrome local apontando pro server):
 
 ```bash
 cd app
+flutter pub get
 flutter run -d chrome --dart-define=API_BASE_URL=http://localhost:3000
 ```
 
-O app prepende `/v1` ao `API_BASE_URL` automaticamente.
+Detalhes em [`app/README.md`](app/README.md) e [`server/README.md`](server/README.md) (em construção).
 
-## Deploy de produção
+## Deploy e CI/CD
 
-Cada alvo deploya em sua branch correspondente. Você escolhe o que publicar:
+Convenção "1 branch = 1 ambiente". Push em branch dispara pipeline automático.
 
-```bash
-git checkout main && git pull
-# (edita app/pubspec.yaml e/ou server/package.json pra bumpar)
-git add . && git commit -m "chore: bump version"
-git push origin main
-```
+| Branch | Server (Cloud Run) | Mobile | Web (Firebase) |
+|---|---|---|---|
+| `main` | — | — | prod |
+| `release` | prod `runnin-api` | — | — |
+| `release-ios` | — | TestFlight | — |
+| `release-android` | — | Play Internal | — |
+| `homologation` | staging `runnin-api-staging` | — | staging |
 
-Depois, dependendo do que quer publicar:
+Detalhes completos em [`docs/DEPLOY.md`](docs/DEPLOY.md).
 
-```bash
-# Server prod (Cloud Run, via GitHub Actions)
-git checkout release && git merge --ff-only main && git push origin release
+## Stack
 
-# iOS (TestFlight, via Codemagic)
-git checkout release-ios && git merge --ff-only main && git push origin release-ios
+- **App**: Flutter 3.x, Bloc, Dio, Hive, GoRouter
+- **Watch**: Swift native, HKWorkoutSession + HKLiveWorkoutBuilder, WCSession
+- **Backend**: Node 20 + Express + TypeScript em Cloud Run (`southamerica-east1`)
+- **DB**: Firestore Native + Storage
+- **Auth**: Firebase Auth (anônimo, email, Apple, Google, telefone)
+- **LLM**: Gemini 3.5 Flash (texto), 3.1 Pro Preview (plan), 2.5 Flash Live (voz), embedding-001 (RAG)
+- **CI**: GitHub Actions (server + web) + Codemagic (mobile)
 
-# Android (Play Internal, via Codemagic)
-git checkout release-android && git merge --ff-only main && git push origin release-android
-```
+## Memórias importantes
 
-Pra publicar tudo de uma vez, push as 3 branches (cada uma dispara o pipeline correspondente em paralelo).
+Persistem entre sessões em `~/.claude/projects/.../memory/`:
 
-Pra disparar um build novo no TestFlight / Play Internal **sem mudança de código** (rebuild com mesma versão semver, novo build number do Codemagic):
-
-```bash
-git checkout release-ios     # ou release-android
-git commit --allow-empty -m "chore: rebuild"
-git push origin release-ios
-```
-
-## Deploy de staging
-
-Mesma ideia, na branch `homologation`:
-
-```bash
-git checkout homologation && git merge --ff-only main && git push origin homologation
-```
-
-Dispara `Deploy Server Staging` (Cloud Run) + `Deploy Staging` (Web). Mobile não tem workflow staging — TestFlight cobre o papel de "QA build".
-
-## Pré-requisitos & credenciais
-
-- **Codemagic UI** (Settings → Code signing):
-  - Android: keystore `.jks` com reference `runnin_keystore`.
-  - iOS: integração `codemagic_app_store` + secret `CERTIFICATE_PRIVATE_KEY` no grupo `ios_signing`.
-- **GitHub Secrets**:
-  - `GCP_SA_KEY` (Cloud Run deploy).
-  - `ENV_PRODUCTION` / `ENV_STAGING` (conteúdo de `server/.env.production` / `.env.staging`).
-- **Firebase**: configurado em `app/lib/firebase_options.dart` e `server/runnin-google-service-account.json` (gitignored).
-
-## Documentação
-
-- [Postman](docs/postman/README.md) — coleção das rotas do server
-- [GCP Setup](docs/GCP_SETUP.md)
-- [Notifications](docs/notifications.md)
+- `project_plan_revision_architecture` — `weeks=BASE imutável + adjustedWeeks=vigente`
+- `project_health_plugin_per_type_query` — NUNCA passar lista batch pro `health.getHealthDataFromTypes` (loop tipo-por-tipo)
+- `project_plan_personalization_priority` — `durationMin/hidratação/nutrição` por dia
+- `project_run_type_freemium_gate` — freemium só roda Free Run; premium escolhe planned vs Free Run
+- `iOS extension version sync` — bump iOS toca pubspec + 3 build configs do pbxproj

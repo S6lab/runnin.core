@@ -21,6 +21,7 @@ import { validateMedicalForGoal, MedicalRestrictionError } from './validate-medi
 import { buildExecutionSegments, resolveEffectiveSessionType } from './build-execution-segments';
 import { deriveWeeksCountFromRaceDate, isoDateToDayOfWeek } from './race-date.helpers';
 import { enforceRaceWeekStructure } from './enforce-race-week-structure';
+import { applyNarrativeFallbacks } from './hydrate-revised-sessions';
 import {
   getRoteiroTemplates,
   getRoteiroTemplatesDefault,
@@ -618,6 +619,8 @@ export class GeneratePlanUseCase {
         systemPrompt: built.systemPrompt,
         maxTokens: built.maxTokens,
         temperature: built.temperature,
+        userId: plan.userId,
+        useCase: 'generate-plan',
         // JSON mode: Gemini garante schema válido. Elimina ~90% das
         // falhas de parse que levavam plano a "failed" status.
         responseJson: true,
@@ -723,14 +726,20 @@ export class GeneratePlanUseCase {
         totalMs,
         weeksCount: input.weeksCount,
       });
+      // Aplica fallbacks determinísticos pra narrative/blockName/objective/
+      // targets/focus ANTES do save. Garante que toda semana tem texto coach
+      // mesmo se `_generateWeekNarratives` (Pro Preview com thinking-budget)
+      // truncar em MAX_TOKENS — caso comum em ~30% das gerações observado em
+      // prod. LLM enriquece sobrescrevendo depois (fire-and-forget abaixo).
+      const weeksWithFallbacks = applyNarrativeFallbacks(weeks);
       await this.repo.update(plan.id, plan.userId, {
         status: 'ready',
-        weeks,
+        weeks: weeksWithFallbacks,
         // Inicializa adjustedWeeks = weeks na criação. Isso simplifica
         // toda a leitura subsequente (effectivePlanWeeks sempre tem snapshot
         // vigente), e as revisões só sobrescrevem adjustedWeeks daqui pra
         // frente — plan.weeks (BASE) permanece imutável.
-        adjustedWeeks: weeks,
+        adjustedWeeks: weeksWithFallbacks,
         updatedAt: new Date().toISOString(),
       });
       // Notifica user que o plano está pronto (in-app + push). Dynamic
@@ -884,6 +893,8 @@ REGRAS GERAIS:
 
       const raw = await this.llm.generate(userPrompt, {
         systemPrompt: 'Você é o Coach AI do runnin. Tom: técnico, direto, sem prolixidade. Cada parágrafo pesa. Sem emojis. PT-BR.',
+        userId: plan.userId,
+        useCase: 'plan-rationale',
         // 6000 (era 3000) — o prompt pede 1000-1400 palavras em 6 seções de
         // markdown PT-BR, ~4500-5500 tokens de saída na prática. Antes
         // estava no limite quando o LLM era verboso. Combinado com
@@ -979,6 +990,8 @@ ${weeksDigest}`;
 
       const raw = await this.llm.generate(userPrompt, {
         systemPrompt: 'Você é o Coach AI do runnin. Retorne SOMENTE JSON válido. Sem comentários, sem texto fora do JSON.',
+        userId: plan.userId,
+        useCase: 'plan-narratives',
         maxTokens: 3000,
         temperature: 0.4,
       });
@@ -998,7 +1011,7 @@ ${weeksDigest}`;
         return true;
       });
 
-      const enriched: PlanWeek[] = weeks.map((w) => {
+      const enrichedRaw: PlanWeek[] = weeks.map((w) => {
         const match = uniqueNarratives.find((x) => x.weekNumber === w.weekNumber);
         if (!match) return w;
         return {
@@ -1009,6 +1022,13 @@ ${weeksDigest}`;
           targets: match.targets ?? w.targets,
         };
       });
+
+      // Aplica fallbacks determinísticos em cima do LLM. Preserva o que veio
+      // do enriquecimento e completa lacunas (semanas sem match, ou campos
+      // que o LLM omitiu/truncou). Sem isso, narratives quebradas pelo
+      // thinking-budget do Pro Preview deixavam semanas sem texto até a
+      // primeira revisão semanal — o "fix" que o user reportou ao gerar plano.
+      const enriched = applyNarrativeFallbacks(enrichedRaw);
 
       // Espelha enriquecimento de narrativa em adjustedWeeks (BASE foi
       // recém-criada == adjustedWeeks neste momento, antes de qualquer

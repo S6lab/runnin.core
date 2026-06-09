@@ -1,5 +1,6 @@
 import { logger } from '@shared/logger/logger';
 import { LLMOptions, LLMProvider } from './llm.interface';
+import { trackLlmUsage } from './usage-tracker';
 
 const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
 // Modelo de texto. Override via env GEMINI_MODEL (ex: gemini-flash-latest,
@@ -74,6 +75,17 @@ export class GeminiAdapter implements LLMProvider {
     } else {
       logger.info('llm.gemini.generate', meta);
     }
+    // Persiste agregado em Firestore (best-effort, falha silenciosa). Caller
+    // passa userId + useCase via LLMOptions. Sem esses, atribui a 'system'/
+    // 'unknown' pra ter o gasto contabilizado mesmo sem tagging.
+    void trackLlmUsage({
+      userId: options.userId ?? null,
+      useCase: options.useCase ?? 'unknown',
+      model,
+      promptTokens: data.usageMetadata?.promptTokenCount ?? 0,
+      outputTokens: data.usageMetadata?.candidatesTokenCount ?? 0,
+      latencyMs: Date.now() - start,
+    });
     return text;
   }
 

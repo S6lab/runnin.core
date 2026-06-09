@@ -955,3 +955,101 @@ export async function postDevLogin(req: Request, res: Response, next: NextFuncti
     next(err);
   }
 }
+
+// === Admin: LLM usage / token tracking ===
+import { GetLlmUsageUseCase } from '../use-cases/get-llm-usage.use-case';
+import { LLM_PRICING_USD_PER_1M } from '@shared/infra/llm/llm-pricing';
+
+const _usageUC = new GetLlmUsageUseCase();
+
+function _resolveRange(req: Request): { from: string; to: string } | null {
+  const from = (req.query['from'] as string) ?? '';
+  const to = (req.query['to'] as string) ?? '';
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) return null;
+  return { from, to };
+}
+
+export async function getUsageTokens(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const range = _resolveRange(req);
+    if (!range) {
+      res.status(400).json({ error: 'invalid_range', hint: '?from=YYYY-MM-DD&to=YYYY-MM-DD' });
+      return;
+    }
+    const userId = (req.query['userId'] as string) || null;
+    const result = await _usageUC.execute({ range, userId });
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function getUsageTopUsers(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const range = _resolveRange(req);
+    if (!range) {
+      res.status(400).json({ error: 'invalid_range' });
+      return;
+    }
+    const limit = Math.min(Math.max(parseInt((req.query['limit'] as string) ?? '20', 10), 1), 100);
+    const result = await _usageUC.topUsers(range, limit);
+    res.json({ users: result });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function getUsageSystem(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const range = _resolveRange(req);
+    if (!range) {
+      res.status(400).json({ error: 'invalid_range' });
+      return;
+    }
+    const result = await _usageUC.systemUsage(range);
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export function getUsagePricing(_req: Request, res: Response): void {
+  // Expõe a tabela de pricing pra UI mostrar "este modelo custa $X / 1M".
+  // Admin pode editar futuramente via PATCH (TODO Fase 2.2 expansão).
+  res.json({ pricing: LLM_PRICING_USD_PER_1M });
+}
+
+// === Coach runtime config (parametrizar checkInDistanceM etc) ===
+import {
+  getCoachRuntimeConfig,
+  invalidateCoachRuntimeConfigCache,
+  DEFAULT_COACH_RUNTIME_CONFIG,
+  type CoachRuntimeConfig,
+} from '@modules/coach/use-cases/coach-runtime-config.service';
+
+export async function getCoachRuntimeConfigAdmin(_req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const current = await getCoachRuntimeConfig();
+    res.json({ current, defaults: DEFAULT_COACH_RUNTIME_CONFIG });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function patchCoachRuntimeConfigAdmin(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const body = req.body as Partial<CoachRuntimeConfig> | undefined;
+    if (!body || typeof body !== 'object') {
+      res.status(400).json({ error: 'invalid_body' });
+      return;
+    }
+    // Merge raso (cooldownsBy substitui inteiro se vier no payload).
+    const db = getFirestore();
+    await db.collection('app_config').doc('coach_runtime').set(body, { merge: true });
+    invalidateCoachRuntimeConfigCache();
+    const updated = await getCoachRuntimeConfig();
+    res.json({ current: updated, defaults: DEFAULT_COACH_RUNTIME_CONFIG });
+  } catch (err) {
+    next(err);
+  }
+}

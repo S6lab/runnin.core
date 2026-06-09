@@ -30,6 +30,12 @@ import {
   getAdminWiringStatus,
   postSetAdminClaim,
   postDevLogin,
+  getUsageTokens,
+  getUsageTopUsers,
+  getUsageSystem,
+  getUsagePricing,
+  getCoachRuntimeConfigAdmin,
+  patchCoachRuntimeConfigAdmin,
 } from './admin.controller';
 
 export const adminRouter = Router();
@@ -83,3 +89,17 @@ adminRouter.get('/crons', getCronsList);
 adminRouter.get('/users/plans-catalog', getPlansCatalog);
 adminRouter.get('/constants/plan-rules', getPlanRules);
 adminRouter.get('/wiring-status', getAdminWiringStatus);
+
+// ─── LLM Usage / Token tracking ──────────────────────────────────────────
+// Métricas de gasto por modelo, user, use case e dia. Custo em USD usando
+// tabela hardcoded em llm-pricing.ts.
+adminRouter.get('/usage/tokens', getUsageTokens);          // ?from&to&userId?
+adminRouter.get('/usage/top-users', getUsageTopUsers);     // ?from&to&limit
+adminRouter.get('/usage/system', getUsageSystem);          // crons sem userId
+adminRouter.get('/usage/pricing', getUsagePricing);        // tabela atual
+
+// ─── Coach runtime config (parametrizar checkInDistanceM etc) ────────────
+// Override sobre defaults vivem em Firestore `app_config/coach_runtime`.
+// App fetcha via /v1/coach/runtime-config (cache 1h Hive). Cache server 60s.
+adminRouter.get('/coach/runtime-config', getCoachRuntimeConfigAdmin);
+adminRouter.patch('/coach/runtime-config', patchCoachRuntimeConfigAdmin);

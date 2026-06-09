@@ -455,6 +455,8 @@ REGRAS de preenchimento:
         systemPrompt:
           'Você é o Coach AI. Retorne SOMENTE JSON válido. Sem comentários, sem markdown, sem texto fora do JSON. ' +
           opts.sysExtra,
+        userId: plan.userId,
+        useCase: 'weekly-revision-analysis',
         maxTokens: opts.maxTokens,
         temperature: 0.35,
         responseJson: true,

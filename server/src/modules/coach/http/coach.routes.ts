@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { authMiddleware } from '@shared/infra/http/middlewares/auth.middleware';
 import { requireFeature } from '@shared/infra/http/middlewares/require-feature.middleware';
-import { postCoachMessage, postCoachChat, getCoachReport, postGenerateReport, getCoachMessagesByRun, getPeriodAnalysis, postCoachLiveToken, postCoachLiveDiag, postCoachLiveTurn } from './coach.controller';
+import { postCoachMessage, postCoachChat, getCoachReport, postGenerateReport, getCoachMessagesByRun, getPeriodAnalysis, postCoachLiveToken, postCoachLiveDiag, postCoachLiveTurn, getCoachRuntimeConfigHandler } from './coach.controller';
 
 export const coachRouter = Router();
 
@@ -25,3 +25,7 @@ coachRouter.get('/report/:runId', requireFeature('weeklyReports'), getCoachRepor
 coachRouter.post('/report/:runId/generate', requireFeature('weeklyReports'), postGenerateReport);
 coachRouter.get('/messages/:runId', requireFeature('coachVoiceDuringRun'), getCoachMessagesByRun);
 coachRouter.get('/period-analysis', requireFeature('weeklyReports'), getPeriodAnalysis);
+
+// Runtime config (intervalo cue, cooldowns, rotação Live). App fetcha no boot,
+// cacheia 1h em Hive. Admin pode editar `app_config/coach_runtime` sem deploy.
+coachRouter.get('/runtime-config', getCoachRuntimeConfigHandler);

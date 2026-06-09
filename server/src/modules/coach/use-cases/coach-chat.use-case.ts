@@ -44,6 +44,8 @@ export class CoachChatUseCase {
       systemPrompt: built.systemPrompt,
       maxTokens: built.maxTokens,
       temperature: built.temperature,
+      userId,
+      useCase: 'coach-chat',
     });
   }
 }

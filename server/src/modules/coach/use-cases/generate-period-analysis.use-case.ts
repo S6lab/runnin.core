@@ -84,6 +84,8 @@ export class GeneratePeriodAnalysisUseCase {
         systemPrompt: built.systemPrompt,
         maxTokens: built.maxTokens,
         temperature: built.temperature,
+        userId,
+        useCase: 'period-analysis',
       });
 
       const runsData: PeriodAnalysisRun[] = periodRuns.map(r => ({

@@ -112,6 +112,8 @@ export class GenerateWeeklyReportUseCase {
       systemPrompt: renderTemplate(config.systemPrompt, values),
       maxTokens: config.maxTokens,
       temperature: config.temperature,
+      userId: plan.userId,
+      useCase: 'weekly-report',
     });
 
     const { summary, coachHighlights } = parseResponse(raw);

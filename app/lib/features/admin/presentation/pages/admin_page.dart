@@ -513,6 +513,10 @@ class _DrivePanel extends StatelessWidget {
           const SizedBox(height: 8),
           _PromptsConsoleEntry(canRead: session.canRead),
           const SizedBox(height: 8),
+          _CoachRuntimeEntry(canRead: session.canRead),
+          const SizedBox(height: 8),
+          _TokensEntry(canRead: session.canRead),
+          const SizedBox(height: 8),
           _PlanRulesEntry(canRead: session.canRead),
           const SizedBox(height: 8),
           _CronTriggersPanel(canTrigger: session.canUpload),
@@ -1084,6 +1088,46 @@ class _PlanRulesEntry extends StatelessWidget {
         subtitle: const Text('Constantes vigentes: janelas, picos, frequência mínima, caps, idade, comorbidades — read-only'),
         trailing: const Icon(Icons.chevron_right),
         onTap: () => GoRouter.of(context).push('/admin/plan-rules'),
+      ),
+    );
+  }
+}
+
+class _CoachRuntimeEntry extends StatelessWidget {
+  final bool canRead;
+  const _CoachRuntimeEntry({required this.canRead});
+
+  @override
+  Widget build(BuildContext context) {
+    if (!canRead) return const SizedBox.shrink();
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 0, vertical: 0),
+      child: ListTile(
+        leading: const Icon(Icons.tune_outlined),
+        title: const Text('Coach Runtime'),
+        subtitle: const Text('Distância entre cues, cooldowns, rotação Live, reconnect cap — parametrizar sem deploy'),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => GoRouter.of(context).push('/admin/coach-runtime'),
+      ),
+    );
+  }
+}
+
+class _TokensEntry extends StatelessWidget {
+  final bool canRead;
+  const _TokensEntry({required this.canRead});
+
+  @override
+  Widget build(BuildContext context) {
+    if (!canRead) return const SizedBox.shrink();
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 0, vertical: 0),
+      child: ListTile(
+        leading: const Icon(Icons.attach_money_outlined),
+        title: const Text('Tokens & Custo LLM'),
+        subtitle: const Text('Input/output, custo USD por dia, modelo, use case e top users'),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => GoRouter.of(context).push('/admin/tokens'),
       ),
     );
   }

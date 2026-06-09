@@ -206,6 +206,8 @@ export class CoachMessageUseCase {
       systemPrompt: built.systemPrompt,
       maxTokens: built.maxTokens,
       temperature: built.temperature,
+      userId,
+      useCase: 'coach-message',
     });
     const text = cleanCueText(rawText);
     let audio = null as { audioBase64: string; mimeType: string } | null;

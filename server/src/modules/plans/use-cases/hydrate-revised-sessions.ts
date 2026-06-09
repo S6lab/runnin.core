@@ -177,13 +177,13 @@ function defaultNotes(type: string): string {
   return 'Easy run — base aeróbica em zona conversável. Forma > pace. Hidrate antes e durante.';
 }
 
-function fallbackNarrative(w: PlanWeek): string {
+export function fallbackNarrative(w: PlanWeek): string {
   const totalKm = w.sessions.reduce((s, x) => s + (x.distanceKm ?? 0), 0);
   const n = w.sessions.length;
   return `Semana ${w.weekNumber} — ${n} sessões totalizando ${totalKm.toFixed(1)}km. Foco em consistência e consciência do esforço.`;
 }
 
-function fallbackFocus(w: PlanWeek): string {
+export function fallbackFocus(w: PlanWeek): string {
   const totalKm = w.sessions.reduce((s, x) => s + (x.distanceKm ?? 0), 0);
   if (totalKm < 10) return 'Recuperação · Reset';
   if (totalKm < 20) return 'Base · Consistência';
@@ -191,19 +191,38 @@ function fallbackFocus(w: PlanWeek): string {
   return 'Build · Resistência';
 }
 
-function fallbackBlockName(w: PlanWeek): string {
+export function fallbackBlockName(w: PlanWeek): string {
   return `Semana ${w.weekNumber} · Construção`;
 }
 
-function fallbackObjective(w: PlanWeek): string {
+export function fallbackObjective(w: PlanWeek): string {
   const n = w.sessions.length;
   return `Completar as ${n} sessões respeitando paces alvo e descansando entre treinos.`;
 }
 
-function fallbackTargets(w: PlanWeek): string[] {
+export function fallbackTargets(w: PlanWeek): string[] {
   const totalKm = w.sessions.reduce((s, x) => s + (x.distanceKm ?? 0), 0);
   return [
     `${w.sessions.length} sessões totalizando ${totalKm.toFixed(1)}km`,
     'Hidratação reforçada e sono mínimo 7h por noite',
   ];
+}
+
+/**
+ * Aplica fallbacks determinísticos pra qualquer week sem `narrative`,
+ * `blockName`, `objective`, `targets` ou `focus`. Usado tanto pela revisão
+ * (após LLM) quanto pelo plan-init (quando `_generateWeekNarratives` falha
+ * ou trunca em MAX_TOKENS — caso comum no Pro Preview com thinking-budget).
+ *
+ * Preserva o que o LLM já entregou — só completa lacunas.
+ */
+export function applyNarrativeFallbacks(weeks: PlanWeek[]): PlanWeek[] {
+  return weeks.map((w) => ({
+    ...w,
+    narrative: w.narrative && w.narrative.trim().length > 0 ? w.narrative : fallbackNarrative(w),
+    focus: w.focus && w.focus.trim().length > 0 ? w.focus : fallbackFocus(w),
+    blockName: w.blockName && w.blockName.trim().length > 0 ? w.blockName : fallbackBlockName(w),
+    objective: w.objective && w.objective.trim().length > 0 ? w.objective : fallbackObjective(w),
+    targets: w.targets && w.targets.length > 0 ? w.targets : fallbackTargets(w),
+  }));
 }

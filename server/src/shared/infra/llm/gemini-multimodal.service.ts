@@ -1,4 +1,5 @@
 import { logger } from '@shared/logger/logger';
+import { trackLlmUsage } from './usage-tracker';
 
 const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
 // Override via env GEMINI_MODEL (mesmo do adapter de texto).
@@ -35,6 +36,8 @@ interface GeminiGenerateContentResponse {
   }>;
   usageMetadata?: {
     totalTokenCount?: number;
+    promptTokenCount?: number;
+    candidatesTokenCount?: number;
   };
 }
 
@@ -51,6 +54,7 @@ export class GeminiMultimodalService {
     prompt: string,
     imageData: Buffer,
     mimeType: string,
+    trackOpts?: { userId?: string | null; useCase?: string },
   ): Promise<string> {
     this.ensureApiKey();
     const base64Data = imageData.toString('base64');
@@ -100,6 +104,14 @@ export class GeminiMultimodalService {
       latencyMs: Date.now() - start,
       model: this.defaultModel,
       tokens: data.usageMetadata?.totalTokenCount,
+    });
+    void trackLlmUsage({
+      userId: trackOpts?.userId ?? null,
+      useCase: trackOpts?.useCase ?? 'multimodal',
+      model: this.defaultModel,
+      promptTokens: data.usageMetadata?.promptTokenCount ?? 0,
+      outputTokens: data.usageMetadata?.candidatesTokenCount ?? 0,
+      latencyMs: Date.now() - start,
     });
     return text;
   }

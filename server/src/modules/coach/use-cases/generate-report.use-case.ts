@@ -134,6 +134,8 @@ export class GenerateReportUseCase {
         systemPrompt: built.systemPrompt,
         maxTokens: built.maxTokens,
         temperature: built.temperature,
+        userId,
+        useCase: 'run-report',
       });
       const reportId = run.id;
 
@@ -212,6 +214,8 @@ export class GenerateReportUseCase {
         systemPrompt: built.systemPrompt,
         maxTokens: built.maxTokens,
         temperature: built.temperature,
+        userId,
+        useCase: 'run-report-enriched',
       });
 
       const sections = this._parseEnrichedJson(raw);

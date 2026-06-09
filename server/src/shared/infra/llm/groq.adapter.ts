@@ -1,5 +1,6 @@
 import { LLMOptions, LLMProvider } from './llm.interface';
 import { logger } from '@shared/logger/logger';
+import { trackLlmUsage } from './usage-tracker';
 
 const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const DEFAULT_MODEL = 'qwen/qwen3-32b';
@@ -28,8 +29,21 @@ export class GroqAdapter implements LLMProvider {
     });
 
     if (!res.ok) throw new Error(`Groq error: ${res.status} ${await res.text()}`);
-    const data = await res.json() as { choices: { message: { content: string } }[]; usage: { total_tokens: number } };
+    const data = await res.json() as {
+      choices: { message: { content: string } }[];
+      usage: { prompt_tokens?: number; completion_tokens?: number; total_tokens: number };
+    };
     logger.info('llm.groq.generate', { latencyMs: Date.now() - start, tokens: data.usage.total_tokens });
+    const prompt_t = data.usage.prompt_tokens ?? 0;
+    const out_t = data.usage.completion_tokens ?? (data.usage.total_tokens - prompt_t);
+    void trackLlmUsage({
+      userId: options.userId ?? null,
+      useCase: options.useCase ?? 'unknown',
+      model: DEFAULT_MODEL,
+      promptTokens: prompt_t,
+      outputTokens: out_t,
+      latencyMs: Date.now() - start,
+    });
     return data.choices[0].message.content;
   }
 

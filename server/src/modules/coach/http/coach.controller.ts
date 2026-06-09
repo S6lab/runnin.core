@@ -268,3 +268,19 @@ export async function getPeriodAnalysis(req: Request, res: Response, next: NextF
     next(err);
   }
 }
+
+// === Runtime config (config dinâmica do Coach Live) ===
+import { getCoachRuntimeConfig } from '../use-cases/coach-runtime-config.service';
+
+export async function getCoachRuntimeConfigHandler(
+  _req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const config = await getCoachRuntimeConfig();
+    res.json(config);
+  } catch (err) {
+    next(err);
+  }
+}
