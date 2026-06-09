@@ -138,6 +138,11 @@ export function postCoachLiveDiag(req: Request, res: Response): void {
     turns: b['turns'],            // turns acumulados na sessão Live atual
     ageMs: b['ageMs'],            // idade da sessão Live atual em ms
     attempt: b['attempt'],        // nº tentativa de reconexão (1,2,3...)
+    // TF 69: diagnose enriquecida do 1008 — última operação na sessão e
+    // tempo desde ela. Se close acontece <1s após sendText, era essa
+    // operação que API rejeitou.
+    lastSendKind: b['lastSendKind'],
+    msSinceLastSend: b['msSinceLastSend'],
   });
   res.json({ ok: true });
 }

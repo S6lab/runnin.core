@@ -24,6 +24,18 @@ struct ContentView: View {
                 RunCompletedScreen()
             }
         }
+        // TF 69 belt-and-suspenders: quando iPhone empurra status=active via
+        // applicationContext (caminho independente de sendMessage), aqui
+        // garantimos que HKWorkoutSession está rodando. Resolve cenário
+        // observado em TF 68: startWatchApp trazia Watch foreground, mas o
+        // sendMessage("startWorkout") paralelo caía pra transferUserInfo
+        // queued — Watch foreground mas sem HKWorkoutSession ativa → BPM
+        // travado. start() é idempotente (guard `session == nil`).
+        .onChange(of: state.status) { _, newStatus in
+            if newStatus == .active && !WorkoutController.shared.isActive {
+                WorkoutController.shared.start()
+            }
+        }
     }
 }
 

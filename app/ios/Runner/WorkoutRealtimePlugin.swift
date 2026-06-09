@@ -279,17 +279,12 @@ private let wcLog = OSLog(subsystem: "ai.runnin.workout", category: "watch-bridg
       os_log("auth_granted", log: hrLog, type: .info)
       DispatchQueue.main.async {
         self.startQueryInternal(hrType: hrType, result: result)
-        // Watch companion: 2 caminhos complementares.
-        //
-        // 1) startWatchApp(with:) — abre o Runnin Watch em FOREGROUND com
-        //    HKWorkoutConfiguration de running outdoor. Sem isso, mensagem
-        //    WCSession só acordava o Watch em background, demorando 1-3min
-        //    pro HKWorkoutSession ativar de fato (observado em prod TF 67).
-        // 2) notifyWatch(startWorkout) — mantida como redundância caso
-        //    startWatchApp falhe ou Watch já esteja foreground (idempotente
-        //    no SessionDelegate via guard `session == nil`).
+        // Fluxo TF 69: startWatchApp PRIMEIRO; só depois do callback (com
+        // delay pra WCSession reachable settlar) disparamos sendMessage.
+        // Em TF 68 chamávamos os 2 em paralelo — sendMessage caía pra
+        // transferUserInfo (queued) porque Watch ainda nao estava reachable,
+        // e HKWorkoutSession demorava 1-3min pra ativar (visto em prod).
         self.launchWatchAppForeground()
-        self.notifyWatch(action: "startWorkout")
         self.emitWatchStatus()
       }
     }
@@ -300,11 +295,13 @@ private let wcLog = OSLog(subsystem: "ai.runnin.workout", category: "watch-bridg
   /// é o caminho oficial pra launch programático do companion.
   ///
   /// Critério de fail-silent: se HK não disponível, Watch não pareado,
-  /// ou companion não instalado, loga e segue. notifyWatch pega o resto
-  /// (pode tentar acordar via WCSession assíncrono).
+  /// ou companion não instalado, loga e segue chamando notifyWatch direto
+  /// (caminho degradado — Watch pode acordar via WCSession async).
   private func launchWatchAppForeground() {
     guard HKHealthStore.isHealthDataAvailable() else {
       os_log("launch_watch.skip reason=no_hk", log: wcLog, type: .info)
+      // Fallback degradado: tenta sendMessage direto sem delay.
+      self.notifyWatch(action: "startWorkout")
       return
     }
     let config = HKWorkoutConfiguration()
@@ -318,6 +315,15 @@ private let wcLog = OSLog(subsystem: "ai.runnin.workout", category: "watch-bridg
         os_log("launch_watch.failed err=%{public}@",
                log: wcLog, type: .error,
                err?.localizedDescription ?? "unknown")
+      }
+      // TF 69: dispara sendMessage DEPOIS do callback com delay 800ms.
+      // Independente de ok/err, tentamos — se startWatchApp funcionou,
+      // o Watch ja vai estar acordando e tem chance maior de estar
+      // reachable. Belt-and-suspenders: o ContentView.onChange no Watch
+      // também auto-inicia HKWorkoutSession quando recebe status=active
+      // via applicationContext, mesmo sem essa mensagem chegar.
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+        self.notifyWatch(action: "startWorkout")
       }
     }
   }

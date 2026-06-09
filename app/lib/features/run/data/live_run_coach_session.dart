@@ -103,6 +103,13 @@ class LiveRunCoachSession {
   int _reconnectAttempt = 0;
   final List<String> _pendingSends = <String>[];
 
+  // TF 69: rastreia última operação (sendText/sendAudio/idle) e timestamp
+  // pra diagnose do close 1008. Quando Live API rejeita uma operação, o
+  // close vem com motivo genérico — saber qual call foi a última ajuda a
+  // localizar payload/sequência problemática.
+  String _lastSendKind = 'idle';
+  int _lastSendAtMs = 0;
+
   /// Cada item é o transcript de UMA fala completa do coach (texto == voz).
   Stream<String> get transcripts => _transcriptsCtrl.stream;
   bool get isOpen => _open;
@@ -451,6 +458,13 @@ class LiveRunCoachSession {
         'turns': _turnsThisSession,
         'ageMs': sessionAge.inMilliseconds,
         'attempt': phase == 'reconnect_attempt' ? _reconnectAttempt : null,
+        // TF 69: ajuda a diagnose do 1008 — saber qual foi a última operação
+        // e quanto tempo atrás. Se close é < 1s após sendText, sabemos que
+        // foi a operação que API rejeitou.
+        'lastSendKind': _lastSendKind,
+        'msSinceLastSend': _lastSendAtMs > 0
+            ? DateTime.now().millisecondsSinceEpoch - _lastSendAtMs
+            : null,
       });
     } catch (_) {/* diagnóstico é best-effort */}
   }
@@ -564,6 +578,8 @@ class LiveRunCoachSession {
     if (text.trim().isEmpty) return;
     if (_open) {
       try {
+        _lastSendKind = 'sendText';
+        _lastSendAtMs = DateTime.now().millisecondsSinceEpoch;
         _session?.sendText(text);
       } catch (e) {
         // ignore: avoid_print

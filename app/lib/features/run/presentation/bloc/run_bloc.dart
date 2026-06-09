@@ -6,6 +6,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:runnin/core/analytics/analytics_service.dart';
+import 'package:runnin/core/audio/coach_audio_player.dart';
 import 'package:runnin/core/audio/telemetry_tts.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 import 'package:runnin/features/biometrics/data/health_sync_service.dart';
@@ -297,6 +298,10 @@ class RunState {
 class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
   final _remote = RunRemoteDatasource();
   final _userRemote = UserRemoteDatasource();
+  // TF 69: fallback HTTP /coach/message quando _coachSession.isOpen == false.
+  // Antes, premium ficava em silêncio quando Live caía mid-run; agora o cue
+  // sai via server (templates ativos ou Flash LLM + Live TTS server-side).
+  final _coachRemote = RunCoachRemoteDatasource();
   // Contexto do coach sobrevive à rotação/queda da sessão Live (source-of-truth
   // do histórico curto pra reinjetar como preamble quando a sessão é reciclada).
   final _coachCtx = CoachContextManager();
@@ -837,9 +842,15 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
       // segmento. Roda a cada 30s e tenta rotacionar se shouldRotateNow.
       _startCoachRotationSafetyTimer();
 
-      // Stall check: 30s após START, se distância < 5m E houve fix GPS,
-      // pede ao coach um disclaimer gentil ("tudo bem? começa quando puder").
+      // Stall check: 30s após START, se distância < 5m, pede ao coach um
+      // disclaimer gentil ("tudo bem? começa quando puder").
       // One-shot — reset por StartRun (não dispara em resume).
+      //
+      // TF 69: removida exigência de `state.points.isNotEmpty`. Antes só
+      // disparava se houve fix GPS, deixando cenário indoor (Eduardo no
+      // teste BPM parado) sem cue mesmo após 3min de imobilidade. Coach
+      // tem template `no_movement` que cobre "GPS travado?" sem precisar
+      // de fix prévio.
       _stallCueFired = false;
       _stallCheckTimer?.cancel();
       _stallCheckTimer = Timer(const Duration(seconds: 30), () {
@@ -847,16 +858,13 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
         if (state.status != RunStatus.active) return;
         if (state.distanceM >= 5.0) return; // moveu, OK
         _stallCueFired = true;
-        // Disclaimer gentil do coach (só se houve fix GPS pra contextualizar).
-        if (state.points.isNotEmpty) {
-          unawaited(_requestCoachCue(
-            event: 'no_movement',
-            distanceM: state.distanceM,
-            elapsedS: state.elapsedS,
-            currentPaceMinKm: state.currentPaceMinKm,
-          ));
-          _lastCueAt['no_movement'] = DateTime.now().millisecondsSinceEpoch;
-        }
+        unawaited(_requestCoachCue(
+          event: 'no_movement',
+          distanceM: state.distanceM,
+          elapsedS: state.elapsedS,
+          currentPaceMinKm: state.currentPaceMinKm,
+        ));
+        _lastCueAt['no_movement'] = DateTime.now().millisecondsSinceEpoch;
         // Pausa a run e pede o dialog de continuar/encerrar.
         add(_NoMovementDetected());
       });
@@ -2136,21 +2144,29 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
       return;
     }
     if (!_coachSession.isOpen) {
-      Logger.warn('coach.cue.skipped_session_closed', context: {
+      // TF 69: Live caiu mid-run. Antes ficava em silêncio; agora cai pro
+      // HTTP /coach/message. Server resolve via templates (rev 51, zero LLM
+      // pra eventos mecânicos) ou Flash + Live TTS (mesma voz Charon).
+      // Latência maior (~2-3s) que o WS, mas melhor que silêncio.
+      Logger.info('coach.cue.fallback_http', context: {
         'event': event,
         'kmReached': '${kmReached ?? '-'}',
       });
-      // Pra `check_in` (500m/4min): se a sessão está fechada (rotação/
-      // reconnect), AINDA assim avança os trackers. Sem isso, cada GPS
-      // point com distância >= last+500m re-dispara o trigger; observamos
-      // 113 cues queued numa única corrida durante reconnect. Quando a
-      // sessão volta, o coach ouve mil "queremos te ouvir" empilhados.
-      // Outros eventos (km_reached, segment_*, pace_alert) NÃO avançam
-      // — pra eles a falha de entrega é importante e o caller decide.
-      if (event == 'check_in') {
-        _lastCoachSpeechAtMs = DateTime.now().millisecondsSinceEpoch;
-        _lastCoachSpeechDistanceM = state.distanceM;
-      }
+      unawaited(_requestCoachCueViaHttp(
+        event: event,
+        kmReached: kmReached,
+        currentPaceMinKm: currentPaceMinKm ?? _computePaceMinKm(),
+        targetPaceMinKm: targetPaceMinKm ?? _parsePaceMinKm(state.targetPace),
+        kmDurationS: kmDurationS,
+        kmAvgBpm: kmAvgBpm,
+        currentSegmentIndex: currentSegmentIndex,
+      ));
+      // Trackers avançam pros eventos de tempo/distância (check_in) pra
+      // não re-empilhar requests no próximo tick. Outros eventos (km_reached,
+      // segment_*, pace_alert) também avançam porque o HTTP request JÁ vai
+      // entregar o cue — não queremos disparar 2x.
+      _lastCoachSpeechAtMs = DateTime.now().millisecondsSinceEpoch;
+      _lastCoachSpeechDistanceM = state.distanceM;
       return;
     }
     // Janela da saudação: não provoca falas por cima da largada.
@@ -2188,6 +2204,64 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
     // a fala foi de outro evento (km_reached, pace_alert, etc.).
     _lastCoachSpeechAtMs = DateTime.now().millisecondsSinceEpoch;
     _lastCoachSpeechDistanceM = state.distanceM;
+  }
+
+  /// Fallback HTTP quando Live WS está fechada (TF 69).
+  /// POST /coach/message → server resolve via template determinístico (zero
+  /// LLM em check_in/segment_*/goal_reached/finish) ou Flash + Live TTS pros
+  /// LLM cues (km_reached/pace_alert/high_bpm). Voz Charon idêntica ao Live.
+  ///
+  /// Best-effort: falha silenciosa (log warn) — não trava a run, apenas
+  /// significa que o user perdeu UM cue. Próximo evento tenta de novo.
+  Future<void> _requestCoachCueViaHttp({
+    required String event,
+    int? kmReached,
+    double? currentPaceMinKm,
+    double? targetPaceMinKm,
+    int? kmDurationS,
+    int? kmAvgBpm,
+    int? currentSegmentIndex,
+  }) async {
+    if (state.runId == null) return;
+    try {
+      await for (final cue in _coachRemote.streamCoachCue(
+        runId: state.runId,
+        event: event,
+        runType: state.runType,
+        currentPaceMinKm: currentPaceMinKm ?? 0,
+        distanceM: state.distanceM,
+        elapsedS: state.elapsedS,
+        targetPaceMinKm: targetPaceMinKm,
+        kmReached: kmReached,
+        kmDurationS: kmDurationS,
+        kmAvgBpm: kmAvgBpm,
+        currentSegmentIndex: currentSegmentIndex,
+        planSessionId: _planSessionId,
+      )) {
+        if (isClosed) break;
+        // Emite _CoachChunk pra que UI/state acompanhe a fala (mesma
+        // semântica do caminho Live). Sem isso, banner do coach não
+        // atualizaria com o texto do fallback.
+        add(_CoachChunk(CoachCue(
+          text: cue.text,
+          audioBase64: cue.audioBase64,
+          audioMimeType: cue.audioMimeType,
+        )));
+        final audio = cue.audioBase64;
+        if (audio != null && audio.isNotEmpty) {
+          unawaited(playCoachAudio(
+            audio,
+            mimeType: cue.audioMimeType ?? 'audio/mpeg',
+          ));
+        }
+      }
+    } catch (e, st) {
+      Logger.warn('coach.cue.fallback_http_failed', context: {
+        'event': event,
+        'err': e.toString(),
+        'stack_first_line': st.toString().split('\n').first,
+      });
+    }
   }
 
   /// Em transições naturais (km_reached, segment_start, segment_end) avalia
