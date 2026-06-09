@@ -8,6 +8,7 @@ export 'figma_tab_bar.dart';
 export 'figma_form_text_field.dart';
 export 'figma_form_field_label.dart';
 export 'figma_google_sign_in_button.dart';
+export 'figma_apple_sign_in_button.dart';
 export 'figma_otp_text_field.dart';
 
 // Onboarding

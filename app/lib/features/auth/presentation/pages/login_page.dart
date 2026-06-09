@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:intl_phone_field/intl_phone_field.dart';
 import 'package:runnin/core/router/app_router.dart';
 import 'package:runnin/shared/widgets/runnin_app_bar.dart';
@@ -97,7 +99,8 @@ class _LoginPageState extends State<LoginPage> {
 
     try {
       try {
-        await UserRemoteDatasource().provisionMe();
+        await UserRemoteDatasource().provisionMe(name: _pendingProvisionName);
+        _pendingProvisionName = null;
       } catch (_) {
         // Se provision falhar, segue mesmo assim — onboarding pode reprovision.
       }
@@ -195,6 +198,56 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
+  Future<void> _signInWithApple() async {
+    setState(() { _loading = true; _error = null; });
+    try {
+      final appleCredential = await SignInWithApple.getAppleIDCredential(
+        scopes: [
+          AppleIDAuthorizationScopes.email,
+          AppleIDAuthorizationScopes.fullName,
+        ],
+      );
+      // Apple só envia nome na PRIMEIRA autenticação. Captura antes do
+      // signInWithCredential para evitar race com authStateChanges → provisionMe.
+      final given = appleCredential.givenName?.trim() ?? '';
+      final family = appleCredential.familyName?.trim() ?? '';
+      final appleName = [given, family].where((s) => s.isNotEmpty).join(' ');
+      if (appleName.isNotEmpty) _pendingProvisionName = appleName;
+
+      final oauthCredential = OAuthProvider('apple.com').credential(
+        idToken: appleCredential.identityToken,
+        accessToken: appleCredential.authorizationCode,
+      );
+      final result = await FirebaseAuth.instance.signInWithCredential(oauthCredential);
+      if (appleName.isNotEmpty && (result.user?.displayName?.isEmpty ?? true)) {
+        await result.user?.updateDisplayName(appleName);
+      }
+      // authStateChanges listener cuida do provisionMe + navigate.
+    } on SignInWithAppleAuthorizationException catch (e) {
+      if (!mounted) return;
+      if (e.code == AuthorizationErrorCode.canceled) {
+        setState(() => _loading = false);
+        return;
+      }
+      setState(() {
+        _error = 'Login Apple cancelado ou falhou.';
+        _loading = false;
+      });
+    } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = 'Login Apple: ${e.code}';
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = 'Erro ao fazer login com Apple.';
+        _loading = false;
+      });
+    }
+  }
+
   Future<void> _beginPhoneAuth() async {
     setState(() { _loading = true; _error = null; });
     // O IntlPhoneField já entrega o número em E.164 com o código do país.
@@ -238,6 +291,7 @@ class _LoginPageState extends State<LoginPage> {
             });
           },
           codeSent: (verificationId, resendToken) {
+            _phoneVerificationId = verificationId;
             if (!mounted) return;
             setState(() {
               _phoneMode = true;
@@ -323,6 +377,9 @@ class _LoginPageState extends State<LoginPage> {
 
   String? _phoneVerificationId;
   dynamic _phoneConfirmationResult;
+  // Nome capturado do Apple Sign-In (só disponível na 1ª autenticação).
+  // Passado explicitamente ao provisionMe para evitar race com updateDisplayName.
+  String? _pendingProvisionName;
 
   /// Volta da tela OTP pra entrada de telefone. Limpa o código digitado e
   /// o erro pra não carregar contexto do attempt anterior. Mantém o
@@ -377,6 +434,12 @@ class _LoginPageState extends State<LoginPage> {
                   FigmaGoogleSignInButton(
                     onPressed: _loading ? null : _signInWithGoogle,
                   ),
+                  if (!kIsWeb && Platform.isIOS) ...[
+                    const SizedBox(height: 12),
+                    FigmaAppleSignInButton(
+                      onPressed: _loading ? null : _signInWithApple,
+                    ),
+                  ],
                   const SizedBox(height: 28),
                   const FigmaFormFieldLabel(text: 'OU DIGITE SEU TELEFONE'),
                   const SizedBox(height: 8),

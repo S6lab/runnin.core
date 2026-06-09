@@ -992,6 +992,12 @@ class _BottomActions extends StatelessWidget {
           width: double.infinity,
           child: GestureDetector(
             onTap: () async {
+              final confirmed = await showModalBottomSheet<bool>(
+                context: context,
+                backgroundColor: Colors.transparent,
+                builder: (_) => const _LogoutConfirmSheet(),
+              );
+              if (confirmed != true) return;
               await FirebaseAuth.instance.signOut();
               markOnboardingPending();
               if (context.mounted) context.go('/login');
@@ -1009,6 +1015,91 @@ class _BottomActions extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _LogoutConfirmSheet extends StatelessWidget {
+  const _LogoutConfirmSheet();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: FigmaColors.navBottombarBg,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      padding: const EdgeInsets.fromLTRB(24, 20, 24, 40),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 36,
+            height: 4,
+            decoration: BoxDecoration(
+              color: FigmaColors.textGhost,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(height: 24),
+          Text(
+            'Sair da conta?',
+            style: context.runninType.displaySm.copyWith(
+              color: FigmaColors.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Você precisará fazer login novamente para acessar o app.',
+            textAlign: TextAlign.center,
+            style: context.runninType.bodyMd.copyWith(
+              color: FigmaColors.textSecondary,
+              fontSize: 13,
+            ),
+          ),
+          const SizedBox(height: 28),
+          SizedBox(
+            width: double.infinity,
+            height: 48,
+            child: TextButton(
+              style: TextButton.styleFrom(
+                backgroundColor: const Color(0xFFFF3B30).withValues(alpha: 0.12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              onPressed: () => Navigator.of(context).pop(true),
+              child: Text(
+                'Sair',
+                style: context.runninType.bodyMd.copyWith(
+                  color: const Color(0xFFFF3B30),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            height: 48,
+            child: TextButton(
+              style: TextButton.styleFrom(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              onPressed: () => Navigator.of(context).pop(false),
+              child: Text(
+                'Cancelar',
+                style: context.runninType.bodyMd.copyWith(
+                  color: FigmaColors.textPrimary,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
