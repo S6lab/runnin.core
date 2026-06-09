@@ -6,6 +6,7 @@ import { buildLiveCoachPrompt, getKnobs, isInDndWindow } from '@shared/infra/llm
 import { CoachConfigService } from './coach-config.service';
 import { CoachRuntimeContextService } from './coach-runtime-context.service';
 import { tryBuildTemplate, isTemplateEvent } from './template-cues';
+import { getActiveLiveSession } from './live-session-registry';
 import { CoachMessageLogRepository } from '../domain/coach-message-log.repository';
 import { CoachMessageLog } from '../domain/coach-message-log.entity';
 import { FirestoreCoachMessageLogRepository } from '../infra/firestore-coach-message-log.repository';
@@ -201,6 +202,24 @@ export class CoachMessageUseCase {
         if (ctx.event === 'segment_start' && ctx.runId) {
           this.lastSegmentStartAtByRunId.set(ctx.runId, Date.now());
         }
+        // Live WS routing: se há sessão Live ativa pra esse runId, manda o
+        // texto pra ela falar em streaming (~500ms) ao invés de abrir uma
+        // sessão TTS HTTP nova (~2-3s). Mesma voz Charon, latência baixa.
+        // Quando Live cai (ex: TTL Gemini), fallback automático pro TTS.
+        const liveDelivered = this._deliverViaLive(ctx, userId, tpl.text);
+        if (liveDelivered) {
+          this._logCoachMessage(ctx, userId, tpl.text, 'audio/pcm;rate=24000', {
+            source: `template:v${tpl.variation}`,
+          });
+          logger.info('coach.message.template', {
+            runId: ctx.runId,
+            event: ctx.event,
+            variation: tpl.variation,
+            deliveredVia: 'live_ws',
+          });
+          return { text: tpl.text };
+        }
+        // Fallback: sintetiza HTTP TTS como antes.
         const audio = config.ttsEnabled
           ? await this.liveTts.synthesize(tpl.text, { voiceId: 'coach-bruno' }).catch((err) => {
               logger.warn('coach.template.tts_failed', { runId: ctx.runId, err: String(err) });
@@ -214,6 +233,7 @@ export class CoachMessageUseCase {
           runId: ctx.runId,
           event: ctx.event,
           variation: tpl.variation,
+          deliveredVia: 'http_tts',
         });
         return {
           text: tpl.text,
@@ -289,6 +309,24 @@ export class CoachMessageUseCase {
       useCase: 'coach-message',
     });
     const text = cleanCueText(rawText);
+
+    // Live WS routing também pros cues LLM. Quando Live ativo, o text
+    // sai pela sessão Gemini Live do cliente (~500ms streaming) ao invés
+    // de abrir TTS HTTP novo (~2-3s). Voz Charon idêntica nos dois caminhos.
+    const liveDelivered = this._deliverViaLive(ctx, userId, text);
+    if (liveDelivered) {
+      this._logCoachMessage(ctx, userId, text, 'audio/pcm;rate=24000', {
+        promptVersion: built.version,
+        source: built.source,
+      });
+      logger.info('coach.message.llm', {
+        runId: ctx.runId,
+        event: ctx.event,
+        deliveredVia: 'live_ws',
+      });
+      return { text };
+    }
+
     let audio = null as { audioBase64: string; mimeType: string } | null;
 
     if (config.ttsEnabled) {
@@ -308,6 +346,29 @@ export class CoachMessageUseCase {
       audioBase64: audio?.audioBase64,
       audioMimeType: audio?.mimeType,
     };
+  }
+
+  /**
+   * Empurra `text` pra sessão Live ativa do (uid, runId), se existir.
+   * Retorna true quando entregou via Live, false se não há sessão (caller
+   * cai pro fluxo HTTP TTS).
+   */
+  private _deliverViaLive(ctx: CoachContext, userId: string, text: string): boolean {
+    if (!ctx.runId) return false;
+    const session = getActiveLiveSession(userId, ctx.runId);
+    if (!session) return false;
+    try {
+      session.sendText(text);
+      return true;
+    } catch (err) {
+      // Erro raro (sessão se invalidando entre check e send). Fallback
+      // pro TTS HTTP — o caller continua o fluxo normal.
+      logger.warn('coach.message.live_send_failed', {
+        runId: ctx.runId,
+        err: String(err),
+      });
+      return false;
+    }
   }
 
   async listForRun(userId: string, runId: string): Promise<CoachMessageLog[]> {

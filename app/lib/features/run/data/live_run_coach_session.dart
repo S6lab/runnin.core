@@ -178,6 +178,16 @@ class LiveRunCoachSession {
       final newOk = await _connect(cfg, preamble: preamble, isRotation: true);
       if (!newOk) {
         unawaited(_beacon('rotate_failed', reason: reason));
+        // Fix TF 68: quando rotação falha E a velha sessão também já caiu
+        // (caso típico do `new_session_expire_time deadline exceeded`),
+        // não fica ninguém pra falar. _handleClose foi pulado porque
+        // `_rotating=true` durante a tentativa de rotação — agora libera
+        // o guard e agenda reconnect explicitamente. Sem isso, o coach
+        // silenciava pelo resto da run (padrão visto na corrida do Eduardo).
+        if (!_open) {
+          _rotating = false; // libera antes do _maybeScheduleReconnect ler
+          _maybeScheduleReconnect(reason: 'rotate_failed_after_close');
+        }
         return false;
       }
 

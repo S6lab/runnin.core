@@ -1600,10 +1600,15 @@ class _WatchStatusBanner extends StatelessWidget {
         icon: Icons.watch,
       );
     } else if (status.paired && status.appInstalled) {
+      // TF 68: ao tocar INICIAR, `HKHealthStore.startWatchApp` traz o
+      // Runnin pra foreground automaticamente. User não precisa abrir
+      // manualmente. Copy reflete essa promessa pra reduzir ansiedade
+      // no preparo. Se startWatchApp falhar (raro), o app cai pra
+      // polling de BPM (~2min) — sem trava de fluxo.
       info = (
-        label: 'Watch pareado, app não respondeu — abra o Runnin no Watch',
-        color: palette.muted,
-        icon: Icons.watch_off_outlined,
+        label: 'Watch pareado · vai conectar ao INICIAR',
+        color: palette.primary.withValues(alpha: 0.7),
+        icon: Icons.watch_outlined,
       );
     } else if (status.paired) {
       info = (

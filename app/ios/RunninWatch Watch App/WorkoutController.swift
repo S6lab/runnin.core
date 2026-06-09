@@ -27,6 +27,11 @@ class WorkoutController: NSObject, ObservableObject {
     private let healthStore = HKHealthStore()
     private var session: HKWorkoutSession?
     private var builder: HKLiveWorkoutBuilder?
+    /// Flag pra distinguir `.ended` de stop() explícito (iPhone STOP) vs
+    /// suspensão inesperada (Watch perde foreground). Setada em stop() e
+    /// limpada em start(). HKWorkoutSessionDelegate usa pra decidir
+    /// auto-restart.
+    private var intentionalStop: Bool = false
     /// Mock BPM no simulador: HKLiveWorkoutBuilder emite valor sintético
     /// estático/zerado e impede testar zonas/coach end-to-end. Timer roda
     /// só em #if targetEnvironment(simulator) — em device físico, lê o
@@ -57,6 +62,10 @@ class WorkoutController: NSObject, ObservableObject {
             os_log("start.idempotent skip=already_running", log: wcLog, type: .info)
             return
         }
+        // Limpa flag de stop intencional — auto-restart do delegate
+        // .ended depende dela; se a próxima session terminar inesperada,
+        // queremos reabrir.
+        intentionalStop = false
         guard HKHealthStore.isHealthDataAvailable() else {
             os_log("start.no_healthkit", log: wcLog, type: .error)
             return
@@ -186,6 +195,9 @@ class WorkoutController: NSObject, ObservableObject {
             os_log("stop.idempotent skip=no_session", log: wcLog, type: .info)
             return
         }
+        // Marca stop como intencional pra delegate didChangeTo .ended NÃO
+        // disparar auto-restart. Flag limpa em start() pra próxima sessão.
+        intentionalStop = true
         stopBpmPolling()
         #if targetEnvironment(simulator)
         stopMockBpm()
@@ -213,6 +225,29 @@ extension WorkoutController: HKWorkoutSessionDelegate {
                         date: Date) {
         os_log("session.state %{public}@ -> %{public}@", log: wcLog, type: .info,
                String(describing: fromState), String(describing: toState))
+
+        // TF 68: auto-restart se a sessão terminar SEM stop() explícito.
+        // Observado em prod: watchOS suspende HKWorkoutSession quando Watch
+        // perde foreground mid-run (notificação, tela apagar). Sem restart,
+        // BPM trava no último valor (visto em prod TF 67 — BPM=75 estável
+        // por 2min apesar de Watch "ativo" na UI).
+        //
+        // Guard `intentionalStop`: stop() explícito (via iPhone STOP) seta
+        // a flag — não reabrimos. Idempotente: se nova sessão já está
+        // tentando subir, o `session != nil` em start() vira no-op.
+        if toState == .ended && !self.intentionalStop {
+            os_log("session.unexpected_end auto_restart=true", log: wcLog, type: .info)
+            DispatchQueue.main.async {
+                self.session = nil
+                self.builder = nil
+                self.isActive = false
+                // Restart com pequeno delay pra dar tempo do builder/session
+                // limparem state interno antes do healthStore aceitar nova.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    self.start()
+                }
+            }
+        }
     }
 
     func workoutSession(_ workoutSession: HKWorkoutSession, didFailWithError error: Error) {
@@ -222,6 +257,9 @@ extension WorkoutController: HKWorkoutSessionDelegate {
             self.session = nil
             self.builder = nil
             self.isActive = false
+            // Falha real (auth/sensor/etc): NÃO tenta restart automático —
+            // pode entrar em loop infinito. Loga e segue parado; user
+            // pode reiniciar a sessão se for caso transiente.
         }
     }
 }
