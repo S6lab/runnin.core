@@ -261,6 +261,10 @@ class RunBgNotificationService {
     if (body == _lastPayload) return; // dedup pra ticks com mesmo segundo
     _lastPayload = body;
     try {
+      // when = início da corrida em ms. Sem isso, usesChronometer reseta
+      // pra 0 a cada show() (usa "now" como referência), causando oscilação
+      // entre 0 e 1s na bandeja.
+      final runStartMs = DateTime.now().millisecondsSinceEpoch - (elapsedS * 1000);
       await _plugin.show(
         _notifId,
         'Corrida em andamento',
@@ -276,7 +280,7 @@ class RunBgNotificationService {
             interruptionLevel: InterruptionLevel.timeSensitive,
             threadIdentifier: 'runnin.run.active',
           ),
-          android: const AndroidNotificationDetails(
+          android: AndroidNotificationDetails(
             _channelId,
             _channelName,
             channelDescription: _channelDescription,
@@ -287,6 +291,7 @@ class RunBgNotificationService {
             ongoing: true,
             autoCancel: false,
             showWhen: true,
+            when: runStartMs,
             usesChronometer: true,
             onlyAlertOnce: true,
             category: AndroidNotificationCategory.workout,

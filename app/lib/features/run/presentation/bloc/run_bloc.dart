@@ -807,6 +807,8 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
         final greeting = TelemetryTts.formatStart(event.type);
         emit(state.copyWith(coachLiveMessage: greeting));
         unawaited(TelemetryTts.instance.speak(greeting));
+        _lastCoachSpeechAtMs = DateTime.now().millisecondsSinceEpoch;
+        _lastCoachSpeechDistanceM = 0;
       }
 
       // Timer de tempo decorrido — cancela QUALQUER timer anterior. Sem
@@ -1098,6 +1100,13 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
         coachAudioMimeType: '',
       ),
     );
+    // Saudação chega como _CoachChunk mas não passa por _requestCoachCue,
+    // então _lastCoachSpeechAtMs ficava em 0 — bloqueando o check-in de
+    // 500m e o timer de 4min que exigem > 0.
+    if (_lastCoachSpeechAtMs == 0) {
+      _lastCoachSpeechAtMs = DateTime.now().millisecondsSinceEpoch;
+      _lastCoachSpeechDistanceM = state.distanceM;
+    }
   }
 
   void _onGpsUpdate(_GpsUpdate event, Emitter<RunState> emit) {
@@ -2170,6 +2179,8 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
       if (msg != null) {
         if (!isClosed) add(_CoachChunk(CoachCue(text: msg)));
         unawaited(TelemetryTts.instance.speak(msg));
+        _lastCoachSpeechAtMs = DateTime.now().millisecondsSinceEpoch;
+        _lastCoachSpeechDistanceM = state.distanceM;
       }
       return;
     }
