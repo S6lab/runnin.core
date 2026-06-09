@@ -5,6 +5,7 @@ import { GeminiLiveTtsService } from '@shared/infra/llm/gemini-live-tts.service'
 import { buildLiveCoachPrompt, getKnobs, isInDndWindow } from '@shared/infra/llm/prompts';
 import { CoachConfigService } from './coach-config.service';
 import { CoachRuntimeContextService } from './coach-runtime-context.service';
+import { tryBuildTemplate, isTemplateEvent } from './template-cues';
 import { CoachMessageLogRepository } from '../domain/coach-message-log.repository';
 import { CoachMessageLog } from '../domain/coach-message-log.entity';
 import { FirestoreCoachMessageLogRepository } from '../infra/firestore-coach-message-log.repository';
@@ -22,6 +23,8 @@ export const CoachContextSchema = z.object({
   event: z.enum([
     'pre_run',
     'km_reached',
+    /** @deprecated km_split foi unificado em km_reached em rev 51. Schema
+     *  aceita por retrocompat — server retorna skipped:'deprecated_event'. */
     'km_split',
     'pace_alert',
     'motivation',
@@ -29,6 +32,10 @@ export const CoachContextSchema = z.object({
     'start',
     'finish',
     'preview',
+    'check_in',
+    'goal_reached',
+    'high_bpm',
+    'no_movement',
     // Eventos estruturais ligados ao executionSegments da PlanSession.
     // segment_start: cliente cruzou a fronteira pro próximo segmento.
     // segment_pace_off: pace desviou do alvo DESTE segmento (substitui
@@ -88,7 +95,23 @@ export interface CoachCueResponse {
 
 export interface CoachCueSkipped {
   skipped: true;
-  reason: 'frequency' | 'dnd' | 'silent';
+  /**
+   * frequency/dnd/silent vêm do decision layer (preferências do user).
+   * deprecated_event = km_split foi removido (mantido por retrocompat).
+   * transition_handled_by_start = segment_end suprimido porque segment_start
+   *   acabou de falar e cobriu a transição.
+   * not_last_segment = segment_end só fala na última fase do roteiro.
+   * no_segment_data = evento segment_* sem executionSegments no plano
+   *   (caller cai pro LLM como fallback).
+   */
+  reason:
+    | 'frequency'
+    | 'dnd'
+    | 'silent'
+    | 'deprecated_event'
+    | 'transition_handled_by_start'
+    | 'not_last_segment'
+    | 'no_segment_data';
 }
 
 export type CoachGenerateResult = CoachCueResponse | CoachCueSkipped;
@@ -133,6 +156,9 @@ export class CoachMessageUseCase {
   private runtime = new CoachRuntimeContextService();
   private messageLog: CoachMessageLogRepository = new FirestoreCoachMessageLogRepository();
   private runtimeCache = new Map<string, CachedRuntime>();
+  // Memória curta: timestamp do último segment_start por runId. Usado pra
+  // suprimir segment_end imediato (dedup transição). 5s de janela.
+  private lastSegmentStartAtByRunId = new Map<string, number>();
 
   async generate(ctx: CoachContext, userId: string): Promise<CoachGenerateResult> {
     // Preview de voz no settings: sample short text via Live TTS, sem
@@ -155,6 +181,59 @@ export class CoachMessageUseCase {
 
     const decision = applyDecisionLayer(ctx, runtime.profile, knobs);
     if (decision) return decision;
+
+    // === Fast path: templates determinísticos ===
+    // Eventos mecânicos (segment_start/end, check_in, motivation, goal_reached,
+    // finish, no_movement, km_split-noop) NÃO pagam LLM nem RAG retrieval —
+    // texto é resolvido a partir do runtime context. Mantém o tracker log
+    // pro admin auditar adoção. Eventos LLM (start/km_reached/pace_alert/
+    // high_bpm) continuam pelo caminho normal abaixo.
+    if (isTemplateEvent(ctx.event)) {
+      const tpl = tryBuildTemplate({
+        ctx,
+        runtime,
+        lastSegmentStartAtMs: ctx.runId
+          ? this.lastSegmentStartAtByRunId.get(ctx.runId)
+          : undefined,
+      });
+      if (tpl?.kind === 'text') {
+        // Trackeia segment_start pra dedup do segment_end próximo (mesma run).
+        if (ctx.event === 'segment_start' && ctx.runId) {
+          this.lastSegmentStartAtByRunId.set(ctx.runId, Date.now());
+        }
+        const audio = config.ttsEnabled
+          ? await this.liveTts.synthesize(tpl.text, { voiceId: 'coach-bruno' }).catch((err) => {
+              logger.warn('coach.template.tts_failed', { runId: ctx.runId, err: String(err) });
+              return null;
+            })
+          : null;
+        this._logCoachMessage(ctx, userId, tpl.text, audio?.mimeType, {
+          source: `template:v${tpl.variation}`,
+        });
+        logger.info('coach.message.template', {
+          runId: ctx.runId,
+          event: ctx.event,
+          variation: tpl.variation,
+        });
+        return {
+          text: tpl.text,
+          audioBase64: audio?.audioBase64,
+          audioMimeType: audio?.mimeType,
+        };
+      }
+      if (tpl?.kind === 'noop') {
+        logger.info('coach.message.template_noop', {
+          runId: ctx.runId,
+          event: ctx.event,
+          reason: tpl.reason,
+        });
+        // no_segment_data: template não conseguiu resolver porque a sessão
+        // não tem executionSegments. Cai pro LLM como fallback gracioso.
+        if (tpl.reason !== 'no_segment_data') {
+          return { skipped: true, reason: tpl.reason };
+        }
+      }
+    }
 
     const knowledgeContext = await formatRunningKnowledgeContext(
       `${runtime.profile?.goal ?? ''} ${runtime.profile?.level ?? ''} ${ctx.event} corrida ${ctx.runType ?? ''} pace ${ctx.targetPaceMinKm ?? ''} bpm ${ctx.bpm ?? ''} ${ctx.question ?? ''}`,
@@ -219,26 +298,10 @@ export class CoachMessageUseCase {
       audio = await this.liveTts.synthesize(text, { voiceId: 'coach-bruno' });
     }
 
-    if (ctx.runId && ctx.event !== 'question') {
-      const log: CoachMessageLog = {
-        id: randomUUID(),
-        runId: ctx.runId,
-        userId,
-        author: 'coach',
-        event: ctx.event,
-        text,
-        audioMimeType: audio?.mimeType,
-        kmAtTime: ctx.kmReached ?? (ctx.distanceM / 1000),
-        paceAtTime: ctx.currentPaceMinKm ? ctx.currentPaceMinKm.toFixed(2) : undefined,
-        bpmAtTime: ctx.bpm,
-        promptVersion: built.version,
-        promptSource: built.source,
-        createdAt: new Date().toISOString(),
-      };
-      this.messageLog.save(log).catch(err => {
-        logger.warn('coach.message_log.save_failed', { runId: ctx.runId, err: String(err) });
-      });
-    }
+    this._logCoachMessage(ctx, userId, text, audio?.mimeType, {
+      promptVersion: built.version,
+      source: built.source,
+    });
 
     return {
       text,
@@ -282,6 +345,39 @@ export class CoachMessageUseCase {
       entry.byPlanSession.set(planKey, cached);
     }
     return cached;
+  }
+
+  /**
+   * Persiste o cue do coach na coleção CoachMessageLog. Usado tanto pelo
+   * caminho LLM quanto pelos templates. Falha silenciosa — coach já entregou
+   * o áudio, log é só pra histórico/replay.
+   */
+  private _logCoachMessage(
+    ctx: CoachContext,
+    userId: string,
+    text: string,
+    audioMimeType: string | undefined,
+    meta: { promptVersion?: string; source: CoachMessageLog['promptSource'] },
+  ): void {
+    if (!ctx.runId || ctx.event === 'question') return;
+    const log: CoachMessageLog = {
+      id: randomUUID(),
+      runId: ctx.runId,
+      userId,
+      author: 'coach',
+      event: ctx.event,
+      text,
+      audioMimeType,
+      kmAtTime: ctx.kmReached ?? (ctx.distanceM / 1000),
+      paceAtTime: ctx.currentPaceMinKm ? ctx.currentPaceMinKm.toFixed(2) : undefined,
+      bpmAtTime: ctx.bpm,
+      promptVersion: meta.promptVersion,
+      promptSource: meta.source,
+      createdAt: new Date().toISOString(),
+    };
+    this.messageLog.save(log).catch((err) => {
+      logger.warn('coach.message_log.save_failed', { runId: ctx.runId, err: String(err) });
+    });
   }
 
   /**

@@ -401,7 +401,6 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
   /// pause/abandon/complete.
   Timer? _stallCheckTimer;
   bool _stallCueFired = false;
-  double? _lastKmPace; // pace médio do km anterior pra splits
 
   // BPM realtime (workout_realtime_service). Subscription ativa durante
   // active+paused; cancela no complete/abandon. Samples acumulados por km
@@ -663,7 +662,6 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
     // ignore: avoid_print
     print('coach.alert_prefs.resolved=$_alertPrefs');
     _lastCueAt.clear();
-    _lastKmPace = null;
     _planSessionId = event.planSessionId;
     _segments = const [];
     _currentSegmentIdx = -1;
@@ -1242,7 +1240,6 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
     }
 
     if (crossedKmBoundary) {
-      final prevKm = _lastCoachKm;
       _lastCoachKm = kmReached;
       // Live Activity sempre — request precisa ser foreground (ver comentário
       // em _onTimerTick). Updates sucessivos funcionam em qualquer estado.
@@ -1297,39 +1294,10 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
         _lastCueAt['km_reached'] = DateTime.now().millisecondsSinceEpoch;
         _maybeRotateLiveSession(trigger: 'km_reached');
       }
-      // kmSplits: ao fechar um km, manda o pace deste km E o alvo planejado
-      // (segment.targetPace > session.targetPace > pace do km anterior como
-      // fallback). Antes mandávamos só o pace do km anterior, e o coach
-      // dizia "acelerou/manteve/caiu" — útil mas vago. Agora a fala fica
-      // "seu pace no km X foi YY, a meta é XX".
-      if (_alertPrefs['kmSplits'] == true && smoothedPace != null) {
-        final kmNow = newDistance / 1000;
-        PlanSegment? segHere;
-        for (final s in _segments) {
-          if (kmNow >= s.kmStart && kmNow < s.kmEnd) {
-            segHere = s;
-            break;
-          }
-        }
-        final plannedTarget = _parsePaceMinKm(segHere?.targetPace) ??
-            _parsePaceMinKm(state.targetPace);
-        final targetForCue = plannedTarget ?? (prevKm > 0 ? _lastKmPace : null);
-        // Sem nenhum alvo (Free Run sem pace alvo no 1º km) → não dispara
-        // pra não soar genérico. A partir do 2º km, fallback de _lastKmPace
-        // garante que a comparação aconteça.
-        if (targetForCue != null) {
-          unawaited(_requestCoachCue(
-            event: 'km_split',
-            kmReached: kmReached,
-            distanceM: newDistance,
-            elapsedS: state.elapsedS,
-            currentPaceMinKm: smoothedPace,
-            targetPaceMinKm: targetForCue,
-          ));
-          _lastCueAt['km_split'] = DateTime.now().millisecondsSinceEpoch;
-        }
-      }
-      _lastKmPace = smoothedPace;
+      // km_split removido em rev 51: era duplicata do km_reached (ambos
+      // disparavam ao cruzar km, gerando 2 calls LLM com info subset).
+      // O km_reached já carrega pace + target + duração + BPM — server
+      // sintetiza tudo no cue.
     }
 
     // Detecção de transição de segment. Roda só quando há plano com
@@ -1386,52 +1354,35 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
       }
 
       // segment_pace_off: substitui pace_alert genérico quando segment
-      // ativo tem targetPace. Cooldown 60s pra evitar flood.
-      if (_alertPrefs['paceOutOfRange'] == true &&
-          activeSegment?.targetPace != null &&
-          smoothedPace != null &&
-          state.status == RunStatus.active &&
-          _cooldownOk('segment_pace_off', seconds: 60)) {
-        final segTarget = _parsePaceMinKm(activeSegment!.targetPace);
-        if (segTarget != null) {
-          final deviation = (smoothedPace - segTarget).abs() / segTarget;
-          if (deviation >= 0.10) {
-            _requestCoachCue(
-              event: 'segment_pace_off',
-              currentPaceMinKm: smoothedPace,
-              targetPaceMinKm: segTarget,
-              distanceM: newDistance,
-              elapsedS: state.elapsedS,
-              currentSegmentIndex: activeSegmentIdx,
-            );
-            _lastCueAt['segment_pace_off'] = DateTime.now().millisecondsSinceEpoch;
-          }
-        }
-      }
     }
 
-    // Pace alert legado: dispara só quando NÃO há segment ativo com
-    // targetPace (Free Run ou segment de warmup/cooldown sem alvo). 60s
-    // cooldown como antes.
-    if (!hasSegments || activeSegment?.targetPace == null) {
-      if (_alertPrefs['paceOutOfRange'] == true &&
-          smoothedPace != null &&
-          state.targetPace != null &&
-          state.status == RunStatus.active &&
-          _cooldownOk('pace_alert', seconds: 60)) {
-        final targetPace = _parsePaceMinKm(state.targetPace);
-        if (targetPace != null) {
-          final deviation = (smoothedPace - targetPace).abs() / targetPace;
-          if (deviation >= 0.10) {
-            _requestCoachCue(
-              event: 'pace_alert',
-              currentPaceMinKm: smoothedPace,
-              targetPaceMinKm: targetPace,
-              distanceM: newDistance,
-              elapsedS: state.elapsedS,
-            );
-            _lastCueAt['pace_alert'] = DateTime.now().millisecondsSinceEpoch;
-          }
+    // Pace alert unificado (rev 51): antes existiam 2 eventos —
+    // `pace_alert` (alvo da sessão) e `segment_pace_off` (alvo do segmento
+    // ativo). Conteúdo do cue era idêntico, só o alvo mudava — geravam
+    // calls LLM duplicadas com cooldowns independentes.
+    //
+    // Agora: 1 evento `pace_alert`. Target = segment.targetPace quando há
+    // segment ativo COM alvo; caso contrário cai pra session.targetPace.
+    // Server recebe `currentSegmentIndex` quando aplicável pra contextualizar.
+    if (_alertPrefs['paceOutOfRange'] == true &&
+        smoothedPace != null &&
+        state.status == RunStatus.active &&
+        _cooldownOk('pace_alert', seconds: 60)) {
+      final targetPaceStr = activeSegment?.targetPace ?? state.targetPace;
+      final targetPace = _parsePaceMinKm(targetPaceStr);
+      if (targetPace != null) {
+        final deviation = (smoothedPace - targetPace).abs() / targetPace;
+        if (deviation >= 0.10) {
+          _requestCoachCue(
+            event: 'pace_alert',
+            currentPaceMinKm: smoothedPace,
+            targetPaceMinKm: targetPace,
+            distanceM: newDistance,
+            elapsedS: state.elapsedS,
+            currentSegmentIndex:
+                activeSegment?.targetPace != null ? activeSegmentIdx : null,
+          );
+          _lastCueAt['pace_alert'] = DateTime.now().millisecondsSinceEpoch;
         }
       }
     }
@@ -2330,12 +2281,8 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
           if (kmAvgBpm != null) 'frequência cardíaca $kmAvgBpm',
         ];
         return 'Coach, acabei de fechar o km $kmReached: ${m.join(', ')}. $totals Anuncia o fechamento do km com a fórmula combinada: "fechamos o $kmReachedº km" + comparação clara pace × alvo.';
-      case 'km_split':
-        return 'Coach, fechei o km $kmReached em ${pace(currentPaceMinKm)}/km. A meta era ${pace(targetPaceMinKm)}/km. Me dá o veredito.';
       case 'pace_alert':
         return 'Coach, meu pace está ${pace(currentPaceMinKm)}/km e o alvo é $tgt. Me corrige? $totals';
-      case 'segment_pace_off':
-        return 'Coach, na fase atual do roteiro meu pace está ${pace(currentPaceMinKm)}/km mas o alvo da fase é $tgt. Como ajusto? $totals';
       case 'segment_start':
         return 'Coach, entrei na próxima fase do roteiro. O que muda agora? $totals';
       case 'segment_end':

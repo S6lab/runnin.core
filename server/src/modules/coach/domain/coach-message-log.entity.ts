@@ -21,6 +21,7 @@ export type CoachMessageEvent =
   | 'segment_end'
   | 'goal_reached'
   | 'check_in'
+  | 'no_movement'
   | 'push_to_talk';
 
 export type CoachMessageAuthor = 'coach' | 'user';
@@ -38,7 +39,12 @@ export interface CoachMessageLog {
   paceAtTime?: string;        // pace ao gerar
   bpmAtTime?: number;         // bpm ao gerar
   promptVersion?: string;     // ex: 'live-coach.v1.2026-05' ou '...+admin-override'
-  promptSource?: 'firestore' | 'env' | 'default';
+  /**
+   * Origem do texto do cue. firestore/env/default vêm do config-store de
+   * prompts (caminho LLM). template:vN indica que o cue foi gerado por
+   * `template-cues.ts` na variação N (sem custo LLM).
+   */
+  promptSource?: 'firestore' | 'env' | 'default' | `template:v${number}`;
   createdAt: string;
   liveTurn?: boolean;         // true when emitido pela sessão Gemini Live nativa
   sessionGeneration?: number; // contador de rotações da sessão Live dentro da mesma run
