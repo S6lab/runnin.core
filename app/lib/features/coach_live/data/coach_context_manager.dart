@@ -48,6 +48,7 @@ class CoachContextSnapshot {
     required this.currentPhase,
     required this.lastCoachUtterances,
     required this.lastTriggers,
+    this.sessionTone,
   });
 
   final int generation;
@@ -57,10 +58,11 @@ class CoachContextSnapshot {
   final double? currentPaceMinKm;
   final int? avgBpm;
   final String? currentPhase;
-  final List<String> lastCoachUtterances; // últimas 3
-  final List<String> lastTriggers;        // últimos 5
+  final List<String> lastCoachUtterances; // últimas 5
+  final List<String> lastTriggers;        // últimos 8
+  final String? sessionTone;             // 'free' | 'guide' | 'performance'
 
-  /// Preamble de até 800 chars injetado como primeiro sendText logo após o
+  /// Preamble de até 900 chars injetado como primeiro sendText logo após o
   /// setupComplete da nova sessão. Cap rígido pra evitar reincidência do
   /// próprio bug que estamos resolvendo (contexto inflando a sessão).
   String toPromptPreamble() {
@@ -79,22 +81,25 @@ class CoachContextSnapshot {
     }
 
     final lines = <String>[
-      '[CONTEXTO ANTERIOR — você estava acompanhando esta corrida e a sessão foi reciclada por questão técnica]',
+      '[CONTEXTO ANTERIOR — sessão reciclada por questão técnica. Você é o COACH, não corre junto.]',
+      if (sessionTone != null)
+        'Sessão: $sessionTone'
+            '${avgPaceMinKm != null && avgPaceMinKm! > 0 ? " · pace alvo ${_fmtPace(avgPaceMinKm!)}/km" : ""}',
       if (pos.isNotEmpty) 'Posição: ${pos.join(' · ')}',
     ];
     if (lastCoachUtterances.isNotEmpty) {
       final quoted = lastCoachUtterances
-          .map((u) => '"${_truncate(u, 80)}"')
+          .map((u) => '"${_truncate(u, 120)}"')
           .join(', ');
-      lines.add('Últimas falas suas: $quoted');
+      lines.add('Suas últimas falas: $quoted');
     }
     if (lastTriggers.isNotEmpty) {
       lines.add('Últimos eventos: ${lastTriggers.join(', ')}');
     }
-    lines.add('Continue de onde parou — não repita a saudação, não pergunte de volta, apenas siga atendendo o atleta.');
+    lines.add('Continue de onde parou — sem saudação, sem perguntar de volta.');
 
     var out = lines.join('\n');
-    if (out.length > 800) out = '${out.substring(0, 797)}...';
+    if (out.length > 900) out = '${out.substring(0, 897)}...';
     return out;
   }
 }
@@ -106,15 +111,16 @@ class CoachContextSnapshot {
 /// beacon /coach/live-turn é feita por um datasource separado em
 /// fire-and-forget — esse manager NÃO conhece o server.
 class CoachContextManager {
-  static const int _maxUtterances = 3;
-  static const int _maxTriggers = 5;
-  static const int _maxUtteranceLen = 200;
+  static const int _maxUtterances = 5;
+  static const int _maxTriggers = 8;
+  static const int _maxUtteranceLen = 300;
 
   String? _runId;
   int _generation = 0;
   final List<_CoachTurnEntry> _coachTurns = <_CoachTurnEntry>[];
   final List<String> _triggers = <String>[];
   RunMetricsSnapshot? _lastMetrics;
+  String? _sessionTone;
 
   bool get isInitialized => _runId != null;
   int get generation => _generation;
@@ -127,12 +133,19 @@ class CoachContextManager {
     _coachTurns.clear();
     _triggers.clear();
     _lastMetrics = null;
+    _sessionTone = null;
   }
 
   /// Incrementa a geração — chamado pelo LiveRunCoachSession após uma rotação
   /// bem-sucedida (nova sessão Live aberta com preamble injetado).
   void bumpGeneration() {
     _generation += 1;
+  }
+
+  /// Registra o tom da sessão ('free' | 'guide' | 'performance') pra incluir
+  /// no preamble de rotação e orientar o coach após cada sessão reciclada.
+  void setSessionTone(String tone) {
+    _sessionTone = tone;
   }
 
   void recordCoachTurn({
@@ -176,6 +189,7 @@ class CoachContextManager {
       currentPhase: _lastMetrics?.currentPhase,
       lastCoachUtterances: _coachTurns.map((e) => e.text).toList(growable: false),
       lastTriggers: List<String>.unmodifiable(_triggers),
+      sessionTone: _sessionTone,
     );
   }
 
@@ -185,6 +199,7 @@ class CoachContextManager {
     _coachTurns.clear();
     _triggers.clear();
     _lastMetrics = null;
+    _sessionTone = null;
   }
 
   void _pushTrigger(String trigger) {

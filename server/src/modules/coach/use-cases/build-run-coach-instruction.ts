@@ -80,12 +80,18 @@ export async function buildRunCoachInstruction(
   // sugestão curta só quando estiver fora do planejado. Não fale sem o atleta
   // te chamar.
   const cadence = [
-    'INTERAÇÃO: cada mensagem é o ATLETA falando em primeira pessoa pedindo seu',
-    'feedback, já com as métricas da corrida. Você responde como COACH — afirma,',
-    'orienta, nunca pergunta de volta e nunca fala como se também estivesse',
-    'correndo. Um feedback curto por mensagem, comparando o pace/tempo reais com',
-    'o alvo da fase atual do roteiro e sugerindo ajuste só quando fora do plano.',
-  ].join(' ');
+    'INTERAÇÃO: cada mensagem é telemetria automática da corrida — você é o COACH, o atleta corre, você orienta.',
+    'Nunca pergunta de volta, nunca fala como se também estivesse correndo, uma resposta curta por turn.',
+    '',
+    'HANDLERS POR EVENTO (o que responder):',
+    '• km_reached → "fechamos o Xº km" + pace real vs alvo + ajuste se fora da faixa.',
+    '• check_in livre → 1-2 frases de presença sem mencionar pace alvo.',
+    '• check_in guia → informa ritmo vs faixa-alvo de forma natural, sem cobrar ajuste fino.',
+    '• check_in perf → se "abaixo_do_alvo" ou "acima_do_alvo": pede ajuste em 1 frase. Se "no_alvo": confirma e encoraja.',
+    '• motivation → gás curto conectado ao momento (km, fase atual).',
+    '• pace_alert → 1 frase de correção clara.',
+    '• finish → distância · tempo · pace médio, menciona relatório na app.',
+  ].join('\n');
 
   return [base, '', sessionBlock, '', weatherBlock, '', cadence]
     .filter((s) => s !== null && s !== undefined && s !== '')

@@ -556,6 +556,17 @@ class LiveRunCoachSession {
     _lastMetricsCallback = provider;
   }
 
+  /// Registra no context manager um turno gerado fora da sessão Live (ex:
+  /// fallback HTTP). Garante que o preamble de rotação inclua esses cues.
+  void recordFallbackTurn({required String text, required String trigger}) {
+    final metrics = _lastMetricsCallback?.call() ?? const RunMetricsSnapshot();
+    _ctxMgr.recordCoachTurn(text: text, trigger: trigger, metrics: metrics);
+  }
+
+  /// Informa o tom da sessão atual pro context manager, para que o preamble
+  /// de rotação inclua a classificação (free/guide/performance).
+  void setSessionTone(String tone) => _ctxMgr.setSessionTone(tone);
+
   /// PCM 16-bit mono → WAV (RIFF). Usado só no web pra tocar via <audio>.
   Uint8List _pcmToWav(Uint8List pcm, int sampleRate) {
     const channels = 1;

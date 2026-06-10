@@ -2242,6 +2242,12 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
     // Marca o trigger pra o turn que vai chegar — o session usa pra alimentar
     // o ctxMgr e o beacon /coach/live-turn com o evento que provocou a fala.
     _coachSession.markTrigger(event);
+    // Informa o tom da sessão pro context manager (idempotente): free/guide/
+    // performance. Usado no preamble de rotação pra que o coach saiba o tipo
+    // de sessão sem precisar inferir das métricas.
+    _coachSession.setSessionTone(
+      _sessionTone(state.runType, _parsePaceMinKm(state.targetPace)),
+    );
     final tt = _telemetryText(
       event,
       runType: state.runType,
@@ -2285,6 +2291,7 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
   }) async {
     if (state.runId == null) return;
     try {
+      final accumulated = StringBuffer();
       await for (final cue in _coachRemote.streamCoachCue(
         runId: state.runId,
         event: event,
@@ -2308,6 +2315,7 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
           audioBase64: cue.audioBase64,
           audioMimeType: cue.audioMimeType,
         )));
+        if (cue.text.isNotEmpty) accumulated.write(cue.text);
         final audio = cue.audioBase64;
         if (audio != null && audio.isNotEmpty) {
           unawaited(playCoachAudio(
@@ -2315,6 +2323,12 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
             mimeType: cue.audioMimeType ?? 'audio/mpeg',
           ));
         }
+      }
+      // Grava no context manager pra que o preamble de rotação inclua
+      // o que foi dito durante o fallback (quando a sessão Live estava fechada).
+      final fullText = accumulated.toString().trim();
+      if (fullText.isNotEmpty) {
+        _coachSession.recordFallbackTurn(text: fullText, trigger: event);
       }
     } catch (e, st) {
       Logger.warn('coach.cue.fallback_http_failed', context: {
@@ -2397,116 +2411,59 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
 
     switch (event) {
       case 'start':
-        // Saudação é o ÚNICO momento que o coach pode amarrar a meta de
-        // longo prazo (ex: "sua meta é completar 10K em 12 de setembro,
-        // hoje vamos com uma easy run de 3km no pace YY:YY"). Em todos os
-        // cues subsequentes ele fala SÓ da sessão em curso.
-        return 'Oi coach! Vou começar agora minha ${runType ?? 'corrida'}. '
-            'Me recebe ancorando: (1) a meta de longo prazo do meu plano (a corrida-alvo e a data); '
-            '(2) o objetivo da sessão de HOJE (distância, pace alvo se houver, foco). '
-            'Frase única, curta, calorosa. A partir daqui você NÃO menciona mais a meta de longo prazo — '
-            'até o fim da corrida o foco fica só na sessão de hoje.';
+        return 'Oi coach! Vou começar minha ${runType ?? 'corrida'} agora.';
       case 'km_reached':
         final m = <String>[
           'pace deste km ${pace(currentPaceMinKm)}/km',
-          'pace alvo $tgt',
+          'alvo $tgt',
           if (kmDurationS != null) 'tempo do km ${dur(kmDurationS)}',
           if (elevationGainM != null && elevationGainM > 0)
-            'ganho de elevação +${elevationGainM.toStringAsFixed(0)}m',
-          if (kmAvgBpm != null) 'frequência cardíaca $kmAvgBpm',
+            'elevação +${elevationGainM.toStringAsFixed(0)}m',
+          if (kmAvgBpm != null) 'FC $kmAvgBpm',
         ];
-        return 'Coach, acabei de fechar o km $kmReached: ${m.join(', ')}. $totals Anuncia o fechamento do km com a fórmula combinada: "fechamos o $kmReachedº km" + comparação clara pace × alvo.';
+        return 'Coach, fechei o km $kmReached. ${m.join(', ')}. $totals';
       case 'pace_alert':
-        return 'Coach, meu pace está ${pace(currentPaceMinKm)}/km e o alvo é $tgt. Me corrige? $totals';
+        return 'Coach, meu pace está ${pace(currentPaceMinKm)}/km. Alvo: $tgt. $totals';
       case 'segment_start':
-        return 'Coach, entrei na próxima fase do roteiro. O que muda agora? $totals';
+        return 'Coach, entrei na próxima fase do roteiro. $totals';
       case 'segment_end':
-        return 'Coach, terminei a fase atual do roteiro. Como fui? $totals';
+        return 'Coach, terminei a fase atual do roteiro. $totals';
       case 'motivation':
-        return 'Coach, como estou indo? $totals Me dá um gás pra manter a constância.';
+        return 'Coach, como estou indo? $totals';
       case 'check_in':
-        // Persona variants: a cada 500m queremos uma fala curta de
-        // "presença". 2 modos:
-        //   - GUIA (easy/recovery/livre, sem pace alvo): coach descreve o
-        //     andamento (km feito, distância restante quando há, ritmo
-        //     atual SEM cobrar). Tom de companhia.
-        //   - PERFORMANCE (intervalado/tempo/com targetPace): variants que
-        //     comparam pace dos últimos 500m vs alvo.
-        // Comum em todos: NUNCA menciona a meta de longo prazo do plano
-        // (corrida-alvo / data). Só a sessão em curso.
         final last500 = paceLast500m != null
-            ? 'meu pace dos últimos 500m foi ${pace(paceLast500m)}/km'
-            : 'acabei de fechar mais 500m';
+            ? 'pace dos últimos 500m: ${pace(paceLast500m)}/km'
+            : 'mais 500m completados';
         final remaining = kmRemaining != null && kmRemaining > 0
-            ? 'faltam ${kmRemaining.toStringAsFixed(1)}km pra meta da sessão'
+            ? 'faltam ${kmRemaining.toStringAsFixed(1)}km'
             : null;
-        // pace direction calc — usado em guide (só informativo) e performance
-        // (decide a variante "corrigir"). 6s/km de tolerância (~0.1 min/km).
+        // pace menor = mais rápido = acima do alvo. Tolerância 6s/km (~0.1 min/km).
         final paceDirRaw = (paceLast500m != null && targetPaceMinKm != null)
             ? (paceLast500m < targetPaceMinKm - 0.1
-                ? 'acima_do_alvo' // pace menor = mais rápido = acelerou
+                ? 'acima_do_alvo'
                 : paceLast500m > targetPaceMinKm + 0.1
                     ? 'abaixo_do_alvo'
                     : 'no_alvo')
             : 'livre';
         if (tone == 'free') {
-          // Free Run: sem pace alvo nenhum. Coach só descreve andamento.
-          final ctx = <String>[
-            last500,
-            if (remaining != null) remaining,
-            totals,
-          ].join('. ');
-          return 'Coach, check-in dos 500m: $ctx. '
-              'Essa é uma Corrida Livre — sem pace alvo. '
-              'Manda uma fala curta (1-2 frases) só como companhia: descreve o que está rolando '
-              '(km feito, ritmo natural, distância que falta quando houver) sem cobrar pace nem comparar com alvo. '
-              'Tom de "to aqui contigo, seguindo junto". '
-              'Varia o estilo entre cumprimentar pelo nome, brincar levemente, ou apenas relatar o andamento. '
-              'Nunca cite a meta de longo prazo do plano — só a sessão de hoje.';
+          return 'Coach, check-in 500m: $last500. '
+              '${remaining != null ? "$remaining. " : ""}$totals';
         }
         if (tone == 'guide') {
-          // Easy / Long / Recovery / Caminhada: TEM pace alvo (faixa), mas
-          // coach só INFORMA sem corrigir.
-          final ctx = <String>[
-            last500,
-            'pace alvo da sessão $tgt (faixa, não restrito)',
-            'pace dos últimos 500m vs alvo: $paceDirRaw',
-            if (remaining != null) remaining,
-            totals,
-          ].join('. ');
-          return 'Coach, check-in dos 500m: $ctx. '
-              'Essa é uma sessão de tom GUIA (easy/long/recovery): o pace alvo é uma faixa, '
-              'NÃO é restrito. Manda uma fala curta (1-2 frases) só INFORMATIVA: mostra como o ritmo '
-              'está em relação ao alvo de forma confortável ("teu pace tá em X, alvo é Y, confortável, bora") '
-              'sem pedir ajuste fino. Se estiver bem dentro da faixa, comemora a constância; se estiver '
-              'levemente fora, observa naturalmente sem cobrar. Varia o estilo: cumprimentar pelo nome, '
-              'brincar, ou relatar o andamento. Nunca cite a meta de longo prazo do plano — só a sessão de hoje.';
+          return 'Coach, check-in 500m: $last500. Alvo $tgt (faixa). '
+              'Pace vs alvo: $paceDirRaw. ${remaining != null ? "$remaining. " : ""}$totals';
         }
-        // tone == 'performance' — tempo/intervalado/threshold/race-pace e sessões-meta
-        final ctx = <String>[
-          last500,
-          'pace alvo $tgt',
-          'pace dos últimos 500m vs alvo: $paceDirRaw',
-          if (remaining != null) remaining,
-          totals,
-        ].join('. ');
-        return 'Coach, check-in dos 500m: $ctx. '
-            'Essa é uma sessão de tom PERFORMANCE (pace alvo restrito). '
-            'Manda uma fala curta de presença (1-2 frases), variando o estilo entre: '
-            '(a) brincando que sumiu mas voltou e comentando se acelerei/mantive/segurei o ritmo, '
-            '(b) chamando pelo meu nome e lembrando quantos km faltam pra meta da sessão, '
-            '(c) "coach na área" celebrando que estou seguindo o pace, citando o próximo km, '
-            '(d) corrigindo: pace levemente acima/abaixo do alvo da sessão, pede pra ajustar. '
-            'Escolhe a variante que combina com o momento e nunca repete a anterior. '
-            'Nunca cite a meta de longo prazo do plano (corrida-alvo / data) — foco só na sessão de hoje.';
+        // performance: pace alvo restrito
+        return 'Coach, check-in 500m: $last500. Alvo $tgt (restrito). '
+            'Pace vs alvo: $paceDirRaw. ${remaining != null ? "$remaining. " : ""}$totals';
       case 'high_bpm':
-        return 'Coach, meu BPM tá em $kmAvgBpm — acima do meu limite confortável. Devo segurar o ritmo?';
+        return 'Coach, meu BPM tá em $kmAvgBpm. $totals';
       case 'no_movement':
-        return 'Coach, apertei iniciar mas ainda não comecei a me mexer. Tudo certo pra largar?';
+        return 'Coach, iniciei mas ainda não comecei a me mover.';
       case 'finish':
-        return 'Coach, terminei a corrida! Total ${dist}km em ${dur(state.elapsedS)}, pace médio $avgPace/km. Me dá o resumo geral.';
+        return 'Coach, finalizei! Total ${dist}km em ${dur(state.elapsedS)}, pace médio $avgPace/km.';
       case 'goal_reached':
-        return 'Coach, acabei de bater a meta de distância da minha sessão do dia ($totals). Me avisa que a sessão termina aqui mas que você segue comigo se eu quiser continuar.';
+        return 'Coach, bati a meta de distância da sessão. $totals';
       default:
         return 'Coach, como estou indo? $totals';
     }
