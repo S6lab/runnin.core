@@ -106,6 +106,14 @@ function buildStatsFromRun(run: Run): BadgeStatsSnapshot {
   };
 }
 
+/** Quote curta baseada nos dados reais da run pra badges FIRST_*. */
+function firstRunCoachQuote(run: Run, kind: string): string {
+  const km = run.distanceM ? (run.distanceM / 1000).toFixed(1) : '?';
+  const pace = run.avgPace ?? '—';
+  return `${kind} concluído: ${km}km a ${pace}/km. Esse é o registro real — ` +
+         `a partir daqui o coach mede contra você mesmo.`;
+}
+
 // ── Categoria: PRIMEIRAS VEZES (one-shot) ───────────────────────────────
 
 const FIRST_RUN: BadgeDefinition = {
@@ -117,9 +125,14 @@ const FIRST_RUN: BadgeDefinition = {
   evaluate: ({ allRuns }) => {
     const first = allRuns[0];
     if (!first) return null;
+    const stats = buildStatsFromRun(first);
+    stats.extra = {
+      ...(stats.extra ?? {}),
+      coachQuote: firstRunCoachQuote(first, 'Primeira corrida'),
+    };
     return {
       primaryDisplay: '01',
-      stats: buildStatsFromRun(first),
+      stats,
       context: { runId: first.id },
       badgeChip: 'MARCO HISTÓRICO',
     };
@@ -134,9 +147,11 @@ const FIRST_5K: BadgeDefinition = {
   evaluate: ({ allRuns }) => {
     const r = allRuns.find((x) => (x.distanceM ?? 0) >= 5000);
     if (!r) return null;
+    const stats = buildStatsFromRun(r);
+    stats.extra = { ...(stats.extra ?? {}), coachQuote: firstRunCoachQuote(r, '5K') };
     return {
       primaryDisplay: '5K',
-      stats: buildStatsFromRun(r),
+      stats,
       context: { runId: r.id },
       badgeChip: 'PRIMEIROS 5 KM',
     };
@@ -151,9 +166,11 @@ const FIRST_10K: BadgeDefinition = {
   evaluate: ({ allRuns }) => {
     const r = allRuns.find((x) => (x.distanceM ?? 0) >= 10000);
     if (!r) return null;
+    const stats = buildStatsFromRun(r);
+    stats.extra = { ...(stats.extra ?? {}), coachQuote: firstRunCoachQuote(r, '10K') };
     return {
       primaryDisplay: '10K',
-      stats: buildStatsFromRun(r),
+      stats,
       context: { runId: r.id },
       badgeChip: 'PRIMEIROS 10 KM',
     };
@@ -271,12 +288,36 @@ function cumulativeDistance(target: number, label: string): BadgeDefinition {
     evaluate: ({ allRuns }) => {
       const km = totalKm(allRuns);
       if (km < target) return null;
+      // Span em dias: primeira run válida até a run que cruzou o target.
+      const sorted = [...allRuns].sort(
+        (a, b) => new Date(a.createdAt as string).getTime() -
+                  new Date(b.createdAt as string).getTime(),
+      );
+      let acc = 0;
+      let crossingRun = sorted[sorted.length - 1];
+      for (const r of sorted) {
+        acc += (r.distanceM ?? 0) / 1000;
+        if (acc >= target) { crossingRun = r; break; }
+      }
+      const firstDate = sorted[0] ? new Date(sorted[0].createdAt as string) : null;
+      const crossDate = crossingRun ? new Date(crossingRun.createdAt as string) : null;
+      const spanDays = firstDate && crossDate
+        ? Math.max(1, Math.round((crossDate.getTime() - firstDate.getTime()) / 86400000))
+        : null;
       return {
         primaryDisplay: `${target}`,
         primaryUnit: 'km',
         stats: {
           distanceKm: Math.round(km * 10) / 10,
-          extra: { target, runsTotal: allRuns.length },
+          extra: {
+            target,
+            runsTotal: allRuns.length,
+            ...(spanDays !== null ? { spanDays } : {}),
+            coachQuote:
+              `${km.toFixed(0)}km em ${allRuns.length} corridas` +
+              (spanDays !== null ? `, ao longo de ${spanDays} dias. ` : '. ') +
+              `Cada quilômetro custou esforço real — não foi acaso.`,
+          },
         },
         badgeChip: label,
       };
@@ -332,7 +373,14 @@ function streakDays(target: number, label: string): BadgeDefinition {
         primaryUnit: target === 1 ? 'dia' : 'dias',
         stats: {
           distanceKm: Math.round(totalKm(allRuns) * 10) / 10,
-          extra: { streak, target },
+          extra: {
+            streak,
+            target,
+            coachQuote:
+              `${streak} dias seguidos correndo. ` +
+              `Consistência é o ativo que mais valoriza com o tempo — você ` +
+              `acabou de provar que tem.`,
+          },
         },
         badgeChip: label,
       };
@@ -364,15 +412,47 @@ function paceUnderThreshold(thresholdSec: number, label: string): BadgeDefinitio
         return p !== null && p < thresholdSec;
       });
       if (!r) return null;
+      // Extrai pace REAL inicial do user (primeira run válida com pace) +
+      // delta em segundos pro template "antes → depois" no card.
+      const sorted = [...allRuns].sort(
+        (a, b) => new Date(a.createdAt as string).getTime() -
+                  new Date(b.createdAt as string).getTime(),
+      );
+      const firstWithPace = sorted.find(x => paceToSeconds(x.avgPace) !== null);
+      const firstPaceSec = firstWithPace ? paceToSeconds(firstWithPace.avgPace) : null;
+      const prPaceSec = paceToSeconds(r.avgPace);
+      const stats = buildStatsFromRun(r);
+      if (firstPaceSec !== null && prPaceSec !== null) {
+        stats.extra = {
+          ...(stats.extra ?? {}),
+          firstPace: firstWithPace!.avgPace as string,
+          paceDeltaSec: prPaceSec - firstPaceSec,
+          coachQuote: buildPaceCoachQuote(
+            firstWithPace!.avgPace as string,
+            r.avgPace as string,
+            prPaceSec - firstPaceSec,
+          ),
+        };
+      }
       return {
         primaryDisplay: r.avgPace ?? labelPace,
         primaryUnit: '/km',
-        stats: buildStatsFromRun(r),
+        stats,
         context: { runId: r.id },
         badgeChip: label,
       };
     },
   };
+}
+
+/** Gera quote do coach baseada em dados reais: pace inicial vs pace do PR
+ *  e o ganho em segundos por km. Sem fallback genérico. */
+function buildPaceCoachQuote(firstPace: string, prPace: string, deltaSec: number): string {
+  const gainAbs = Math.abs(deltaSec);
+  if (deltaSec >= 0) {
+    return `${firstPace}/km → ${prPace}/km. Pace estável é base; agora atacar o teto.`;
+  }
+  return `Você saiu de ${firstPace}/km para sub-${prPace}/km. ${gainAbs}s por km é ganho real de treino — não foi sorte.`;
 }
 
 // Escala 30s entre 7:00 e 3:30/km.
@@ -423,7 +503,6 @@ const WEEKLY_REPORT: BadgeDefinition = {
     if (reportTrigger?.kind !== 'weekly') return null;
     const weekStart = reportTrigger.weekStart;
     if (!weekStart) return null;
-    // Stats da semana
     const start = new Date(weekStart);
     const end = new Date(start);
     end.setUTCDate(end.getUTCDate() + 7);
@@ -432,14 +511,45 @@ const WEEKLY_REPORT: BadgeDefinition = {
       return d >= start && d < end;
     });
     const weekKm = totalKm(weekRuns);
+    const durationS = weekRuns.reduce((s, r) => s + (r.durationS ?? 0), 0);
+    // Barras verticais por dia da semana (km/dia). Cliente renderiza
+    // _VerticalBars quando `dailyBars` está em extra.
+    const dailyBars = Array(7).fill(0);
+    const dailyLabels = ['SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB', 'DOM'];
+    for (const r of weekRuns) {
+      const d = new Date(r.createdAt as string);
+      // dayOfWeek: 1=Mon..7=Sun, ajusta pra index 0..6
+      const dow = d.getUTCDay(); // 0=Sun..6=Sat
+      const idx = dow === 0 ? 6 : dow - 1;
+      dailyBars[idx] += (r.distanceM ?? 0) / 1000;
+    }
+    const avgPaceSec = weekRuns
+      .map(r => paceToSeconds(r.avgPace))
+      .filter((x): x is number => x !== null);
+    const avgPace = avgPaceSec.length > 0
+      ? Math.round(avgPaceSec.reduce((a, b) => a + b, 0) / avgPaceSec.length)
+      : null;
+    const avgPaceLabel = avgPace !== null
+      ? `${Math.floor(avgPace / 60)}:${(avgPace % 60).toString().padStart(2, '0')}`
+      : '—';
     return {
       primaryDisplay: weekKm.toFixed(1),
       primaryUnit: 'km',
       stats: {
         weekKm: Math.round(weekKm * 10) / 10,
         distanceKm: Math.round(weekKm * 10) / 10,
-        durationS: weekRuns.reduce((s, r) => s + (r.durationS ?? 0), 0),
-        extra: { runsCount: weekRuns.length, weekStart },
+        durationS,
+        extra: {
+          runsCount: weekRuns.length,
+          weekStart,
+          dailyBars: dailyBars.map(v => Math.round(v * 10) / 10),
+          dailyLabels,
+          barUnit: 'km',
+          avgPaceLabel,
+          coachQuote:
+            `${weekRuns.length} corridas, ${weekKm.toFixed(1)}km e pace médio ${avgPaceLabel}/km na semana. ` +
+            `Esse é o teu retrato semanal — métrica honesta pra próxima.`,
+        },
       },
       context: { weekStart },
       badgeChip: `SEMANA ${formatWeekRange(start)}`,
@@ -471,20 +581,58 @@ const MONTHLY_REPORT: BadgeDefinition = {
       return d.getUTCFullYear() === year && d.getUTCMonth() + 1 === month;
     });
     const monthKm = totalKm(monthRuns);
+    const durationS = monthRuns.reduce((s, r) => s + (r.durationS ?? 0), 0);
+    // 4-5 barras semanais por semana ISO do mês
+    const weeklyMap = new Map<number, number>();
+    for (const r of monthRuns) {
+      const d = new Date(r.createdAt as string);
+      const week = getISOWeek(d);
+      weeklyMap.set(week, (weeklyMap.get(week) ?? 0) + (r.distanceM ?? 0) / 1000);
+    }
+    const sortedWeeks = [...weeklyMap.entries()].sort((a, b) => a[0] - b[0]);
+    const dailyBars = sortedWeeks.map(([_, km]) => Math.round(km * 10) / 10);
+    const dailyLabels = sortedWeeks.map(([wk]) => `S${wk}`);
+    const bestRun = monthRuns.reduce<Run | null>(
+      (best, r) => (best == null || (r.distanceM ?? 0) > (best.distanceM ?? 0)) ? r : best,
+      null,
+    );
     return {
       primaryDisplay: monthKm.toFixed(1),
       primaryUnit: 'km',
       stats: {
         monthKm: Math.round(monthKm * 10) / 10,
         distanceKm: Math.round(monthKm * 10) / 10,
-        durationS: monthRuns.reduce((s, r) => s + (r.durationS ?? 0), 0),
-        extra: { runsCount: monthRuns.length, monthKey },
+        durationS,
+        extra: {
+          runsCount: monthRuns.length,
+          monthKey,
+          dailyBars,
+          dailyLabels,
+          barUnit: 'km',
+          ...(bestRun ? { bestRunKm: Math.round((bestRun.distanceM ?? 0) / 100) / 10 } : {}),
+          coachQuote:
+            `${monthRuns.length} corridas e ${monthKm.toFixed(1)}km no mês. ` +
+            `Mensal mostra tendência — agora dá pra ver se a base tá subindo.`,
+        },
       },
       context: { monthKey },
       badgeChip: monthKey,
     };
   },
 };
+
+/** ISO week number (1-53) — usado pro agrupamento semanal do MONTHLY_REPORT. */
+function getISOWeek(d: Date): number {
+  const target = new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+  const dayNr = (target.getDay() + 6) % 7;
+  target.setDate(target.getDate() - dayNr + 3);
+  const firstThursday = target.valueOf();
+  target.setMonth(0, 1);
+  if (target.getDay() !== 4) {
+    target.setMonth(0, 1 + ((4 - target.getDay()) + 7) % 7);
+  }
+  return 1 + Math.ceil((firstThursday - target.valueOf()) / 604800000);
+}
 
 // ── Registry ────────────────────────────────────────────────────────────
 

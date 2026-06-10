@@ -52,7 +52,7 @@ class NextBadgeTeaser extends StatelessWidget {
                       '$pct%',
                       style: type.labelCaps.copyWith(
                         color: palette.primary,
-                        fontSize: 11,
+                        fontSize: 11.0,
                       ),
                     ),
                   ],
@@ -62,7 +62,7 @@ class NextBadgeTeaser extends StatelessWidget {
                   next.title,
                   style: type.labelMd.copyWith(
                     color: palette.text,
-                    fontSize: 16,
+                    fontSize: 16.0,
                     fontWeight: FontWeight.w700,
                   ),
                 ),

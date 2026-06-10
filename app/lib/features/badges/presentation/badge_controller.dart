@@ -32,6 +32,11 @@ class BadgeController extends ChangeNotifier {
   NextBadgeProgress? _nextBadge;
   NextBadgeProgress? get nextBadge => _nextBadge;
 
+  /// TF 79: catálogo completo (atingidos + bloqueados) pra galeria.
+  /// Carregado via `loadCatalog()`.
+  List<BadgeCatalogEntry> _catalog = const [];
+  List<BadgeCatalogEntry> get catalog => _catalog;
+
   Future<void> refresh() async {
     _loading = true;
     notifyListeners();
@@ -91,6 +96,23 @@ class BadgeController extends ChangeNotifier {
       notifyListeners();
     } catch (e, st) {
       Logger.error('badges.next.fail', e, st);
+    }
+  }
+
+  /// Carrega o catálogo completo dos badges (atingidos + bloqueados). Usado
+  /// pela galeria pra mostrar tudo de uma vez, com cadeado nos locked.
+  Future<void> loadCatalog() async {
+    _loading = true;
+    notifyListeners();
+    try {
+      _catalog = await _ds.getCatalog();
+      _lastErrored = false;
+    } catch (e, st) {
+      _lastErrored = true;
+      Logger.error('badges.catalog.fail', e, st);
+    } finally {
+      _loading = false;
+      notifyListeners();
     }
   }
 }

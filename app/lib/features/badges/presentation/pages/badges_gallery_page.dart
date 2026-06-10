@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
 
 import 'package:runnin/core/theme/context_extension.dart';
+import 'package:runnin/features/badges/data/badge_remote_datasource.dart';
 import 'package:runnin/features/badges/domain/entities/badge.dart' as badge_e;
 import 'package:runnin/features/badges/presentation/badge_controller.dart';
-import 'package:runnin/features/badges/presentation/widgets/badge_card_view.dart';
 import 'package:runnin/features/badges/presentation/pages/badge_popup_modal.dart';
+import 'package:runnin/features/badges/presentation/widgets/badge_card_view.dart';
 
+/// Galeria de badges — TF 79 mostra TODOS os badges definidos no server,
+/// com cadeado nos bloqueados. Pull-to-refresh re-roda evaluator + listByUser.
 class BadgesGalleryPage extends StatefulWidget {
-  /// Quando true, esconde AppBar/Scaffold — pra usar embedded em outra
+  /// Quando true, esconde Scaffold/AppBar — pra usar embedded em outra
   /// página (ex: aba badges em /gamification).
   final bool embedded;
   const BadgesGalleryPage({super.key, this.embedded = false});
@@ -23,7 +26,7 @@ class _BadgesGalleryPageState extends State<BadgesGalleryPage> {
   void initState() {
     super.initState();
     _controller.addListener(_onChange);
-    _controller.refresh();
+    _controller.loadCatalog();
   }
 
   @override
@@ -34,12 +37,14 @@ class _BadgesGalleryPageState extends State<BadgesGalleryPage> {
 
   void _onChange() => setState(() {});
 
+  Future<void> _refresh() => _controller.loadCatalog();
+
   @override
   Widget build(BuildContext context) {
     final palette = context.runninPalette;
     final type = context.runninType;
     final body = RefreshIndicator(
-      onRefresh: _controller.refresh,
+      onRefresh: _refresh,
       color: palette.primary,
       child: _build(context, palette, type),
     );
@@ -58,14 +63,11 @@ class _BadgesGalleryPageState extends State<BadgesGalleryPage> {
   }
 
   Widget _build(BuildContext context, palette, type) {
-    if (_controller.loading && _controller.all.isEmpty) {
+    final catalog = _controller.catalog;
+    if (_controller.loading && catalog.isEmpty) {
       return Center(child: CircularProgressIndicator(color: palette.primary));
     }
-    if (_controller.all.isEmpty) {
-      // Diferencia "vazio porque novato" (sem erro) de "vazio porque
-      // request falhou" (lastErrored=true). Sem isso, qualquer falha de
-      // rede/server vira "Nenhum badge ainda" enganador e o user fica sem
-      // botão de retry.
+    if (catalog.isEmpty) {
       final errored = _controller.lastErrored;
       return ListView(
         physics: const AlwaysScrollableScrollPhysics(),
@@ -83,24 +85,14 @@ class _BadgesGalleryPageState extends State<BadgesGalleryPage> {
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    errored
-                        ? 'Não foi possível carregar'
-                        : 'Nenhum badge ainda',
+                    errored ? 'Não foi possível carregar' : 'Carregando catálogo…',
                     textAlign: TextAlign.center,
-                    style: type.labelMd.copyWith(color: palette.text, fontSize: 18),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    errored
-                        ? 'Verifique sua conexão e toque pra tentar de novo'
-                        : 'Conclua corridas pra desbloquear marcos da sua jornada',
-                    textAlign: TextAlign.center,
-                    style: type.bodySm.copyWith(color: palette.muted),
+                    style: type.labelMd.copyWith(color: palette.text, fontSize: 18.0),
                   ),
                   if (errored) ...[
                     const SizedBox(height: 20),
                     OutlinedButton.icon(
-                      onPressed: () => _controller.refresh(),
+                      onPressed: _refresh,
                       icon: Icon(Icons.refresh, color: palette.primary),
                       label: Text(
                         'TENTAR DE NOVO',
@@ -112,7 +104,9 @@ class _BadgesGalleryPageState extends State<BadgesGalleryPage> {
                       style: OutlinedButton.styleFrom(
                         side: BorderSide(color: palette.primary),
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 20, vertical: 12),
+                          horizontal: 20,
+                          vertical: 12,
+                        ),
                       ),
                     ),
                   ],
@@ -123,26 +117,113 @@ class _BadgesGalleryPageState extends State<BadgesGalleryPage> {
         ],
       );
     }
-    return GridView.builder(
-      padding: const EdgeInsets.all(16),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        mainAxisSpacing: 12,
-        crossAxisSpacing: 12,
-        childAspectRatio: 0.72,
-      ),
-      itemCount: _controller.all.length,
-      itemBuilder: (_, i) {
-        final b = _controller.all[i];
-        return GestureDetector(
-          onTap: () => _openDetail(b),
-          child: BadgeCardView(badge: b, compact: true),
-        );
-      },
+
+    // Sorted: atingidos primeiro (por unlockedAt desc), depois bloqueados.
+    final sorted = [...catalog]..sort((a, b) {
+        if (a.unlocked != b.unlocked) return a.unlocked ? -1 : 1;
+        final aTs = a.unlock?.unlockedAt ?? 0;
+        final bTs = b.unlock?.unlockedAt ?? 0;
+        return bTs.compareTo(aTs);
+      });
+
+    final unlockedCount = catalog.where((e) => e.unlocked).length;
+
+    return CustomScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      slivers: [
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+            child: Row(
+              children: [
+                Text(
+                  'CATÁLOGO',
+                  style: type.labelCaps.copyWith(
+                    color: palette.muted,
+                    fontSize: 11.0,
+                    letterSpacing: 1.5,
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  '$unlockedCount / ${catalog.length}',
+                  style: type.labelCaps.copyWith(
+                    color: palette.primary,
+                    fontSize: 12.0,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        SliverPadding(
+          padding: const EdgeInsets.all(16),
+          sliver: SliverGrid(
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              mainAxisSpacing: 12,
+              crossAxisSpacing: 12,
+              childAspectRatio: 0.58,
+            ),
+            delegate: SliverChildBuilderDelegate(
+              (_, i) {
+                final entry = sorted[i];
+                return GestureDetector(
+                  onTap: () => _openDetail(entry),
+                  child: BadgeCardView(
+                    badge: _toBadge(entry),
+                    compact: true,
+                    locked: !entry.unlocked,
+                  ),
+                );
+              },
+              childCount: sorted.length,
+            ),
+          ),
+        ),
+      ],
     );
   }
 
-  void _openDetail(badge_e.Badge b) {
-    BadgePopupModal.show(context, b);
+  /// Converte entrada do catálogo em Badge pra reusar o BadgeCardView.
+  /// Para locked, gera Badge sintético com os campos da definição (sem stats).
+  badge_e.Badge _toBadge(BadgeCatalogEntry entry) {
+    if (entry.unlock != null) return entry.unlock!;
+    return badge_e.Badge(
+      badgeId: entry.badgeId,
+      category: _categoryFromString(entry.category),
+      title: entry.title,
+      subtitle: entry.subtitle,
+      description: entry.description,
+      badgeChip: 'BLOQUEADO',
+      primaryDisplay: '—',
+      unlockedAt: 0,
+      stats: const badge_e.BadgeStatsSnapshot(),
+      seen: true,
+    );
+  }
+
+  badge_e.BadgeCategory _categoryFromString(String s) {
+    switch (s) {
+      case 'first':
+        return badge_e.BadgeCategory.first;
+      case 'distance_total':
+        return badge_e.BadgeCategory.distanceTotal;
+      case 'distance_run':
+        return badge_e.BadgeCategory.distanceRun;
+      case 'streak':
+        return badge_e.BadgeCategory.streak;
+      case 'pace':
+        return badge_e.BadgeCategory.pace;
+      case 'report':
+        return badge_e.BadgeCategory.report;
+    }
+    return badge_e.BadgeCategory.first;
+  }
+
+  void _openDetail(BadgeCatalogEntry entry) {
+    final badge = _toBadge(entry);
+    BadgePopupModal.show(context, badge);
   }
 }

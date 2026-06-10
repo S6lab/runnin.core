@@ -4,6 +4,7 @@ import { FirestoreRunRepository } from '@modules/runs/infra/firestore-run.reposi
 import { FirestoreBadgeRepository } from '../infra/firestore-badge.repository';
 import { EvaluateBadgesUseCase } from '../use-cases/evaluate-badges.use-case';
 import { GetNextBadgeUseCase } from '../use-cases/get-next-badge.use-case';
+import { BADGE_DEFINITIONS } from '../domain/badge-definitions';
 
 const runs = new FirestoreRunRepository();
 const badges = new FirestoreBadgeRepository();
@@ -39,24 +40,79 @@ export async function getMyBadges(req: Request, res: Response, next: NextFunctio
 /** GET /badges/recent-unseen — pra popup logic (mostra mais recente
  *  ainda não-visto pelo user). Roda evaluator antes (idempotente) pra que
  *  fresh install com histórico antigo veja badges retroativos no boot, sem
- *  precisar abrir /profile/badges primeiro. */
+ *  precisar abrir /profile/badges primeiro.
+ *
+ *  TF 79: bulk-seen em retroativo. Se há > 3 unseen E nenhum desbloqueado
+ *  agora (newlyUnlocked === 0), são badges retroativos antigos (user com
+ *  histórico abrindo a feature pela 1ª vez). Marca TODOS como seen do server
+ *  e devolve lista vazia — evita bombardear 14 popups na home. User
+ *  descobre os badges na galeria. Quando uma run NOVA destrava algo, isso
+ *  é tratado fora (push notification + modal pós-run). */
 export async function getRecentUnseen(req: Request, res: Response, next: NextFunction): Promise<void> {
   const t0 = Date.now();
   logger.info('badges.recent_unseen.start', { uid: req.uid });
   try {
     const evalResult = await evaluator.execute({ uid: req.uid });
     const list = await badges.listByUser(req.uid);
-    const unseen = list.filter((b) => !b.seen);
+    let unseen = list.filter((b) => !b.seen);
+    let bulkSeen = 0;
+    if (unseen.length > 3 && evalResult.unlocked.length === 0) {
+      bulkSeen = unseen.length;
+      await Promise.all(unseen.map((b) => badges.markSeen(req.uid, b.badgeId)));
+      unseen = [];
+    }
     logger.info('badges.recent_unseen.ok', {
       uid: req.uid,
       ms: Date.now() - t0,
       unseen: unseen.length,
       total: list.length,
       newlyUnlocked: evalResult.unlocked.length,
+      bulkSeen,
     });
     res.json({ badges: unseen.slice(0, 5) });
   } catch (err) {
     logger.error('badges.recent_unseen.fail', {
+      uid: req.uid,
+      ms: Date.now() - t0,
+      err: err instanceof Error ? err.message : String(err),
+      stack: err instanceof Error ? err.stack : undefined,
+    });
+    next(err);
+  }
+}
+
+/** GET /badges/catalog — devolve TODOS os badges definidos no código, com
+ *  flag `unlocked` e dados reais quando desbloqueado. Usado pela galeria
+ *  pra mostrar atingidos + bloqueados (estes com cadeado). Roda evaluator
+ *  antes pra garantir que badges retroativos válidos apareçam unlocked. */
+export async function getCatalog(req: Request, res: Response, next: NextFunction): Promise<void> {
+  const t0 = Date.now();
+  logger.info('badges.catalog.start', { uid: req.uid });
+  try {
+    await evaluator.execute({ uid: req.uid });
+    const list = await badges.listByUser(req.uid);
+    const unlockedById = new Map(list.map((b) => [b.badgeId, b]));
+    const catalog = BADGE_DEFINITIONS.map((def) => {
+      const unlocked = unlockedById.get(def.badgeId) ?? null;
+      return {
+        badgeId: def.badgeId,
+        category: def.category,
+        title: def.title,
+        subtitle: def.subtitle,
+        description: def.description ?? null,
+        unlocked: unlocked !== null,
+        unlock: unlocked,
+      };
+    });
+    logger.info('badges.catalog.ok', {
+      uid: req.uid,
+      ms: Date.now() - t0,
+      total: catalog.length,
+      unlockedCount: list.length,
+    });
+    res.json({ catalog });
+  } catch (err) {
+    logger.error('badges.catalog.fail', {
       uid: req.uid,
       ms: Date.now() - t0,
       err: err instanceof Error ? err.message : String(err),

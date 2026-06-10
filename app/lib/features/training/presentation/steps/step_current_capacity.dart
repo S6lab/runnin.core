@@ -54,6 +54,14 @@ class _StepCurrentCapacityState extends State<StepCurrentCapacity> {
   late final TextEditingController _minCtrl;
   late final TextEditingController _secCtrl;
   late final TextEditingController _kmCtrl;
+  // TF 79: FocusNodes nos campos de tempo pra disparar auto-scroll que
+  // mantém o campo de VOLUME SEMANAL visível quando o teclado sobe. Sem
+  // isso o user clica em min/seg, teclado cobre o volume, ele não vê
+  // o campo e bate "continuar" sem preencher → plano sem baseline.
+  late final FocusNode _minFocus;
+  late final FocusNode _secFocus;
+  /// Key do bloco "VOLUME SEMANAL ATUAL" pra `Scrollable.ensureVisible`.
+  final GlobalKey _weeklyKmKey = GlobalKey();
 
   @override
   void initState() {
@@ -65,10 +73,38 @@ class _StepCurrentCapacityState extends State<StepCurrentCapacity> {
     _kmCtrl = TextEditingController(
       text: widget.weeklyKm != null ? widget.weeklyKm!.toStringAsFixed(0) : '',
     );
+    _minFocus = FocusNode();
+    _secFocus = FocusNode();
+    // Quando teclado abre nos campos de tempo, agenda scroll pro bloco
+    // VOLUME SEMANAL ficar visível na linha de baixo (logo após o tempo).
+    // Sem isso o teclado cobria o campo e o user nem sabia que existia.
+    _minFocus.addListener(_handleTimeFocus);
+    _secFocus.addListener(_handleTimeFocus);
+  }
+
+  void _handleTimeFocus() {
+    if (!(_minFocus.hasFocus || _secFocus.hasFocus)) return;
+    // Espera o teclado terminar de subir (~300ms) e o scroll viewport
+    // recomputar viewInsets antes de chamar ensureVisible.
+    Future<void>.delayed(const Duration(milliseconds: 320), () {
+      if (!mounted) return;
+      final ctx = _weeklyKmKey.currentContext;
+      if (ctx == null || !ctx.mounted) return;
+      Scrollable.ensureVisible(
+        ctx,
+        duration: const Duration(milliseconds: 240),
+        curve: Curves.easeOutCubic,
+        alignment: 1.0, // alinha o bloco no FUNDO do viewport visível
+      );
+    });
   }
 
   @override
   void dispose() {
+    _minFocus.removeListener(_handleTimeFocus);
+    _secFocus.removeListener(_handleTimeFocus);
+    _minFocus.dispose();
+    _secFocus.dispose();
     _minCtrl.dispose();
     _secCtrl.dispose();
     _kmCtrl.dispose();
@@ -161,10 +197,15 @@ class _StepCurrentCapacityState extends State<StepCurrentCapacity> {
               Expanded(
                 child: TextField(
                   controller: _minCtrl,
+                  focusNode: _minFocus,
                   keyboardType: TextInputType.number,
                   inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                   textAlign: TextAlign.center,
                   style: context.runninType.dataMd,
+                  // scrollPadding generoso garante que o campo NÃO seja
+                  // empurrado p/ borda — sobra espaço pra ver o bloco
+                  // de VOLUME logo abaixo.
+                  scrollPadding: const EdgeInsets.only(bottom: 240),
                   decoration: const InputDecoration(
                     hintText: 'min',
                     border: OutlineInputBorder(),
@@ -179,10 +220,12 @@ class _StepCurrentCapacityState extends State<StepCurrentCapacity> {
               Expanded(
                 child: TextField(
                   controller: _secCtrl,
+                  focusNode: _secFocus,
                   keyboardType: TextInputType.number,
                   inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                   textAlign: TextAlign.center,
                   style: context.runninType.dataMd,
+                  scrollPadding: const EdgeInsets.only(bottom: 240),
                   decoration: const InputDecoration(
                     hintText: 'seg',
                     border: OutlineInputBorder(),
@@ -218,29 +261,40 @@ class _StepCurrentCapacityState extends State<StepCurrentCapacity> {
             ),
           ],
           const SizedBox(height: 26),
-          Text(
-            'VOLUME SEMANAL ATUAL (KM/SEM)',
-            style: context.runninType.labelMd.copyWith(
-              color: palette.muted,
-              letterSpacing: 1.2,
-              fontSize: 11,
+          // Key usada pelo _handleTimeFocus pra rolar este bloco pra
+          // dentro do viewport quando o teclado dos campos de tempo sobe.
+          Container(
+            key: _weeklyKmKey,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'VOLUME SEMANAL ATUAL (KM/SEM) *',
+                  style: context.runninType.labelMd.copyWith(
+                    color: palette.muted,
+                    letterSpacing: 1.2,
+                    fontSize: 11,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: _kmCtrl,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^[0-9]*\.?[0-9]{0,1}'))],
+                  style: context.runninType.dataMd,
+                  scrollPadding: const EdgeInsets.only(bottom: 240),
+                  decoration: const InputDecoration(
+                    hintText: 'ex: 25',
+                    suffixText: 'km',
+                    border: OutlineInputBorder(),
+                  ),
+                  onChanged: (v) {
+                    final n = double.tryParse(v.trim());
+                    widget.onWeeklyKmChange(n);
+                  },
+                ),
+              ],
             ),
-          ),
-          const SizedBox(height: 10),
-          TextField(
-            controller: _kmCtrl,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^[0-9]*\.?[0-9]{0,1}'))],
-            style: context.runninType.dataMd,
-            decoration: const InputDecoration(
-              hintText: 'ex: 25',
-              suffixText: 'km',
-              border: OutlineInputBorder(),
-            ),
-            onChanged: (v) {
-              final n = double.tryParse(v.trim());
-              widget.onWeeklyKmChange(n);
-            },
           ),
           if (widget.historyHint != null) ...[
             const SizedBox(height: 8),

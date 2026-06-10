@@ -8,6 +8,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'dart:io';
 
+import 'package:runnin/core/logger/logger.dart';
 import 'package:runnin/core/theme/context_extension.dart';
 import 'package:runnin/features/badges/domain/entities/badge.dart' as badge_e;
 import 'package:runnin/features/badges/presentation/badge_controller.dart';
@@ -51,10 +52,26 @@ class _BadgePopupModalState extends State<BadgePopupModal> {
     try {
       // Captura PNG do RepaintBoundary do card.
       final renderObject = _cardKey.currentContext?.findRenderObject();
-      if (renderObject is! RenderRepaintBoundary) return;
+      if (renderObject is! RenderRepaintBoundary) {
+        Logger.error(
+          'badges.share.no_render_object',
+          'cardKey context returned null or not RepaintBoundary',
+          StackTrace.current,
+          {'badgeId': widget.badge.badgeId},
+        );
+        return;
+      }
       final ui.Image img = await renderObject.toImage(pixelRatio: 3.0);
       final ByteData? bytes = await img.toByteData(format: ui.ImageByteFormat.png);
-      if (bytes == null) return;
+      if (bytes == null) {
+        Logger.error(
+          'badges.share.toByteData_null',
+          'image.toByteData returned null',
+          StackTrace.current,
+          {'badgeId': widget.badge.badgeId},
+        );
+        return;
+      }
       final pngBytes = bytes.buffer.asUint8List();
       // Persiste tmp pra share_plus.
       final dir = await getTemporaryDirectory();
@@ -68,7 +85,9 @@ class _BadgePopupModalState extends State<BadgePopupModal> {
       );
       // Best-effort: registra share no server.
       unawaited(BadgeController.instance.trackShare(widget.badge.badgeId));
-    } catch (_) {/* ignore */}
+    } catch (e, st) {
+      Logger.error('badges.share.fail', e, st, {'badgeId': widget.badge.badgeId});
+    }
     if (mounted) setState(() => _sharing = false);
   }
 

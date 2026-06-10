@@ -39,6 +39,52 @@ class BadgeRemoteDatasource {
     if (n == null) return null;
     return NextBadgeProgress.fromJson(n as Map<String, dynamic>);
   }
+
+  /// TF 79: catálogo completo dos badges (definidos no server) com estado
+  /// unlocked/locked. Galeria renderiza atingidos + bloqueados (cadeado).
+  Future<List<BadgeCatalogEntry>> getCatalog() async {
+    final res = await _dio.get('/badges/catalog');
+    final list = (res.data['catalog'] as List?) ?? const [];
+    return list
+        .map((e) => BadgeCatalogEntry.fromJson(e as Map<String, dynamic>))
+        .toList(growable: false);
+  }
+}
+
+/// Entrada do catálogo: definição estática + flag unlocked + dados do unlock
+/// quando aplicável (timestamp, stats, etc).
+class BadgeCatalogEntry {
+  final String badgeId;
+  final String category;
+  final String title;
+  final String subtitle;
+  final String? description;
+  final bool unlocked;
+  /// Quando unlocked=true, vem o `Badge` completo (com unlockedAt, stats,
+  /// badgeChip, primaryDisplay…). Null quando bloqueado.
+  final Badge? unlock;
+
+  const BadgeCatalogEntry({
+    required this.badgeId,
+    required this.category,
+    required this.title,
+    required this.subtitle,
+    required this.unlocked,
+    this.description,
+    this.unlock,
+  });
+
+  factory BadgeCatalogEntry.fromJson(Map<String, dynamic> j) => BadgeCatalogEntry(
+        badgeId: j['badgeId'] as String,
+        category: j['category'] as String? ?? 'first',
+        title: j['title'] as String? ?? '',
+        subtitle: j['subtitle'] as String? ?? '',
+        description: j['description'] as String?,
+        unlocked: j['unlocked'] == true,
+        unlock: j['unlock'] != null
+            ? Badge.fromJson(j['unlock'] as Map<String, dynamic>)
+            : null,
+      );
 }
 
 class NextBadgeProgress {

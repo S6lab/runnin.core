@@ -39,7 +39,9 @@ export interface BadgeStatsSnapshot {
   /** Pace médio do PERÍODO (semana/mês). */
   periodAvgPace?: string;
   /** Outros key-value que a definição quiser carregar. */
-  extra?: Record<string, string | number | boolean>;
+  /** Outros key-value que a definição quiser carregar. Aceita também arrays
+   *  (dailyBars, dailyLabels) usados pelos templates de visualização do card. */
+  extra?: Record<string, string | number | boolean | number[] | string[]>;
 }
 
 export interface Badge {

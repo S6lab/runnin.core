@@ -604,9 +604,14 @@ class _PlanSetupPageState extends State<PlanSetupPage> {
       case _Step.currentCapacity:
         if (_alreadyRuns == null) return false;
         if (_alreadyRuns == false) return true;
+        // TF 79: volume semanal vira obrigatório. Antes ficava opcional e
+        // user que não enxergava o campo (teclado cobria) passava direto
+        // pra criar plano com baseline errado. Agora gate explícito.
         return _capacityDistanceKm != null &&
             _capacityTimeSec != null &&
-            _capacityTimeSec! > 0;
+            _capacityTimeSec! > 0 &&
+            _weeklyKm != null &&
+            _weeklyKm! > 0;
       case _Step.raceTargetPace:
         return _targetPaceMinKm != null;
       case _Step.raceWindow:
