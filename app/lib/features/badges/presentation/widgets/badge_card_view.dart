@@ -1,4 +1,3 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:runnin/core/theme/context_extension.dart';
 import 'package:runnin/features/badges/domain/entities/badge.dart' as badge_e;
@@ -51,8 +50,8 @@ class BadgeCardView extends StatelessWidget {
           ),
         ),
         padding: EdgeInsets.symmetric(
-          horizontal: compact ? 14.0 : 24.0,
-          vertical: compact ? 14.0 : 24.0,
+          horizontal: compact ? 12.0 : 24.0,
+          vertical: compact ? 10.0 : 24.0,
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -61,28 +60,31 @@ class BadgeCardView extends StatelessWidget {
             _Header(badge: badge, locked: locked, compact: compact),
             SizedBox(height: compact ? 16.0 : 24.0),
             _Hero(badge: badge, compact: compact),
-            SizedBox(height: compact ? 4.0 : 8.0),
-            Text(
-              _heroLabel(),
-              style: type.labelCaps.copyWith(
-                color: palette.muted,
-                fontSize: compact ? 10.0 : 13.0,
-                letterSpacing: 1.4,
-                fontWeight: FontWeight.w600,
+            // Hero label (KM ACUMULADOS, MIN/KM, etc) só no popup —
+            // remove título do header do badge no compact pra economizar
+            // espaço vertical e evitar overflow.
+            if (!compact) ...[
+              const SizedBox(height: 8.0),
+              Text(
+                _heroLabel(),
+                style: type.labelCaps.copyWith(
+                  color: palette.muted,
+                  fontSize: 13.0,
+                  letterSpacing: 1.4,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
-            ),
+            ],
             // Visualização contextualizada: template muda por tipo de badge.
-            //  - cumulative/single_run/streak → progress bar horizontal
-            //  - pace PR → cards "antes → depois" (início vs PR atual)
-            //  - report semanal/diário → barras verticais (placeholder)
-            //  - first/marathon → sem visualization (hero é o destaque)
-            if (!locked) ...[
+            // No compact (galeria), esconde a visualização pra caber no
+            // aspect ratio do GridView. Popup mostra completo.
+            if (!locked && !compact) ...[
               Builder(
                 builder: (_) {
                   final viz = _selectVisualization();
                   if (viz == null) return const SizedBox.shrink();
                   return Padding(
-                    padding: EdgeInsets.only(top: compact ? 12.0 : 18.0),
+                    padding: const EdgeInsets.only(top: 18.0),
                     child: viz,
                   );
                 },
@@ -91,27 +93,32 @@ class BadgeCardView extends StatelessWidget {
             SizedBox(height: compact ? 12.0 : 20.0),
             Text(
               badge.title,
-              maxLines: 2,
+              maxLines: compact ? 1 : 2,
               overflow: TextOverflow.ellipsis,
               style: type.dataMd.copyWith(
-                color: palette.text,
-                fontSize: compact ? 18.0 : 26.0,
+                // Título usa palette.secondary (cor #2 da skin) — destaque
+                // diferente do hero (palette.text branco).
+                color: palette.secondary,
+                fontSize: compact ? 14.0 : 26.0,
                 fontWeight: FontWeight.w800,
                 height: 1.1,
                 letterSpacing: -0.4,
               ),
             ),
             SizedBox(height: compact ? 4.0 : 6.0),
-            Text(
-              badge.subtitle,
-              maxLines: compact ? 2 : 3,
-              overflow: TextOverflow.ellipsis,
-              style: type.bodySm.copyWith(
-                color: palette.muted,
-                fontSize: compact ? 11.0 : 14.0,
-                height: 1.35,
+            // Subtítulo só no popup (no compact ocupa muito espaço e quebra
+            // overflow vertical do GridView).
+            if (!compact)
+              Text(
+                badge.subtitle,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: type.bodySm.copyWith(
+                  color: palette.muted,
+                  fontSize: 14.0,
+                  height: 1.35,
+                ),
               ),
-            ),
             SizedBox(height: compact ? 6.0 : 10.0),
             Text(
               locked
@@ -134,9 +141,7 @@ class BadgeCardView extends StatelessWidget {
                   quote: _resolveCoachQuote()!,
                   locked: locked,
                 ),
-                const SizedBox(height: 18.0),
               ],
-              _Footer(handle: _userHandle()),
             ],
           ],
         ),
@@ -270,14 +275,6 @@ class BadgeCardView extends StatelessWidget {
     return '$dd/$mm/${d.year}';
   }
 
-  String _userHandle() {
-    final user = FirebaseAuth.instance.currentUser;
-    final name = user?.displayName?.trim();
-    if (name != null && name.isNotEmpty) return name.split(' ').first;
-    final email = user?.email?.trim();
-    if (email != null && email.isNotEmpty) return email.split('@').first;
-    return 'Runner';
-  }
 }
 
 class _Header extends StatelessWidget {
@@ -293,13 +290,39 @@ class _Header extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
+        // ".AI" SEMPRE acompanhado de "RUNNIN" (lockup canônico do app),
+        // mesmo no compact. Cor do ".AI" preta sólida pra garantir leitura
+        // em todas as skins (auto-contraste falhava em magenta/volt).
+        Icon(
+          Icons.keyboard_double_arrow_right,
+          size: compact ? 11.0 : 16.0,
+          color: palette.primary,
+        ),
+        const SizedBox(width: 3),
         Text(
-          'RUNNIN.AI',
+          'RUNNIN',
           style: type.labelCaps.copyWith(
-            color: palette.muted,
-            fontSize: compact ? 9.0 : 11.0,
-            letterSpacing: 1.6,
+            color: palette.text,
+            fontSize: compact ? 8.5 : 12.0,
+            letterSpacing: 1.0,
             fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(width: 3),
+        Container(
+          padding: EdgeInsets.symmetric(
+            horizontal: compact ? 3.0 : 5.0,
+            vertical: compact ? 1.0 : 2.0,
+          ),
+          color: palette.primary,
+          child: Text(
+            '.AI',
+            style: type.labelCaps.copyWith(
+              color: const Color(0xFF0A0A0F),
+              fontSize: compact ? 7.5 : 10.0,
+              letterSpacing: 0.6,
+              fontWeight: FontWeight.w700,
+            ),
           ),
         ),
         const Spacer(),
@@ -311,10 +334,17 @@ class _Header extends StatelessWidget {
                 vertical: compact ? 4.0 : 6.0,
               ),
               decoration: BoxDecoration(
-                color: palette.surfaceAlt,
-                border: Border.all(color: palette.border, width: 0.8),
+                // TF 79: chip ganha palette.secondary (cor #2 da skin),
+                // contrasta com chevron/.AI/border que são primary.
+                color: palette.secondary.withValues(alpha: 0.18),
+                border: Border.all(
+                  color: palette.secondary.withValues(alpha: 0.7),
+                  width: 0.8,
+                ),
               ),
-              constraints: BoxConstraints(maxWidth: compact ? 140 : 240),
+              // Popup tem espaço pra label completa ("ACUMULADO 50K") —
+              // maxWidth alargado evita ellipsis em chips longos.
+              constraints: BoxConstraints(maxWidth: compact ? 140 : 320),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -333,10 +363,10 @@ class _Header extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       textAlign: TextAlign.center,
                       style: type.labelCaps.copyWith(
-                        color: palette.muted,
+                        color: palette.secondary,
                         fontSize: compact ? 8.5 : 10.5,
                         letterSpacing: 0.8,
-                        fontWeight: FontWeight.w600,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                   ),
@@ -370,7 +400,7 @@ class _Hero extends StatelessWidget {
               maxLines: 1,
               style: TextStyle(
                 color: palette.text,
-                fontSize: compact ? 56.0 : 96.0,
+                fontSize: compact ? 42.0 : 96.0,
                 fontWeight: FontWeight.w900,
                 height: 0.95,
                 letterSpacing: -2,
@@ -806,32 +836,3 @@ class _VerticalBars extends StatelessWidget {
   }
 }
 
-class _Footer extends StatelessWidget {
-  final String handle;
-  const _Footer({required this.handle});
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.runninPalette;
-    final type = context.runninType;
-    return Row(
-      children: [
-        Text(
-          handle,
-          style: type.bodyXs.copyWith(
-            color: palette.muted,
-            fontSize: 11.0,
-          ),
-        ),
-        const Spacer(),
-        Text(
-          'runninai.com',
-          style: type.bodyXs.copyWith(
-            color: palette.muted,
-            fontSize: 11.0,
-          ),
-        ),
-      ],
-    );
-  }
-}

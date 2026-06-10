@@ -44,6 +44,10 @@ class BadgePopupModal extends StatefulWidget {
 
 class _BadgePopupModalState extends State<BadgePopupModal> {
   final GlobalKey _cardKey = GlobalKey();
+  /// Key do botão COMPARTILHAR pra capturar `sharePositionOrigin` requerido
+  /// pelo UIActivityViewController no iOS (sem isso lança
+  /// "sharePositionOrigin argument must be set").
+  final GlobalKey _shareBtnKey = GlobalKey();
   bool _sharing = false;
 
   Future<void> _share() async {
@@ -79,9 +83,19 @@ class _BadgePopupModalState extends State<BadgePopupModal> {
         '${dir.path}/badge_${widget.badge.badgeId}_${DateTime.now().millisecondsSinceEpoch}.png',
       );
       await file.writeAsBytes(pngBytes);
+      // iOS exige sharePositionOrigin (Rect do botão). Sem isso o
+      // UIActivityViewController lança "sharePositionOrigin: argument
+      // must be set" (visto nos logs). Usa o botão como anchor.
+      final btnBox = _shareBtnKey.currentContext?.findRenderObject() as RenderBox?;
+      Rect? sharePositionOrigin;
+      if (btnBox != null && btnBox.hasSize) {
+        final topLeft = btnBox.localToGlobal(Offset.zero);
+        sharePositionOrigin = topLeft & btnBox.size;
+      }
       await Share.shareXFiles(
         [XFile(file.path)],
         text: '${widget.badge.title} · runnin.ai',
+        sharePositionOrigin: sharePositionOrigin,
       );
       // Best-effort: registra share no server.
       unawaited(BadgeController.instance.trackShare(widget.badge.badgeId));
@@ -135,15 +149,14 @@ class _BadgePopupModalState extends State<BadgePopupModal> {
                 ],
               ),
             ),
-            // Card (full bleed) — em RepaintBoundary pra capturar PNG
+            // Card scrollable pra cards altos não overflowarem (stats grid
+            // + coach quote podem ultrapassar viewport em telas pequenas).
             Expanded(
-              child: Center(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: RepaintBoundary(
-                    key: _cardKey,
-                    child: BadgeCardView(badge: widget.badge),
-                  ),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                child: RepaintBoundary(
+                  key: _cardKey,
+                  child: BadgeCardView(badge: widget.badge),
                 ),
               ),
             ),
@@ -154,6 +167,7 @@ class _BadgePopupModalState extends State<BadgePopupModal> {
                 children: [
                   Expanded(
                     child: ElevatedButton.icon(
+                      key: _shareBtnKey,
                       onPressed: _sharing ? null : _share,
                       icon: const Icon(Icons.ios_share),
                       label: Text(_sharing ? 'PREPARANDO...' : 'COMPARTILHAR'),

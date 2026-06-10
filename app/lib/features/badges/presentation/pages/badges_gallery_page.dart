@@ -164,7 +164,9 @@ class _BadgesGalleryPageState extends State<BadgesGalleryPage> {
               crossAxisCount: 2,
               mainAxisSpacing: 12,
               crossAxisSpacing: 12,
-              childAspectRatio: 0.58,
+              // TF 79: aspect 1.0 (quadrado) — cabe lockup + hero + label +
+              // título 1-linha + data sem overflow vertical.
+              childAspectRatio: 1.0,
             ),
             delegate: SliverChildBuilderDelegate(
               (_, i) {
