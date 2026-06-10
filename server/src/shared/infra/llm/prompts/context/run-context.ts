@@ -27,15 +27,17 @@ export interface RunContextInput {
   windKmh?: number;
 }
 
-/** Pace double (min/km) → "mm:ss/km" pra ficar legível na fala do coach
- *  ("5:30/km" em vez de "5.50/km"). Lida com null/undefined. */
+/** Pace double (min/km) → "5min30" pra Gemini narrar corretamente. TF 81
+ *  (Issue #3): formato anterior `5:30` era lido como "cinco mil por km"
+ *  (Gemini parsing :00 como milhar) ou "sete vírgula 45" (Gemini parsing :
+ *  como vírgula decimal). `5min30` evita ambiguidade — TTS expande pra
+ *  "cinco minutos e trinta segundos". */
 function formatPaceMmSs(p: number | undefined): string | null {
   if (typeof p !== 'number' || !isFinite(p) || p <= 0) return null;
   const min = Math.floor(p);
   const sec = Math.round((p - min) * 60);
-  // Edge: arredondamento pode estourar pra 60s (ex: 5.999) — normaliza.
-  if (sec === 60) return `${min + 1}:00`;
-  return `${min}:${sec.toString().padStart(2, '0')}`;
+  if (sec === 60) return `${min + 1}min00`;
+  return `${min}min${sec.toString().padStart(2, '0')}`;
 }
 
 export function formatRunContext(ctx: RunContextInput): string {
@@ -44,8 +46,9 @@ export function formatRunContext(ctx: RunContextInput): string {
   if (ctx.runType) lines.push(`- Tipo: ${ctx.runType}`);
   if (typeof ctx.distanceM === 'number') lines.push(`- Distância acumulada: ${(ctx.distanceM / 1000).toFixed(2)} km`);
   if (typeof ctx.elapsedS === 'number') lines.push(`- Tempo total: ${Math.floor(ctx.elapsedS / 60)} min ${ctx.elapsedS % 60}s`);
-  // Pace em mm:ss/km (não decimal) — fala do coach soa muito mais natural
-  // ("5:30/km" vs "5.50/km" que ele lê como "cinco vírgula cinquenta").
+  // Pace formatado `5min30/km` (TF 81, Issue #3) — Gemini lia `5:30` mal
+  // ("cinco mil por km" ou "cinco vírgula cinquenta"). `5min30` expande
+  // naturalmente pra "cinco minutos e trinta segundos por quilômetro".
   const curPace = formatPaceMmSs(ctx.currentPaceMinKm);
   if (curPace) lines.push(`- Pace atual: ${curPace}/km`);
   const tgtPace = formatPaceMmSs(ctx.targetPaceMinKm);
@@ -71,7 +74,7 @@ export function buildEventPrompt(ctx: RunContextInput): string {
     case 'pre_run':
       return `O corredor quer iniciar uma corrida do tipo ${ctx.runType ?? 'livre'}. Prepare o atleta com foco no objetivo, no plano atual e no cuidado com intensidade.\n\n${base}`;
     case 'km_reached': {
-      const curPace = formatPaceMmSs(ctx.currentPaceMinKm) ?? 'X:XX';
+      const curPace = formatPaceMmSs(ctx.currentPaceMinKm) ?? 'XminXX';
       const tgtPace = formatPaceMmSs(ctx.targetPaceMinKm);
       const tgtSuffix = tgtPace ? `, alvo ${tgtPace}/km` : '';
       const bpmHint = typeof ctx.kmAvgBpm === 'number'
@@ -80,16 +83,16 @@ export function buildEventPrompt(ctx: RunContextInput): string {
       return `O atleta${ctx.athleteName ? ' ' + ctx.athleteName : ''} acabou de completar o km ${ctx.kmReached}. ESTRUTURA OBRIGATÓRIA, 2 frases:\n\n1) "Fechamos o ${ctx.kmReached}º km${ctx.athleteName ? ', ' + ctx.athleteName : ''}. Seu pace foi ${curPace}/km${tgtSuffix}." — anúncio claro do fechamento + comparação direta com o alvo (se houver alvo).\n2) Uma frase curta com ação ("mantém", "segura", "acelera 5 segundos") ou observação técnica de cadência/respiração baseada no que mais se destaca (FC alta, elevação, distância vs km anterior). Use o tom da persona configurada.${bpmHint}\n\nNão pule a 1ª frase, não inverta a ordem, não enrole. 8-12s de áudio total.\n\n${base}`;
     }
     case 'km_split': {
-      const cur = formatPaceMmSs(ctx.currentPaceMinKm) ?? 'X:XX';
-      const tgt = formatPaceMmSs(ctx.targetPaceMinKm) ?? 'Y:YY';
+      const cur = formatPaceMmSs(ctx.currentPaceMinKm) ?? 'XminXX';
+      const tgt = formatPaceMmSs(ctx.targetPaceMinKm) ?? 'YminYY';
       const bpmHint = typeof ctx.kmAvgBpm === 'number'
         ? ` Quando "FC média do km" estiver no contexto, MENCIONE ela na 2ª frase se for relevante ("FC média ${ctx.kmAvgBpm}, tá dentro" ou "FC subiu pra ${ctx.kmAvgBpm}, segura no próximo km").`
         : '';
       return `O atleta${ctx.athleteName ? ' ' + ctx.athleteName : ''} acabou de fechar o km ${ctx.kmReached}. Diga claramente, NESTE formato (varie só o nome e o tom final), 1-2 frases: "${ctx.athleteName ?? 'Atleta'}, seu pace no km ${ctx.kmReached} foi ${cur}/km, a meta é manter em ${tgt}/km." Depois UMA frase curta com tom da persona (motivador: gás pra manter; técnico: ajuste objetivo de cadência/postura). NÃO troque a 1ª frase pelo livre — ela é o feedback de split que o user pediu.${bpmHint}\n\n${base}`;
     }
     case 'pace_alert': {
-      const curPace = formatPaceMmSs(ctx.currentPaceMinKm) ?? 'X:XX';
-      const tgtPace = formatPaceMmSs(ctx.targetPaceMinKm) ?? 'Y:YY';
+      const curPace = formatPaceMmSs(ctx.currentPaceMinKm) ?? 'XminXX';
+      const tgtPace = formatPaceMmSs(ctx.targetPaceMinKm) ?? 'YminYY';
       const bpmHint = typeof ctx.bpm === 'number'
         ? ` Se "BPM atual" estiver elevado (>~85% do máximo), correlacione com o pace alto na 2ª frase ("FC tá em ${ctx.bpm}, segura").`
         : '';
@@ -111,7 +114,7 @@ export function buildEventPrompt(ctx: RunContextInput): string {
       // mesmo quando tudo segue o plano. Diferente de motivation (motivacional
       // genérica), check_in cita os números atuais (km/pace/tempo) pra mostrar
       // ao user que o coach está acompanhando ativamente.
-      const curPace = formatPaceMmSs(ctx.currentPaceMinKm) ?? 'X:XX';
+      const curPace = formatPaceMmSs(ctx.currentPaceMinKm) ?? 'XminXX';
       const km = typeof ctx.distanceM === 'number' ? (ctx.distanceM / 1000).toFixed(2) : '?';
       const bpmHint = typeof ctx.bpm === 'number'
         ? ` Se "BPM atual" estiver no contexto, prefira usar ele como sinal vital ("FC em ${ctx.bpm}, ritmo confortável") em vez de adivinhar respiração — é mais informativo.`
@@ -127,8 +130,8 @@ export function buildEventPrompt(ctx: RunContextInput): string {
     case 'segment_start':
       return `O corredor entrou no próximo segmento do plano (índice ${ctx.currentSegmentIndex ?? '?'}). Anuncie a transição em 1 frase referenciando o briefing do segmento (fase + instrução).\n\n${base}`;
     case 'segment_pace_off': {
-      const curPace = formatPaceMmSs(ctx.currentPaceMinKm) ?? 'X:XX';
-      const tgtPace = formatPaceMmSs(ctx.targetPaceMinKm) ?? 'Y:YY';
+      const curPace = formatPaceMmSs(ctx.currentPaceMinKm) ?? 'XminXX';
+      const tgtPace = formatPaceMmSs(ctx.targetPaceMinKm) ?? 'YminYY';
       return `O pace do corredor desviou do alvo DESTE segmento do plano (índice ${ctx.currentSegmentIndex ?? '?'}). Corrija explicitamente, NESTE formato, 2 frases:\n\n1) "${ctx.athleteName ?? 'Atleta'}, na fase atual seu pace é ${curPace}/km, o alvo da fase é ${tgtPace}/km." — cite o ALVO DO SEGMENTO (não o pace alvo geral da sessão).\n2) Ação direta com DIREÇÃO clara (acelera X segundos, segura na próxima curva) no tom da persona.\n\n${base}`;
     }
     case 'segment_end':

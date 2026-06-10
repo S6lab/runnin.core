@@ -171,14 +171,20 @@ function formatPace(minKm: number | undefined | null): string | null {
   const totalSec = Math.round(minKm * 60);
   const min = Math.floor(totalSec / 60);
   const sec = totalSec % 60;
-  return `${min}:${sec.toString().padStart(2, '0')}`;
+  // TF 81 (Issue #3): formato `5min30` em vez de `5:30` — Gemini lê
+  // corretamente como "cinco minutos e trinta segundos". Antes `5:00` virava
+  // "cinco mil" e `7:45` virava "sete vírgula 45".
+  return `${min}min${sec.toString().padStart(2, '0')}`;
 }
 
 function formatTime(seconds: number): string {
+  // TF 81 (Issue #3): formato `47min30` em vez de `47:30` pra TTS ler como
+  // "quarenta e sete minutos e trinta segundos" (não "quarenta e sete
+  // vírgula trinta"). Mesmo padrão do formatPace acima.
   const s = Math.max(0, Math.round(seconds));
   const m = Math.floor(s / 60);
   const r = s % 60;
-  return `${m}:${r.toString().padStart(2, '0')}`;
+  return `${m}min${r.toString().padStart(2, '0')}`;
 }
 
 // =============================================================================

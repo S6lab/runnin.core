@@ -2710,9 +2710,13 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
   }
 
   String _fmtPaceMinKm(double p) {
+    // TF 81 (Issue #3): formato `5min30` em vez de `5:30` pra Gemini
+    // narrar corretamente. Antes: "5:00/km" → "cinco mil por km", "7:45/km"
+    // → "sete vírgula 45". Com `5min30` o LLM expande naturalmente pra
+    // "cinco minutos e trinta segundos por quilômetro".
     final m = p.floor();
     final s = ((p - m) * 60).round();
-    return '$m:${s.toString().padLeft(2, '0')}';
+    return '${m}min${s.toString().padLeft(2, '0')}';
   }
 
   double _computePaceMinKm() {
