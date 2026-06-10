@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:runnin/features/badges/presentation/badge_controller.dart';
 import 'package:runnin/features/badges/presentation/pages/badge_popup_modal.dart';
+import 'package:runnin/features/badges/presentation/widgets/next_badge_teaser.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -103,6 +104,8 @@ class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
     // TF 77: checa badges não-vistos no boot + listener pra abrir modal.
     BadgeController.instance.addListener(_maybeShowBadgePopup);
     unawaited(BadgeController.instance.checkRecentUnseen());
+    // TF 79: carrega "próximo badge" pro teaser permanente na home.
+    unawaited(BadgeController.instance.loadNext());
   }
 
   @override
@@ -134,6 +137,8 @@ class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
       // TF 77: checa badges desbloqueados ainda não-vistos. Popup pop
       // no próximo open. Best-effort: falha silenciosa.
       unawaited(BadgeController.instance.checkRecentUnseen());
+      // TF 79: refresh do teaser próximo badge no resume.
+      unawaited(BadgeController.instance.loadNext());
     }
   }
 
@@ -247,6 +252,11 @@ class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
                     // cross-tab content leak reported by the user.
                     // B2 SUP-406 Section 1 — Coach Brief + INICIAR
                     _IniciarSessaoButton(data: state.data),
+                    const SizedBox(height: 20),
+                    // TF 79: teaser do próximo badge mais perto de desbloquear.
+                    // Some quando user já tem tudo OU está a < 5% do alvo
+                    // (server retorna null nesse caso). Tap → /profile/badges.
+                    const NextBadgeTeaser(),
                     const SizedBox(height: 20),
                     // Notificações migraram pro ícone (sino) no cabeçalho da
                     // Home → tela /notifications. Dropdown antigo removido.

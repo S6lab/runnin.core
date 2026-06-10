@@ -6,6 +6,8 @@ import 'package:flutter/foundation.dart';
 import 'package:go_router/go_router.dart';
 import 'package:runnin/core/network/api_client.dart';
 import 'package:runnin/core/router/app_router.dart';
+import 'package:runnin/features/badges/presentation/badge_controller.dart';
+import 'package:runnin/features/badges/presentation/pages/badge_popup_modal.dart';
 
 /// Init FCM + registra token no backend + roteia taps de push pra rota
 /// correta no app.
@@ -78,21 +80,43 @@ class PushNotificationsService {
 
   /// Lê `data.route` do payload e navega via rootNavigator. Fallback
   /// pra `/notifications` se a rota não vier no payload.
+  ///
+  /// TF 79: quando `data.kind == 'badge_unlocked'`, primeiro navega pra
+  /// `/profile/badges`, depois abre o `BadgePopupModal` do badge específico
+  /// via lookup no `BadgeController`. Sem o popup, o user ia precisar
+  /// procurar o badge novo na galeria — UX ruim.
   void _handleTap(RemoteMessage msg) {
     final route = msg.data['route'];
     final target = (route is String && route.isNotEmpty)
         ? route
         : '/notifications';
+    final kind = msg.data['kind'];
+    final badgeId = msg.data['badgeId'];
     // navigatorKey.currentContext só fica disponível depois do build do
     // MaterialApp.router. Em cold start chegamos aqui antes — então
     // agendamos pra próximo frame.
-    Future<void>.delayed(const Duration(milliseconds: 50), () {
+    Future<void>.delayed(const Duration(milliseconds: 50), () async {
       final ctx = rootNavigatorKey.currentContext;
       if (ctx == null) return;
       try {
         ctx.push(target);
       } catch (e) {
         if (kDebugMode) debugPrint('push.nav_failed: $e route=$target');
+        return;
+      }
+      if (kind == 'badge_unlocked' && badgeId is String && badgeId.isNotEmpty) {
+        // Aguarda a galeria carregar (controller já cacheia all=List<Badge>)
+        // e abre o popup do badge alvo. Se o user fechou push depois de
+        // markSeen, BadgeController.all ainda devolve o badge — popup
+        // mostra como "já visto" sem disparar mark-seen.
+        await BadgeController.instance.refresh();
+        final target = BadgeController.instance.all
+            .where((b) => b.badgeId == badgeId)
+            .firstOrNull;
+        if (target == null) return;
+        final ctx2 = rootNavigatorKey.currentContext;
+        if (ctx2 == null || !ctx2.mounted) return;
+        await BadgePopupModal.show(ctx2, target);
       }
     });
   }

@@ -62,6 +62,11 @@ class _BadgesGalleryPageState extends State<BadgesGalleryPage> {
       return Center(child: CircularProgressIndicator(color: palette.primary));
     }
     if (_controller.all.isEmpty) {
+      // Diferencia "vazio porque novato" (sem erro) de "vazio porque
+      // request falhou" (lastErrored=true). Sem isso, qualquer falha de
+      // rede/server vira "Nenhum badge ainda" enganador e o user fica sem
+      // botão de retry.
+      final errored = _controller.lastErrored;
       return ListView(
         physics: const AlwaysScrollableScrollPhysics(),
         children: [
@@ -71,19 +76,46 @@ class _BadgesGalleryPageState extends State<BadgesGalleryPage> {
               padding: const EdgeInsets.symmetric(horizontal: 32),
               child: Column(
                 children: [
-                  Icon(Icons.emoji_events_outlined, size: 56, color: palette.muted),
+                  Icon(
+                    errored ? Icons.cloud_off_outlined : Icons.emoji_events_outlined,
+                    size: 56,
+                    color: errored ? palette.warning : palette.muted,
+                  ),
                   const SizedBox(height: 16),
                   Text(
-                    'Nenhum badge ainda',
+                    errored
+                        ? 'Não foi possível carregar'
+                        : 'Nenhum badge ainda',
                     textAlign: TextAlign.center,
                     style: type.labelMd.copyWith(color: palette.text, fontSize: 18),
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Conclua corridas pra desbloquear marcos da sua jornada',
+                    errored
+                        ? 'Verifique sua conexão e toque pra tentar de novo'
+                        : 'Conclua corridas pra desbloquear marcos da sua jornada',
                     textAlign: TextAlign.center,
                     style: type.bodySm.copyWith(color: palette.muted),
                   ),
+                  if (errored) ...[
+                    const SizedBox(height: 20),
+                    OutlinedButton.icon(
+                      onPressed: () => _controller.refresh(),
+                      icon: Icon(Icons.refresh, color: palette.primary),
+                      label: Text(
+                        'TENTAR DE NOVO',
+                        style: type.labelCaps.copyWith(
+                          color: palette.primary,
+                          letterSpacing: 1.0,
+                        ),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        side: BorderSide(color: palette.primary),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 20, vertical: 12),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),

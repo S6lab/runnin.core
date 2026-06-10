@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'package:runnin/features/badges/domain/entities/badge.dart' as badge_e;
 import 'package:runnin/features/training/domain/entities/plan_checkpoint.dart';
 
 class GpsPoint {
@@ -338,6 +339,11 @@ class Run {
   /// semana toda. `feedbackAt` indica quando foi enviado.
   final List<CheckpointInput> userFeedback;
   final String? feedbackAt;
+  /// TF 79: badges desbloqueados na resposta do PATCH /runs/:id/complete.
+  /// Populado APENAS pelo response do complete-run — não persiste, é o sinal
+  /// transitório pro cliente abrir BadgePopupModal full-screen antes de ir
+  /// pro /report. Em outras leituras de Run, fica `const []`.
+  final List<badge_e.Badge> unlockedBadges;
 
   const Run({
     required this.id,
@@ -363,6 +369,7 @@ class Run {
     this.splits = const [],
     this.userFeedback = const [],
     this.feedbackAt,
+    this.unlockedBadges = const [],
   });
 
   factory Run.fromJson(Map<String, dynamic> j) => Run(
@@ -399,5 +406,10 @@ class Run {
             .toList()
         : const [],
     feedbackAt: j['feedbackAt'] as String?,
+    unlockedBadges: j['unlockedBadges'] != null
+        ? (j['unlockedBadges'] as List)
+            .map((e) => badge_e.Badge.fromJson(e as Map<String, dynamic>))
+            .toList()
+        : const [],
   );
 }

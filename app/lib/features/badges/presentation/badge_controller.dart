@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:runnin/core/logger/logger.dart';
 import 'package:runnin/features/badges/data/badge_remote_datasource.dart';
 import 'package:runnin/features/badges/domain/entities/badge.dart';
 
@@ -20,14 +21,31 @@ class BadgeController extends ChangeNotifier {
   bool _loading = false;
   bool get loading => _loading;
 
+  /// True se o último refresh/checkRecentUnseen falhou. UI usa pra
+  /// mostrar erro com retry em vez de "Nenhum badge ainda" — diferenciar
+  /// "vazio porque novato" de "vazio porque rede/server falhou".
+  bool _lastErrored = false;
+  bool get lastErrored => _lastErrored;
+
+  /// TF 79: próximo badge mais próximo de desbloquear (teaser na home).
+  /// Carregado via `loadNext()` e cacheado até o próximo refresh.
+  NextBadgeProgress? _nextBadge;
+  NextBadgeProgress? get nextBadge => _nextBadge;
+
   Future<void> refresh() async {
     _loading = true;
     notifyListeners();
     try {
       _all = await _ds.getMine();
-    } catch (_) {/* best-effort */}
-    _loading = false;
-    notifyListeners();
+      _lastErrored = false;
+    } catch (e, st) {
+      _lastErrored = true;
+      // Logger.error vai pro analytics/Crashlytics — diagnosticável remoto.
+      Logger.error('badges.refresh.fail', e, st);
+    } finally {
+      _loading = false;
+      notifyListeners();
+    }
   }
 
   /// Chamado no app boot/resume. Se há novo badge não-visto, popa o mais
@@ -38,7 +56,9 @@ class BadgeController extends ChangeNotifier {
       if (unseen.isEmpty) return;
       _pendingPopup = unseen.first;
       notifyListeners();
-    } catch (_) {/* ignore */}
+    } catch (e, st) {
+      Logger.error('badges.recent_unseen.fail', e, st);
+    }
   }
 
   Future<void> dismissPopup() async {
@@ -48,13 +68,29 @@ class BadgeController extends ChangeNotifier {
     if (b != null) {
       try {
         await _ds.markSeen(b.badgeId);
-      } catch (_) {/* ignore */}
+      } catch (e, st) {
+        Logger.error('badges.mark_seen.fail', e, st, {'badgeId': b.badgeId});
+      }
     }
   }
 
   Future<void> trackShare(String badgeId) async {
     try {
       await _ds.trackShare(badgeId);
-    } catch (_) {/* ignore */}
+    } catch (e, st) {
+      Logger.error('badges.share.fail', e, st, {'badgeId': badgeId});
+    }
+  }
+
+  /// Carrega o próximo badge mais perto de desbloquear. Chamado pelo card
+  /// teaser da home no boot/resume. Best-effort: falha silenciosa não
+  /// quebra a home; só não mostra o card.
+  Future<void> loadNext() async {
+    try {
+      _nextBadge = await _ds.getNext();
+      notifyListeners();
+    } catch (e, st) {
+      Logger.error('badges.next.fail', e, st);
+    }
   }
 }

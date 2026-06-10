@@ -12,11 +12,11 @@ import 'package:runnin/core/audio/coach_audio_player.dart';
 import 'package:runnin/core/debug/mock_gps_service.dart';
 import 'package:runnin/core/notifications/run_bg_notification_service.dart';
 import 'package:runnin/core/theme/app_palette.dart';
+import 'package:runnin/features/badges/presentation/pages/badge_popup_modal.dart';
 import 'package:runnin/features/run/domain/entities/run.dart' show GpsPoint;
 import 'package:runnin/features/run/presentation/bloc/run_bloc.dart';
 import 'package:runnin/features/run/presentation/widgets/gps_permission_modal.dart';
 import 'package:runnin/features/subscriptions/presentation/subscription_controller.dart';
-import 'package:runnin/shared/widgets/figma/export.dart' show FigmaBadgeUnlockModal;
 
 /// Página da corrida ativa. Aceita `initialType` que vem da última tela
 /// do wizard /prep. Inicia em modo IDLE com botão INICIAR + status chips
@@ -59,9 +59,12 @@ class ActiveRunPage extends StatelessWidget {
       listenWhen: (_, curr) => curr.status == RunStatus.completed,
       listener: (context, state) {
         final runId = state.completedRun?.id ?? state.runId ?? '';
-        if (state.completedRun?.newBadges != null &&
-            state.completedRun!.newBadges!.isNotEmpty) {
-          _showBadgeUnlockModal(context, state.completedRun!.newBadges!, runId);
+        // TF 79: unlockedBadges vem populado pelo PATCH /runs/:id/complete.
+        // Mostra BadgePopupModal full-screen estilo Stories pra cada badge
+        // antes de navegar pro /report. isAutoUnlock=true → markSeen no close.
+        final badges = state.completedRun?.unlockedBadges ?? const [];
+        if (badges.isNotEmpty) {
+          _showBadgePopups(context, badges, runId);
         } else {
           context.pushReplacement('/report', extra: runId);
         }
@@ -76,51 +79,22 @@ class ActiveRunPage extends StatelessWidget {
     );
   }
 
-  static void _showBadgeUnlockModal(
+  /// Mostra `BadgePopupModal` em sequência pra cada badge desbloqueado. Após
+  /// o último ser dispensado, navega pra `/report`. Substitui o
+  /// `FigmaBadgeUnlockModal` legado (que usava `Run.newBadges: List<String>`
+  /// nunca mais populado) — agora usa o sistema de badges full do server
+  /// com card visual + share, igual ao popup automático do boot da home.
+  static Future<void> _showBadgePopups(
     BuildContext context,
-    List<String> newBadges,
+    List badges,
     String originalRunId,
-  ) {
-    if (newBadges.isEmpty) return;
-    
-    final badge = newBadges.first;
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => FigmaBadgeUnlockModal(
-        badgeIcon: Icons.celebration,
-        badgeTitle: _getBadgeTitle(badge),
-        xpGained: 100,
-        message: 'Parabéns! Você desbloqueou um novo badge.',
-        onDismiss: () {
-          Navigator.of(ctx).pop();
-          final remainingBadges = List<String>.from(newBadges)..removeAt(0);
-          if (remainingBadges.isEmpty) {
-            context.pushReplacement(
-              '/report',
-              extra: originalRunId,
-            );
-          } else {
-            _showBadgeUnlockModal(context, remainingBadges, originalRunId);
-          }
-        },
-      ),
-    );
-  }
-
-  static String _getBadgeTitle(String badgeId) {
-    switch (badgeId) {
-      case 'first_run':
-        return 'Primeira Corrida';
-      case '距離10':
-        return '10km Club';
-      case 'streak_7':
-        return 'Corredor de 7 Dias';
-      case 'distance_50':
-        return '50km Master';
-      default:
-        return badgeId.toUpperCase().replaceAll('_', ' ');
+  ) async {
+    for (final badge in badges) {
+      if (!context.mounted) return;
+      await BadgePopupModal.show(context, badge, isAutoUnlock: true);
     }
+    if (!context.mounted) return;
+    context.pushReplacement('/report', extra: originalRunId);
   }
 }
 

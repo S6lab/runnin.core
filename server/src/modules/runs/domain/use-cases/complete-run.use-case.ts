@@ -9,6 +9,7 @@ import { effectivePlanWeeks } from '@modules/plans/domain/plan.entity';
 import { logger } from '@shared/logger/logger';
 import { EvaluateBadgesUseCase } from '@modules/badges/use-cases/evaluate-badges.use-case';
 import { FirestoreBadgeRepository } from '@modules/badges/infra/firestore-badge.repository';
+import { SendUserPushUseCase } from '@modules/notifications/domain/use-cases/send-user-push.use-case';
 
 const KmSplitInputSchema = z.object({
   kmIndex: z.number().int().nonnegative(),
@@ -101,7 +102,11 @@ export class CompleteRunUseCase {
     private readonly runRepo: RunRepository,
   ) {}
 
-  async execute(runId: string, userId: string, input: CompleteRunInput): Promise<Run> {
+  async execute(
+    runId: string,
+    userId: string,
+    input: CompleteRunInput,
+  ): Promise<{ run: Run; unlockedBadges: import('@modules/badges/domain/badge.entity').Badge[] }> {
     const run = await this.runRepo.findById(runId, userId);
     if (!run) throw new NotFoundError('Run');
 
@@ -177,15 +182,39 @@ export class CompleteRunUseCase {
     // algum marco (1ª corrida, 5K, 10K, streak, etc), persiste o badge
     // unlocked pra mostrar no próximo open do app. Best-effort — falha
     // silenciosa pra não quebrar o complete-run em caso de Firestore down.
+    // TF 79: também retorna a lista pro client mostrar modal pós-run.
+    let unlockedBadges: import('@modules/badges/domain/badge.entity').Badge[] = [];
     try {
       const badgesRepo = new FirestoreBadgeRepository();
       const evaluator = new EvaluateBadgesUseCase(this.runRepo, badgesRepo);
       const { unlocked } = await evaluator.execute({ uid: userId });
+      unlockedBadges = unlocked;
       if (unlocked.length > 0) {
         logger.info('badges.unlocked_after_run', {
           userId, runId, count: unlocked.length,
           ids: unlocked.map((b) => b.badgeId),
         });
+        // TF 79: dispara push pra cada badge desbloqueado. Best-effort —
+        // SendUserPushUseCase já respeita notificationsEnabled.push do user
+        // e falha silenciosa quando token inválido. Vai pra central de
+        // notificações iOS via APNS (bridge automática do FCM).
+        try {
+          const userRepo = new FirestoreUserRepository();
+          const sendPush = new SendUserPushUseCase(userRepo);
+          for (const badge of unlocked) {
+            await sendPush.execute(userId, {
+              title: '🏅 Novo marco desbloqueado!',
+              body: `${badge.title} · ${badge.subtitle}`,
+              data: {
+                kind: 'badge_unlocked',
+                route: '/profile/badges',
+                badgeId: badge.badgeId,
+              },
+            });
+          }
+        } catch (err) {
+          logger.warn('badges.push_failed', { userId, runId, err: String(err) });
+        }
       }
     } catch (err) {
       logger.warn('badges.eval_failed', { userId, runId, err: String(err) });
@@ -204,7 +233,7 @@ export class CompleteRunUseCase {
       }
     }
 
-    return { ...run, ...updates };
+    return { run: { ...run, ...updates }, unlockedBadges };
   }
 
   /**

@@ -37,9 +37,13 @@ export async function patchGps(req: Request, res: Response, next: NextFunction):
 export async function patchComplete(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const input = CompleteRunSchema.parse(req.body);
-    const run = await completeRun.execute(req.params['id'] as string, req.uid, input);
+    const { run, unlockedBadges } = await completeRun.execute(
+      req.params['id'] as string, req.uid, input,
+    );
     triggerReportGeneration(run.id, req.uid);
-    res.json(run);
+    // TF 79: cliente usa `unlockedBadges` pra abrir BadgePopupModal full-screen
+    // entre fim da run e /report (sem precisar esperar o boot da home).
+    res.json({ ...run, unlockedBadges });
   } catch (err) { next(err); }
 }
 
