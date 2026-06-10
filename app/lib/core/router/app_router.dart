@@ -36,6 +36,7 @@ import 'package:runnin/features/history/presentation/pages/history_page.dart';
 import 'package:runnin/features/history/presentation/pages/run_detail_page.dart';
 import 'package:runnin/features/history/presentation/pages/coach_conversation_replay_page.dart';
 import 'package:runnin/features/profile/presentation/pages/account_page.dart';
+import 'package:runnin/features/badges/presentation/pages/badges_gallery_page.dart';
 import 'package:runnin/features/profile/presentation/pages/account_access_page.dart';
 import 'package:runnin/features/profile/presentation/pages/health_exams_page.dart';
 import 'package:runnin/features/profile/presentation/pages/health/devices_page.dart';
@@ -319,6 +320,12 @@ final appRouter = GoRouter(
               CoachConversationReplayPage(runId: state.pathParameters['runId']!),
         ),
         GoRoute(path: '/profile', builder: (_, _) => const AccountPage()),
+        // TF 77: nova galeria de badges/checkpoints (substitui qualquer
+        // tela legada). Acessível via /profile/badges no menu de conta.
+        GoRoute(
+          path: '/profile/badges',
+          builder: (_, _) => const BadgesGalleryPage(),
+        ),
         GoRoute(
           path: '/profile/access',
           builder: (_, _) => const AccountAccessPage(),

@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:runnin/features/badges/presentation/badge_controller.dart';
+import 'package:runnin/features/badges/presentation/pages/badge_popup_modal.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -98,12 +100,26 @@ class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
     // antes desses tipos serem adicionados — sem isso, a lista de
     // Configurações > Saúde > Runnin fica só com "Batimentos".
     _bootstrapHealth();
+    // TF 77: checa badges não-vistos no boot + listener pra abrir modal.
+    BadgeController.instance.addListener(_maybeShowBadgePopup);
+    unawaited(BadgeController.instance.checkRecentUnseen());
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    BadgeController.instance.removeListener(_maybeShowBadgePopup);
     super.dispose();
+  }
+
+  void _maybeShowBadgePopup() {
+    final pending = BadgeController.instance.pendingPopup;
+    if (pending == null || !mounted) return;
+    // Defer pro próximo frame pra evitar showDialog durante build.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      BadgePopupModal.show(context, pending, isAutoUnlock: true);
+    });
   }
 
   @override
@@ -115,6 +131,9 @@ class _HomeViewState extends State<_HomeView> with WidgetsBindingObserver {
     // o sono do Watch chegando no HK só depois do limite.
     if (state == AppLifecycleState.resumed) {
       _refreshHealthAndReload();
+      // TF 77: checa badges desbloqueados ainda não-vistos. Popup pop
+      // no próximo open. Best-effort: falha silenciosa.
+      unawaited(BadgeController.instance.checkRecentUnseen());
     }
   }
 

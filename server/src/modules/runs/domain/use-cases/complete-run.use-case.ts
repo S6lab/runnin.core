@@ -7,12 +7,16 @@ import { GetProfileUseCase } from '@modules/users/domain/use-cases/get-profile.u
 import { FirestorePlanRepository } from '@modules/plans/infra/firestore-plan.repository';
 import { effectivePlanWeeks } from '@modules/plans/domain/plan.entity';
 import { logger } from '@shared/logger/logger';
+import { EvaluateBadgesUseCase } from '@modules/badges/use-cases/evaluate-badges.use-case';
+import { FirestoreBadgeRepository } from '@modules/badges/infra/firestore-badge.repository';
 
 const KmSplitInputSchema = z.object({
   kmIndex: z.number().int().nonnegative(),
   durationS: z.number().nonnegative(),
   avgPaceMinKm: z.string(),
   avgBpm: z.number().optional(),
+  /** TF 75 Fase 10: BPM máximo do split (pico). Cliente reporta. */
+  maxBpm: z.number().optional(),
   elevationGain: z.number().optional(),
   /** Distância real do split (m). Opcional — splits de 1km completo omitem.
    *  Splits parciais (tail < 1km) enviam o leftover real pra calorias
@@ -124,6 +128,7 @@ export class CompleteRunUseCase {
         calories: calcCalories(splitDistM, s.durationS, weightKg),
       };
       if (typeof s.avgBpm === 'number') base.avgBpm = s.avgBpm;
+      if (typeof s.maxBpm === 'number') base.maxBpm = s.maxBpm;
       if (typeof s.elevationGain === 'number') base.elevationGain = s.elevationGain;
       if (typeof s.distanceM === 'number') base.distanceM = s.distanceM;
       if (s.isPartial === true) base.isPartial = true;
@@ -166,6 +171,24 @@ export class CompleteRunUseCase {
       } catch (err) {
         logger.warn('user.maxBpm.bump_failed', { userId, runId, err: String(err) });
       }
+    }
+
+    // TF 77: dispara evaluator de badges pós-completar. Se a run desbloqueou
+    // algum marco (1ª corrida, 5K, 10K, streak, etc), persiste o badge
+    // unlocked pra mostrar no próximo open do app. Best-effort — falha
+    // silenciosa pra não quebrar o complete-run em caso de Firestore down.
+    try {
+      const badgesRepo = new FirestoreBadgeRepository();
+      const evaluator = new EvaluateBadgesUseCase(this.runRepo, badgesRepo);
+      const { unlocked } = await evaluator.execute({ uid: userId });
+      if (unlocked.length > 0) {
+        logger.info('badges.unlocked_after_run', {
+          userId, runId, count: unlocked.length,
+          ids: unlocked.map((b) => b.badgeId),
+        });
+      }
+    } catch (err) {
+      logger.warn('badges.eval_failed', { userId, runId, err: String(err) });
     }
 
     // Marca a sessão do plano como executada quando a run carrega um

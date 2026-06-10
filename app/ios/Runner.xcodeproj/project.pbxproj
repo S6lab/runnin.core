@@ -15,6 +15,7 @@
 		55D6DD9E2FD3AECA00104508 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 55D6DD9D2FD3AECA00104508 /* SwiftUI.framework */; };
 		55D6DDAD2FD3AECA00104508 /* RunninLiveActivityExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 55D6DD9A2FD3AEC900104508 /* RunninLiveActivityExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		55D6DDC92FD3B1E700104508 /* LiveActivityPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55D6DDBF2FD3B1E700104508 /* LiveActivityPlugin.swift */; };
+		55D6DDCA2FD3B1E700104509 /* AudioSessionPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55D6DDC02FD3B1E700104509 /* AudioSessionPlugin.swift */; };
 		55D6DDD02FD3B1E700104508 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 55D6DDC22FD3B1E700104508 /* PrivacyInfo.xcprivacy */; };
 		55D6DDD12FD3B1E700104508 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 55D6DDB72FD3B1E700104508 /* Assets.xcassets */; };
 		55D6DDD22FD3B1E700104508 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 55D6DDC12FD3B1E700104508 /* Main.storyboard */; };
@@ -110,6 +111,7 @@
 		55D6DDBC2FD3B1E700104508 /* InstagramStoriesPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InstagramStoriesPlugin.swift; sourceTree = "<group>"; };
 		55D6DDBD2FD3B1E700104508 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		55D6DDBF2FD3B1E700104508 /* LiveActivityPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveActivityPlugin.swift; sourceTree = "<group>"; };
+		55D6DDC02FD3B1E700104509 /* AudioSessionPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioSessionPlugin.swift; sourceTree = "<group>"; };
 		55D6DDC02FD3B1E700104508 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
 		55D6DDC22FD3B1E700104508 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		55D6DDC32FD3B1E700104508 /* Runner.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Runner.entitlements; sourceTree = "<group>"; };
@@ -253,6 +255,7 @@
 				55D6DDBC2FD3B1E700104508 /* InstagramStoriesPlugin.swift */,
 				55D6DDBE2FD3B1E700104508 /* LaunchScreen.storyboard */,
 				55D6DDBF2FD3B1E700104508 /* LiveActivityPlugin.swift */,
+				55D6DDC02FD3B1E700104509 /* AudioSessionPlugin.swift */,
 				55D6DDC12FD3B1E700104508 /* Main.storyboard */,
 				55D6DDC22FD3B1E700104508 /* PrivacyInfo.xcprivacy */,
 				55D6DDC32FD3B1E700104508 /* Runner.entitlements */,
@@ -672,6 +675,7 @@
 				7A1B0001AE000000DEAD0001 /* WorkoutRealtimePlugin.swift in Sources */,
 				7A1B0001AE000000DEAD0003 /* InstagramStoriesPlugin.swift in Sources */,
 				55D6DDC92FD3B1E700104508 /* LiveActivityPlugin.swift in Sources */,
+				55D6DDCA2FD3B1E700104509 /* AudioSessionPlugin.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -871,7 +875,7 @@
 				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
 				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 70;
+				CURRENT_PROJECT_VERSION = 78;
 				DEVELOPMENT_TEAM = Y36XR89PWG;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
@@ -916,7 +920,7 @@
 				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
 				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 70;
+				CURRENT_PROJECT_VERSION = 78;
 				DEVELOPMENT_TEAM = Y36XR89PWG;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
@@ -958,7 +962,7 @@
 				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
 				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 70;
+				CURRENT_PROJECT_VERSION = 78;
 				DEVELOPMENT_TEAM = Y36XR89PWG;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
@@ -1000,7 +1004,7 @@
 				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
 				CODE_SIGN_ENTITLEMENTS = "RunninWatch Watch App/RunninWatch.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 70;
+				CURRENT_PROJECT_VERSION = 78;
 				DEVELOPMENT_TEAM = Y36XR89PWG;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
@@ -1050,7 +1054,7 @@
 				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
 				CODE_SIGN_ENTITLEMENTS = "RunninWatch Watch App/RunninWatch.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 70;
+				CURRENT_PROJECT_VERSION = 78;
 				DEVELOPMENT_TEAM = Y36XR89PWG;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
@@ -1097,7 +1101,7 @@
 				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
 				CODE_SIGN_ENTITLEMENTS = "RunninWatch Watch App/RunninWatch.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 70;
+				CURRENT_PROJECT_VERSION = 78;
 				DEVELOPMENT_TEAM = Y36XR89PWG;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;

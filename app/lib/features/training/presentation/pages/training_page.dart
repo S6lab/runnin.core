@@ -1371,10 +1371,10 @@ class _CargaBars extends StatelessWidget {
     final palette = context.runninPalette;
     final type = context.runninType;
     if (weeks.isEmpty) return const SizedBox.shrink();
+    // Sessions é fonte de verdade — projectedLoadKm cacheado pode estar stale
+    // depois de revisão LLM (request-revision não regenera o campo).
     final loads = weeks
-        .map((w) =>
-            w.projectedLoadKm ??
-            w.sessions.fold<double>(0, (s, x) => s + x.distanceKm))
+        .map((w) => w.sessions.fold<double>(0, (s, x) => s + x.distanceKm))
         .toList();
     final maxLoad = loads.fold<double>(1, (m, l) => l > m ? l : m);
     const maxBarH = 90.0;
@@ -1684,10 +1684,6 @@ class _WeeklySessionRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // TF 70 UX: dia + tipo na mesma linha após o ícone. Antes
-                // tinha "Segunda" + linha abaixo "Easy Run"; agora vira
-                // "Segunda · Easy Run" / "Segunda · Descanso" — economiza
-                // altura do card sem perder informação.
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.baseline,
                   textBaseline: TextBaseline.alphabetic,
@@ -1697,27 +1693,15 @@ class _WeeklySessionRow extends StatelessWidget {
                       const SizedBox(width: 6),
                     ],
                     Flexible(
-                      child: RichText(
+                      child: Text(
+                        isRest ? 'Descanso' : session!.type,
                         overflow: TextOverflow.ellipsis,
-                        text: TextSpan(
-                          children: [
-                            TextSpan(
-                              text: _dayNames[dayOfWeek],
-                              style: context.runninType.displaySm.copyWith(
-                                fontSize: 18,
-                                color: isPast && !isToday ? palette.muted : palette.text,
-                              ),
-                            ),
-                            TextSpan(
-                              text: '  ${isRest ? 'Descanso' : session!.type}',
-                              style: context.runninType.bodyMd.copyWith(
-                                color: palette.muted,
-                                decoration:
-                                    isExecuted ? TextDecoration.lineThrough : null,
-                                decorationColor: palette.muted,
-                              ),
-                            ),
-                          ],
+                        style: context.runninType.displaySm.copyWith(
+                          fontSize: 18,
+                          color: isPast && !isToday ? palette.muted : palette.text,
+                          decoration:
+                              isExecuted ? TextDecoration.lineThrough : null,
+                          decorationColor: palette.muted,
                         ),
                       ),
                     ),
@@ -1818,8 +1802,10 @@ class _MonthlyWeekCard extends StatelessWidget {
     final objective = (week.objective?.trim().isNotEmpty ?? false)
         ? week.objective!.trim()
         : null;
-    final loadKm = week.projectedLoadKm ??
-        week.sessions.fold<double>(0, (s, x) => s + x.distanceKm);
+    // SEMPRE recomputa a partir de `sessions` em vez de usar `week.projectedLoadKm`.
+    // Revisões manuais via LLM (request-revision) sobrescrevem adjustedWeeks sem
+    // regenerar o campo cacheado → ficava stale. Sessions é a fonte de verdade.
+    final loadKm = week.sessions.fold<double>(0, (s, x) => s + x.distanceKm);
     // Resumo por TIPO (ex.: "3 x EASY RUN") em vez de listar dia a dia.
     final byType = <String, int>{};
     for (final s in week.sessions) {

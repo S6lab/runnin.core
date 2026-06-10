@@ -17,6 +17,7 @@ import { subscriptionRouter } from '@modules/subscriptions/http/subscription.rou
 import { biometricRouter } from '@modules/biometrics/http/biometric.routes';
 import { statsRouter } from '@modules/stats';
 import { weatherRouter } from '@modules/weather/http/weather.routes';
+import { badgesRouter } from '@modules/badges/http/badges.routes';
 
 export function createServer(): express.Application {
   const app = express();
@@ -74,6 +75,7 @@ export function createServer(): express.Application {
   app.use('/v1/biometrics', biometricRouter);
   app.use('/v1/stats', statsRouter);
   app.use('/v1/weather', weatherRouter);
+  app.use('/v1/badges', badgesRouter);
 
   app.use(errorMiddleware);
 

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:runnin/core/theme/app_palette.dart';
+import 'package:runnin/features/badges/presentation/pages/badges_gallery_page.dart';
 import 'package:runnin/features/run/data/datasources/run_remote_datasource.dart';
 import 'package:runnin/features/run/domain/entities/run.dart';
 import 'package:runnin/shared/widgets/achievement_card.dart';
@@ -295,6 +296,20 @@ class _BadgesTab extends StatelessWidget {
   final List<Run> runs;
   final int unlockedCount;
   const _BadgesTab({required this.runs, required this.unlockedCount});
+
+  @override
+  Widget build(BuildContext context) {
+    // TF 77: substitui badges legados hardcoded pela galeria nova (server-backed).
+    // Galeria embedded (sem AppBar própria, pra encaixar como aba).
+    return const BadgesGalleryPage(embedded: true);
+  }
+}
+
+// ignore: unused_element
+class _BadgesTabLegacy extends StatelessWidget {
+  final List<Run> runs;
+  final int unlockedCount;
+  const _BadgesTabLegacy({required this.runs, required this.unlockedCount});
 
   @override
   Widget build(BuildContext context) {
