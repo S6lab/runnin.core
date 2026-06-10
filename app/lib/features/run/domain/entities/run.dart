@@ -88,6 +88,9 @@ class KmSplit {
   final int durationS;
   final String? avgPaceMinKm;
   final int? avgBpm;
+  /// TF 75 Fase 10: BPM máximo dentro do split (pico). Útil pra detectar
+  /// trecho de esforço (subida, sprint) e relatar no review pós-run.
+  final int? maxBpm;
   /// Calorias estimadas (kcal) do km. App não preenche — server calcula em
   /// CompleteRunUseCase via MET × peso × tempo do km e devolve no GET /runs/:id.
   final int? calories;
@@ -108,6 +111,7 @@ class KmSplit {
     required this.durationS,
     this.avgPaceMinKm,
     this.avgBpm,
+    this.maxBpm,
     this.calories,
     this.elevationGain,
     this.distanceM,
@@ -119,6 +123,7 @@ class KmSplit {
         durationS: (j['durationS'] as num).toInt(),
         avgPaceMinKm: j['avgPaceMinKm'] as String?,
         avgBpm: (j['avgBpm'] as num?)?.toInt(),
+        maxBpm: (j['maxBpm'] as num?)?.toInt(),
         calories: (j['calories'] as num?)?.toInt(),
         elevationGain: (j['elevationGain'] as num?)?.toDouble(),
         distanceM: (j['distanceM'] as num?)?.toDouble(),
@@ -132,6 +137,7 @@ class KmSplit {
         'durationS': durationS,
         'avgPaceMinKm': avgPaceMinKm ?? formattedPace,
         if (avgBpm != null) 'avgBpm': avgBpm,
+        if (maxBpm != null) 'maxBpm': maxBpm,
         if (elevationGain != null) 'elevationGain': elevationGain,
         if (distanceM != null) 'distanceM': distanceM,
         if (isPartial) 'isPartial': true,
@@ -179,6 +185,7 @@ List<KmSplit> computeKmSplits(List<GpsPoint> points) {
   double kmStartDist = 0;
   int bpmSum = 0;
   int bpmCount = 0;
+  int bpmMax = 0;
   double elevGain = 0;
   double? prevAlt = points.first.altitude;
   bool anyAlt = points.first.altitude != null;
@@ -190,6 +197,7 @@ List<KmSplit> computeKmSplits(List<GpsPoint> points) {
     if (p1.bpm != null && p1.bpm! > 0) {
       bpmSum += p1.bpm!;
       bpmCount++;
+      if (p1.bpm! > bpmMax) bpmMax = p1.bpm!;
     }
     if (p1.altitude != null) {
       anyAlt = true;
@@ -211,6 +219,7 @@ List<KmSplit> computeKmSplits(List<GpsPoint> points) {
           durationS: s,
           avgPaceMinKm: '${m.toString().padLeft(2, '0')}:${sec.toString().padLeft(2, '0')}',
           avgBpm: bpmCount > 0 ? (bpmSum / bpmCount).round() : null,
+          maxBpm: bpmMax > 0 ? bpmMax : null,
           elevationGain: anyAlt ? double.parse(elevGain.toStringAsFixed(1)) : null,
         ));
       }
@@ -219,6 +228,7 @@ List<KmSplit> computeKmSplits(List<GpsPoint> points) {
       kmStartDist = cumDist;
       bpmSum = 0;
       bpmCount = 0;
+      bpmMax = 0;
       elevGain = 0;
     }
   }
@@ -245,6 +255,7 @@ List<KmSplit> computeKmSplits(List<GpsPoint> points) {
         avgPaceMinKm:
             '${paceMin.toString().padLeft(2, '0')}:${paceSec.toString().padLeft(2, '0')}',
         avgBpm: bpmCount > 0 ? (bpmSum / bpmCount).round() : null,
+        maxBpm: bpmMax > 0 ? bpmMax : null,
         elevationGain: anyAlt ? double.parse(elevGain.toStringAsFixed(1)) : null,
         distanceM: leftoverM,
         isPartial: true,

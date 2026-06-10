@@ -299,16 +299,22 @@ class LiveRunCoachSession {
       );
       _open = true;
       _session = newSession;
+      final preambleLen = preamble?.length ?? 0;
       Logger.info('coach.live.open_ok', context: {
         'model': cfg.model,
         'sys_instr_len': cfg.systemInstruction?.length ?? 0,
         'rotation': isRotation,
+        'preamble_len': preambleLen,
       });
-      unawaited(_beacon('open_ok'));
+      unawaited(_beacon('open_ok', preambleLen: preambleLen));
       // Injeta preamble imediatamente (rotação OU reconexão pós-queda).
+      // Sem isso, a sessão nova vê só systemInstruction inicial e o coach
+      // fala "fora de contexto" depois de TTL/erro (TF 71 Fase -4).
       if (preamble != null && preamble.isNotEmpty) {
         try {
           newSession.sendText(preamble);
+          _lastSendKind = 'preamble';
+          _lastSendAtMs = DateTime.now().millisecondsSinceEpoch;
         } catch (_) {/* ignore */}
       }
       // Fix TF 59: drena fila com throttle 2s entre sends. Antes drenava
@@ -461,6 +467,7 @@ class LiveRunCoachSession {
     int? code,
     String? reason,
     String? error,
+    int? preambleLen,
   }) async {
     try {
       await _dio.post<void>('/coach/live-diag', data: {
@@ -468,6 +475,7 @@ class LiveRunCoachSession {
         'code': ?code,
         'reason': ?reason,
         'error': ?error,
+        'preambleLen': ?preambleLen,
         'sysInstrLen': _lastConfig?.systemInstruction?.length ?? 0,
         'outputTranscription': _lastConfig?.outputTranscription ?? false,
         'model': _lastConfig?.model,

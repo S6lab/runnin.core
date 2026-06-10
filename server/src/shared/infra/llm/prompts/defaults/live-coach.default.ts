@@ -51,6 +51,9 @@ export const LIVE_COACH_DEFAULTS = {
   ].join('\n'),
 
   temperature: 0.75,
-  maxTokens: 80,
+  // TF 75 Fase 5: era 80, finalizando frases mid-pensamento ("finish:MAX_TOKENS"
+  // recorrente em prod). 200 acomoda 1-2 frases completas sem ficar prolixo.
+  // Cap é por turn — cada cue chama isso uma vez.
+  maxTokens: 200,
   ragChunks: 2,
 };

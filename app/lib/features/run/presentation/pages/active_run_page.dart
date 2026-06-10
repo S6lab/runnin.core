@@ -481,6 +481,11 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
                               state: state,
                               palette: palette,
                             ),
+                            if (state.currentSpo2 != null)
+                              _Spo2StatusChip(
+                                pct: state.currentSpo2!,
+                                palette: palette,
+                              ),
                           ],
                         ),
                       ],
@@ -667,6 +672,24 @@ class _StatusChip extends StatelessWidget {
 /// Antes era um único `_StatusChip` inline com 2 ramos lógicos; com 3
 /// estados ficou complexo o bastante pra merecer widget próprio. UX:
 /// usuário não vê o chip "piscando" pra "—" em cada jitter do Watch.
+/// TF 75 Fase 12: chip "SpO2 · 97%" exibido ao lado do BPM. Só renderiza
+/// quando há sample recente (Watch Series 6+ pareado).
+class _Spo2StatusChip extends StatelessWidget {
+  final int pct;
+  final RunninPalette palette;
+  const _Spo2StatusChip({required this.pct, required this.palette});
+
+  @override
+  Widget build(BuildContext context) {
+    return _StatusChip(
+      icon: Icons.water_drop_outlined,
+      label: 'SpO₂ · $pct%',
+      color: palette.secondary,
+      pulsing: false,
+    );
+  }
+}
+
 class _BpmStatusChip extends StatelessWidget {
   final RunState state;
   final RunninPalette palette;
@@ -1532,6 +1555,10 @@ class _ActiveStatsLayoutState extends State<_ActiveStatsLayout> {
                         paceLabel: cumPaces[i],
                         speedLabel: '${s.avgSpeedKmh.toStringAsFixed(1)} km/h',
                         done: true,
+                        avgBpm: s.avgBpm,
+                        maxBpm: s.maxBpm,
+                        elevationGain: s.elevationGain,
+                        calories: s.calories,
                       );
                     }
                     final kmIdx = i + 1;
@@ -1851,11 +1878,21 @@ class _SplitCard extends StatelessWidget {
   /// Velocidade média (km/h), ou "em andamento" pra split em curso.
   final String speedLabel;
   final bool done;
+  /// TF 75 Fase 10: BPM avg/max + elevação + calorias por split.
+  /// Null quando indisponível (sem wearable, split em curso, etc).
+  final int? avgBpm;
+  final int? maxBpm;
+  final double? elevationGain;
+  final int? calories;
   const _SplitCard({
     required this.kmLabel,
     required this.paceLabel,
     required this.speedLabel,
     required this.done,
+    this.avgBpm,
+    this.maxBpm,
+    this.elevationGain,
+    this.calories,
   });
 
   @override
@@ -1865,7 +1902,9 @@ class _SplitCard extends StatelessWidget {
     final accent = done ? palette.secondary : palette.muted;
     final mutedFg = palette.muted.withValues(alpha: 0.7);
     return Container(
-      width: 104,
+      // TF 77 F4: 124→144 + maxLines:1 + ellipsis nos textos pra evitar
+      // RenderFlex overflow de 34px (Fase 10 TF 75 enchia card).
+      width: 144,
       padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
       decoration: BoxDecoration(
         color: palette.surface,
@@ -1876,12 +1915,16 @@ class _SplitCard extends StatelessWidget {
         children: [
           Text(
             kmLabel,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: type.labelCaps.copyWith(color: accent, fontSize: 11, letterSpacing: 1.2),
           ),
           const SizedBox(height: 4),
           // Pace médio (agregado) — destaque principal do card
           Text(
             paceLabel,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: type.labelMd.copyWith(
               color: done ? palette.text : mutedFg,
               fontSize: 13,
@@ -1892,12 +1935,45 @@ class _SplitCard extends StatelessWidget {
           // Velocidade média (km/h)
           Text(
             speedLabel,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: type.labelCaps.copyWith(
               color: mutedFg,
               fontSize: 10,
               letterSpacing: 0.5,
             ),
           ),
+          // TF 75 Fase 10: BPM avg·max + elevação + calorias quando disponíveis.
+          if (avgBpm != null || elevationGain != null || calories != null) ...[
+            const SizedBox(height: 4),
+            if (avgBpm != null)
+              Text(
+                '♥ $avgBpm${maxBpm != null ? '·max $maxBpm' : ''}',
+                style: type.labelCaps.copyWith(
+                  color: mutedFg,
+                  fontSize: 9,
+                  letterSpacing: 0.4,
+                ),
+              ),
+            if (elevationGain != null && elevationGain! > 0)
+              Text(
+                '↑${elevationGain!.toStringAsFixed(0)}m',
+                style: type.labelCaps.copyWith(
+                  color: mutedFg,
+                  fontSize: 9,
+                  letterSpacing: 0.4,
+                ),
+              ),
+            if (calories != null && calories! > 0)
+              Text(
+                '${calories}kcal',
+                style: type.labelCaps.copyWith(
+                  color: mutedFg,
+                  fontSize: 9,
+                  letterSpacing: 0.4,
+                ),
+              ),
+          ],
         ],
       ),
     );

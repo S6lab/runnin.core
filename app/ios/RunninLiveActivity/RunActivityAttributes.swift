@@ -19,11 +19,15 @@ public struct RunActivityAttributes: ActivityAttributes {
     /// Pace atual em min/km (raw double). Null quando indisponível
     /// (drift parado, sample muito velho). UI cai pra "—:—".
     public var paceMinKmRaw: Double?
+    /// TF 75 Fase 8: BPM atual do wearable. Null quando indisponível
+    /// (Watch desconectado, sample stale). UI esconde bloco coração.
+    public var bpmRaw: Int?
 
-    public init(distanceKm: Double, elapsedSeconds: Int, paceMinKmRaw: Double?) {
+    public init(distanceKm: Double, elapsedSeconds: Int, paceMinKmRaw: Double?, bpmRaw: Int? = nil) {
       self.distanceKm = distanceKm
       self.elapsedSeconds = elapsedSeconds
       self.paceMinKmRaw = paceMinKmRaw
+      self.bpmRaw = bpmRaw
     }
   }
 

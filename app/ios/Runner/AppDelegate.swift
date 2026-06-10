@@ -22,5 +22,8 @@ import UIKit
     if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "LiveActivityPlugin") {
       LiveActivityPlugin.register(with: registrar)
     }
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "RunninAudioKeepalivePlugin") {
+      RunninAudioKeepalivePlugin.register(with: registrar)
+    }
   }
 }

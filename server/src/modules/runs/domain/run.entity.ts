@@ -7,6 +7,9 @@ export interface KmSplit {
   durationS: number;
   avgPaceMinKm: string;
   avgBpm?: number;
+  /** TF 75 Fase 10: BPM máximo do split (pico). Cliente reporta no PATCH
+   *  /runs/:id/complete; server passa direto sem recalcular. */
+  maxBpm?: number;
   /** Calorias estimadas (kcal) do km — server preenche em CompleteRunUseCase
    *  usando MET escalonado por pace × peso × tempo do km. */
   calories?: number;

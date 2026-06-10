@@ -16,6 +16,7 @@ import 'package:runnin/core/logger/logger.dart';
 import 'package:runnin/core/notifications/run_bg_notification_service.dart';
 import 'package:runnin/features/run/data/datasources/run_remote_datasource.dart';
 import 'package:runnin/features/run/data/datasources/run_coach_remote_datasource.dart';
+import 'package:runnin/features/run/data/audio_session_keepalive.dart';
 import 'package:runnin/features/run/data/live_run_coach_session.dart';
 import 'package:runnin/features/run/data/workout_realtime_service.dart';
 import 'package:runnin/features/coach_live/data/coach_context_manager.dart';
@@ -45,6 +46,11 @@ class StartRun extends RunEvent {
   /// pace/tempo a cada km (modo FREEMIUM). Null = fallback pra true
   /// (mantém comportamento anterior caso caller esqueça de passar).
   final bool? isPremium;
+  /// TF 77 F3: origem do start. 'watch' quando user iniciou pelo Watch,
+  /// 'iphone' (default) quando UI iPhone. LA não deve iniciar quando origem
+  /// é Watch — Watch já cobre o display, LA mirroreia como banner "Abrir
+  /// no iPhone" sobrepondo a ActiveRunScreen.
+  final String? startSource;
   StartRun({
     required this.type,
     this.targetPace,
@@ -52,6 +58,7 @@ class StartRun extends RunEvent {
     this.alertPrefs,
     this.planSessionId,
     this.isPremium,
+    this.startSource,
   });
 }
 
@@ -91,6 +98,12 @@ class _NoMovementDetected extends RunEvent {}
 /// (HealthKit/Health Connect direto) em vez do stream nativo de workout.
 /// Coach cue `high_bpm` só dispara em modo realtime — fallback tem
 /// latência alta (15s+) e pode levar a alertas atrasados.
+/// TF 75 Fase 12: SpO2 sample do Watch via WCSession (oxigenação %).
+class _Spo2Tick extends RunEvent {
+  final int pct;
+  _Spo2Tick(this.pct);
+}
+
 class _BpmTick extends RunEvent {
   final int? value;
   final bool fallback;
@@ -200,6 +213,9 @@ class RunState {
   /// durante a run, persiste no completeRun pra alimentar o relatório
   /// e a revisão semanal com a curva real.
   final List<TelemetryPoint> telemetryTimeline;
+  /// TF 75 Fase 12: SpO2 (oxigenação) em %. Apple Watch Series 6+ tem
+  /// oxímetro de pulso. Null sem fonte; sample raro (~30-60s).
+  final int? currentSpo2;
 
   const RunState({
     this.status = RunStatus.idle,
@@ -224,6 +240,7 @@ class RunState {
     this.bpmSource = 'none',
     this.watchStatus,
     this.telemetryTimeline = const [],
+    this.currentSpo2,
   });
 
   /// Compat com a UI antiga e o gating de coach cue `high_bpm`: ativo quando
@@ -254,6 +271,7 @@ class RunState {
     String? bpmSource,
     WatchPairingStatus? watchStatus,
     List<TelemetryPoint>? telemetryTimeline,
+    int? currentSpo2,
   }) => RunState(
     status: status ?? this.status,
     runId: runId ?? this.runId,
@@ -277,6 +295,7 @@ class RunState {
     bpmSource: bpmSource ?? this.bpmSource,
     watchStatus: watchStatus ?? this.watchStatus,
     telemetryTimeline: telemetryTimeline ?? this.telemetryTimeline,
+    currentSpo2: currentSpo2 ?? this.currentSpo2,
   );
 
   String get formattedDistance => '${(distanceM / 1000).toStringAsFixed(2)}km';
@@ -308,7 +327,11 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
   // Sessão Gemini Live efêmera/rotacional: rotaciona em transições naturais
   // pra evitar acúmulo de áudio no histórico interno do socket (que degradava
   // a voz por volta do km 3 no modelo native-audio).
-  late final LiveRunCoachSession _coachSession = LiveRunCoachSession(
+  // Não-final pra TF 71 Fase -2: quando user inicia nova run sem completar
+  // a anterior, recriamos o objeto pra cortar reconnects órfãos consumindo
+  // token/generation. `close()` seta _disposed=true e bloqueia reuso, então
+  // precisa nova instância.
+  late LiveRunCoachSession _coachSession = LiveRunCoachSession(
     contextManager: _coachCtx,
   );
   StreamSubscription<String>? _coachTranscriptSub;
@@ -367,6 +390,37 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
   /// (Live) — evita "dois coaches" no início. A saudação já anuncia a sessão.
   int _suppressCuesUntilMs = 0;
 
+  /// TF 75 Fase 1: true se Watch está conectado E reportou 0 passos nos
+  /// últimos 60s. Usado pra droppar drift GPS cumulativo (pace falso ~5min/km
+  /// gerado por GPS oscilando in place enganava o gate de pace anterior).
+  ///
+  /// Quando Watch não está conectado (sem entries no buffer), retorna null
+  /// → fallback no gate de pace tradicional.
+  bool? _isStepIdle60s() {
+    if (_stepsBuf.length < 2) return null;
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    final recent = _stepsBuf.where((e) => nowMs - e.ts <= _stepsIdleWindowMs);
+    if (recent.length < 2) return null;
+    final first = recent.first;
+    final last = recent.last;
+    final dt = last.ts - first.ts;
+    if (dt < 30000) return null; // janela ainda incompleta
+    return last.total - first.total == 0;
+  }
+
+  /// TF 77 F3: setado no _onStart a partir do StartRun.startSource. Quando
+  /// 'watch', LA é bloqueada (Watch já cobre display).
+  String? _startSource;
+
+  /// TF 71 Fase -3: ring buffer da distância aceita nos últimos 60s. Per-point
+  /// gate (TF 70) ainda deixava drift cumulativo passar — pontos isolados
+  /// passavam, mas o conjunto somava pace de caminhada arrastando-se no lugar.
+  /// Aqui gateamos por agregado: se pace na janela > 12 min/km, descartamos
+  /// o último delta (drift cumulativo confirmado).
+  final List<({int ts, double dist})> _gpsDriftWindow = [];
+  static const int _driftWindowMs = 60000;
+  static const double _driftMaxPaceMinKm = 12.0;
+
   /// True = abre Gemini Live (premium). False = só TTS on-device a cada km
   /// (freemium). Setado em [_onStart] a partir de [StartRun.isPremium];
   /// default true mantém comportamento anterior pra qualquer caller antigo.
@@ -395,6 +449,16 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
   static const _checkInDistanceM = 500.0;
   static const _checkInIdleSeconds = 240; // 4 min
   Timer? _motivationTimer;
+
+  /// TF 75 Fase 3: cooldown global entre QUALQUER cue. Sem isso, check_in
+  /// (500m) + km_reached + segment_start podiam disparar no mesmo ciclo GPS
+  /// — Eduardo ouviu 2-3 cues sobrepostos.
+  ///
+  /// TF 77 F2: era 4s, insuficiente — cues ainda colidiam (Gemini Live
+  /// tem ~5-8s de áudio por turn). Subido pra 8s + agora INCLUI pre_run
+  /// (saudação respeita) pra evitar 2x saudação no race Watch+iPhone.
+  int _lastAnyCoachCueAtMs = 0;
+  static const _globalCueCooldownS = 8;
   /// Cue `km_analysis` agendado pra ~10s depois de cada km_reached.
   /// Cancelado se outro km cruza antes (rare) OU se user pausa/abandona —
   /// evita análise de km já irrelevante (ex: user pausou logo após km 3,
@@ -414,6 +478,14 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
   StreamSubscription<int?>? _bpmSub;
   final List<int> _kmBpmSamples = [];
   int? _userMaxBpm;
+  /// TF 75 Fase 1: subscription pro stepsStream do Watch (push via WCSession).
+  /// Buffer de últimos N samples [(ts, totalSteps)] alimenta o gate idle
+  /// no _onGpsUpdate.
+  StreamSubscription<int>? _stepsSub;
+  final List<({int ts, int total})> _stepsBuf = [];
+  static const int _stepsIdleWindowMs = 60000;
+  /// TF 75 Fase 12: SpO2 subscription.
+  StreamSubscription<int>? _spo2Sub;
   /// Subscription pro watch_status do plugin nativo iOS. Ativa pro tempo
   /// todo (não só durante corrida) — a pre-run page também precisa do estado
   /// pra mostrar banner "Instale Runnin no Watch".
@@ -550,6 +622,8 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
                 type: (p['type'] as String?) ?? 'Free Run',
                 isPremium: p['isPremium'] == true,
                 planSessionId: p['planSessionId'] as String?,
+                // TF 77 F3: marca origem pra LA não iniciar com Watch ativo.
+                startSource: 'watch',
               ));
             }
             break;
@@ -578,6 +652,7 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
     on<ResumeRun>(_onResume);
     on<_NoMovementDetected>(_onNoMovementDetected);
     on<_BpmTick>(_onBpmTick);
+    on<_Spo2Tick>((e, emit) => emit(state.copyWith(currentSpo2: e.pct)));
     on<_TelemetryTick>(_onTelemetryTick);
     on<DismissNoMovementPrompt>(
       (e, emit) => emit(state.copyWith(noMovementPrompt: false)),
@@ -643,11 +718,29 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
     _kmBpmSamples.clear();
     _lastBpmAtMs = null;
     _bpmStaleLogged = false;
-    _bpmSub?.cancel();
+    _bpmSub?.cancel(); _stepsSub?.cancel(); _spo2Sub?.cancel();
     _bpmSub = workoutRealtimeService.bpmStream.listen(
       (v) => add(_BpmTick(v)),
     );
+    // TF 75 Fase 1: steps cumulative buffer pro gate idle.
+    _stepsSub?.cancel(); _spo2Sub?.cancel();
+    _stepsBuf.clear();
+    _stepsSub = workoutRealtimeService.stepsStream.listen((total) {
+      final nowMs = DateTime.now().millisecondsSinceEpoch;
+      _stepsBuf.add((ts: nowMs, total: total));
+      // Pruna entries fora da janela de 60s.
+      _stepsBuf.removeWhere((e) => nowMs - e.ts > _stepsIdleWindowMs * 2);
+    });
+    // TF 75 Fase 12: SpO2 sub — dispara event interno que atualiza state.
+    _spo2Sub?.cancel();
+    _spo2Sub = workoutRealtimeService.spo2Stream.listen((pct) {
+      if (!isClosed) add(_Spo2Tick(pct));
+    });
     unawaited(workoutRealtimeService.start());
+    // TF 75 Fase 0 (CRÍTICO): mantém AVAudioSession ativa via silent audio
+    // loop. Sem isso, Dart engine suspende em background entre cues do
+    // coach → cues param 5min com tela bloqueada (regressão TF 74).
+    unawaited(AudioSessionKeepalive.instance.startKeepalive());
 
     // Agenda fallback: em 1s, se realtime ainda não emitiu, começa polling.
     _bpmFallbackPollTimer?.cancel();
@@ -682,6 +775,8 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
     // de telemetria a cada km. Default true mantém retro-compat se um
     // caller antigo não passar o flag.
     _isPremium = event.isPremium ?? true;
+    // TF 77 F3: origem do start. Watch=true ⇒ LA não inicia.
+    _startSource = event.startSource;
     // ignore: avoid_print
     print('run.mode.resolved isPremium=$_isPremium type=${event.type}');
 
@@ -760,11 +855,22 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
       _lastCoachKm = 0;
       _lastKmStartElapsedS = 0;
       _pendingRotationTrigger = null;
+      _gpsDriftWindow.clear();
       // Wall-clock anchor pra elapsedS (vide _onTimerTick).
       _startedAtMs = DateTime.now().millisecondsSinceEpoch;
       _pausedTotalMs = 0;
       _pauseStartMs = null;
       if (_isPremium) {
+        // TF 71 Fase -2: se uma sessão Live anterior ainda está aberta,
+        // user iniciou nova run sem stop. Sem dispose explícito a sessão
+        // antiga seguia reconectando indefinidamente (TF 70 deu resiliência
+        // demais), consumindo tokens da run que terminou. Fecha e recria.
+        if (_coachSession.isOpen) {
+          unawaited(_coachSession.close());
+          _coachTranscriptSub?.cancel();
+          _coachTranscriptSub = null;
+          _coachSession = LiveRunCoachSession(contextManager: _coachCtx);
+        }
         // Premium: contexto + Live session + saudação (mesmo fluxo de sempre).
         _coachCtx.init(runId);
         _coachSession.setMetricsProvider(_buildMetricsSnapshot);
@@ -805,6 +911,7 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
               // (só freemium chamava _requestCoachCue no start) — coach
               // ficava mudo após a primeira fala.
               _lastCoachSpeechAtMs = DateTime.now().millisecondsSinceEpoch;
+              _lastAnyCoachCueAtMs = _lastCoachSpeechAtMs;
               _lastCoachSpeechDistanceM = 0;
             }
           }());
@@ -817,6 +924,7 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
         emit(state.copyWith(coachLiveMessage: greeting));
         unawaited(TelemetryTts.instance.speak(greeting));
         _lastCoachSpeechAtMs = DateTime.now().millisecondsSinceEpoch;
+        _lastAnyCoachCueAtMs = _lastCoachSpeechAtMs;
         _lastCoachSpeechDistanceM = 0;
       }
 
@@ -1038,6 +1146,7 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
       elapsedS: newElapsed,
       paceMinKm: state.currentPaceMinKm,
       sessionType: state.runType,
+      bpm: state.bpmSourceActive ? state.currentBpm : null, startSource: _startSource,
     ));
     // Push state pro Watch — 1Hz. updateApplicationContext dedup automático
     // (entrega só o último valor se Watch tava offline). Idempotente quando
@@ -1117,6 +1226,7 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
     // 500m e o timer de 4min que exigem > 0.
     if (_lastCoachSpeechAtMs == 0) {
       _lastCoachSpeechAtMs = DateTime.now().millisecondsSinceEpoch;
+      _lastAnyCoachCueAtMs = _lastCoachSpeechAtMs;
       _lastCoachSpeechDistanceM = state.distanceM;
     }
   }
@@ -1215,6 +1325,46 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
       }
     }
 
+    // TF 75 Fase 1: gate por passos do Watch — fonte mais confiável que
+    // pace. Se Watch reporta 0 passos em 60s, qualquer delta GPS é drift,
+    // independente do pace aparente. Watch ausente = retorna null → cai
+    // no gate cumulativo abaixo.
+    final stepIdle = _isStepIdle60s();
+    if (stepIdle == true && addedDistance > 0) {
+      // ignore: avoid_print
+      print('gps.drift.rejected_step_idle raw=${addedDistance.toStringAsFixed(1)}m');
+      addedDistance = 0;
+    }
+
+    // TF 71 Fase -3: gate cumulativo de 60s. Per-point gate (TF 70) deixou
+    // passar drift em janela larga — Eduardo viu "500m concluído" sem sair
+    // do lugar. Aqui, se a soma dos pontos aceitos nos últimos 60s gera
+    // pace agregado > 12 min/km (caminhada arrastada), descartamos o último
+    // delta — quase certamente é GPS oscilando.
+    if (addedDistance > 0) {
+      final nowMs = pos.timestamp.millisecondsSinceEpoch;
+      _gpsDriftWindow.removeWhere((e) => nowMs - e.ts > _driftWindowMs);
+      _gpsDriftWindow.add((ts: nowMs, dist: addedDistance));
+      if (_gpsDriftWindow.length >= 3) {
+        final firstTs = _gpsDriftWindow.first.ts;
+        final spanS = (nowMs - firstTs) / 1000.0;
+        if (spanS >= 30) {
+          final sumDist = _gpsDriftWindow.fold<double>(0, (a, b) => a + b.dist);
+          // pace min/km = spanMin / km; spanMin = spanS/60; km = sumDist/1000
+          final paceMinKm = (spanS / 60.0) / (sumDist / 1000.0);
+          if (paceMinKm > _driftMaxPaceMinKm) {
+            // ignore: avoid_print
+            print('gps.drift.cumulative_rejected '
+                'sumDist=${sumDist.toStringAsFixed(1)}m '
+                'spanS=${spanS.toStringAsFixed(1)} '
+                'pace=${paceMinKm.toStringAsFixed(1)}min/km');
+            _gpsDriftWindow.removeLast();
+            addedDistance = 0;
+          }
+        }
+      }
+    }
+
     // Só adiciona pontos aceitos pelo filtro de drift. computeKmSplits usa
     // haversine em todos os pontos sem filtrar — se drift points entrassem
     // aqui, cumDist divergia de state.distanceM e os kmIndex ficavam errados
@@ -1251,50 +1401,10 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
       ),
     );
 
-    // Check-in canônico por distância: a cada 500m sem o coach falar,
-    // dispara um cue de presença. Junto com o check_in por tempo (4min,
-    // vide _startMotivationTimer), garante que o coach sempre acompanha
-    // o user mesmo quando tudo está conforme o plano.
-    if (state.status == RunStatus.active &&
-        _lastCoachSpeechAtMs > 0 &&
-        newDistance - _lastCoachSpeechDistanceM >= _checkInDistanceM) {
-      // Pace dos últimos 500m: reusa rollingPaceMinKm com janela maior
-      // (500m em vez dos ~30m do default). maxWindowMs em 10min cobre
-      // pace lento (~10min/km) sem rodar a run inteira.
-      final paceLast500m = rollingPaceMinKm(
-        newPoints,
-        windowMeters: 500,
-        maxWindowMs: 600000,
-      );
-      final kmRemaining = _plannedDistanceM != null
-          ? max(0.0, (_plannedDistanceM! - newDistance) / 1000.0)
-          : null;
-      unawaited(_requestCoachCue(
-        event: 'check_in',
-        distanceM: newDistance,
-        elapsedS: state.elapsedS,
-        currentPaceMinKm: smoothedPace,
-        paceLast500m: paceLast500m,
-        kmRemaining: kmRemaining,
-      ));
-    }
-
-    // Goal reached: a sessão planejada tem distanceKm > 0 e o user acabou
-    // de cruzar esse alvo. Cue avisa "sua sessão termina aqui — se quiser
-    // continuar, eu sigo" sem auto-completar a run. One-shot.
-    if (!_goalReachedFired &&
-        _plannedDistanceM != null &&
-        newDistance >= _plannedDistanceM!) {
-      _goalReachedFired = true;
-      unawaited(_requestCoachCue(
-        event: 'goal_reached',
-        distanceM: newDistance,
-        elapsedS: state.elapsedS,
-        currentPaceMinKm: smoothedPace,
-      ));
-      _lastCueAt['goal_reached'] = DateTime.now().millisecondsSinceEpoch;
-    }
-
+    // TF 75 Fase 4: km_reached PRIMEIRO (antes do check_in 500m). Quando
+    // user cruza km exato, evita 2 cues sobrepostos — km_reached atualiza
+    // `_lastCoachSpeechDistanceM = state.distanceM`, fazendo o gate do
+    // check_in ver delta=0 e skip natural na mesma iteração.
     if (crossedKmBoundary) {
       _lastCoachKm = kmReached;
       // Live Activity sempre — request precisa ser foreground (ver comentário
@@ -1304,6 +1414,7 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
         elapsedS: state.elapsedS,
         paceMinKm: smoothedPace,
         sessionType: state.runType,
+        bpm: state.bpmSourceActive ? state.currentBpm : null, startSource: _startSource,
       ));
       // Tempo do km que acabou de cruzar (não acumulado). Coach reporta
       // "1 km em X min" + server estima calorias do km (MET × peso × tempo).
@@ -1354,6 +1465,60 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
       // disparavam ao cruzar km, gerando 2 calls LLM com info subset).
       // O km_reached já carrega pace + target + duração + BPM — server
       // sintetiza tudo no cue.
+    }
+
+    // Goal reached: a sessão planejada tem distanceKm > 0 e o user acabou
+    // de cruzar esse alvo. Cue avisa "sua sessão termina aqui — se quiser
+    // continuar, eu sigo" sem auto-completar a run. One-shot.
+    if (!_goalReachedFired &&
+        _plannedDistanceM != null &&
+        newDistance >= _plannedDistanceM!) {
+      _goalReachedFired = true;
+      unawaited(_requestCoachCue(
+        event: 'goal_reached',
+        distanceM: newDistance,
+        elapsedS: state.elapsedS,
+        currentPaceMinKm: smoothedPace,
+      ));
+      _lastCueAt['goal_reached'] = DateTime.now().millisecondsSinceEpoch;
+    }
+
+    // Check-in canônico por distância: a cada 500m sem o coach falar,
+    // dispara um cue de presença. Junto com o check_in por tempo (4min,
+    // vide _startMotivationTimer), garante que o coach sempre acompanha
+    // o user mesmo quando tudo está conforme o plano.
+    //
+    // TF 72 fix: gate por pace real. Se user tá parado (smoothedPace null
+    // ou > 12 min/km — caminhada arrastada), o `motivation timer` cobre
+    // (~4min idle). Sem esse gate, drift GPS sub-threshold somava 500m
+    // parado e disparava cue "check_in" com pace bizarro.
+    //
+    // TF 75 Fase 4: roda DEPOIS de km_reached. Se km_reached acabou de
+    // disparar nesta mesma iteração, ele zerou _lastCoachSpeechDistanceM
+    // (via _requestCoachCue → state.distanceM == newDistance), e o
+    // delta abaixo vira 0 → skip natural.
+    final smoothedPaceForGate = smoothedPace;
+    final isUserMoving = smoothedPaceForGate != null && smoothedPaceForGate < 12.0;
+    if (state.status == RunStatus.active &&
+        _lastCoachSpeechAtMs > 0 &&
+        isUserMoving &&
+        newDistance - _lastCoachSpeechDistanceM >= _checkInDistanceM) {
+      final paceLast500m = rollingPaceMinKm(
+        newPoints,
+        windowMeters: 500,
+        maxWindowMs: 600000,
+      );
+      final kmRemaining = _plannedDistanceM != null
+          ? max(0.0, (_plannedDistanceM! - newDistance) / 1000.0)
+          : null;
+      unawaited(_requestCoachCue(
+        event: 'check_in',
+        distanceM: newDistance,
+        elapsedS: state.elapsedS,
+        currentPaceMinKm: smoothedPace,
+        paceLast500m: paceLast500m,
+        kmRemaining: kmRemaining,
+      ));
     }
 
     // Detecção de transição de segment. Roda só quando há plano com
@@ -1473,13 +1638,13 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
   Future<void> _onComplete(CompleteRun event, Emitter<RunState> emit) async {
     if (state.runId == null) return;
     _pendingRotationTrigger = null;
-    _bpmSub?.cancel();
+    _bpmSub?.cancel(); _stepsSub?.cancel(); _spo2Sub?.cancel();
     _bpmSub = null;
     _bpmFallbackPollTimer?.cancel();
     _bpmFallbackPollTimer = null;
     _runHealthSyncTimer?.cancel();
     _runHealthSyncTimer = null;
-    unawaited(workoutRealtimeService.stop());
+    unawaited(workoutRealtimeService.stop()); unawaited(AudioSessionKeepalive.instance.stopKeepalive());
     // Empurra status=completed COM totais + splits pro Watch (em vez de idle
     // direto). Watch mostra RunCompletedScreen até user reconhecer; só aí
     // volta pra idle. Splits aqui são os locais — `computeKmSplits` final
@@ -1818,13 +1983,13 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
 
   void _onAbandon(AbandonRun event, Emitter<RunState> emit) {
     _stop();
-    _bpmSub?.cancel();
+    _bpmSub?.cancel(); _stepsSub?.cancel(); _spo2Sub?.cancel();
     _bpmSub = null;
     _bpmFallbackPollTimer?.cancel();
     _bpmFallbackPollTimer = null;
     _runHealthSyncTimer?.cancel();
     _runHealthSyncTimer = null;
-    unawaited(workoutRealtimeService.stop());
+    unawaited(workoutRealtimeService.stop()); unawaited(AudioSessionKeepalive.instance.stopKeepalive());
     _pendingRotationTrigger = null;
     // Volta o Watch pra PreRunScreen.
     _pushStatusToWatch('idle');
@@ -2006,6 +2171,7 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
           elapsedS: state.elapsedS,
           paceMinKm: state.currentPaceMinKm,
           sessionType: state.runType,
+          bpm: state.bpmSourceActive ? state.currentBpm : null, startSource: _startSource,
         ));
       }
     } else if (lifecycle == AppLifecycleState.resumed && _appInBackground) {
@@ -2019,6 +2185,15 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
       if (state.status == RunStatus.active) {
         _lastBpmAtMs = null;
         _bpmStaleLogged = false;
+        // TF 75 Fase 9: tenta puxar BPM do cache nativo iPhone. Watch pode
+        // ter empurrado samples enquanto Dart engine estava suspenso —
+        // sem isso a UI ficava 5-30s exibindo BPM stale até o próximo push.
+        unawaited(() async {
+          final cached = await workoutRealtimeService.getLastCachedBpm();
+          if (cached != null && !isClosed) {
+            add(_BpmTick(cached));
+          }
+        }());
       }
       unawaited(runBgNotificationService.cancel());
       if (state.status == RunStatus.active) {
@@ -2032,7 +2207,7 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
   Future<void> close() {
     _stop();
     _coachTranscriptSub?.cancel();
-    _bpmSub?.cancel();
+    _bpmSub?.cancel(); _stepsSub?.cancel(); _spo2Sub?.cancel();
     _bpmSub = null;
     _watchStatusSub?.cancel();
     _watchStatusSub = null;
@@ -2044,7 +2219,7 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
     _bpmFallbackPollTimer = null;
     _runHealthSyncTimer?.cancel();
     _runHealthSyncTimer = null;
-    unawaited(workoutRealtimeService.stop());
+    unawaited(workoutRealtimeService.stop()); unawaited(AudioSessionKeepalive.instance.stopKeepalive());
     if (_isPremium) {
       unawaited(_coachSession.close());
       _coachCtx.dispose();
@@ -2177,6 +2352,21 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
     double? kmRemaining,
   }) async {
     if (state.runId == null) return;
+    // TF 75 Fase 3: cooldown global entre cues. `finish` ignora (precisa
+    // falar no fim). Pre-run, motivation_timer, e os outros respeitam.
+    // TF 77 F2: pre_run agora respeita cooldown (Watch+iPhone race causa 2x).
+    // finish ignora — precisa falar no fim.
+    if (event != 'finish') {
+      final nowMs = DateTime.now().millisecondsSinceEpoch;
+      if (nowMs - _lastAnyCoachCueAtMs < _globalCueCooldownS * 1000) {
+        Logger.warn('coach.cue.suppressed_global_cooldown', context: {
+          'event': event,
+          'elapsedMs': '${nowMs - _lastAnyCoachCueAtMs}',
+          'thresholdMs': '${_globalCueCooldownS * 1000}',
+        });
+        return;
+      }
+    }
     // Freemium: pula o backend e a sessão Live. Só `km_reached` e `finish`
     // viram telemetria falada localmente (TTS on-device) + banner. Outros
     // eventos (motivation, pace_alert, segment_*) ficam silenciosos —
@@ -2200,6 +2390,7 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
         if (!isClosed) add(_CoachChunk(CoachCue(text: msg)));
         unawaited(TelemetryTts.instance.speak(msg));
         _lastCoachSpeechAtMs = DateTime.now().millisecondsSinceEpoch;
+        _lastAnyCoachCueAtMs = _lastCoachSpeechAtMs;
         _lastCoachSpeechDistanceM = state.distanceM;
       }
       return;
@@ -2227,6 +2418,7 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
       // segment_*, pace_alert) também avançam porque o HTTP request JÁ vai
       // entregar o cue — não queremos disparar 2x.
       _lastCoachSpeechAtMs = DateTime.now().millisecondsSinceEpoch;
+      _lastAnyCoachCueAtMs = _lastCoachSpeechAtMs;
       _lastCoachSpeechDistanceM = state.distanceM;
       return;
     }
@@ -2260,16 +2452,22 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
       paceLast500m: paceLast500m,
       kmRemaining: kmRemaining,
     );
-    // Log do texto exato enviado ao Gemini Live — pra debugar quando o
-    // coach "inventa" números (ex: user reportou ouvir "20km" sem plano
-    // de 20km). Truncamos pra não inundar Console.app.
-    // ignore: avoid_print
-    print('run.coach.send_telemetry event=$event text=${tt.length > 200 ? "${tt.substring(0, 200)}..." : tt}');
+    // TF 75 Fase 6: trocado print por Logger.info pra ir pro Cloud Logging.
+    // `print` só vai pro Console.app local; sem isso, debug remoto das
+    // alucinações ("coach falou 5:42 parado") era impossível.
+    final ttPreview = tt.length > 240 ? '${tt.substring(0, 240)}…' : tt;
+    Logger.info('run.coach.send_telemetry', context: {
+      'event': event,
+      'text': ttPreview,
+      'textLen': '${tt.length}',
+      'runId': state.runId ?? '',
+    });
     _coachSession.sendTelemetry(tt);
     // Atualiza trackers da regra canônica (500m / 4min): qualquer fala do
     // coach reseta os dois. Mantém a cadência prometida ao user mesmo quando
     // a fala foi de outro evento (km_reached, pace_alert, etc.).
     _lastCoachSpeechAtMs = DateTime.now().millisecondsSinceEpoch;
+    _lastAnyCoachCueAtMs = _lastCoachSpeechAtMs;
     _lastCoachSpeechDistanceM = state.distanceM;
   }
 
@@ -2388,6 +2586,14 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
     final dist = (state.distanceM / 1000).toStringAsFixed(2);
     final avgPace = _fmtPaceMinKm(_computePaceMinKm());
     final tgt = targetPaceMinKm != null ? '${pace(targetPaceMinKm)}/km' : 'livre';
+    // TF 75 Fase 2: detecta idle real (Watch pedômetro reportou 0 passos h60s)
+    // e prefixa o telemetry com bandeira de estado. Sem isso o LLM alucinava
+    // pace (5:42, 7:38) baseado em telemetria com pace falso de drift.
+    final isIdle = _isStepIdle60s() == true;
+    final idlePrefix = isIdle
+        ? '[ESTADO: PARADO há ~1min (Watch detectou 0 passos). NÃO mencione pace '
+            'nem distância; sugira retomar.] '
+        : '';
 
     // Totais da corrida — anexados em primeira pessoa pra o coach ter sempre
     // o panorama e nunca precisar perguntar.
@@ -2421,15 +2627,15 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
             'elevação +${elevationGainM.toStringAsFixed(0)}m',
           if (kmAvgBpm != null) 'FC $kmAvgBpm',
         ];
-        return 'Coach, fechei o km $kmReached. ${m.join(', ')}. $totals';
+        return '${idlePrefix}Coach, fechei o km $kmReached. ${m.join(', ')}. $totals';
       case 'pace_alert':
-        return 'Coach, meu pace está ${pace(currentPaceMinKm)}/km. Alvo: $tgt. $totals';
+        return '${idlePrefix}Coach, meu pace está ${pace(currentPaceMinKm)}/km. Alvo: $tgt. $totals';
       case 'segment_start':
-        return 'Coach, entrei na próxima fase do roteiro. $totals';
+        return '${idlePrefix}Coach, entrei na próxima fase do roteiro. $totals';
       case 'segment_end':
-        return 'Coach, terminei a fase atual do roteiro. $totals';
+        return '${idlePrefix}Coach, terminei a fase atual do roteiro. $totals';
       case 'motivation':
-        return 'Coach, como estou indo? $totals';
+        return '${idlePrefix}Coach, como estou indo? $totals';
       case 'check_in':
         final last500 = paceLast500m != null
             ? 'pace dos últimos 500m: ${pace(paceLast500m)}/km'
@@ -2446,15 +2652,15 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
                     : 'no_alvo')
             : 'livre';
         if (tone == 'free') {
-          return 'Coach, check-in 500m: $last500. '
+          return '${idlePrefix}Coach, check-in 500m: $last500. '
               '${remaining != null ? "$remaining. " : ""}$totals';
         }
         if (tone == 'guide') {
-          return 'Coach, check-in 500m: $last500. Alvo $tgt (faixa). '
+          return '${idlePrefix}Coach, check-in 500m: $last500. Alvo $tgt (faixa). '
               'Pace vs alvo: $paceDirRaw. ${remaining != null ? "$remaining. " : ""}$totals';
         }
         // performance: pace alvo restrito
-        return 'Coach, check-in 500m: $last500. Alvo $tgt (restrito). '
+        return '${idlePrefix}Coach, check-in 500m: $last500. Alvo $tgt (restrito). '
             'Pace vs alvo: $paceDirRaw. ${remaining != null ? "$remaining. " : ""}$totals';
       case 'high_bpm':
         return 'Coach, meu BPM tá em $kmAvgBpm. $totals';

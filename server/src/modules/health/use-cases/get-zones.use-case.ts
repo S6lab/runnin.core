@@ -1,31 +1,14 @@
 import { UserRepository } from '@modules/users/domain/user.repository';
 import { RunRepository } from '@modules/runs/domain/run.repository';
-import { Zone } from '../domain/zone.entity';
-
-const ZONE_FACTORS = [0.5, 0.6, 0.7, 0.8, 0.9] as const;
-type ZoneFactor = typeof ZONE_FACTORS[number];
-const ZONE_NAMES = ['Z1', 'Z2', 'Z3', 'Z4', 'Z5'] as const;
-type ZoneName = typeof ZONE_NAMES[number];
-const ZONE_LABELS = [
-  'Futurologico',
-  'Manutenção',
-  'Intensidade Moderada',
-  'Aeróbico',
-  'Anaeróbico'
-] as const;
-type ZoneLabel = typeof ZONE_LABELS[number];
-
-function calculateKarvonenZone(maxBpm: number, restingBpm: number, factor: ZoneFactor): [number, number] {
-  const karvonen = ((maxBpm - restingBpm) * factor) + restingBpm;
-  
-  if (factor === 0.9) {
-    return [Math.round(karvonen), Math.ceil(maxBpm)];
-  }
-  
-  const nextFactor = ZONE_FACTORS[ZONE_FACTORS.indexOf(factor) + 1];
-  const nextZoneMin = ((maxBpm - restingBpm) * nextFactor) + restingBpm;
-  return [Math.round(karvonen), Math.round(nextZoneMin)];
-}
+import {
+  Zone,
+  ZoneName,
+  ZoneLabel,
+  ZONE_FACTORS,
+  ZONE_NAMES,
+  ZONE_LABELS,
+  calculateKarvonenZone,
+} from '../domain/zone.entity';
 
 export class GetZonesUseCase {
   constructor(

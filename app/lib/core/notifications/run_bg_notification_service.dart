@@ -7,6 +7,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 
 import 'package:runnin/core/analytics/analytics_service.dart';
 import 'package:runnin/core/logger/logger.dart';
+import 'package:runnin/features/run/data/workout_realtime_service.dart';
 
 /// Notificação persistente que aparece na bandeja/lock screen enquanto a
 /// corrida está em background. Confirma visualmente pro user que a corrida
@@ -222,14 +223,39 @@ class RunBgNotificationService {
     required int elapsedS,
     double? paceMinKm,
     String? sessionType,
+    int? bpm,
+    /// TF 77 F3: 'watch' bloqueia LA inteira (Watch já cobre display).
+    /// 'iphone'/null permite LA normal (Watch pode estar inativo).
+    String? startSource,
   }) async {
     if (!_isSupported) return;
+
+    // TF 73: Live Activity do iPhone mirroreia pro Watch como banner
+    // "Abrir no iPhone" sobrepondo o ActiveRunScreen.
+    //
+    // TF 75 Fase 7: gate sticky. `start` da Live Activity respeita
+    // watchActive (não inicia se Watch tá cobrindo). MAS uma vez `started`,
+    // mantém updates independente de watchStatus — assim ela não oscila
+    // (some+volta) com flutuações do Watch reachability. Fallback de notif
+    // local (linha 278+) segue inteiramente gated por watchActive.
+    // TF 77 F3: se user iniciou pelo Watch, força watchActive=true mesmo
+    // se WCSession latestStatus ainda não estabilizou — evita LA piscar
+    // ao iniciar via Watch (race que causou overlay no TF 76).
+    final watchActive = startSource == 'watch' ||
+        _watchHandlesDisplay ||
+        workoutRealtimeService.latestWatchStatus.isOptimal;
 
     // Caminho preferencial: Live Activity (iOS 16.2+). Renderiza card
     // grande no lock screen + Dynamic Island com pace/km/tempo em mono
     // bold. Quando suportado, NÃO disparamos a notif local (evita
     // duplicação visual). Caller não precisa saber qual caminho rodou.
     if (await _isLiveActivitySupported()) {
+      // TF 75 Fase 7: skip apenas o `start` inicial se Watch ativo.
+      // Updates depois de iniciada SEMPRE rodam.
+      if (!_liveActivityStarted && watchActive && Platform.isIOS) {
+        Logger.info('live_activity.skip_start reason=watch_active');
+        // Não return — cai pro fallback local que respeita o gate abaixo.
+      } else {
       try {
         final method = _liveActivityStarted ? 'update' : 'start';
         // Plugin agora retorna Map {ok, reason?, error?, id?} pra desambiguar
@@ -240,6 +266,7 @@ class RunBgNotificationService {
           'elapsedS': elapsedS,
           'paceMinKm': ?paceMinKm,
           'sessionType': ?sessionType,
+          'bpm': ?bpm,
         });
         final ok = res is Map ? res['ok'] == true : res == true;
         if (ok) {
@@ -261,14 +288,14 @@ class RunBgNotificationService {
         Logger.error('live_activity.invoke_failed', e, st);
         // fall through pro fallback
       }
+      }
     }
 
-    // TF 70: quando Watch app ativo, suprimimos o fallback. Watch já mostra
-    // ActiveRunScreen + iPhone tenta Live Activity acima. Sem isso, local
-    // notif mirroreia pro Watch como "Abrir no iPhone" (cenário Eduardo
-    // reportou 2 notifs no Watch).
-    if (_watchHandlesDisplay && Platform.isIOS) {
-      Logger.info('run_bg_notif.skip_local_fallback reason=watch_active');
+    // TF 75 Fase 7: fallback local notif segue inteiramente gated por
+    // watchActive (sem oscilar, mas também sem aparecer no Watch quando
+    // ele já cobre o display).
+    if (watchActive && Platform.isIOS) {
+      Logger.info('run_bg_notif.skip_local reason=watch_active');
       return;
     }
 

@@ -1,6 +1,6 @@
 import { Run } from '@modules/runs/domain/run.entity';
 import { RunRepository } from '@modules/runs/domain/run.repository';
-import { Plan } from '@modules/plans/domain/plan.entity';
+import { Plan, effectivePlanWeeks } from '@modules/plans/domain/plan.entity';
 import { PlanRepository } from '@modules/plans/domain/plan.repository';
 import { StatsPeriod } from '../stats-aggregate.entity';
 import {
@@ -86,6 +86,45 @@ export class GetStatsBreakdownUseCase {
     const planned = expandPlans(plans);
     const { volume, pace } = this.buildSeries(buckets, periodRuns, planned, plans);
 
+    // TF 77: log estendido pra debug do bug volume/pace planejado errado.
+    try {
+      const { logger } = await import('@shared/logger/logger');
+      const planSummary = plans.map((p) => {
+        const weeks = (p.adjustedWeeks ?? p.weeks ?? []) as Array<{
+          weekNumber: number;
+          sessions?: Array<{ dayOfWeek: number; distanceKm?: number; targetPace?: string }>;
+        }>;
+        return {
+          planId: p.id,
+          startDate: p.startDate ?? p.createdAt,
+          weeksCount: weeks.length,
+          weeks: weeks.map((w) => ({
+            wn: w.weekNumber,
+            sessions: (w.sessions ?? []).map((s) =>
+              `dow${s.dayOfWeek}=${s.distanceKm ?? 0}km`,
+            ).join('|'),
+          })),
+        };
+      });
+      const expandedSummary = planned.map((m, i) => {
+        const entries = Array.from(m.entries()).map(([k, v]) => `${k}:${v.km}km`);
+        return { planIdx: i, days: entries };
+      });
+      logger.info('stats.breakdown.deep_dump', {
+        uid: userId,
+        period,
+        tzOffsetMin,
+        buckets: buckets.map((b) => ({
+          label: b.label,
+          start: b.start.toISOString(),
+          end: b.end.toISOString(),
+        })),
+        plans: planSummary,
+        expanded: expandedSummary,
+        volume,
+      });
+    } catch (_) {/* ignore */}
+
     return { period, stats, volume, pace };
   }
 
@@ -156,12 +195,20 @@ export class GetStatsBreakdownUseCase {
         : null;
 
       // Planejado: itera cada dia do bucket, pega o plano ativo naquele dia.
+      //
+      // TF 77 F6 (bug 2): `addDays(d, 1)` usava `new Date(y, m, d+1)` que
+      // construía meia-noite local UTC, perdendo o offset BRT. Resultado:
+      // bucket SEG (08/jun 03:00 UTC → 09/jun 03:00 UTC) iterava d=08/jun
+      // 03:00 → 09/jun 00:00 → ambos dentro do range, e dateKey do segundo
+      // retornava "2026-06-09" → bucket pegava planejado do dia seguinte.
+      // Fix: avança +24h preservando offset; dateKey usa getUTCDate (mesmo
+      // truque local-as-UTC dos buckets).
       let plannedKm = 0;
       const plannedPaceSecs: number[] = [];
-      for (let d = new Date(b.start); d < b.end; d = addDays(d, 1)) {
+      for (let d = new Date(b.start); d < b.end; d = new Date(d.getTime() + 86400000)) {
         const planIdx = activePlanIndex(plans, d);
         if (planIdx < 0) continue;
-        const day = planned[planIdx]!.get(dateKey(d));
+        const day = planned[planIdx]!.get(dateKeyUtc(d));
         if (!day) continue;
         plannedKm += day.km;
         plannedPaceSecs.push(...day.paces);
@@ -219,7 +266,13 @@ function buildBuckets(period: StatsPeriod, now: Date, tzOffsetMin: number): Buck
     void monthStartLocal;
     return buckets;
   }
-  // threeMonths: mês atual + 2 anteriores.
+  // threeMonths: mês atual + 2 anteriores. Cada bucket cobre o mês INTEIRO
+  // (01 a 1º do próximo) — usuário compara plano vs executado no mês todo.
+  //
+  // TF 77 F6 (fix 2): removido cap em today+1 — limitava JUN ao 10/06 em
+  // vez do mês inteiro, e o usuário via planejado de só ~10 dias contra o
+  // plano que cobria 30. Como agora o iterator preserva offset e dateKeyUtc
+  // recorta certo dia-a-dia, não há risco de "vazar" sessões do mês seguinte.
   const buckets: Bucket[] = [];
   const y = localNow.getUTCFullYear();
   const m = localNow.getUTCMonth();
@@ -247,17 +300,33 @@ function addDaysUtc(d: Date, n: number): Date {
 
 // ── Plano (planejado) ──────────────────────────────────────────────────────
 
-/** Expande cada plano num mapa dateKey → { km, paces[] } a partir das sessões. */
+/** Expande cada plano num mapa dateKey → { km, paces[] } a partir das sessões.
+ *
+ *  TF 77 F6: bug pre-77 alocava sessões antes do startDate quando o plano não
+ *  começa numa segunda. Ex: plano começa qua, sessão na seg → offset=1-3=-2,
+ *  jogava a sessão num dia ANTES de startDate (não somava em nenhum bucket
+ *  válido + sumia da semana atual + aparecia na semana anterior).
+ *
+ *  Correção: ancoramos o plano na SEGUNDA da semana de startDate (anterior
+ *  ou igual). Cada (weekNumber, dayOfWeek) mapeia exatamente pra uma data
+ *  calendário. Sessões antes de startDate são puladas. */
 function expandPlans(plans: Plan[]): Map<string, { km: number; paces: number[] }>[] {
   return plans.map((plan) => {
     const map = new Map<string, { km: number; paces: number[] }>();
     const startStr = (plan.startDate ?? plan.createdAt).slice(0, 10);
     const start = parseLocalDate(startStr);
-    const startWeekday = start.getDay() === 0 ? 7 : start.getDay();
-    for (const week of plan.weeks ?? []) {
+    const startWeekday = start.getDay() === 0 ? 7 : start.getDay(); // 1=seg..7=dom
+    // Segunda da semana em que startDate está (ou o próprio startDate se for seg).
+    const mondayOfWeek1 = addDays(start, -(startWeekday - 1));
+    for (const week of effectivePlanWeeks(plan)) {
       for (const s of week.sessions ?? []) {
-        const offset = (week.weekNumber - 1) * 7 + (s.dayOfWeek - startWeekday);
-        const key = dateKey(addDays(start, offset));
+        const dow = s.dayOfWeek; // 1=seg..7=dom
+        const offsetFromMonday = (week.weekNumber - 1) * 7 + (dow - 1);
+        const sessionDate = addDays(mondayOfWeek1, offsetFromMonday);
+        // Pula sessões antes do startDate (semana 1 incompleta quando plano
+        // não começa na segunda).
+        if (sessionDate < start) continue;
+        const key = dateKey(sessionDate);
         const entry = map.get(key) ?? { km: 0, paces: [] };
         entry.km += s.distanceKm || 0;
         const ps = paceToSec(s.targetPace);
@@ -322,6 +391,16 @@ function addDays(d: Date, n: number): Date {
 function dateKey(d: Date): string {
   return `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}-${d
     .getDate()
+    .toString()
+    .padStart(2, '0')}`;
+}
+
+/** Igual a `dateKey` mas usa componentes UTC. Necessário pra iterar buckets
+ *  em local-as-UTC (start/end já carregam o offset) sem deixar a TZ do
+ *  processo (UTC no Cloud Run) interferir no recorte dia-a-dia. */
+function dateKeyUtc(d: Date): string {
+  return `${d.getUTCFullYear()}-${(d.getUTCMonth() + 1).toString().padStart(2, '0')}-${d
+    .getUTCDate()
     .toString()
     .padStart(2, '0')}`;
 }

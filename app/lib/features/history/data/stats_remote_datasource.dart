@@ -1,4 +1,7 @@
+import 'dart:convert';
+
 import 'package:dio/dio.dart';
+import 'package:runnin/core/logger/logger.dart';
 import 'package:runnin/core/network/api_client.dart';
 import 'package:runnin/features/history/domain/entities/stats_aggregate.dart';
 import 'package:runnin/features/history/domain/entities/stats_breakdown.dart';
@@ -26,6 +29,19 @@ class StatsRemoteDatasource {
       '/stats/breakdown',
       queryParameters: {'period': period, 'tzOffsetMin': tz},
     );
+    // TF 75 Fase 11: dump do payload pra investigar bug recorrente do
+    // gráfico errado em Histórico/Dados/Semana. Eduardo já reportou 2x;
+    // sem ver o payload real é impossível diagnosticar.
+    try {
+      final raw = jsonEncode(res.data);
+      final preview = raw.length > 1800 ? '${raw.substring(0, 1800)}…' : raw;
+      Logger.info('stats.breakdown.dump', context: {
+        'period': period,
+        'tzOffsetMin': '$tz',
+        'rawPreview': preview,
+        'rawLen': '${raw.length}',
+      });
+    } catch (_) {/* best-effort */}
     return StatsBreakdown.fromJson(res.data as Map<String, dynamic>);
   }
 }

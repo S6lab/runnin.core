@@ -154,6 +154,7 @@ private let laLog = OSLog(subsystem: "ai.runnin.live_activity", category: "lifec
     let distanceM = doubleOf(args["distanceM"]) ?? 0
     let elapsedS = intOf(args["elapsedS"]) ?? 0
     let paceMinKm = doubleOf(args["paceMinKm"])
+    let bpm = intOf(args["bpm"])
     let sessionType = (args["sessionType"] as? String) ?? "Corrida"
 
     // Se já existe activity rodando, encerra a velha antes de criar nova
@@ -169,7 +170,8 @@ private let laLog = OSLog(subsystem: "ai.runnin.live_activity", category: "lifec
     let content = RunActivityAttributes.ContentState(
       distanceKm: distanceM / 1000.0,
       elapsedSeconds: elapsedS,
-      paceMinKmRaw: paceMinKm
+      paceMinKmRaw: paceMinKm,
+      bpmRaw: bpm
     )
 
     do {
@@ -200,6 +202,7 @@ private let laLog = OSLog(subsystem: "ai.runnin.live_activity", category: "lifec
     let distanceM = doubleOf(args["distanceM"]) ?? 0
     let elapsedS = intOf(args["elapsedS"]) ?? 0
     let paceMinKm = doubleOf(args["paceMinKm"])
+    let bpm = intOf(args["bpm"])
 
     // Update implícito-start: se Dart chamar update sem start (cenário
     // raro mas possível em hot restart), criamos a activity ad-hoc com
@@ -208,7 +211,8 @@ private let laLog = OSLog(subsystem: "ai.runnin.live_activity", category: "lifec
       let content = RunActivityAttributes.ContentState(
         distanceKm: distanceM / 1000.0,
         elapsedSeconds: elapsedS,
-        paceMinKmRaw: paceMinKm
+        paceMinKmRaw: paceMinKm,
+        bpmRaw: bpm
       )
       Task {
         await activity.update(ActivityContent(state: content, staleDate: nil))

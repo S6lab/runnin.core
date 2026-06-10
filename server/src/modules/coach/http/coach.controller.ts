@@ -143,6 +143,10 @@ export function postCoachLiveDiag(req: Request, res: Response): void {
     // operação que API rejeitou.
     lastSendKind: b['lastSendKind'],
     msSinceLastSend: b['msSinceLastSend'],
+    // TF 73: preambleLen no open_ok confirma que o contexto foi reinjetado
+    // após rotação/reconnect — falas "fora de contexto" pós-TTL costumam
+    // ter preambleLen=0 (preamble caiu ou ctxMgr resetou).
+    preambleLen: b['preambleLen'],
   });
   res.json({ ok: true });
 }

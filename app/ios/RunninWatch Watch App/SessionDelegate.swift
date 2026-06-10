@@ -128,6 +128,71 @@ class SessionDelegate: NSObject, WCSessionDelegate {
         }
     }
 
+    /// TF 75 Fase 12: push SpO2 (% saturação) Watch→iPhone. Sample raro
+    /// (~30-60s) então throttle 15s pra dedup mas não esmagar updates.
+    private var lastSpo2: Int = 0
+    private var lastSpo2PushAt: TimeInterval = 0
+    private static let spo2PushIntervalS: TimeInterval = 15.0
+    func pushSpo2ToPhone(_ pct: Int) {
+        let now = Date().timeIntervalSince1970
+        // Dedup mesmo valor recente — não inunda quando query devolve mesmo sample.
+        if pct == lastSpo2 && now - lastSpo2PushAt < Self.spo2PushIntervalS { return }
+        lastSpo2 = pct
+        lastSpo2PushAt = now
+        let session = WCSession.default
+        guard session.activationState == .activated else { return }
+        let payload: [String: Any] = [
+            "type": "spo2_update",
+            "spo2": pct,
+            "ts": Int(now * 1000),
+        ]
+        do {
+            try session.updateApplicationContext(payload)
+        } catch {
+            session.transferUserInfo(payload)
+        }
+    }
+
+    /// TF 75 Fase 1: push step count cumulativo Watch→iPhone. Throttle 5s
+    /// (3 a 5x menos chamadas que BPM, basta pra detectar idle de 60s).
+    /// iPhone calcula delta com janela móvel e usa pra droppar drift GPS.
+    private var lastStepsPushAt: TimeInterval = 0
+    private static let stepsPushIntervalS: TimeInterval = 5.0
+    func pushStepsToPhone(_ steps: Int) {
+        guard steps >= 0 else { return }
+        let now = Date().timeIntervalSince1970
+        if now - lastStepsPushAt < Self.stepsPushIntervalS { return }
+        lastStepsPushAt = now
+        let session = WCSession.default
+        guard session.activationState == .activated else { return }
+        let payload: [String: Any] = [
+            "type": "steps_update",
+            "steps": steps,
+            "ts": Int(now * 1000),
+        ]
+        do {
+            try session.updateApplicationContext(payload)
+        } catch {
+            session.transferUserInfo(payload)
+        }
+    }
+
+    /// TF 71 Fase 0: push de diagnóstico Watch→iPhone (não BPM). Usado pra
+    /// reportar restart de sessão por BPM stale e outros eventos de
+    /// observabilidade. `transferUserInfo` garante entrega FIFO (não
+    /// throttled como applicationContext) — adequado pra eventos raros.
+    func pushDiagToPhone(kind: String, extra: [String: Any] = [:]) {
+        let session = WCSession.default
+        guard session.activationState == .activated else { return }
+        var payload: [String: Any] = [
+            "type": "watch_diag",
+            "kind": kind,
+            "ts": Int(Date().timeIntervalSince1970 * 1000),
+        ]
+        for (k, v) in extra { payload[k] = v }
+        session.transferUserInfo(payload)
+    }
+
     /// Fallback: iPhone usa `transferUserInfo` quando Watch não está reachable.
     /// Entrega quando Watch acorda — ótimo pra stopWorkout em fim de corrida
     /// (se Watch estava no pulso e foi desligado mid-corrida).

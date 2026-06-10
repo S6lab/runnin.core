@@ -3,6 +3,7 @@ import Foundation
 import HealthKit
 import OSLog
 import SwiftUI
+import WatchKit
 
 private let wcLog = OSLog(subsystem: "ai.runnin.workout", category: "workout-controller")
 
@@ -23,6 +24,9 @@ class WorkoutController: NSObject, ObservableObject {
     /// Último BPM observado pelo builder (pra UI mínima do Watch — não vai
     /// pro iPhone via WCSession; iPhone lê direto do HK store).
     @Published var lastHeartRate: Int = 0
+    /// TF 75 Fase 12: SpO2 (% oxigenação do sangue) — Watch Series 6+.
+    /// Atualizado via querySpo2FromStore. UI mostra valor ao lado do BPM.
+    @Published var lastSpo2: Int = 0
 
     private let healthStore = HKHealthStore()
     private var session: HKWorkoutSession?
@@ -47,6 +51,25 @@ class WorkoutController: NSObject, ObservableObject {
     /// real travou em 94 nos testes; com polling o último valor disponível
     /// sempre flui pro phone via WCSession.
     private var bpmPollingTimer: Timer?
+
+    /// TF 71 Fase 0: mantém CPU ativo do Watch durante a corrida mesmo com
+    /// tela apagada. HKWorkoutSession autoriza sensor a coletar em background
+    /// mas Watch suspende dispatch da app — `HKLiveWorkoutBuilder` para de
+    /// receber callbacks de sample. Com Extended Runtime o builder roda
+    /// continuamente. Reason `.workout` é a opção Apple suporta pra fitness.
+    private var extendedSession: WKExtendedRuntimeSession?
+
+    /// TF 71 Fase 0: contador de polls consecutivos sem BPM fresh. Quando
+    /// passa o threshold (~15s == 5 polls de 3s), reabrimos a sessão pra
+    /// re-engajar o sensor.
+    private var consecutiveStalePolls: Int = 0
+    private static let stalePollsThreshold: Int = 5
+
+    /// TF 71 Fase 0 (fix do fix): só ativa auto-restart APÓS ter recebido
+    /// pelo menos 1 sample fresh. Sem isso, sessão recém-aberta (warmup
+    /// de ~10-15s sem sample) dispara restart imediato → loop infinito de
+    /// restart antes do sensor coletar. Vimos isso em prod TF 71 build 135.
+    private var hasReceivedFreshSample: Bool = false
 
     private override init() {
         super.init()
@@ -77,6 +100,15 @@ class WorkoutController: NSObject, ObservableObject {
             if let hr = HKObjectType.quantityType(forIdentifier: .heartRate) { s.insert(hr) }
             if let cal = HKObjectType.quantityType(forIdentifier: .activeEnergyBurned) { s.insert(cal) }
             if let dist = HKObjectType.quantityType(forIdentifier: .distanceWalkingRunning) { s.insert(dist) }
+            // TF 75 Fase 1: pedômetro pra detectar "user parado" e dropar
+            // drift GPS cumulativo. Se 0 passos em 60s, qualquer movimentação
+            // de coordenada é ruíu de sinal, não corrida.
+            if let steps = HKObjectType.quantityType(forIdentifier: .stepCount) { s.insert(steps) }
+            // TF 75 Fase 12: SpO2 (oxigenação do sangue) leitura realtime
+            // durante a corrida. Watch Series 6+ tem o oxímetro de pulso —
+            // sample chega a cada ~30s quando user fica parado e/ou no
+            // wrist sensor.
+            if let spo2 = HKObjectType.quantityType(forIdentifier: .oxygenSaturation) { s.insert(spo2) }
             return s
         }()
 
@@ -126,6 +158,7 @@ class WorkoutController: NSObject, ObservableObject {
             DispatchQueue.main.async {
                 self.isActive = true
             }
+            startExtendedRuntime()
             startBpmPolling()
             #if targetEnvironment(simulator)
             startMockBpm()
@@ -201,6 +234,20 @@ class WorkoutController: NSObject, ObservableObject {
             }
 
             if !bpmSourceFresh {
+                // TF 71 Fase 0: incrementa contador stale. Se passa do
+                // threshold, restart da HKWorkoutSession pra re-engajar o
+                // sensor. Race-free porque restart só roda do mesmo timer.
+                //
+                // Guard `hasReceivedFreshSample`: nunca dispara restart se
+                // a sessão ainda não recebeu UM sample fresh. Sem isso, o
+                // warmup inicial (~10-15s sem dado) iria fazer restart
+                // imediato → loop infinito (TF 71 build 135).
+                self.consecutiveStalePolls += 1
+                if self.hasReceivedFreshSample &&
+                   self.consecutiveStalePolls >= Self.stalePollsThreshold {
+                    self.restartSessionDueToStale()
+                    return
+                }
                 // Fallback: HKSampleQuery direto do HK store. Pega o sample
                 // mais recente da janela 30s — não depende do builder estar
                 // atualizado. Custa mais (query I/O), mas garante fresh.
@@ -212,10 +259,78 @@ class WorkoutController: NSObject, ObservableObject {
                 return
             }
 
+            // Sample fresh chegou — zera o contador stale e libera auto-restart.
+            self.consecutiveStalePolls = 0
+            self.hasReceivedFreshSample = true
             DispatchQueue.main.async { self.lastHeartRate = bpm }
             SessionDelegate.shared.pushBpmToPhone(bpm)
+            // TF 75 Fase 1: push step count cumulativo pra o iPhone detectar
+            // "user parado" e descartar drift GPS. Não é por delta — push
+            // valor total da sessão e iPhone calcula delta com janela 60s.
+            self.pushStepsToPhone()
+            // TF 75 Fase 12: SpO2 (oxigenação) — sample query no HK store,
+            // não vem pelo builder. Throttle interno via SessionDelegate.
+            self.querySpo2FromStore()
         }
         os_log("bpm_polling.started interval=3s mode=builder+store_fallback", log: wcLog, type: .info)
+    }
+
+    /// TF 75 Fase 12: lê o sample SpO2 mais recente do HK store e push
+    /// pra iPhone. Apple Watch Series 6+ tem oxímetro de pulso — samples
+    /// não saem pelo builder, precisa query direto.
+    private func querySpo2FromStore() {
+        guard let type = HKObjectType.quantityType(forIdentifier: .oxygenSaturation) else { return }
+        let now = Date()
+        let predicate = HKQuery.predicateForSamples(
+            withStart: now.addingTimeInterval(-300), // janela 5min — SpO2 é raro
+            end: now,
+            options: .strictEndDate
+        )
+        let sort = NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)
+        let query = HKSampleQuery(
+            sampleType: type,
+            predicate: predicate,
+            limit: 1,
+            sortDescriptors: [sort]
+        ) { [weak self] _, samples, _ in
+            guard let sample = samples?.first as? HKQuantitySample else { return }
+            // Apple HK reporta SpO2 como fração 0-1 (ex: 0.97 = 97%).
+            let frac = sample.quantity.doubleValue(for: .percent())
+            let pct = Int((frac * 100).rounded())
+            if pct < 50 || pct > 100 { return }
+            DispatchQueue.main.async { self?.lastSpo2 = pct }
+            SessionDelegate.shared.pushSpo2ToPhone(pct)
+        }
+        healthStore.execute(query)
+    }
+
+    /// TF 75 Fase 1: lê total de passos do builder e push pro iPhone via
+    /// SessionDelegate.
+    ///
+    /// TF 77 F1: HKLiveWorkoutBuilder NÃO coleta stepCount por padrão —
+    /// só hr/calories/distance. Eduardo testou em prod e gate idle nunca
+    /// destravava porque builder.statistics(.stepCount) retornava nil.
+    /// Fix: HKSampleQuery direto no HK store (mesma estratégia que SpO2 +
+    /// fallback BPM). Apple HK garante samples de pedômetro mesmo sem o
+    /// data source explícito.
+    private func pushStepsToPhone() {
+        guard let stepsType = HKObjectType.quantityType(forIdentifier: .stepCount) else { return }
+        let now = Date()
+        let predicate = HKQuery.predicateForSamples(
+            withStart: now.addingTimeInterval(-300),
+            end: now,
+            options: .strictEndDate
+        )
+        let query = HKStatisticsQuery(
+            quantityType: stepsType,
+            quantitySamplePredicate: predicate,
+            options: .cumulativeSum
+        ) { _, stats, _ in
+            guard let sum = stats?.sumQuantity() else { return }
+            let steps = Int(sum.doubleValue(for: .count()))
+            SessionDelegate.shared.pushStepsToPhone(steps)
+        }
+        healthStore.execute(query)
     }
 
     /// HKSampleQuery direto no HK store — fallback quando o builder não
@@ -253,6 +368,51 @@ class WorkoutController: NSObject, ObservableObject {
         bpmPollingTimer = nil
     }
 
+    /// TF 71 Fase 0: liga `WKExtendedRuntimeSession` reason=.workout pra
+    /// segurar dispatch do app durante a corrida com tela apagada. Sem isso,
+    /// `HKLiveWorkoutBuilder` para de receber callbacks e o BPM congela
+    /// (sintoma observado em prod TF 70).
+    ///
+    /// Bateria: ~15-20% extra/hora. Aceitável pra fitness app durante run.
+    private func startExtendedRuntime() {
+        guard extendedSession == nil else { return }
+        let s = WKExtendedRuntimeSession()
+        s.delegate = self
+        extendedSession = s
+        s.start()
+        os_log("extended_runtime.start state=%{public}@", log: wcLog, type: .info,
+               String(describing: s.state))
+    }
+
+    private func stopExtendedRuntime() {
+        guard let s = extendedSession else { return }
+        s.invalidate()
+        extendedSession = nil
+        os_log("extended_runtime.invalidate", log: wcLog, type: .info)
+    }
+
+    /// TF 71 Fase 0: chamado quando `startBpmPolling` detecta N polls
+    /// consecutivos sem sample fresh (>15s stale). Encerra a sessão atual
+    /// e reabre pra forçar o sensor a re-engajar. O delegate
+    /// `session.unexpected_end` NÃO dispara aqui porque setamos
+    /// `intentionalStop=false` ANTES do `s.end()` — mesmo path, mas o
+    /// auto-restart via delegate cobre a reabertura.
+    private func restartSessionDueToStale() {
+        guard let s = session else { return }
+        os_log("bpm_polling.stale_restart attempts=%d", log: wcLog, type: .info,
+               consecutiveStalePolls)
+        SessionDelegate.shared.pushDiagToPhone(
+            kind: "bpm_stale_restart",
+            extra: ["staleCount": consecutiveStalePolls]
+        )
+        consecutiveStalePolls = 0
+        hasReceivedFreshSample = false
+        intentionalStop = false
+        s.end()
+        // Builder cleanup + restart vem pelo delegate didChangeTo(.ended) que
+        // chama self.start() de novo via auto-restart path.
+    }
+
     func stop() {
         guard #available(iOS 26.0, watchOS 10.0, *) else { return }
         guard let s = session else {
@@ -263,6 +423,7 @@ class WorkoutController: NSObject, ObservableObject {
         // disparar auto-restart. Flag limpa em start() pra próxima sessão.
         intentionalStop = true
         stopBpmPolling()
+        stopExtendedRuntime()
         #if targetEnvironment(simulator)
         stopMockBpm()
         #endif
@@ -325,6 +486,33 @@ extension WorkoutController: HKWorkoutSessionDelegate {
             // pode entrar em loop infinito. Loga e segue parado; user
             // pode reiniciar a sessão se for caso transiente.
         }
+    }
+}
+
+@available(iOS 26.0, watchOS 10.0, *)
+extension WorkoutController: WKExtendedRuntimeSessionDelegate {
+    func extendedRuntimeSession(_ extendedRuntimeSession: WKExtendedRuntimeSession,
+                                didInvalidateWith reason: WKExtendedRuntimeSessionInvalidationReason,
+                                error: Error?) {
+        os_log("extended_runtime.invalidated reason=%{public}@ err=%{public}@",
+               log: wcLog, type: .info,
+               String(describing: reason),
+               error?.localizedDescription ?? "nil")
+        // NÃO reabre automaticamente — Watch pode invalidar por `.resignedFrontmost`
+        // (app não tá em foreground), `.suppressedBySystem`, etc., e reabrir
+        // em loop só piora. A HKWorkoutSession por si só continua mantendo
+        // o sensor coletando; extended runtime é só bônus pra dispatch da app.
+        DispatchQueue.main.async {
+            self.extendedSession = nil
+        }
+    }
+
+    func extendedRuntimeSessionDidStart(_ extendedRuntimeSession: WKExtendedRuntimeSession) {
+        os_log("extended_runtime.started", log: wcLog, type: .info)
+    }
+
+    func extendedRuntimeSessionWillExpire(_ extendedRuntimeSession: WKExtendedRuntimeSession) {
+        os_log("extended_runtime.will_expire", log: wcLog, type: .info)
     }
 }
 

@@ -110,7 +110,16 @@ struct ActiveRunScreen: View {
                                value: "\(Int(state.caloriesKcal))",
                                unit: nil, valueColor: .white)
                 }
-                smallStat(label: "ELEV", value: "+\(Int(state.elevationM))m")
+                // TF 75 Fase 12: SpO2 do Watch Series 6+. Aparece só se há
+                // sample (Watch sem oxímetro: lastSpo2 == 0 e o bloco some).
+                if workout.lastSpo2 > 0 {
+                    HStack(spacing: 8) {
+                        smallStat(label: "SpO₂", value: "\(workout.lastSpo2)%")
+                        smallStat(label: "ELEV", value: "+\(Int(state.elevationM))m")
+                    }
+                } else {
+                    smallStat(label: "ELEV", value: "+\(Int(state.elevationM))m")
+                }
             }
             .opacity(isPaused ? 0.55 : 1.0)
             Spacer(minLength: 0)

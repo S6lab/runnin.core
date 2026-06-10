@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { FirestoreRunRepository } from '@modules/runs/infra/firestore-run.repository';
 import { FirestorePlanRepository } from '@modules/plans/infra/firestore-plan.repository';
+import { FirestoreUserRepository } from '@modules/users/infra/firestore-user.repository';
 import { GetStatsAggregateUseCase } from '../domain/use-cases/get-stats-aggregate.use-case';
 import { GetUserTotalsUseCase } from '../domain/use-cases/get-user-totals.use-case';
 import { GetStatsBreakdownUseCase } from '../domain/use-cases/get-stats-breakdown.use-case';
@@ -8,7 +9,8 @@ import { StatsPeriod } from '../domain/stats-aggregate.entity';
 
 const runRepo = new FirestoreRunRepository();
 const planRepo = new FirestorePlanRepository();
-const getStats = new GetStatsAggregateUseCase(runRepo);
+const userRepo = new FirestoreUserRepository();
+const getStats = new GetStatsAggregateUseCase(runRepo, userRepo);
 const getUserTotals = new GetUserTotalsUseCase(runRepo);
 const getBreakdown = new GetStatsBreakdownUseCase(runRepo, planRepo);
 
@@ -44,6 +46,20 @@ export async function getStatsBreakdown(req: Request, res: Response, next: NextF
       ? Math.max(-840, Math.min(840, Number(tzRaw)))
       : 0;
     const result = await getBreakdown.execute(req.uid, period as StatsPeriod, tzOffsetMin);
+    // TF 77: dump server-side pra investigar bug do volume planejado errado.
+    // Logger.info do client tava silenciado em release → não tínhamos visibilidade.
+    try {
+      const { logger } = await import('@shared/logger/logger');
+      logger.info('stats.breakdown.server_dump', {
+        uid: req.uid,
+        period,
+        tzOffsetMin,
+        volume: result.volume,
+        pace: result.pace,
+        statsRuns: result.stats?.runs,
+        statsKm: result.stats?.totalDistanceKm,
+      });
+    } catch (_) {/* ignore */}
     res.json(result);
   } catch (err) {
     next(err);

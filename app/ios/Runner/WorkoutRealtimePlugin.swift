@@ -227,10 +227,28 @@ private let wcLog = OSLog(subsystem: "ai.runnin.workout", category: "watch-bridg
         pushRunState(args)
       }
       result(nil)
+    case "getLastCachedBpm":
+      // TF 75 Fase 9: cache nativo do BPM do Watch sobrevive a Dart suspended.
+      // Dart pode consultar no resume pra recuperar o último BPM válido sem
+      // depender de novo sample chegar.
+      let ageMs = lastBpmCachedAtMs == 0 ? Int.max :
+        Int(Date().timeIntervalSince1970 * 1000) - lastBpmCachedAtMs
+      result([
+        "bpm": lastBpmCached,
+        "ts": lastBpmCachedAtMs,
+        "ageMs": ageMs,
+      ])
     default:
       result(FlutterMethodNotImplemented)
     }
   }
+
+  /// TF 75 Fase 9: BPM mais recente recebido do Watch via WCSession,
+  /// cacheado em memória nativa. Sobrevive a Dart suspended em background
+  /// (Dart engine pode pausar, mas o WCSession delegate Swift continua
+  /// rodando). Dart consulta via method channel `getLastCachedBpm` no resume.
+  private var lastBpmCached: Int = 0
+  private var lastBpmCachedAtMs: Int = 0
 
   // MARK: Commands
 
@@ -510,6 +528,25 @@ extension WorkoutRealtimePlugin: WCSessionDelegate {
       let ts = (message["ts"] as? Int) ?? Int(Date().timeIntervalSince1970 * 1000)
       emit(["type": "bpm", "value": bpm, "ts": ts, "source": "watch_wc"])
       receivedAtLeastOne = true
+      lastBpmCached = bpm
+      lastBpmCachedAtMs = ts
+      replyHandler(["ok": true])
+      return
+    }
+    // TF 75 Fase 1: passos cumulativos do Watch via WCSession. Dart usa
+    // pra detectar idle (0 passos em 60s) e droppar drift GPS.
+    if let kind = message["type"] as? String, kind == "steps_update",
+       let steps = message["steps"] as? Int {
+      let ts = (message["ts"] as? Int) ?? Int(Date().timeIntervalSince1970 * 1000)
+      emit(["type": "steps", "value": steps, "ts": ts, "source": "watch_wc"])
+      replyHandler(["ok": true])
+      return
+    }
+    // TF 75 Fase 12: SpO2 (oxigenação) do Watch.
+    if let kind = message["type"] as? String, kind == "spo2_update",
+       let pct = message["spo2"] as? Int {
+      let ts = (message["ts"] as? Int) ?? Int(Date().timeIntervalSince1970 * 1000)
+      emit(["type": "spo2", "value": pct, "ts": ts, "source": "watch_wc"])
       replyHandler(["ok": true])
       return
     }
@@ -544,6 +581,20 @@ extension WorkoutRealtimePlugin: WCSessionDelegate {
       let ts = (userInfo["ts"] as? Int) ?? Int(Date().timeIntervalSince1970 * 1000)
       emit(["type": "bpm", "value": bpm, "ts": ts, "source": "watch_wc_userinfo"])
       receivedAtLeastOne = true
+      lastBpmCached = bpm
+      lastBpmCachedAtMs = ts
+      return
+    }
+    if let kind = userInfo["type"] as? String, kind == "steps_update",
+       let steps = userInfo["steps"] as? Int {
+      let ts = (userInfo["ts"] as? Int) ?? Int(Date().timeIntervalSince1970 * 1000)
+      emit(["type": "steps", "value": steps, "ts": ts, "source": "watch_wc_userinfo"])
+      return
+    }
+    if let kind = userInfo["type"] as? String, kind == "spo2_update",
+       let pct = userInfo["spo2"] as? Int {
+      let ts = (userInfo["ts"] as? Int) ?? Int(Date().timeIntervalSince1970 * 1000)
+      emit(["type": "spo2", "value": pct, "ts": ts, "source": "watch_wc_userinfo"])
       return
     }
     if let action = userInfo["action"] as? String {
@@ -571,6 +622,18 @@ extension WorkoutRealtimePlugin: WCSessionDelegate {
       let ts = (applicationContext["ts"] as? Int) ?? Int(Date().timeIntervalSince1970 * 1000)
       emit(["type": "bpm", "value": bpm, "ts": ts, "source": "watch_wc_ctx"])
       receivedAtLeastOne = true
+      lastBpmCached = bpm
+      lastBpmCachedAtMs = ts
+    }
+    if let kind = applicationContext["type"] as? String, kind == "steps_update",
+       let steps = applicationContext["steps"] as? Int {
+      let ts = (applicationContext["ts"] as? Int) ?? Int(Date().timeIntervalSince1970 * 1000)
+      emit(["type": "steps", "value": steps, "ts": ts, "source": "watch_wc_ctx"])
+    }
+    if let kind = applicationContext["type"] as? String, kind == "spo2_update",
+       let pct = applicationContext["spo2"] as? Int {
+      let ts = (applicationContext["ts"] as? Int) ?? Int(Date().timeIntervalSince1970 * 1000)
+      emit(["type": "spo2", "value": pct, "ts": ts, "source": "watch_wc_ctx"])
     }
   }
 

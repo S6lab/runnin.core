@@ -115,7 +115,7 @@ struct RunLockScreenView: View {
         }
       }
 
-      // Linha dos 3 números grandes
+      // Linha dos 3 (ou 4 com BPM) números grandes
       HStack(alignment: .firstTextBaseline, spacing: 0) {
         metric(
           label: "DISTÂNCIA",
@@ -134,7 +134,42 @@ struct RunLockScreenView: View {
           value: formatTime(state.elapsedSeconds),
           unit: nil
         )
+        // TF 75 Fase 8: BPM com animação de coração batendo. Só aparece
+        // quando wearable conecta — sem isso polui card de free run iPhone-only.
+        if let bpm = state.bpmRaw, bpm > 0 {
+          Spacer(minLength: 8)
+          bpmMetric(bpm: bpm)
+        }
       }
+    }
+  }
+
+  @ViewBuilder
+  private func bpmMetric(bpm: Int) -> some View {
+    VStack(alignment: .leading, spacing: 3) {
+      HStack(spacing: 4) {
+        Group {
+          if #available(iOS 17.0, *) {
+            Image(systemName: "heart.fill")
+              .font(.system(size: 9))
+              .foregroundStyle(Color.red)
+              .symbolEffect(.pulse, options: .repeating)
+          } else {
+            Image(systemName: "heart.fill")
+              .font(.system(size: 9))
+              .foregroundStyle(Color.red)
+          }
+        }
+        Text("BPM")
+          .font(.system(size: 9, weight: .medium, design: .monospaced))
+          .tracking(0.8)
+          .foregroundStyle(.white.opacity(0.5))
+      }
+      Text("\(bpm)")
+        .font(.system(size: 30, weight: .bold, design: .monospaced))
+        .foregroundStyle(.white)
+        .minimumScaleFactor(0.7)
+        .lineLimit(1)
     }
   }
 

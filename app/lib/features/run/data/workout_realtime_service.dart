@@ -104,6 +104,15 @@ class WorkoutRealtimeService {
   StreamSubscription<dynamic>? _eventSub;
 
   final _bpmController = StreamController<int?>.broadcast();
+  /// TF 75 Fase 1: total cumulativo de passos do Watch (HK stepCount sumQty
+  /// da sessão). RunBloc usa pra detectar idle (0 passos em 60s) e dropar
+  /// drift GPS cumulativo. Sem isso, GPS oscilando parado somava 500m falso.
+  final _stepsController = StreamController<int>.broadcast();
+  int? _latestSteps;
+  /// TF 75 Fase 12: SpO2 (oxigenação) em %. Apple Watch Series 6+ tem
+  /// oxímetro de pulso. Sample raro (~30-60s); UI mostra último valor.
+  final _spo2Controller = StreamController<int>.broadcast();
+  int? _latestSpo2;
   final _sessionStateController = StreamController<WorkoutSessionState>.broadcast();
   final _warningController = StreamController<String>.broadcast();
   final _watchStatusController = StreamController<WatchPairingStatus>.broadcast();
@@ -144,6 +153,23 @@ class WorkoutRealtimeService {
     _attachEventStream();
     if (_latestBpm != null) yield _latestBpm;
     yield* _bpmController.stream;
+  }
+
+  /// TF 75 Fase 1: total cumulativo de passos do Watch durante a sessão.
+  /// Emite a cada ~5s (throttle no Watch). RunBloc mantém janela 60s pra
+  /// detectar idle e descartar drift GPS.
+  Stream<int> get stepsStream async* {
+    _attachEventStream();
+    if (_latestSteps != null) yield _latestSteps!;
+    yield* _stepsController.stream;
+  }
+
+  /// TF 75 Fase 12: SpO2 (% oxigenação) do Apple Watch Series 6+.
+  /// Replay-on-listen igual ao bpmStream.
+  Stream<int> get spo2Stream async* {
+    _attachEventStream();
+    if (_latestSpo2 != null) yield _latestSpo2!;
+    yield* _spo2Controller.stream;
   }
 
   /// Stream de warnings nativos (`no_hr_source`, `permission_denied`, etc).
@@ -380,12 +406,32 @@ class WorkoutRealtimeService {
       Logger.error('workout_realtime.stop_failed', e, st, {'code': e.code});
     }
     _setState(WorkoutSessionState.idle);
+
+    // TF 75 Fase 9: detached do método stop pra ficar disponível pra
+    // chamadores externos (RunBloc no resume do app).
     // NÃO desliga o event stream — Watch comandos (startRun, pauseRun, etc)
     // E watch_status precisam continuar fluindo. Detachar aqui fazia o
     // Plugin Swift's onCancel disparar (eventSink = nil) e droppar TODOS
     // os eventos subsequentes silenciosamente — causa do "iniciar pelo
     // Watch funciona uma vez só" bug. EventChannel fica vivo pra sempre.
     _emitBpm(null);
+  }
+
+  /// TF 75 Fase 9: consulta o BPM nativo cacheado pelo Plugin iOS via WCSession.
+  /// Usado quando o app reataches do background — Dart engine pode ter
+  /// suspendido, mas o handler Swift do WCSession continua rodando e cacheia
+  /// o último BPM recebido do Watch. Retorna null se cache vazio/>30s velho.
+  Future<int?> getLastCachedBpm() async {
+    try {
+      final res = await _methodChannel.invokeMethod<Map>('getLastCachedBpm');
+      if (res == null) return null;
+      final bpm = res['bpm'] as int? ?? 0;
+      final ageMs = res['ageMs'] as int? ?? 999999;
+      if (bpm <= 0 || ageMs > 30000) return null;
+      return bpm;
+    } catch (_) {
+      return null;
+    }
   }
 
   void _attachEventStream() {
@@ -423,6 +469,32 @@ class WorkoutRealtimeService {
       return;
     }
     switch (type) {
+      case 'steps':
+        final rawValue = raw['value'];
+        int? steps;
+        if (rawValue is num) {
+          steps = rawValue.round();
+        } else if (rawValue is String) {
+          steps = int.tryParse(rawValue);
+        }
+        if (steps != null && steps >= 0) {
+          _latestSteps = steps;
+          _stepsController.add(steps);
+        }
+        break;
+      case 'spo2':
+        final rawValue = raw['value'];
+        int? pct;
+        if (rawValue is num) {
+          pct = rawValue.round();
+        } else if (rawValue is String) {
+          pct = int.tryParse(rawValue);
+        }
+        if (pct != null && pct >= 50 && pct <= 100) {
+          _latestSpo2 = pct;
+          _spo2Controller.add(pct);
+        }
+        break;
       case 'bpm':
         // raw['value'] pode chegar como:
         //   - int (Swift Int → Dart int direto)

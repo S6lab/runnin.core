@@ -64,7 +64,11 @@ export async function buildLiveCoachPrompt(args: LiveCoachBuildInput): Promise<B
   return {
     systemPrompt,
     userPrompt: renderTemplate(config.userTemplate, values),
-    maxTokens: isRunTime ? config.maxTokens : 1024,
+    // TF 77 F5: força minimum 200 tokens mesmo se Firestore admin override
+    // baixou pra 40-80. Eduardo viu finish:MAX_TOKENS recorrente em prod
+    // (cues truncadas mid-frase). Math.max(config, 200) protege contra
+    // misconfig sem mexer no admin panel.
+    maxTokens: isRunTime ? Math.max(config.maxTokens, 200) : 1024,
     temperature: config.temperature,
     ragChunks: config.ragChunks,
     version: stampVersion('live-coach', resolvedSource),

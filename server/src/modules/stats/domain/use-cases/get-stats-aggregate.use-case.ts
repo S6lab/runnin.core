@@ -1,5 +1,11 @@
 import { Run } from '@modules/runs/domain/run.entity';
 import { RunRepository } from '@modules/runs/domain/run.repository';
+import { UserRepository } from '@modules/users/domain/user.repository';
+import { UserProfile } from '@modules/users/domain/user.entity';
+import {
+  computeKarvonenZones,
+  classifyKarvonenZone,
+} from '@modules/health/domain/zone.entity';
 import {
   StatsAggregate,
   StatsPeriod,
@@ -29,7 +35,10 @@ const isValidRun = (r: Run): boolean =>
   (r.distanceM ?? 0) >= MIN_VALID_DISTANCE_M;
 
 export class GetStatsAggregateUseCase {
-  constructor(private readonly runs: RunRepository) {}
+  constructor(
+    private readonly runs: RunRepository,
+    private readonly userRepo: UserRepository,
+  ) {}
 
   async execute(userId: string, period: StatsPeriod): Promise<StatsAggregate> {
     const days = PERIOD_DAYS[period];
@@ -37,9 +46,10 @@ export class GetStatsAggregateUseCase {
     const from = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
     const prevFrom = new Date(from.getTime() - days * 24 * 60 * 60 * 1000);
 
-    const [currentRaw, previousRaw] = await Promise.all([
+    const [currentRaw, previousRaw, user] = await Promise.all([
       this.runs.findByDateRange(userId, from, now),
       this.runs.findByDateRange(userId, prevFrom, from),
+      this.userRepo.findById(userId),
     ]);
     const current = currentRaw.filter(isValidRun);
     const previous = previousRaw.filter(isValidRun);
@@ -48,7 +58,7 @@ export class GetStatsAggregateUseCase {
       totals: this.totals(current),
       averages: this.averages(current),
       deltas: this.deltas(current, previous),
-      zoneDistribution: this.zones(current),
+      zoneDistribution: this.zones(current, user),
       weeklyVolume: this.weeklyVolume(current, from, now),
       paceTrend: this.paceTrend(current),
       bpmTrend: this.bpmTrend(current),
@@ -111,22 +121,49 @@ export class GetStatsAggregateUseCase {
     };
   }
 
-  private zones(runs: Run[]): number[] {
-    // 5 zonas baseadas em avgBpm (Z1<120, Z2 120-140, Z3 140-160, Z4 160-175, Z5 >175).
-    // Sem KmSplit BPM real ainda; placeholder por run.avgBpm. Soma = 1.0 (ou zeros se vazio).
+  private zones(runs: Run[], user: UserProfile | null): number[] {
+    // 5 zonas Karvonen baseadas em maxBpm/restingBpm do profile. Antes era
+    // tabela hardcoded (Z1<120, Z2 120-140…); usuários com FC máx diferente
+    // de ~190 ficavam sem zonas relevantes. Agora unificado com a
+    // página /zonas (mesmo helper de health/domain/zone.entity).
+    const zones = this.zonesFor(user);
+    if (!zones) {
+      // Sem dados pra calcular zonas → distribuição zerada. UI deve
+      // checar a flag `zonesAvailable` e esconder o gráfico (TODO entity).
+      return [0, 0, 0, 0, 0];
+    }
     const counts = [0, 0, 0, 0, 0];
     for (const r of runs) {
       const bpm = r.avgBpm;
       if (typeof bpm !== 'number') continue;
-      if (bpm < 120) counts[0]!++;
-      else if (bpm < 140) counts[1]!++;
-      else if (bpm < 160) counts[2]!++;
-      else if (bpm < 175) counts[3]!++;
-      else counts[4]!++;
+      const idx = classifyKarvonenZone(bpm, zones);
+      if (idx !== null) counts[idx]!++;
     }
     const total = counts.reduce((a, b) => a + b, 0);
     if (total === 0) return [0, 0, 0, 0, 0];
-    return counts.map(c => c / total);
+    return counts.map((c) => c / total);
+  }
+
+  /** Resolve maxBpm/restingBpm pro perfil, com fallback Tanaka quando só
+   *  birthDate está presente. Retorna null se não der pra estimar. */
+  private zonesFor(user: UserProfile | null): { min: number; max: number }[] | null {
+    if (!user) return null;
+    const maxBpm = user.maxBpm ?? this.tanakaMaxBpm(user.birthDate);
+    if (!maxBpm) return null;
+    const restingBpm = user.restingBpm ?? 60; // default razoável quando ausente
+    return computeKarvonenZones(maxBpm, restingBpm);
+  }
+
+  /** Tanaka 2001: 208 − 0.7×idade. Mais preciso pra adultos do que 220−idade. */
+  private tanakaMaxBpm(birthDate?: string): number | null {
+    if (!birthDate) return null;
+    const dob = new Date(birthDate);
+    if (Number.isNaN(dob.getTime())) return null;
+    const now = new Date();
+    const age = now.getFullYear() - dob.getFullYear() -
+      (now < new Date(now.getFullYear(), dob.getMonth(), dob.getDate()) ? 1 : 0);
+    if (age <= 0 || age > 120) return null;
+    return Math.round(208 - 0.7 * age);
   }
 
   private weeklyVolume(runs: Run[], from: Date, to: Date): WeeklyVolumeEntry[] {
