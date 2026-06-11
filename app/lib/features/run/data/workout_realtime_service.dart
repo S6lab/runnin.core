@@ -434,6 +434,29 @@ class WorkoutRealtimeService {
     }
   }
 
+  /// TF 82 R4: startRun do Watch persistido nativamente quando o engine
+  /// Dart estava suspenso (emit pro eventSink era buraco negro). Chamar no
+  /// resume do app — retorna o comando fresco (<10min) UMA vez, ou null.
+  Future<WatchCommand?> consumePendingWatchStart() async {
+    try {
+      final res = await _methodChannel
+          .invokeMapMethod<String, Object?>('consumePendingWatchStart');
+      if (res == null) return null;
+      final action = res['action'] as String? ?? '';
+      if (action != 'startRun') return null;
+      Logger.info('workout_realtime.pending_watch_start_consumed', context: {
+        'ageMs': DateTime.now().millisecondsSinceEpoch -
+            ((res['storedAtMs'] as num?)?.toInt() ?? 0),
+      });
+      return WatchCommand(
+        action: action,
+        payload: Map<String, dynamic>.from(res),
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
   void _attachEventStream() {
     _eventSub ??= _eventChannel.receiveBroadcastStream().listen(
       _onEvent,
@@ -514,6 +537,11 @@ class WorkoutRealtimeService {
             'value': '$rawValue',
           });
         }
+        _recordBpmTelemetry(
+          bpm,
+          '${raw['source'] ?? 'unknown'}',
+          sampleTsMs: (raw['ts'] as num?)?.toInt(),
+        );
         _emitBpm(bpm);
         break;
       case 'state':
@@ -563,6 +591,13 @@ class WorkoutRealtimeService {
         // em events do bloc — pausa/abandona/inicia corrida.
         final cmd = WatchCommand.fromMap(raw);
         if (cmd.action.isNotEmpty && !_watchCommandController.isClosed) {
+          if (cmd.action == 'startRun') {
+            // Recebido com o engine vivo — limpa a pendência nativa pra
+            // não re-disparar no próximo resume (TF 82 R4).
+            unawaited(_methodChannel
+                .invokeMethod('clearPendingWatchStart')
+                .catchError((_) => null));
+          }
           _watchCommandController.add(cmd);
         }
         break;
@@ -585,6 +620,69 @@ class WorkoutRealtimeService {
         break;
       default:
         Logger.warn('workout_realtime.unknown_type', context: {'type': type});
+    }
+  }
+
+  // ── Telemetria de BPM (TF 82 — FC some com watch bloqueado) ────────────
+  // Discrimina hipóteses: throttling do applicationContext pelo OS vs
+  // HKLiveWorkoutBuilder parando com tela bloqueada vs staleness na camada
+  // de exibição. Cada amostra registra fonte+timestamp; gap >10s loga o
+  // estado completo; resumo por fonte a cada 60s pra análise pós-corrida.
+  DateTime? _lastBpmAt;
+  String _lastBpmSource = 'none';
+  final Map<String, int> _bpmCountBySource = {};
+  int _bpmMaxGapMs = 0;
+  int _bpmMaxLatencyMs = 0;
+  DateTime? _lastBpmSummaryAt;
+
+  void _recordBpmTelemetry(int? bpm, String source, {int? sampleTsMs}) {
+    final now = DateTime.now();
+    if (bpm != null) {
+      _bpmCountBySource[source] = (_bpmCountBySource[source] ?? 0) + 1;
+      // Latência coleta→entrega: discrimina "Watch coletou mas o push
+      // demorou" (latência alta) de "Watch parou de coletar" (gap sem
+      // latência acumulada).
+      final deliveryLatencyMs = sampleTsMs != null
+          ? now.millisecondsSinceEpoch - sampleTsMs
+          : null;
+      if (deliveryLatencyMs != null && deliveryLatencyMs > _bpmMaxLatencyMs) {
+        _bpmMaxLatencyMs = deliveryLatencyMs;
+      }
+      final last = _lastBpmAt;
+      if (last != null) {
+        final gapMs = now.difference(last).inMilliseconds;
+        if (gapMs > _bpmMaxGapMs) _bpmMaxGapMs = gapMs;
+        if (gapMs > 10000) {
+          Logger.warn('workout_realtime.bpm_gap', context: {
+            'gapMs': gapMs,
+            'lastSource': _lastBpmSource,
+            'newSource': source,
+            'deliveryLatencyMs': deliveryLatencyMs,
+            'watchPaired': _latestWatchStatus.paired,
+            'watchReachable': _latestWatchStatus.reachable,
+            'sessionState': _state.name,
+          });
+        }
+      }
+      _lastBpmAt = now;
+      _lastBpmSource = source;
+    }
+    final lastSummary = _lastBpmSummaryAt;
+    if (lastSummary == null) {
+      _lastBpmSummaryAt = now;
+    } else if (now.difference(lastSummary).inSeconds >= 60) {
+      _lastBpmSummaryAt = now;
+      Logger.info('workout_realtime.bpm_telemetry', context: {
+        'countsBySource': Map<String, int>.from(_bpmCountBySource),
+        'maxGapMs': _bpmMaxGapMs,
+        'maxDeliveryLatencyMs': _bpmMaxLatencyMs,
+        'lastSource': _lastBpmSource,
+        'watchReachable': _latestWatchStatus.reachable,
+        'sessionState': _state.name,
+      });
+      _bpmCountBySource.clear();
+      _bpmMaxGapMs = 0;
+      _bpmMaxLatencyMs = 0;
     }
   }
 

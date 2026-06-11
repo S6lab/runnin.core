@@ -238,9 +238,46 @@ private let wcLog = OSLog(subsystem: "ai.runnin.workout", category: "watch-bridg
         "ts": lastBpmCachedAtMs,
         "ageMs": ageMs,
       ])
+    case "consumePendingWatchStart":
+      // TF 82 R4: startRun enviado com Dart suspenso era emit() pro vazio.
+      // O delegate Swift persiste o comando; Dart consome no resume e
+      // dispara o mesmo fluxo do WatchStartListener. Retorna null se não
+      // há pendência fresca (<10min).
+      result(Self.consumePendingWatchStart())
+    case "clearPendingWatchStart":
+      // Dart recebeu o watch_command vivo (engine acordado) — limpa a
+      // pendência pra não re-disparar no próximo resume.
+      UserDefaults.standard.removeObject(forKey: Self.pendingStartKey)
+      result(nil)
     default:
       result(FlutterMethodNotImplemented)
     }
+  }
+
+  // MARK: - Pending watch start (sobrevive a Dart suspenso)
+
+  private static let pendingStartKey = "runnin.pending_watch_start"
+
+  static func storePendingWatchStart(_ payload: [String: Any]) {
+    var stored: [String: Any] = [:]
+    // Só tipos plist-safe entram no UserDefaults.
+    for (k, v) in payload where v is String || v is Int || v is Bool || v is Double {
+      stored[k] = v
+    }
+    stored["storedAtMs"] = Int(Date().timeIntervalSince1970 * 1000)
+    UserDefaults.standard.set(stored, forKey: pendingStartKey)
+  }
+
+  static func consumePendingWatchStart() -> [String: Any]? {
+    guard let stored = UserDefaults.standard.dictionary(forKey: pendingStartKey) else {
+      return nil
+    }
+    UserDefaults.standard.removeObject(forKey: pendingStartKey)
+    let storedAtMs = stored["storedAtMs"] as? Int ?? 0
+    let ageMs = Int(Date().timeIntervalSince1970 * 1000) - storedAtMs
+    // Start de corrida é time-sensitive — pendência velha só confundiria.
+    guard ageMs < 10 * 60 * 1000 else { return nil }
+    return stored
   }
 
   /// TF 75 Fase 9: BPM mais recente recebido do Watch via WCSession,
@@ -485,6 +522,7 @@ private let wcLog = OSLog(subsystem: "ai.runnin.workout", category: "watch-bridg
       "type": "bpm",
       "value": bpmValue,
       "ts": Int(sample.endDate.timeIntervalSince1970 * 1000),
+      "source": "local_hk",
     ])
   }
 
@@ -557,6 +595,11 @@ extension WorkoutRealtimePlugin: WCSessionDelegate {
         return
       }
       os_log("wc.recv action=%{public}@", log: wcLog, type: .info, action)
+      if action == "startRun" {
+        // Persiste ANTES do emit: se o engine Dart estiver suspenso, o
+        // eventSink é um buraco negro — o resume consome a pendência.
+        WorkoutRealtimePlugin.storePendingWatchStart(message)
+      }
       emit([
         "type": "watch_command",
         "action": action,
@@ -603,6 +646,9 @@ extension WorkoutRealtimePlugin: WCSessionDelegate {
         return
       }
       os_log("wc.recv.userInfo action=%{public}@", log: wcLog, type: .info, action)
+      if action == "startRun" {
+        WorkoutRealtimePlugin.storePendingWatchStart(userInfo)
+      }
       emit([
         "type": "watch_command",
         "action": action,

@@ -147,11 +147,23 @@ class LiveAudioService {
     Duration startGrace = const Duration(seconds: 20),
     Duration maxWait = const Duration(seconds: 90),
   }) async {
-    final deadline = DateTime.now().add(maxWait);
-    final startDeadline = DateTime.now().add(startGrace);
+    final startedAt = DateTime.now();
+    final deadline = startedAt.add(maxWait);
+    final startDeadline = startedAt.add(startGrace);
     while (_player.state != PlayerState.playing &&
         DateTime.now().isBefore(startDeadline)) {
       await Future<void>.delayed(const Duration(milliseconds: 500));
+    }
+    final playbackStarted = _player.state == PlayerState.playing;
+    if (!playbackStarted) {
+      // TF 82 (áudio de finalização "comido"): este é o caminho suspeito —
+      // a geração demorou mais que o grace e fechamos antes do 1º byte.
+      Logger.warn('live_audio.wait_playback.never_started', context: {
+        'graceMs': startGrace.inMilliseconds,
+        'waitedMs': DateTime.now().difference(startedAt).inMilliseconds,
+        'playerState': _player.state.name,
+      });
+      return;
     }
     // Loop porque a fala pode chegar em mais de um flushAndPlay — espera
     // cada playback completar e dá um respiro pro próximo começar.
@@ -167,6 +179,12 @@ class LiveAudioService {
       }
       await Future<void>.delayed(const Duration(milliseconds: 600));
     }
+    final hitMaxWait = !DateTime.now().isBefore(deadline);
+    Logger.info('live_audio.wait_playback.done', context: {
+      'totalMs': DateTime.now().difference(startedAt).inMilliseconds,
+      'hitMaxWait': hitMaxWait,
+      'playerState': _player.state.name,
+    });
   }
 
   /// Libera o ducking sobre apps de música quando a sessão do coach cai

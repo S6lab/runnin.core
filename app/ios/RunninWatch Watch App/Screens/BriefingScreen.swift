@@ -51,7 +51,9 @@ struct BriefingScreen: View {
                     .padding(.top, 4)
 
                 if startFailed {
-                    Text("Sem resposta do iPhone. Verifique se o app está aberto e tente novamente.")
+                    // O comando ficou salvo no iPhone (pending start nativo):
+                    // abrir o app já dispara a corrida — não precisa re-enviar.
+                    Text("iPhone sem resposta. Seu pedido ficou salvo: abra o Runnin no iPhone que a corrida inicia sozinha.")
                         .font(state.scaledFont(size: 9, weight: .medium))
                         .foregroundStyle(.yellow)
                         .padding(.top, 2)

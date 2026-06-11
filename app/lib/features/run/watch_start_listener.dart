@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/widgets.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:runnin/core/router/app_router.dart';
@@ -17,12 +18,29 @@ import 'package:runnin/features/run/data/workout_realtime_service.dart';
 /// Solução: handler app-level navega o iPhone pra `/run` com
 /// `extra={..., autoStart: true}`. ActiveRunPage detecta a flag e dispara
 /// StartRun no initState — mesmo efeito de bater INICIAR no prep.
-class WatchStartListener {
+///
+/// TF 82 R4: com o iPhone SUSPENSO, nem esse listener roda — o comando era
+/// perdido e o Watch caía no "TENTAR NOVAMENTE". Agora o plugin nativo
+/// persiste o startRun pendente; consumimos no cold start e em todo resume,
+/// então abrir o iPhone inicia a corrida sozinho.
+class WatchStartListener with WidgetsBindingObserver {
   StreamSubscription<WatchCommand>? _sub;
 
   void start() {
     _sub?.cancel();
     _sub = workoutRealtimeService.watchCommandStream.listen(_handle);
+    WidgetsBinding.instance.addObserver(this);
+    _consumePending();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _consumePending();
+  }
+
+  Future<void> _consumePending() async {
+    final cmd = await workoutRealtimeService.consumePendingWatchStart();
+    if (cmd != null) _handle(cmd);
   }
 
   void _handle(WatchCommand cmd) {
@@ -52,6 +70,7 @@ class WatchStartListener {
   }
 
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _sub?.cancel();
     _sub = null;
   }
