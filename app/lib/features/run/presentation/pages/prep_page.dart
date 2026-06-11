@@ -86,21 +86,26 @@ class _PrepViewState extends State<_PrepView> {
   final Set<int> _checkedItems = {};
   int? _checkedItemsLen;
 
+  // Toggles refletem os eventos REAIS do coach (modelo canônico s6-ai):
+  // km_reached (kmAlert), pace_alert (paceOutOfRange) e bpm_alert (highBpm).
+  // 'kmSplits' e 'motivation' saíram da UI — eram do coach legado e não
+  // gateiam nada no RunBloc desde a migração (evento motivation removido).
+  // Check-ins de presença (500m outdoor / 4min indoor) são sempre-on.
   static const _alertLabels = {
-    'kmAlert': 'ALERTA A CADA KM',
-    'paceOutOfRange': 'PACE FORA DO RANGE',
-    'highBpm': 'BPM ELEVADO',
-    'kmSplits': 'SPLITS POR KM',
-    'motivation': 'MOTIVAÇÃO',
+    'kmAlert': 'ANÚNCIO POR KM',
+    'paceOutOfRange': 'PACE FORA DO ALVO',
+    'highBpm': 'FC FORA DA ZONA',
   };
 
   static const _alertDescriptions = {
-    'kmAlert': 'Coach comenta pace e distância',
-    'paceOutOfRange': 'Avisa se sair do alvo',
-    'highBpm': 'Alerta se BPM entrar zona 5',
-    'kmSplits': 'Mostra split detalhado',
-    'motivation': 'Mensagens de motivação durante a corrida',
+    'kmAlert': 'Coach fecha cada km com pace, tempo e FC',
+    'paceOutOfRange': 'Avisa quando o pace foge do alvo da sessão',
+    'highBpm': 'Alerta quando a FC sai da zona alvo',
   };
+
+  /// Alertas que dependem de GPS — não se aplicam na esteira (indoor),
+  /// onde o coach faz check-ins por tempo.
+  static const _gpsOnlyAlerts = {'kmAlert', 'paceOutOfRange'};
 
   @override
   void initState() {
@@ -433,14 +438,31 @@ class _PrepViewState extends State<_PrepView> {
           style: type.bodyXs.copyWith(color: palette.muted),
         ),
         const SizedBox(height: 14),
-        ..._alerts.entries.map(
-          (e) => _AlertToggleRow(
-            label: _alertLabels[e.key] ?? e.key,
-            description: _alertDescriptions[e.key],
-            value: e.value,
-            onChanged: (v) => _toggleAlert(e.key, v),
+        // Indoor: alertas de GPS (km/pace) não se aplicam — só FC fica
+        // togglável, e o check-in vira por tempo (sempre-on).
+        if (_indoorMode) ...[
+          Padding(
+            padding: const EdgeInsets.only(bottom: 14),
+            child: Text(
+              'Na esteira o coach faz check-ins por tempo (a cada ~4min) com '
+              'tempo decorrido e FC. Alertas de km e pace dependem de GPS e '
+              'ficam desativados.',
+              style: type.bodyXs.copyWith(color: palette.muted, height: 1.5),
+            ),
           ),
-        ),
+        ],
+        ..._alerts.entries
+            .where((e) =>
+                _alertLabels.containsKey(e.key) &&
+                (!_indoorMode || !_gpsOnlyAlerts.contains(e.key)))
+            .map(
+              (e) => _AlertToggleRow(
+                label: _alertLabels[e.key] ?? e.key,
+                description: _alertDescriptions[e.key],
+                value: e.value,
+                onChanged: (v) => _toggleAlert(e.key, v),
+              ),
+            ),
         const SizedBox(height: 8),
         Align(
           alignment: Alignment.centerRight,
