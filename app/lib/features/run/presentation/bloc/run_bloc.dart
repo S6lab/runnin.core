@@ -6,7 +6,6 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:runnin/core/analytics/analytics_service.dart';
-import 'package:runnin/core/audio/coach_audio_player.dart';
 import 'package:runnin/core/audio/telemetry_tts.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 import 'package:runnin/features/biometrics/data/health_sync_service.dart';
@@ -119,13 +118,6 @@ class _WatchStatusChanged extends RunEvent {
 
 /// Limpa o flag do dialog de "parado" (ex: ao escolher continuar/encerrar).
 class DismissNoMovementPrompt extends RunEvent {}
-
-/// Push-to-talk: abre a janela de fala com o coach (botão "Coach" pressionado).
-/// Streama o mic pra sessão Live já aberta; o coach responde e volta a narrar.
-class CoachTalkStart extends RunEvent {}
-
-/// Fecha a janela de fala (botão solto) → o coach responde.
-class CoachTalkStop extends RunEvent {}
 
 // ── State ────────────────────────────────────────────────────────────────────
 enum RunStatus { idle, starting, active, paused, completing, completed, error }
@@ -317,27 +309,14 @@ class RunState {
 class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
   final _remote = RunRemoteDatasource();
   final _userRemote = UserRemoteDatasource();
-  // TF 69: fallback HTTP /coach/message quando _coachSession.isOpen == false.
-  // Antes, premium ficava em silêncio quando Live caía mid-run; agora o cue
-  // sai via server (templates ativos ou Flash LLM + Live TTS server-side).
-  final _coachRemote = RunCoachRemoteDatasource();
-  // Contexto do coach sobrevive à rotação/queda da sessão Live (source-of-truth
-  // do histórico curto pra reinjetar como preamble quando a sessão é reciclada).
-  final _coachCtx = CoachContextManager();
-  // Sessão Gemini Live efêmera/rotacional: rotaciona em transições naturais
-  // pra evitar acúmulo de áudio no histórico interno do socket (que degradava
-  // a voz por volta do km 3 no modelo native-audio).
-  // Não-final pra TF 71 Fase -2: quando user inicia nova run sem completar
-  // a anterior, recriamos o objeto pra cortar reconnects órfãos consumindo
-  // token/generation. `close()` seta _disposed=true e bloqueia reuso, então
-  // precisa nova instância.
-  late LiveRunCoachSession _coachSession = LiveRunCoachSession(
-    contextManager: _coachCtx,
-  );
+  // Sessão de coach via s6-ai (microsserviço dono do socket Gemini).
+  // Rotação, preamble, fila anti-sobreposição (CueQueue) e fallback HTTP
+  // são server-side agora — o bloc só dispara eventos estruturados.
+  // Não-final: quando user inicia nova run sem completar a anterior,
+  // recriamos o objeto pra cortar reconnects órfãos (`close()` seta
+  // _disposed=true e bloqueia reuso).
+  LiveRunCoachSession _coachSession = LiveRunCoachSession();
   StreamSubscription<String>? _coachTranscriptSub;
-  // Quando trigger natural cai durante push-to-talk, marca pra rotacionar
-  // assim que o user soltar o botão (evita cortar a fala do user).
-  String? _pendingRotationTrigger;
   final _local = RunLocalDatasource();
   final _planRemote = PlanRemoteDatasource();
 
@@ -351,12 +330,6 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
   /// Fix TF 59: alinha temporalmente os 3 sinais (BPM/GPS streams chegam
   /// dessincronizados) e permite coach ler "como foi os últimos 500m".
   Timer? _telemetryTickTimer;
-  /// Safety: a cada 30s checa se a sessão Live atingiu o threshold de
-  /// idade pra rotação. Sem isso a rotação só acontece em km_reached/
-  /// segment_start/segment_end — e em runs lentas (ou pace estável sem
-  /// transição de segmento) a sessão estoura o cap implícito de ~10min
-  /// do Gemini Live API e cai com code 1011. Já vimos esse padrão em prod.
-  Timer? _coachRotationSafetyTimer;
   int _pendingFlushCount = 0;
   int _lastCoachKm = 0;
   /// Timestamp (s desde start da run) em que o último km foi cruzado.
@@ -447,8 +420,6 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
   int _lastCoachSpeechAtMs = 0;
   double _lastCoachSpeechDistanceM = 0;
   static const _checkInDistanceM = 500.0;
-  static const _checkInIdleSeconds = 240; // 4 min
-  Timer? _motivationTimer;
 
   /// TF 75 Fase 3: cooldown global entre QUALQUER cue. Sem isso, check_in
   /// (500m) + km_reached + segment_start podiam disparar no mesmo ciclo GPS
@@ -657,15 +628,8 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
     on<DismissNoMovementPrompt>(
       (e, emit) => emit(state.copyWith(noMovementPrompt: false)),
     );
-    on<CoachTalkStart>((e, emit) => unawaited(_coachSession.startTalk()));
-    on<CoachTalkStop>((e, emit) async {
-      await _coachSession.stopTalk();
-      final pending = _pendingRotationTrigger;
-      if (pending != null) {
-        _pendingRotationTrigger = null;
-        unawaited(_coachSession.rotateSession(reason: 'deferred_$pending'));
-      }
-    });
+    // Push-to-talk removido (decisão de produto, migração s6-ai): a sessão
+    // Live agora é unidirecional (telemetria → fala do coach).
     _local.init();
   }
 
@@ -854,36 +818,31 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
 
       _lastCoachKm = 0;
       _lastKmStartElapsedS = 0;
-      _pendingRotationTrigger = null;
       _gpsDriftWindow.clear();
       // Wall-clock anchor pra elapsedS (vide _onTimerTick).
       _startedAtMs = DateTime.now().millisecondsSinceEpoch;
       _pausedTotalMs = 0;
       _pauseStartMs = null;
       if (_isPremium) {
-        // TF 71 Fase -2: se uma sessão Live anterior ainda está aberta,
-        // user iniciou nova run sem stop. Sem dispose explícito a sessão
-        // antiga seguia reconectando indefinidamente (TF 70 deu resiliência
-        // demais), consumindo tokens da run que terminou. Fecha e recria.
-        if (_coachSession.isOpen) {
-          unawaited(_coachSession.close());
-          _coachTranscriptSub?.cancel();
-          _coachTranscriptSub = null;
-          _coachSession = LiveRunCoachSession(contextManager: _coachCtx);
-        }
-        // Premium: contexto + Live session + saudação (mesmo fluxo de sempre).
-        _coachCtx.init(runId);
+        // SEMPRE fecha e recria a sessão por corrida. O objeto é one-shot
+        // (close() seta _disposed e mata streams) — o gate antigo
+        // `if (isOpen)` pulava a recriação quando a sessão anterior já
+        // tinha sido fechada, reusava um objeto morto/stale e o `start`
+        // nunca era enviado (bug real: coach mudo na saudação, corrida 2
+        // do smoke s6-ai 2026-06-11).
+        unawaited(_coachSession.close());
+        _coachTranscriptSub?.cancel();
+        _coachTranscriptSub = null;
+        _coachSession = LiveRunCoachSession();
         _coachSession.setMetricsProvider(_buildMetricsSnapshot);
         // Abre a sessão Live e saúda AGORA — ao iniciar, quando a tela passa a
         // exibir o mapa (corrida ativa). Suprime cues por 12s pra a saudação
         // falar sozinha. A transcrição alimenta o banner; o áudio toca na sessão.
-        if (!_coachSession.isOpen) {
+        {
           _suppressCuesUntilMs = DateTime.now().millisecondsSinceEpoch + 12000;
-          _coachTranscriptSub?.cancel();
           _coachTranscriptSub = _coachSession.transcripts.listen((t) {
             if (!isClosed) add(_CoachChunk(CoachCue(text: t)));
           });
-          final startType = event.type;
           final startRunId = runId;
           unawaited(() async {
             // Refetch de clima ANTES de abrir a Live session — snapshot
@@ -903,8 +862,10 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
               runId: startRunId,
             );
             if (ok && !isClosed) {
-              _coachSession.markTrigger('start');
-              _coachSession.sendTelemetry(_telemetryText('start', runType: startType));
+              _coachSession.sendEvent('start', {
+                'kmDone': 0,
+                'elapsedS': 0,
+              });
               // Inicializa os trackers de check_in (500m / 4min) com a
               // saudação. Sem isso, os gates `_lastCoachSpeechAtMs > 0`
               // nos triggers de check_in nunca passavam em runs premium
@@ -946,15 +907,6 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
         const Duration(seconds: 30),
         (_) => add(_TelemetryTick()),
       );
-
-      // Motivação: dispara cue a cada 5min se não houver outro cue ativo.
-      // Respeita _alertPrefs['motivation'] (no-op se false).
-      _startMotivationTimer();
-
-      // Safety pra rotação Live: garante que a sessão não estoure o cap
-      // do Gemini (~10min) mesmo em runs lentas ou sem transições de
-      // segmento. Roda a cada 30s e tenta rotacionar se shouldRotateNow.
-      _startCoachRotationSafetyTimer();
 
       // Stall check: 30s após START, se distância < 5m, pede ao coach um
       // disclaimer gentil ("tudo bem? começa quando puder").
@@ -1455,11 +1407,8 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
           targetPaceMinKm: kmTarget,
           kmDurationS: kmDurationS,
           kmAvgBpm: kmAvgBpm,
-          elevationGainM:
-              updatedSplits.isNotEmpty ? updatedSplits.last.elevationGain : null,
         ));
         _lastCueAt['km_reached'] = DateTime.now().millisecondsSinceEpoch;
-        _maybeRotateLiveSession(trigger: 'km_reached');
       }
       // km_split removido em rev 51: era duplicata do km_reached (ambos
       // disparavam ao cruzar km, gerando 2 calls LLM com info subset).
@@ -1512,7 +1461,7 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
           ? max(0.0, (_plannedDistanceM! - newDistance) / 1000.0)
           : null;
       unawaited(_requestCoachCue(
-        event: 'check_in',
+        event: 'half_km',
         distanceM: newDistance,
         elapsedS: state.elapsedS,
         currentPaceMinKm: smoothedPace,
@@ -1541,40 +1490,14 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
         }
       }
 
-      // Detecta transição: novo segment_start.
+      // Transição de segment: só atualiza o índice (alimenta pace_alert e
+      // o snapshot de métricas). Eventos segment_start/segment_end foram
+      // REMOVIDOS na migração s6-ai (16→8 eventos) — o roteiro km-a-km já
+      // vive no systemInstruction da sessão, e half_km/km_reached carregam
+      // o activeSegmentIndex pro coach contextualizar a fase.
       if (activeSegmentIdx != null && activeSegmentIdx != _currentSegmentIdx) {
-        final previousIdx = _currentSegmentIdx;
         _currentSegmentIdx = activeSegmentIdx;
-        _requestCoachCue(
-          event: 'segment_start',
-          distanceM: newDistance,
-          elapsedS: state.elapsedS,
-          currentPaceMinKm: smoothedPace,
-          targetPaceMinKm: _parsePaceMinKm(activeSegment?.targetPace),
-          currentSegmentIndex: activeSegmentIdx,
-        );
-        _lastCueAt['segment_start'] = DateTime.now().millisecondsSinceEpoch;
-        _maybeRotateLiveSession(trigger: 'segment_start');
-        // ignore: avoid_print
-        print('coach.segment.transition prev=$previousIdx now=$activeSegmentIdx phase=${activeSegment?.phase}');
       }
-
-      // Detecta término do último segment: passou de kmEnd final.
-      // _currentSegmentIdx fica no último; dispara só uma vez por run.
-      if (activeSegmentIdx == null && _currentSegmentIdx >= 0 &&
-          _cooldownOk('segment_end', seconds: 999999)) {
-        _requestCoachCue(
-          event: 'segment_end',
-          distanceM: newDistance,
-          elapsedS: state.elapsedS,
-          currentPaceMinKm: smoothedPace,
-          currentSegmentIndex: _currentSegmentIdx,
-        );
-        _lastCueAt['segment_end'] = DateTime.now().millisecondsSinceEpoch;
-        _maybeRotateLiveSession(trigger: 'segment_end');
-      }
-
-      // segment_pace_off: substitui pace_alert genérico quando segment
     }
 
     // Pace alert unificado (rev 51): antes existiam 2 eventos —
@@ -1637,7 +1560,6 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
 
   Future<void> _onComplete(CompleteRun event, Emitter<RunState> emit) async {
     if (state.runId == null) return;
-    _pendingRotationTrigger = null;
     _bpmSub?.cancel(); _stepsSub?.cancel(); _spo2Sub?.cancel();
     _bpmSub = null;
     _bpmFallbackPollTimer?.cancel();
@@ -1674,14 +1596,15 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
       // Mantém a sessão Live aberta até o resumo terminar de tocar (premium).
       // Freemium: a fala 'finish' já saiu pelo TTS local — não precisa esperar.
       if (_isPremium) {
-        Timer(const Duration(seconds: 15), () {
+        // 30s (era 15s): o resumo do finish leva ~5-8s pra gerar no s6-ai e
+        // o áudio só toca completo após o turnComplete — 15s cortava a fala
+        // no meio (smoke 2026-06-11). dispose() derruba o player na hora.
+        Timer(const Duration(seconds: 30), () {
           unawaited(_coachSession.close());
-          _coachCtx.dispose();
         });
       }
     } else if (_isPremium) {
       unawaited(_coachSession.close());
-      _coachCtx.dispose();
     }
     emit(state.copyWith(status: RunStatus.completing));
     _stop();
@@ -1832,14 +1755,12 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
           _alertPrefs['highBpm'] == true &&
           _userMaxBpm != null &&
           value > (_userMaxBpm! * 0.92) &&
-          _cooldownOk('high_bpm', seconds: 90)) {
-        // Reusa o slot `kmAvgBpm` pra passar o BPM atual; o coach
-        // telemetryText cita o valor diretamente na branch high_bpm.
+          _cooldownOk('bpm_alert', seconds: 90)) {
         unawaited(_requestCoachCue(
-          event: 'high_bpm',
-          kmAvgBpm: value,
+          event: 'bpm_alert',
+          bpm: value,
         ));
-        _lastCueAt['high_bpm'] = DateTime.now().millisecondsSinceEpoch;
+        _lastCueAt['bpm_alert'] = DateTime.now().millisecondsSinceEpoch;
       }
     } else {
       // Source caiu (Watch desligado, permission revogada, no_hr_source).
@@ -1990,12 +1911,10 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
     _runHealthSyncTimer?.cancel();
     _runHealthSyncTimer = null;
     unawaited(workoutRealtimeService.stop()); unawaited(AudioSessionKeepalive.instance.stopKeepalive());
-    _pendingRotationTrigger = null;
     // Volta o Watch pra PreRunScreen.
     _pushStatusToWatch('idle');
     if (_isPremium) {
       unawaited(_coachSession.close());
-      _coachCtx.dispose();
     } else {
       // Freemium: corta qualquer fala em andamento (ex: km telemetria
       // disparada logo antes do abandono).
@@ -2015,10 +1934,8 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
     _timer?.cancel();
     _gpsPollTimer?.cancel();
     _gpsSub?.cancel();
-    _motivationTimer?.cancel();
     _scheduledAnalysis?.cancel();
     _stallCheckTimer?.cancel();
-    _coachRotationSafetyTimer?.cancel();
     _bpmFallbackPollTimer?.cancel();
     _runHealthSyncTimer?.cancel();
     _telemetryTickTimer?.cancel();
@@ -2026,10 +1943,8 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
     _timer = null;
     _gpsPollTimer = null;
     _gpsSub = null;
-    _motivationTimer = null;
     _scheduledAnalysis = null;
     _stallCheckTimer = null;
-    _coachRotationSafetyTimer = null;
     _bpmFallbackPollTimer = null;
     _telemetryTickTimer = null;
     // Zera a janela de staleness BPM: ao resumir, dá warmup novo antes de
@@ -2049,19 +1964,15 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
     _timer?.cancel();
     _gpsPollTimer?.cancel();
     _gpsSub?.cancel();
-    _motivationTimer?.cancel();
     _scheduledAnalysis?.cancel();
     _stallCheckTimer?.cancel();
-    _coachRotationSafetyTimer?.cancel();
     _telemetryTickTimer?.cancel();
     _timer = null;
     _gpsPollTimer = null;
     _gpsSub = null;
-    _motivationTimer = null;
     _scheduledAnalysis = null;
     _telemetryTickTimer = null;
     _stallCheckTimer = null;
-    _coachRotationSafetyTimer = null;
     unawaited(workoutRealtimeService.pause());
     emit(state.copyWith(status: RunStatus.paused, noMovementPrompt: true));
   }
@@ -2095,8 +2006,6 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
       const Duration(seconds: 1),
       (_) => add(_TimerTick()),
     );
-    _startMotivationTimer();
-    _startCoachRotationSafetyTimer();
     if (kIsWeb) {
       const webSettings = LocationSettings(
         accuracy: LocationAccuracy.medium,
@@ -2121,10 +2030,8 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
     _gpsPollTimer?.cancel();
     _timer?.cancel();
     _flushTimer?.cancel();
-    _motivationTimer?.cancel();
     _scheduledAnalysis?.cancel();
     _stallCheckTimer?.cancel();
-    _coachRotationSafetyTimer?.cancel();
     _telemetryTickTimer?.cancel();
     // Run terminou — dispensa a notificação de background mesmo se a app
     // estava em foreground (caso o user voltou e finalizou pela UI).
@@ -2134,10 +2041,8 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
     _timer = null;
     _flushTimer = null;
     _telemetryTickTimer = null;
-    _motivationTimer = null;
     _scheduledAnalysis = null;
     _stallCheckTimer = null;
-    _coachRotationSafetyTimer = null;
     if (_observerRegistered) {
       WidgetsBinding.instance.removeObserver(this);
       _observerRegistered = false;
@@ -2159,13 +2064,9 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
       _appInBackground = true;
       // ignore: avoid_print
       print('run.lifecycle.background state=$lifecycle');
-      _motivationTimer?.cancel();
-      _motivationTimer = null;
-      _stallCheckTimer?.cancel();
+          _stallCheckTimer?.cancel();
       _stallCheckTimer = null;
-      _coachRotationSafetyTimer?.cancel();
-      _coachRotationSafetyTimer = null;
-      if (state.status == RunStatus.active) {
+          if (state.status == RunStatus.active) {
         unawaited(runBgNotificationService.update(
           distanceM: state.distanceM,
           elapsedS: state.elapsedS,
@@ -2197,8 +2098,6 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
       }
       unawaited(runBgNotificationService.cancel());
       if (state.status == RunStatus.active) {
-        _startMotivationTimer();
-        _startCoachRotationSafetyTimer();
       }
     }
   }
@@ -2222,7 +2121,6 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
     unawaited(workoutRealtimeService.stop()); unawaited(AudioSessionKeepalive.instance.stopKeepalive());
     if (_isPremium) {
       unawaited(_coachSession.close());
-      _coachCtx.dispose();
     } else {
       unawaited(TelemetryTts.instance.stop());
     }
@@ -2283,57 +2181,16 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
     return elapsed >= seconds * 1000;
   }
 
-  /// Inicia timer da regra canônica POR TEMPO: a cada 4min sem o coach
-  /// falar, dispara um check_in. Junto com o trigger POR DISTÂNCIA
-  /// (500m, vide _onGpsUpdate), garante presença contínua do coach mesmo
-  /// quando a sessão segue o plano sem alertas.
-  ///
-  /// Mantém o nome _startMotivationTimer e o gate _alertPrefs['motivation']
-  /// (toggle do user) por compatibilidade — mas a janela mudou de 5min
-  /// fixo (motivation legado) pra 4min canônico (check_in).
-  void _startMotivationTimer() {
-    _motivationTimer?.cancel();
-    if (_alertPrefs['motivation'] != true) return;
-    _motivationTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      if (state.status != RunStatus.active || isClosed) return;
-      if (_lastCoachSpeechAtMs == 0) return; // saudação inicial ainda não saiu
-      final now = DateTime.now().millisecondsSinceEpoch;
-      final elapsedS = (now - _lastCoachSpeechAtMs) / 1000;
-      // ignore: avoid_print
-      print('coach.checkin.tick elapsedSinceLastSpeech=${elapsedS.round()}s threshold=${_checkInIdleSeconds}s');
-      if (elapsedS < _checkInIdleSeconds) return;
-      unawaited(_requestCoachCue(
-        event: 'check_in',
-        distanceM: state.distanceM,
-        elapsedS: state.elapsedS,
-        currentPaceMinKm: state.currentPaceMinKm,
-      ));
-    });
-  }
+  // REMOVIDOS na migração s6-ai: _startMotivationTimer (evento `motivation`/
+  // check_in idle morreu na redução 16→8; presença é garantida pelo half_km
+  // a cada 500m) e _startCoachRotationSafetyTimer (rotação da sessão Gemini
+  // agora é responsabilidade do s6-ai, server-side).
 
-  /// Safety pra rotação da sessão Live. A rotação normal é disparada
-  /// por triggers naturais (km_reached/segment_start/segment_end), mas
-  /// runs lentas ou em pace estável podem ficar minutos sem nenhum
-  /// trigger — e o Gemini Live tem cap implícito de ~10min por sessão.
-  /// Este timer tick a cada 30s e chama `_maybeRotateLiveSession` com
-  /// trigger sintético; o gate `shouldRotateNow` (turns≥6 OR age≥6min)
-  /// decide se de fato rotaciona. Evita silêncio pós-cap em qualquer
-  /// pace de corrida.
-  void _startCoachRotationSafetyTimer() {
-    _coachRotationSafetyTimer?.cancel();
-    // Freemium não abre LiveRunCoachSession, então não há sessão pra rotacionar.
-    if (!_isPremium) return;
-    _coachRotationSafetyTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      if (isClosed) return;
-      if (state.status != RunStatus.active) return;
-      _maybeRotateLiveSession(trigger: 'safety_age_check');
-    });
-  }
-
-  /// Provoca UMA fala curta do coach na sessão Live. Toda a lógica de
-  /// gatilho/cooldown/dedup fica nos call sites; aqui só formatamos a
-  /// telemetria do momento e enviamos. O modelo decide O QUE dizer; o áudio
-  /// e a transcrição voltam pela sessão (LiveRunCoachSession).
+  /// Dispara UM evento de cue pro s6-ai (um dos 8: start, half_km,
+  /// km_reached, bpm_alert, pace_alert, goal_reached, finish, no_movement).
+  /// Gatilhos/cooldowns por tipo ficam nos call sites; a serialização
+  /// anti-sobreposição REAL (CueQueue P0–P3 + dedup por km) é server-side.
+  /// O cooldown global de 8s permanece como defesa-em-profundidade.
   Future<void> _requestCoachCue({
     required String event,
     int? kmReached,
@@ -2344,10 +2201,7 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
     int? currentSegmentIndex,
     int? kmDurationS,
     int? kmAvgBpm,
-    double? elevationGainM,
-    // Enriquece o cue `check_in` (a cada 500m): pace dos últimos 500m vs
-    // alvo, e km que faltam pra meta da sessão. Permite o coach gerar as
-    // 4 persona variants de "presença" (vide _telemetryText.case 'check_in').
+    int? bpm,
     double? paceLast500m,
     double? kmRemaining,
   }) async {
@@ -2395,35 +2249,9 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
       }
       return;
     }
-    if (!_coachSession.isOpen) {
-      // TF 69: Live caiu mid-run. Antes ficava em silêncio; agora cai pro
-      // HTTP /coach/message. Server resolve via templates (rev 51, zero LLM
-      // pra eventos mecânicos) ou Flash + Live TTS (mesma voz Charon).
-      // Latência maior (~2-3s) que o WS, mas melhor que silêncio.
-      Logger.info('coach.cue.fallback_http', context: {
-        'event': event,
-        'kmReached': '${kmReached ?? '-'}',
-      });
-      unawaited(_requestCoachCueViaHttp(
-        event: event,
-        kmReached: kmReached,
-        currentPaceMinKm: currentPaceMinKm ?? _computePaceMinKm(),
-        targetPaceMinKm: targetPaceMinKm ?? _parsePaceMinKm(state.targetPace),
-        kmDurationS: kmDurationS,
-        kmAvgBpm: kmAvgBpm,
-        currentSegmentIndex: currentSegmentIndex,
-      ));
-      // Trackers avançam pros eventos de tempo/distância (check_in) pra
-      // não re-empilhar requests no próximo tick. Outros eventos (km_reached,
-      // segment_*, pace_alert) também avançam porque o HTTP request JÁ vai
-      // entregar o cue — não queremos disparar 2x.
-      _lastCoachSpeechAtMs = DateTime.now().millisecondsSinceEpoch;
-      _lastAnyCoachCueAtMs = _lastCoachSpeechAtMs;
-      _lastCoachSpeechDistanceM = state.distanceM;
-      return;
-    }
     // Janela da saudação: não provoca falas por cima da largada.
     if (event != 'finish' &&
+        event != 'start' &&
         DateTime.now().millisecondsSinceEpoch < _suppressCuesUntilMs) {
       Logger.info('coach.cue.skipped_suppressed', context: {
         'event': event,
@@ -2431,41 +2259,40 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
       });
       return;
     }
-    // Marca o trigger pra o turn que vai chegar — o session usa pra alimentar
-    // o ctxMgr e o beacon /coach/live-turn com o evento que provocou a fala.
-    _coachSession.markTrigger(event);
-    // Informa o tom da sessão pro context manager (idempotente): free/guide/
-    // performance. Usado no preamble de rotação pra que o coach saiba o tipo
-    // de sessão sem precisar inferir das métricas.
-    _coachSession.setSessionTone(
-      _sessionTone(state.runType, _parsePaceMinKm(state.targetPace)),
-    );
-    final tt = _telemetryText(
-      event,
-      runType: state.runType,
-      kmReached: kmReached,
-      kmDurationS: kmDurationS,
-      currentPaceMinKm: currentPaceMinKm ?? _computePaceMinKm(),
-      targetPaceMinKm: targetPaceMinKm ?? _parsePaceMinKm(state.targetPace),
-      elevationGainM: elevationGainM,
-      kmAvgBpm: kmAvgBpm,
-      paceLast500m: paceLast500m,
-      kmRemaining: kmRemaining,
-    );
-    // TF 75 Fase 6: trocado print por Logger.info pra ir pro Cloud Logging.
-    // `print` só vai pro Console.app local; sem isso, debug remoto das
-    // alucinações ("coach falou 5:42 parado") era impossível.
-    final ttPreview = tt.length > 240 ? '${tt.substring(0, 240)}…' : tt;
-    Logger.info('run.coach.send_telemetry', context: {
+    // Snapshot estruturado de telemetria (TelemetrySnapshot do s6-ai).
+    // Pace vai PRÉ-FORMATADO falável ('5min30', TF 81) — o s6-ai monta o
+    // turn em 1ª pessoa e injeta na sessão Gemini que ele gerencia.
+    final pace = currentPaceMinKm ?? _computePaceMinKm();
+    final target = targetPaceMinKm ?? _parsePaceMinKm(state.targetPace);
+    final data = <String, dynamic>{
+      'kmDone': (distanceM ?? state.distanceM) / 1000.0,
+      'elapsedS': elapsedS ?? state.elapsedS,
+      'kmRemaining': ?kmRemaining,
+      if (pace > 0) 'currentPace': _fmtPaceMinKm(pace),
+      if (paceLast500m != null) 'pace500m': _fmtPaceMinKm(paceLast500m),
+      if (target != null) 'targetPace': _fmtPaceMinKm(target),
+      'bpm': ?bpm,
+      if (event == 'bpm_alert' && _userMaxBpm != null) 'maxBpm': _userMaxBpm,
+      'kmDurationS': ?kmDurationS,
+      'kmAvgBpm': ?kmAvgBpm,
+      // Convenção s6-ai: deviationPct > 0 = mais lento que o alvo.
+      if (event == 'pace_alert' && target != null && pace > 0)
+        'deviationPct': ((pace - target) / target * 100),
+      'activeSegmentIndex': ?currentSegmentIndex,
+      // Bandeira de idle (Watch 0 passos ~1min) — evita alucinação de pace
+      // com drift GPS (TF 75).
+      if (_isStepIdle60s() == true) 'idle': true,
+    };
+    Logger.info('run.coach.send_event', context: {
       'event': event,
-      'text': ttPreview,
-      'textLen': '${tt.length}',
+      'kmReached': '${kmReached ?? '-'}',
       'runId': state.runId ?? '',
+      'wsOpen': '${_coachSession.isOpen}',
     });
-    _coachSession.sendTelemetry(tt);
-    // Atualiza trackers da regra canônica (500m / 4min): qualquer fala do
-    // coach reseta os dois. Mantém a cadência prometida ao user mesmo quando
-    // a fala foi de outro evento (km_reached, pace_alert, etc.).
+    _coachSession.sendEvent(event, data);
+    // Atualiza trackers da regra de presença (500m): qualquer fala do
+    // coach reseta os dois. Mantém a cadência prometida ao user mesmo
+    // quando a fala foi de outro evento (km_reached, pace_alert, etc.).
     _lastCoachSpeechAtMs = DateTime.now().millisecondsSinceEpoch;
     _lastAnyCoachCueAtMs = _lastCoachSpeechAtMs;
     _lastCoachSpeechDistanceM = state.distanceM;
@@ -2478,80 +2305,9 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
   ///
   /// Best-effort: falha silenciosa (log warn) — não trava a run, apenas
   /// significa que o user perdeu UM cue. Próximo evento tenta de novo.
-  Future<void> _requestCoachCueViaHttp({
-    required String event,
-    int? kmReached,
-    double? currentPaceMinKm,
-    double? targetPaceMinKm,
-    int? kmDurationS,
-    int? kmAvgBpm,
-    int? currentSegmentIndex,
-  }) async {
-    if (state.runId == null) return;
-    try {
-      final accumulated = StringBuffer();
-      await for (final cue in _coachRemote.streamCoachCue(
-        runId: state.runId,
-        event: event,
-        runType: state.runType,
-        currentPaceMinKm: currentPaceMinKm ?? 0,
-        distanceM: state.distanceM,
-        elapsedS: state.elapsedS,
-        targetPaceMinKm: targetPaceMinKm,
-        kmReached: kmReached,
-        kmDurationS: kmDurationS,
-        kmAvgBpm: kmAvgBpm,
-        currentSegmentIndex: currentSegmentIndex,
-        planSessionId: _planSessionId,
-      )) {
-        if (isClosed) break;
-        // Emite _CoachChunk pra que UI/state acompanhe a fala (mesma
-        // semântica do caminho Live). Sem isso, banner do coach não
-        // atualizaria com o texto do fallback.
-        add(_CoachChunk(CoachCue(
-          text: cue.text,
-          audioBase64: cue.audioBase64,
-          audioMimeType: cue.audioMimeType,
-        )));
-        if (cue.text.isNotEmpty) accumulated.write(cue.text);
-        final audio = cue.audioBase64;
-        if (audio != null && audio.isNotEmpty) {
-          unawaited(playCoachAudio(
-            audio,
-            mimeType: cue.audioMimeType ?? 'audio/mpeg',
-          ));
-        }
-      }
-      // Grava no context manager pra que o preamble de rotação inclua
-      // o que foi dito durante o fallback (quando a sessão Live estava fechada).
-      final fullText = accumulated.toString().trim();
-      if (fullText.isNotEmpty) {
-        _coachSession.recordFallbackTurn(text: fullText, trigger: event);
-      }
-    } catch (e, st) {
-      Logger.warn('coach.cue.fallback_http_failed', context: {
-        'event': event,
-        'err': e.toString(),
-        'stack_first_line': st.toString().split('\n').first,
-      });
-    }
-  }
-
-  /// Em transições naturais (km_reached, segment_start, segment_end) avalia
-  /// se vale rotacionar a sessão Live agora pra evitar acúmulo de contexto
-  /// interno do socket (causa raiz da degradação de voz observada ~km 3).
-  /// Se o user está em push-to-talk, marca pra rotacionar quando soltar.
-  void _maybeRotateLiveSession({required String trigger}) {
-    if (!_coachSession.isOpen) return;
-    if (!_coachSession.shouldRotateNow()) return;
-    if (_coachSession.isTalking) {
-      _pendingRotationTrigger = trigger;
-      // ignore: avoid_print
-      print('run.coach.live.rotate.deferred trigger=$trigger reason=push_to_talk_active');
-      return;
-    }
-    unawaited(_coachSession.rotateSession(reason: trigger));
-  }
+  // REMOVIDOS na migração s6-ai: _requestCoachCueViaHttp (fallback HTTP
+  // agora vive dentro de LiveRunCoachSession.sendEvent → s6-ai) e
+  // _maybeRotateLiveSession (rotação da sessão Gemini é server-side).
 
   RunMetricsSnapshot _buildMetricsSnapshot() {
     String? phase;
@@ -2567,147 +2323,10 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
     );
   }
 
-  /// Formata o turn de telemetria por momento. Frases instrucionais curtas —
-  /// o estilo/objetivo já estão no systemInstruction travado pelo servidor.
-  String _telemetryText(
-    String event, {
-    String? runType,
-    int? kmReached,
-    int? kmDurationS,
-    double? currentPaceMinKm,
-    double? targetPaceMinKm,
-    double? elevationGainM,
-    int? kmAvgBpm,
-    double? paceLast500m,
-    double? kmRemaining,
-  }) {
-    String pace(double? p) => p == null ? '—' : _fmtPaceMinKm(p);
-    String dur(int? s) => s == null ? '—' : '${s ~/ 60}min ${s % 60}s';
-    final dist = (state.distanceM / 1000).toStringAsFixed(2);
-    final avgPace = _fmtPaceMinKm(_computePaceMinKm());
-    final tgt = targetPaceMinKm != null ? '${pace(targetPaceMinKm)}/km' : 'livre';
-    // TF 75 Fase 2: detecta idle real (Watch pedômetro reportou 0 passos h60s)
-    // e prefixa o telemetry com bandeira de estado. Sem isso o LLM alucinava
-    // pace (5:42, 7:38) baseado em telemetria com pace falso de drift.
-    final isIdle = _isStepIdle60s() == true;
-    final idlePrefix = isIdle
-        ? '[ESTADO: PARADO há ~1min (Watch detectou 0 passos). NÃO mencione pace '
-            'nem distância; sugira retomar.] '
-        : '';
-
-    // Totais da corrida — anexados em primeira pessoa pra o coach ter sempre
-    // o panorama e nunca precisar perguntar.
-    final totals = 'No total já são ${dist}km em ${dur(state.elapsedS)}, pace médio $avgPace/km.';
-
-    // IMPORTANTE: o turn é a VOZ DO ATLETA falando com o coach, em primeira
-    // pessoa, pedindo feedback. O modelo nativo trata cada turn como fala de
-    // um interlocutor; se mandarmos instrução em 3ª pessoa ("dê feedback") ele
-    // responde como um COLEGA ("fechei sim, e vc?"). Em 1ª pessoa ele responde
-    // como COACH.
-    // Classifica o tom do coach pra cues durante a sessão:
-    //   - guide: easy/long/recovery/caminhada — TEM pace alvo (faixa), mas
-    //     coach só INFORMA o ritmo vs alvo. Não cobra ajuste fino. Tom de
-    //     companhia. "Pace tá em 6:25, alvo 6:30 — confortável, bora."
-    //   - performance: tempo/progressivo/intervalado/fartlek/tiros/race-pace
-    //     e sessões-meta (10K, 21K, 42K, Maratona, Meia Maratona). Pace alvo
-    //     restrito; coach pede AJUSTE quando fora.
-    //   - free: Free Run / Corrida Livre — sem pace alvo, coach é só guia
-    //     informativo sem comparar com nada.
-    final tone = _sessionTone(runType, targetPaceMinKm);
-
-    switch (event) {
-      case 'start':
-        return 'Oi coach! Vou começar minha ${runType ?? 'corrida'} agora.';
-      case 'km_reached':
-        final m = <String>[
-          'pace deste km ${pace(currentPaceMinKm)}/km',
-          'alvo $tgt',
-          if (kmDurationS != null) 'tempo do km ${dur(kmDurationS)}',
-          if (elevationGainM != null && elevationGainM > 0)
-            'elevação +${elevationGainM.toStringAsFixed(0)}m',
-          if (kmAvgBpm != null) 'FC $kmAvgBpm',
-        ];
-        return '${idlePrefix}Coach, fechei o km $kmReached. ${m.join(', ')}. $totals';
-      case 'pace_alert':
-        return '${idlePrefix}Coach, meu pace está ${pace(currentPaceMinKm)}/km. Alvo: $tgt. $totals';
-      case 'segment_start':
-        return '${idlePrefix}Coach, entrei na próxima fase do roteiro. $totals';
-      case 'segment_end':
-        return '${idlePrefix}Coach, terminei a fase atual do roteiro. $totals';
-      case 'motivation':
-        return '${idlePrefix}Coach, como estou indo? $totals';
-      case 'check_in':
-        final last500 = paceLast500m != null
-            ? 'pace dos últimos 500m: ${pace(paceLast500m)}/km'
-            : 'mais 500m completados';
-        final remaining = kmRemaining != null && kmRemaining > 0
-            ? 'faltam ${kmRemaining.toStringAsFixed(1)}km'
-            : null;
-        // pace menor = mais rápido = acima do alvo. Tolerância 6s/km (~0.1 min/km).
-        final paceDirRaw = (paceLast500m != null && targetPaceMinKm != null)
-            ? (paceLast500m < targetPaceMinKm - 0.1
-                ? 'acima_do_alvo'
-                : paceLast500m > targetPaceMinKm + 0.1
-                    ? 'abaixo_do_alvo'
-                    : 'no_alvo')
-            : 'livre';
-        if (tone == 'free') {
-          return '${idlePrefix}Coach, check-in 500m: $last500. '
-              '${remaining != null ? "$remaining. " : ""}$totals';
-        }
-        if (tone == 'guide') {
-          return '${idlePrefix}Coach, check-in 500m: $last500. Alvo $tgt (faixa). '
-              'Pace vs alvo: $paceDirRaw. ${remaining != null ? "$remaining. " : ""}$totals';
-        }
-        // performance: pace alvo restrito
-        return '${idlePrefix}Coach, check-in 500m: $last500. Alvo $tgt (restrito). '
-            'Pace vs alvo: $paceDirRaw. ${remaining != null ? "$remaining. " : ""}$totals';
-      case 'high_bpm':
-        return 'Coach, meu BPM tá em $kmAvgBpm. $totals';
-      case 'no_movement':
-        return 'Coach, iniciei mas ainda não comecei a me mover.';
-      case 'finish':
-        return 'Coach, finalizei! Total ${dist}km em ${dur(state.elapsedS)}, pace médio $avgPace/km.';
-      case 'goal_reached':
-        return 'Coach, bati a meta de distância da sessão. $totals';
-      default:
-        return 'Coach, como estou indo? $totals';
-    }
-  }
-
-  /// Classifica o tom do coach durante a sessão:
-  ///   - 'guide'      : easy/long/recovery/caminhada — pace alvo é faixa,
-  ///                    coach informa sem corrigir.
-  ///   - 'performance': tempo/progressivo/intervalado/fartlek/tiros/race-pace
-  ///                    e sessões-meta (10K/21K/42K/Maratona/Meia Maratona)
-  ///                    — coach cobra ajuste fino.
-  ///   - 'free'       : Corrida Livre — sem pace alvo nenhum.
-  ///
-  /// Tipos canônicos vêm do generate-plan use-case do server (e variantes
-  /// frequentes em pt-br). Match case-insensitive por substring pra cobrir
-  /// "Easy Run" / "Easy" / "easy" igualmente.
-  String _sessionTone(String? runType, double? targetPaceMinKm) {
-    final t = (runType ?? '').toLowerCase().trim();
-    if (t.isEmpty || t == 'free run' || t == 'corrida livre' || t == 'livre') {
-      return 'free';
-    }
-    const guideKeys = ['easy', 'long', 'recovery', 'caminhada', 'walk'];
-    for (final k in guideKeys) {
-      if (t.contains(k)) return 'guide';
-    }
-    const perfKeys = [
-      'tempo', 'progressivo', 'intervalado', 'tiros', 'fartlek',
-      'threshold', 'race pace', 'race-pace',
-      '10k', '21k', '42k', 'maratona', 'meia maratona',
-    ];
-    for (final k in perfKeys) {
-      if (t.contains(k)) return 'performance';
-    }
-    // Fallback: se chegou aqui é um tipo desconhecido. Quando tem
-    // targetPace, assume guide (mais seguro pra não cobrar à toa);
-    // sem targetPace, free.
-    return targetPaceMinKm != null ? 'guide' : 'free';
-  }
+  // REMOVIDOS na migração s6-ai: _telemetryText e _sessionTone — a
+  // formatação do turn (1ª pessoa do atleta, bandeira de idle, formato
+  // falável de pace) agora vive no s6-ai (cue-pipeline.formatEventTurn),
+  // que recebe o TelemetrySnapshot estruturado montado em _requestCoachCue.
 
   String _fmtPaceMinKm(double p) {
     // TF 81 (Issue #3): formato `5min30` em vez de `5:30` pra Gemini

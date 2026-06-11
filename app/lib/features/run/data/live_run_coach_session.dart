@@ -1,11 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:gemini_live/gemini_live.dart';
 import 'package:runnin/core/audio/coach_audio_player.dart';
 import 'package:runnin/core/logger/logger.dart';
 import 'package:runnin/core/network/api_client.dart';
@@ -13,54 +12,36 @@ import 'package:runnin/features/coach_live/data/coach_context_manager.dart';
 import 'package:runnin/features/coach_live/data/coach_live_beacon_remote_datasource.dart';
 import 'package:runnin/features/location_weather/data/location_weather_controller.dart';
 import 'package:runnin/features/coach_live/data/live_audio_service.dart';
+import 'package:web_socket_channel/web_socket_channel.dart';
 
-/// Sessão Gemini Live nativa **efêmera/rotacional** que acompanha a corrida.
+/// Sessão de coach ao vivo via **s6-ai** (microsserviço de IA).
 ///
-/// Mudança vs. versão anterior (long-lived):
-///  - Contexto vive FORA da sessão, no [CoachContextManager] passado pelo
-///    bloc. A sessão é descartável; quem morre é a conexão, não o histórico.
-///  - [rotateSession] abre uma nova sessão Live, espera o `setupComplete`,
-///    injeta um preamble curto com o snapshot do manager como primeiro
-///    `sendText`, e SÓ ENTÃO fecha a velha (swap atômico — sem "buraco"
-///    audível pro user). Isso resolve a degradação observada por volta do
-///    km 3 (acúmulo de áudio PCM no histórico interno do socket).
-///  - Reconexão automática em close não-clean (queda de sinal/wifi) com
-///    backoff exponencial 1s → 2s → 4s → 8s → 30s.
-///  - `_reopenAndSend` foi substituído por enfileiramento via [_pendingSends]
-///    enquanto reconecta — ao reconectar, drena a fila com o preamble.
+/// Arquitetura (substitui a conexão direta app→Google via token efêmero):
+///  - runnin-api cria a sessão no s6-ai (`POST /coach/live-session`) montando
+///    o contexto (perfil, roteiro, clima, prefs) e devolve {sessionId, wsUrl}.
+///  - App conecta no WS do s6-ai. O s6-ai é o DONO do socket Gemini:
+///    systemInstruction, CueQueue anti-sobreposição (P0–P3, dedup por km),
+///    gate de preamble, rotação e reconexão com o Google são server-side.
+///  - App envia eventos como frames JSON {type:'event', event, data} e
+///    recebe áudio PCM 24kHz em frames binários + estados/cue_text em JSON.
+///  - Push-to-talk foi REMOVIDO (decisão de produto — TF s6-ai).
 ///
-/// Mantém:
-///  - 1 sessão ATIVA por vez (modelo native-audio, voz contínua)
-///  - `outputAudioTranscription` (texto == voz no banner)
-///  - Push-to-talk via [startTalk]/[stopTalk]
+/// Fallback HTTP: com o WS caído, eventos vão pra
+/// `POST {s6}/v1/live/sessions/:id/events` que devolve {text, audioB64}.
 class LiveRunCoachSession {
   LiveRunCoachSession({
-    required CoachContextManager contextManager,
     CoachLiveBeaconRemoteDatasource? beacon,
     Dio? dio,
     LiveAudioService? audio,
-  })  : _ctxMgr = contextManager,
-        _beaconRemote = beacon ?? CoachLiveBeaconRemoteDatasource(),
+  })  : _beaconRemote = beacon ?? CoachLiveBeaconRemoteDatasource(),
         _dio = dio ?? apiClient,
         _audio = audio ?? LiveAudioService();
 
-  final CoachContextManager _ctxMgr;
   final CoachLiveBeaconRemoteDatasource _beaconRemote;
   final Dio _dio;
   final LiveAudioService _audio;
 
-  static const _voiceDefault = 'Charon';
-
-  // Rotação adaptativa. Fix TF 59 — user reportou queda do coach em 8:40
-  // (rev 56). Reduzido pra 4min: margem dupla antes do cap ~8min do Gemini
-  // Live, garantindo rotação completar antes da queda natural.
-  static const int rotationTurnThreshold = 6;
-  static const Duration rotationAgeThreshold = Duration(minutes: 4);
-  // Token efêmero dura 30min — refetch quando faltam <5min pra evitar
-  // que o token vire pumpkin no meio de uma rotação.
-  static const Duration _tokenStaleThreshold = Duration(minutes: 5);
-
-  // Reconexão exponencial.
+  // Reconexão exponencial ao s6-ai (o s6-ai cuida da reconexão ao Google).
   static const List<Duration> _reconnectBackoff = [
     Duration(seconds: 1),
     Duration(seconds: 2),
@@ -69,511 +50,375 @@ class LiveRunCoachSession {
     Duration(seconds: 16),
     Duration(seconds: 30),
   ];
-
-  /// Cap de tentativas de reconnect antes de desistir definitivamente.
-  /// Sem isso, sessão Gemini fechada por `new_session_expire_time` ficava
-  /// tentando reabrir infinito (vimos attempt 28+ nos logs), consumindo
-  /// bateria e bandwidth. Após esse cap, a session fica em estado fechado
-  /// silente — RunBloc captura `coach.cue.skipped_session_closed` no log.
-  /// Fix TF 59: aumentado de 5 → 10 (user reportou sessão "morrendo cedo"
-  /// em rede móvel; backoff 30s no tail dá ~8min total de retries).
   static const int _maxReconnectAttempts = 10;
 
-  LiveSession? _session;
+  WebSocketChannel? _channel;
+  StreamSubscription<dynamic>? _sub;
   final _transcriptsCtrl = StreamController<String>.broadcast();
-  final StringBuffer _turnTranscript = StringBuffer();
   final BytesBuilder _webPcm = BytesBuilder();
+
   bool _open = false;
-  bool _talking = false;
   bool _disposed = false;
-
-  // Snapshot da config do token (rastreio de beacons + reabertura).
-  _LiveCoachConfig? _lastConfig;
-  DateTime? _tokenExpiresAt;
-  String? _runId;
-  String? _planSessionId;
-  String? _currentTrigger; // alimenta o ctxMgr.recordCoachTurn ao fechar turn
-  DateTime _sessionStartedAt = DateTime.now();
-  int _turnsThisSession = 0;
-  bool _rotating = false;
-
-  // Reconexão.
   bool _intentionalClose = false;
+
+  String? _sessionId;
+  String? _wsUrl;
+  String? _runId;
+  String? _currentTrigger;
+  int _generation = 0;
+
   Timer? _reconnectTimer;
   int _reconnectAttempt = 0;
-  final List<String> _pendingSends = <String>[];
 
-  // TF 69: rastreia última operação (sendText/sendAudio/idle) e timestamp
-  // pra diagnose do close 1008. Quando Live API rejeita uma operação, o
-  // close vem com motivo genérico — saber qual call foi a última ajuda a
-  // localizar payload/sequência problemática.
-  String _lastSendKind = 'idle';
-  int _lastSendAtMs = 0;
+  /// Eventos enfileirados enquanto o WS está caído (dedup por evento, cap 3).
+  /// A serialização anti-sobreposição REAL é a CueQueue do s6-ai — isso aqui
+  /// só preserva o último snapshot de cada evento até a reconexão.
+  final List<MapEntry<String, Map<String, dynamic>>> _pendingEvents = [];
 
-  // TF 70: último motivo de close conhecido. Usado pelo rotateSession fix
-  // pra detectar se o close anterior foi por TTL (new_session_expire_time)
-  // e forçar refetch de token no reconnect — sem isso o token Gemini fica
-  // stale e o reconnect entra em loop infinito.
-  String? _lastCloseReason;
-
-  /// Cada item é o transcript de UMA fala completa do coach (texto == voz).
+  /// Cada item é o transcript de UMA fala completa do coach.
   Stream<String> get transcripts => _transcriptsCtrl.stream;
   bool get isOpen => _open;
-  bool get isTalking => _talking;
   bool get hasPendingReconnect => _reconnectTimer != null;
-  int get generation => _ctxMgr.generation;
-  int get turnsThisSession => _turnsThisSession;
-  Duration get sessionAge =>
-      _open ? DateTime.now().difference(_sessionStartedAt) : Duration.zero;
+  int get generation => _generation;
 
-  /// Marca o trigger que provocou a próxima fala — alimenta o snapshot do
-  /// manager quando o turn fechar. Chamar logo antes de [sendTelemetry].
+  /// O bloc registra um getter de métricas correntes — carimba o beacon
+  /// de histórico quando uma fala fecha.
+  RunMetricsSnapshot Function()? _metricsProvider;
   // ignore: use_setters_to_change_properties
-  void markTrigger(String trigger) {
-    _currentTrigger = trigger;
+  void setMetricsProvider(RunMetricsSnapshot Function() provider) {
+    _metricsProvider = provider;
   }
 
-  /// Avalia se vale rotacionar agora. Chamado pelo bloc em transições
-  /// naturais (km_reached, segment_start, segment_end). Retorna true se
-  /// rotação foi disparada (ou enfileirada por push-to-talk).
-  bool shouldRotateNow() {
-    if (!_open) return false;
-    if (_rotating) return false;
-    final byTurns = _turnsThisSession >= rotationTurnThreshold;
-    final byAge = sessionAge >= rotationAgeThreshold;
-    return byTurns || byAge;
-  }
-
-  /// Abre a sessão. Retorna false se não conseguiu (cai pra run sem voz).
+  /// Abre a sessão: cria no runnin-api (que chama o s6-ai) e conecta o WS.
+  /// Retorna false se não conseguiu (corrida segue sem voz).
   Future<bool> open({String? planSessionId, String? runId}) async {
     if (_open) return true;
     _runId = runId;
-    _planSessionId = planSessionId;
     _intentionalClose = false;
-    final cfg = await _fetchConfig(planSessionId);
-    if (cfg == null) return false;
-    _lastConfig = cfg;
-    final ok = await _connect(cfg);
-    if (ok) {
-      _sessionStartedAt = DateTime.now();
-      _turnsThisSession = 0;
-      _reconnectAttempt = 0;
-    }
+
+    final created = await _createSession(planSessionId);
+    if (!created) return false;
+    final ok = await _connect();
+    if (ok) _reconnectAttempt = 0;
     return ok;
   }
 
-  /// Rotaciona a sessão: pré-aquece uma nova com o mesmo token (refetch se
-  /// stale), injeta preamble do manager como 1º sendText, e SÓ ENTÃO fecha
-  /// a velha. Swap atômico — a velha continua respondendo até a nova estar
-  /// pronta, evitando "buraco" audível.
-  Future<bool> rotateSession({required String reason}) async {
-    if (!_open || _rotating || _disposed) return false;
-    if (_talking) return false;
-    _rotating = true;
-    final oldSession = _session;
+  Future<bool> _createSession(String? planSessionId) async {
     try {
-      // ignore: avoid_print
-      print('run.coach.live.rotate.start reason=$reason turns=$_turnsThisSession ageMs=${sessionAge.inMilliseconds}');
-      _LiveCoachConfig cfg;
-      if (_isTokenStale()) {
-        unawaited(_beacon('token_refresh_required', reason: reason));
-        final refreshed = await _fetchConfig(_planSessionId);
-        if (refreshed == null) return false;
-        _lastConfig = refreshed;
-        cfg = refreshed;
-      } else {
-        cfg = _lastConfig!;
-      }
-
-      // Pré-aquece a nova sessão. Durante essa janela, a velha continua
-      // respondendo se houver fala em andamento.
-      final preamble = _ctxMgr.snapshot().toPromptPreamble();
-      final newOk = await _connect(cfg, preamble: preamble, isRotation: true);
-      if (!newOk) {
-        unawaited(_beacon('rotate_failed', reason: reason));
-        // Fix TF 68: quando rotação falha E a velha sessão também já caiu
-        // (caso típico do `new_session_expire_time deadline exceeded`),
-        // não fica ninguém pra falar. _handleClose foi pulado porque
-        // `_rotating=true` durante a tentativa de rotação — agora libera
-        // o guard e agenda reconnect explicitamente. Sem isso, o coach
-        // silenciava pelo resto da run (padrão visto na corrida do Eduardo).
-        if (!_open) {
-          _rotating = false; // libera antes do _maybeScheduleReconnect ler
-          // TF 70: se o close anterior foi por TTL (new_session_expire_time),
-          // força refetch de token antes do reconnect. Sem isso o token
-          // Gemini fica stale, reconnect tenta com config antiga e entra
-          // em loop infinito (observado em prod TF 69 do Eduardo).
-          if (_lastCloseReason != null &&
-              _lastCloseReason!.contains('new_session_expire_time')) {
-            _tokenExpiresAt = DateTime.now().subtract(const Duration(minutes: 1));
-          }
-          _maybeScheduleReconnect(reason: 'rotate_failed_after_close');
-        }
-        return false;
-      }
-
-      // Swap completo: fecha a velha SEM disparar reconnect (close intencional).
-      try {
-        await oldSession?.close();
-      } catch (_) {/* ignore */}
-
-      _sessionStartedAt = DateTime.now();
-      _turnsThisSession = 0;
-      _reconnectAttempt = 0;
-      _ctxMgr.bumpGeneration();
-      unawaited(_beacon('rotate_ok', reason: reason));
-      // ignore: avoid_print
-      print('run.coach.live.rotate.ok generation=${_ctxMgr.generation}');
-      return true;
-    } catch (e) {
-      unawaited(_beacon('rotate_failed', reason: reason, error: e.toString()));
-      // ignore: avoid_print
-      print('run.coach.live.rotate.failed reason=$reason err=$e');
-      return false;
-    } finally {
-      _rotating = false;
-    }
-  }
-
-  /// Conecta uma sessão Live. Quando [isRotation] for true, [oldSession] é
-  /// preservado (caller faz o swap depois). Quando for primeira conexão,
-  /// substitui [_session] direto.
-  Future<bool> _connect(
-    _LiveCoachConfig cfg, {
-    String? preamble,
-    bool isRotation = false,
-  }) async {
-    LiveSession? newSession;
-    final ready = Completer<bool>();
-    try {
-      newSession = await LiveService(apiKey: cfg.token, apiVersion: 'v1alpha')
-          .connect(
-        LiveConnectParameters(
-          model: cfg.model,
-          config: GenerationConfig(
-            responseModalities: [Modality.AUDIO],
-            speechConfig: SpeechConfig(
-              voiceConfig: VoiceConfig(
-                prebuiltVoiceConfig:
-                    PrebuiltVoiceConfig(voiceName: cfg.voice),
-              ),
-            ),
-          ),
-          systemInstruction: cfg.systemInstruction != null
-              ? Content(parts: [Part(text: cfg.systemInstruction!)])
-              : null,
-          outputAudioTranscription:
-              cfg.outputTranscription ? AudioTranscriptionConfig() : null,
-          callbacks: LiveCallbacks(
-            onMessage: _onMessage,
-            onError: (err, _) {
-              Logger.error('coach.live.error', err, StackTrace.current, {
-                'is_rotation': isRotation,
-              });
-              unawaited(_beacon('ws_error', error: err.toString()));
-              _maybeScheduleReconnect(err: err);
-            },
-            onClose: (code, reason) {
-              final is1008 = code == 1008;
-              Logger.warn('coach.live.close', context: {
-                'code': code,
-                'reason': reason,
-                'is1008': is1008,
-                'sys_instr_len': cfg.systemInstruction?.length ?? 0,
-              });
-              _open = false;
-              // TF 70: registra o motivo do close. rotateSession lê quando
-              // falha de rotação, pra forçar refetch de token se o close
-              // foi por TTL (Gemini new_session_expire_time).
-              _lastCloseReason = reason;
-              unawaited(_beacon('ws_close', code: code, reason: reason));
-              // Fix TF 59: NÃO solta o ducking aqui. User reportou "música
-              // sobe quando coach cai" em 8:40 — porque queda 1011 disparava
-              // releaseDucking imediato mesmo se reconnect ia ter sucesso 1-2s
-              // depois. Música abafada por 1-2s é melhor que clicks de volume.
-              // Ducking só é liberado quando reconnect ESGOTA (vide _maybeScheduleReconnect).
-              _maybeScheduleReconnect(code: code, reason: reason);
-            },
-          ),
-        ),
+      final weather = locationWeatherController.weather;
+      final body = <String, dynamic>{
+        'planSessionId': ?planSessionId,
+        if (weather != null) ...{
+          'temperatureC': weather.temperatureC,
+          'humidityPercent': weather.humidityPercent,
+          'windKmh': weather.windKmh,
+        },
+      };
+      final res = await _dio.post<Map<String, dynamic>>(
+        '/coach/live-session',
+        data: body.isEmpty ? null : body,
+        options: Options(receiveTimeout: const Duration(seconds: 8)),
       );
-      _open = true;
-      _session = newSession;
-      final preambleLen = preamble?.length ?? 0;
-      Logger.info('coach.live.open_ok', context: {
-        'model': cfg.model,
-        'sys_instr_len': cfg.systemInstruction?.length ?? 0,
-        'rotation': isRotation,
-        'preamble_len': preambleLen,
+      final sessionId = res.data?['sessionId'] as String?;
+      final wsUrl = res.data?['wsUrl'] as String?;
+      if (sessionId == null || wsUrl == null) return false;
+      _sessionId = sessionId;
+      _wsUrl = wsUrl;
+      Logger.info('run.coach.s6.session_created', context: {
+        'sessionId': sessionId,
+        'planSession': planSessionId != null,
       });
-      unawaited(_beacon('open_ok', preambleLen: preambleLen));
-      // Injeta preamble imediatamente (rotação OU reconexão pós-queda).
-      // Sem isso, a sessão nova vê só systemInstruction inicial e o coach
-      // fala "fora de contexto" depois de TTL/erro (TF 71 Fase -4).
-      if (preamble != null && preamble.isNotEmpty) {
-        try {
-          newSession.sendText(preamble);
-          _lastSendKind = 'preamble';
-          _lastSendAtMs = DateTime.now().millisecondsSinceEpoch;
-        } catch (_) {/* ignore */}
-      }
-      // Fix TF 59: drena fila com throttle 2s entre sends. Antes drenava
-      // tudo em sequência imediata → 2 cues viram 2 áudios sobrepostos.
-      // Agora cada cue do drain espera 2s pro coach falar (e o anterior
-      // terminar). Remove o sufixo `[trigger]` que foi adicionado pra dedup.
-      if (_pendingSends.isNotEmpty) {
-        final queued = List<String>.from(_pendingSends);
-        _pendingSends.clear();
-        unawaited(_drainPendingSequential(newSession, queued));
-      }
-      if (!ready.isCompleted) ready.complete(true);
       return true;
     } catch (e) {
-      // open_failed costuma ser o 1008 de SETUP (systemInstruction grande na
-      // constraint / safety) — o connect() lança antes do setupComplete.
-      // ignore: avoid_print
-      print('run.coach.live.open_failed: $e rotation=$isRotation');
-      unawaited(_beacon('open_failed', error: e.toString()));
-      if (!ready.isCompleted) ready.complete(false);
+      Logger.warn('run.coach.s6.session_create_failed', context: {'err': '$e'});
       return false;
     }
   }
 
-  bool _isTokenStale() {
-    final exp = _tokenExpiresAt;
-    if (exp == null) return true;
-    final remaining = exp.difference(DateTime.now());
-    return remaining < _tokenStaleThreshold;
+  Future<bool> _connect() async {
+    final sessionId = _sessionId;
+    final wsUrl = _wsUrl;
+    if (sessionId == null || wsUrl == null) return false;
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return false;
+      final token = await user.getIdToken();
+      final uri = Uri.parse(wsUrl).replace(queryParameters: {
+        'sessionId': sessionId,
+        'token': token ?? '',
+      });
+      final channel = WebSocketChannel.connect(uri);
+      await channel.ready;
+      _channel = channel;
+      _open = true;
+      _sub = channel.stream.listen(
+        _onFrame,
+        onError: (Object err) {
+          Logger.warn('run.coach.s6.ws_error', context: {'err': '$err'});
+          unawaited(_beacon('ws_error', error: err.toString()));
+          _open = false;
+          _maybeScheduleReconnect(err: err);
+        },
+        onDone: () {
+          _open = false;
+          unawaited(_beacon('ws_close'));
+          _maybeScheduleReconnect();
+        },
+      );
+      Logger.info('run.coach.s6.open_ok', context: {
+        'sessionId': sessionId,
+        'generation': _generation,
+      });
+      unawaited(_beacon('open_ok'));
+      _drainPendingEvents();
+      return true;
+    } catch (e) {
+      Logger.warn('run.coach.s6.open_failed', context: {'err': '$e'});
+      unawaited(_beacon('open_failed', error: e.toString()));
+      return false;
+    }
   }
 
-  void _maybeScheduleReconnect({int? code, String? reason, Object? err}) {
-    // Cada guard emite um beacon `reconnect_skipped` com o motivo —
-    // sem isso ficamos cegos quando 1011 não recupera (já caímos uma vez:
-    // sessão de 10min do Gemini Live fechou e reconnect não disparou,
-    // sem beacon explicando qual guard barrou).
-    String? skipReason;
-    // Códigos não-clean (1001/1006/1011/etc) e erros (SocketException, etc)
-    // indicam queda real do socket — não dá pra esperar `_talking` virar
-    // false porque o canal de fala já morreu. Forçamos stop da fala em
-    // curso e reconectamos. Pra close limpo (1000) ou rotação, mantemos o
-    // guard intacto.
-    final isUnrecoverableTalking = _talking &&
-        (err != null || (code != null && code != 1000));
-    if (isUnrecoverableTalking) {
-      _talking = false;
-      unawaited(_beacon('talking_force_clear', code: code));
+  void _onFrame(dynamic raw) {
+    // Frame binário = PCM 24kHz da fala do coach.
+    if (raw is List<int>) {
+      final pcm = raw is Uint8List ? raw : Uint8List.fromList(raw);
+      if (kIsWeb) {
+        _webPcm.add(pcm);
+      } else {
+        _audio.addSpeakerChunk(pcm);
+      }
+      return;
     }
+    try {
+      final msg = jsonDecode(raw as String) as Map<String, dynamic>;
+      switch (msg['type'] as String?) {
+        case 'state':
+          _onState(msg);
+        case 'cue_text':
+          _onCueText((msg['text'] as String?) ?? '');
+        case 'error':
+          Logger.warn('run.coach.s6.server_error', context: {'code': msg['code']});
+      }
+    } catch (e) {
+      Logger.warn('run.coach.s6.frame_parse_failed', context: {'err': '$e'});
+    }
+  }
+
+  void _onState(Map<String, dynamic> msg) {
+    final state = msg['state'] as String?;
+    if (msg['generation'] is int) _generation = msg['generation'] as int;
+    switch (state) {
+      case 'turnComplete':
+        if (kIsWeb) {
+          final pcm = _webPcm.takeBytes();
+          if (pcm.isNotEmpty) {
+            final wav = _pcmToWav(pcm, 24000);
+            playCoachAudio(base64Encode(wav), mimeType: 'audio/wav');
+          }
+        } else {
+          unawaited(_audio.flushAndPlay());
+        }
+      case 'interrupted':
+        // Preempção server-side (ex: km_reached cortou half_km) — descarta
+        // o áudio parcial acumulado; o cue vencedor chega em seguida.
+        if (kIsWeb) {
+          _webPcm.clear();
+        } else {
+          _audio.discardSpeakerBuffer();
+        }
+      case 'gone':
+        // s6-ai esgotou a reconexão com o Google. Sessão morta de verdade.
+        Logger.warn('run.coach.s6.upstream_gone');
+        unawaited(_audio.releaseDucking());
+      case 'cue_skipped':
+        Logger.info('run.coach.s6.cue_skipped', context: {
+          'event': msg['event'],
+          'reason': msg['reason'],
+        });
+    }
+  }
+
+  void _onCueText(String text) {
+    final spoken = text.trim();
+    if (spoken.isEmpty) return;
+    final runId = _runId;
+    if (runId != null) {
+      unawaited(_beaconRemote.logCoachTurn(
+        runId: runId,
+        text: spoken,
+        trigger: _currentTrigger ?? 'unknown',
+        sessionGeneration: _generation,
+        metrics: _metricsProvider?.call(),
+      ));
+    }
+    if (!_transcriptsCtrl.isClosed) _transcriptsCtrl.add(spoken);
+  }
+
+  /// Envia um evento de cue (um dos 8: start, half_km, km_reached,
+  /// bpm_alert, pace_alert, goal_reached, finish, no_movement).
+  /// WS aberto → frame JSON (o s6-ai serializa via CueQueue).
+  /// WS caído → enfileira (dedup, cap 3) + tenta fallback HTTP.
+  void sendEvent(String event, Map<String, dynamic> data) {
+    _currentTrigger = event;
+    if (_open) {
+      try {
+        _channel?.sink.add(jsonEncode({'type': 'event', 'event': event, 'data': data}));
+        return;
+      } catch (e) {
+        Logger.warn('run.coach.s6.send_failed', context: {'err': '$e'});
+        _open = false;
+      }
+    }
+    _pendingEvents.removeWhere((e) => e.key == event);
+    _pendingEvents.add(MapEntry(event, data));
+    while (_pendingEvents.length > 3) {
+      _pendingEvents.removeAt(0);
+    }
+    unawaited(_sendEventViaHttp(event, data));
+    _maybeScheduleReconnect();
+  }
+
+  /// Fallback HTTP direto no s6-ai: devolve {text, audioB64} e toca local.
+  Future<void> _sendEventViaHttp(String event, Map<String, dynamic> data) async {
+    final sessionId = _sessionId;
+    final wsUrl = _wsUrl;
+    if (sessionId == null || wsUrl == null) return;
+    try {
+      final httpBase = wsUrl
+          .replaceFirst('wss://', 'https://')
+          .replaceFirst('ws://', 'http://')
+          .replaceFirst(RegExp(r'/v1/live$'), '');
+      final res = await _dio.post<Map<String, dynamic>>(
+        '$httpBase/v1/live/sessions/$sessionId/events',
+        data: {'event': event, 'data': data},
+        options: Options(receiveTimeout: const Duration(seconds: 20)),
+      );
+      // Entregue: remove da fila de reenvio (senão falaria 2x no reconnect).
+      _pendingEvents.removeWhere((e) => e.key == event);
+      final text = res.data?['text'] as String?;
+      final audio = res.data?['audioB64'] as String?;
+      if (audio != null && audio.isNotEmpty) {
+        playCoachAudio(audio, mimeType: (res.data?['audioMimeType'] as String?) ?? 'audio/wav');
+      }
+      if (text != null && text.isNotEmpty) _onCueText(text);
+      Logger.info('run.coach.s6.http_fallback_ok', context: {'event': event});
+    } on DioException catch (e) {
+      // 409 = WS reconectou no meio tempo; 204 = cue dropado (dedup/prefs).
+      final status = e.response?.statusCode;
+      if (status == 409) _pendingEvents.removeWhere((p) => p.key == event);
+      Logger.info('run.coach.s6.http_fallback_skip', context: {
+        'event': event,
+        'status': status,
+      });
+    } catch (e) {
+      Logger.warn('run.coach.s6.http_fallback_failed', context: {'err': '$e'});
+    }
+  }
+
+  void _drainPendingEvents() {
+    if (_pendingEvents.isEmpty) return;
+    final queued = List<MapEntry<String, Map<String, dynamic>>>.from(_pendingEvents);
+    _pendingEvents.clear();
+    // Sem throttle client-side: a CueQueue do s6-ai serializa e deduplica.
+    for (final e in queued) {
+      try {
+        _channel?.sink.add(jsonEncode({'type': 'event', 'event': e.key, 'data': e.value}));
+      } catch (_) {/* ignore */}
+    }
+  }
+
+  void _maybeScheduleReconnect({Object? err}) {
+    String? skipReason;
     if (_disposed) {
       skipReason = 'disposed';
     } else if (_intentionalClose) {
       skipReason = 'intentional_close';
-    } else if (_rotating) {
-      skipReason = 'rotating';
-    } else if (_talking) {
-      skipReason = 'talking';
-    } else if (_runId == null) {
-      skipReason = 'no_run_id';
-    } else if (code == 1000) {
-      skipReason = 'clean_close_1000';
+    } else if (_open) {
+      skipReason = 'already_open';
     } else if (_reconnectTimer != null) {
       skipReason = 'already_scheduled';
     } else if (_reconnectAttempt >= _maxReconnectAttempts) {
       skipReason = 'max_attempts_exhausted';
     }
     if (skipReason != null) {
-      unawaited(_beacon(
-        'reconnect_skipped',
-        reason: skipReason,
-        code: code,
-      ));
-      // Fix TF 59: SÓ libera ducking quando reconnect REALMENTE morreu
-      // (esgotou attempts). Música sobe = "coach morreu de verdade",
-      // não "ele tá reconectando".
       if (skipReason == 'max_attempts_exhausted') {
-        // ignore: avoid_print
-        print('run.coach.live.reconnect_exhausted attempts=$_reconnectAttempt code=$code');
+        Logger.warn('run.coach.s6.reconnect_exhausted', context: {
+          'attempts': _reconnectAttempt,
+        });
         unawaited(_audio.releaseDucking());
       }
       return;
     }
-
-    // Quando o server Google fecha com `new_session_expire_time deadline
-    // exceeded`, é o TOKEN que não pode mais abrir sessão nova (NSXT do
-    // ephemeral token expirou — limite SDK do Gemini Live, ~10-15min).
-    // Marcamos o token como vencido pra forçar refetch no próximo attempt.
-    // Sem isso, reusávamos o _lastConfig com token morto e cada open
-    // estourava TimeoutException de 10s → loop infinito (28+ attempts
-    // observados nos logs).
-    if (reason != null && reason.contains('new_session_expire_time')) {
-      _tokenExpiresAt = DateTime.now().subtract(const Duration(minutes: 1));
-    }
-    final isNetwork = err is SocketException ||
-        code == 1001 ||
-        code == 1006 ||
-        code == 1011 ||
-        code == 1012 ||
-        code == 1013;
-    if (!isNetwork && code != null) {
-      unawaited(_beacon(
-        'reconnect_skipped',
-        reason: 'non_recoverable_code',
-        code: code,
-      ));
-      return; // ex: 1008 (constraint) não recupera com retry
-    }
     final attempt = _reconnectAttempt;
-    final delay = _reconnectBackoff[
-        attempt.clamp(0, _reconnectBackoff.length - 1)];
+    final delay = _reconnectBackoff[attempt.clamp(0, _reconnectBackoff.length - 1)];
     _reconnectAttempt = attempt + 1;
-    unawaited(_beacon(
-      'reconnect_attempt',
-      reason: reason,
-      error: err?.toString(),
-    ));
-    // ignore: avoid_print
-    print('run.coach.live.reconnect.attempt n=$attempt delay=${delay.inSeconds}s');
+    unawaited(_beacon('reconnect_attempt'));
     _reconnectTimer = Timer(delay, () async {
       _reconnectTimer = null;
-      if (_disposed || _intentionalClose || _talking || _open) return;
-      final cfg = _isTokenStale()
-          ? await _fetchConfig(_planSessionId)
-          : _lastConfig;
-      if (cfg == null) {
-        unawaited(_beacon('reconnect_failed', reason: 'no_config'));
-        _maybeScheduleReconnect(code: code, reason: reason, err: err);
-        return;
-      }
-      _lastConfig = cfg;
-      final preamble = _ctxMgr.snapshot().toPromptPreamble();
-      final ok = await _connect(cfg, preamble: preamble, isRotation: false);
+      if (_disposed || _intentionalClose || _open) return;
+      await _cleanupChannel();
+      final ok = await _connect();
       if (ok) {
-        _sessionStartedAt = DateTime.now();
-        _turnsThisSession = 0;
         _reconnectAttempt = 0;
         unawaited(_beacon('reconnect_ok'));
-        // ignore: avoid_print
-        print('run.coach.live.reconnect.ok');
       } else {
         unawaited(_beacon('reconnect_failed'));
-        _maybeScheduleReconnect(code: code, reason: reason, err: err);
+        _maybeScheduleReconnect(err: err);
       }
     });
   }
 
-  /// Reporta open/close/error pro servidor (cai no log do Cloud Run, onde dá
-  /// pra inspecionar `coach.live.client_diag is1008=true`). Best-effort.
-  Future<void> _beacon(
-    String phase, {
-    int? code,
-    String? reason,
-    String? error,
-    int? preambleLen,
-  }) async {
+  Future<void> _cleanupChannel() async {
+    await _sub?.cancel();
+    _sub = null;
+    try {
+      await _channel?.sink.close();
+    } catch (_) {/* ignore */}
+    _channel = null;
+  }
+
+  /// Diagnóstico best-effort (cai no Cloud Logging do runnin-api).
+  Future<void> _beacon(String phase, {String? error}) async {
     try {
       await _dio.post<void>('/coach/live-diag', data: {
         'phase': phase,
-        'code': ?code,
-        'reason': ?reason,
         'error': ?error,
-        'preambleLen': ?preambleLen,
-        'sysInstrLen': _lastConfig?.systemInstruction?.length ?? 0,
-        'outputTranscription': _lastConfig?.outputTranscription ?? false,
-        'model': _lastConfig?.model,
         'runId': ?_runId,
-        'generation': _ctxMgr.generation,
-        'turns': _turnsThisSession,
-        'ageMs': sessionAge.inMilliseconds,
+        'sessionId': ?_sessionId,
+        'generation': _generation,
         'attempt': phase == 'reconnect_attempt' ? _reconnectAttempt : null,
-        // TF 69: ajuda a diagnose do 1008 — saber qual foi a última operação
-        // e quanto tempo atrás. Se close é < 1s após sendText, sabemos que
-        // foi a operação que API rejeitou.
-        'lastSendKind': _lastSendKind,
-        'msSinceLastSend': _lastSendAtMs > 0
-            ? DateTime.now().millisecondsSinceEpoch - _lastSendAtMs
-            : null,
+        'transport': 's6-ws',
       });
     } catch (_) {/* diagnóstico é best-effort */}
   }
 
-  void _onMessage(LiveServerMessage msg) {
-    final sc = msg.serverContent;
-
-    // Áudio: acumula chunks PCM 24kHz. Web acumula localmente; nativo vai pro
-    // buffer do speaker do LiveAudioService.
-    final b64 = msg.data;
-    if (b64 != null && b64.isNotEmpty) {
-      final pcm = base64.decode(b64);
-      if (kIsWeb) {
-        _webPcm.add(pcm);
-      } else {
-        _audio.addSpeakerChunk(pcm);
-      }
+  Future<void> close() async {
+    _disposed = true;
+    _intentionalClose = true;
+    _open = false;
+    _reconnectTimer?.cancel();
+    _reconnectTimer = null;
+    _pendingEvents.clear();
+    try {
+      _channel?.sink.add(jsonEncode({'type': 'close'}));
+    } catch (_) {/* ignore */}
+    await _cleanupChannel();
+    // Encerra a sessão server-side (libera o socket Gemini do s6-ai).
+    final sessionId = _sessionId;
+    final wsUrl = _wsUrl;
+    if (sessionId != null && wsUrl != null) {
+      try {
+        final httpBase = wsUrl
+            .replaceFirst('wss://', 'https://')
+            .replaceFirst('ws://', 'http://')
+            .replaceFirst(RegExp(r'/v1/live$'), '');
+        await _dio.delete<void>('$httpBase/v1/live/sessions/$sessionId');
+      } catch (_) {/* best-effort */}
     }
-
-    // Transcript do áudio de saída (texto == voz).
-    final t = sc?.outputTranscription?.text;
-    if (t != null && t.isNotEmpty) _turnTranscript.write(t);
-
-    // Fim do turno: toca o áudio acumulado e publica o transcript da fala.
-    if (sc?.turnComplete == true) {
-      if (kIsWeb) {
-        final pcm = _webPcm.takeBytes();
-        if (pcm.isNotEmpty) {
-          final wav = _pcmToWav(pcm, 24000);
-          playCoachAudio(base64Encode(wav), mimeType: 'audio/wav');
-        }
-      } else {
-        unawaited(_audio.flushAndPlay());
-      }
-      final spoken = _turnTranscript.toString().trim();
-      _turnTranscript.clear();
-      if (spoken.isNotEmpty) {
-        _turnsThisSession += 1;
-        final trigger = _currentTrigger ?? 'unknown';
-        // Alimenta o manager ANTES de emitir no stream público — assim qualquer
-        // rotação disparada pelo bloc imediatamente após já enxerga essa fala.
-        final metrics = _lastMetricsCallback?.call();
-        _ctxMgr.recordCoachTurn(
-          text: spoken,
-          trigger: trigger,
-          metrics: metrics ?? const RunMetricsSnapshot(),
-        );
-        // Beacon fire-and-forget pra persistência server-side.
-        final runId = _runId;
-        if (runId != null) {
-          unawaited(_beaconRemote.logCoachTurn(
-            runId: runId,
-            text: spoken,
-            trigger: trigger,
-            sessionGeneration: _ctxMgr.generation,
-            metrics: metrics,
-          ));
-        }
-        if (!_transcriptsCtrl.isClosed) {
-          _transcriptsCtrl.add(spoken);
-        }
-      }
-    }
+    await _audio.dispose();
+    if (!_transcriptsCtrl.isClosed) await _transcriptsCtrl.close();
   }
-
-  /// O bloc registra um getter de métricas correntes — chamado quando um
-  /// turn fecha pra carimbar o snapshot no manager + beacon.
-  RunMetricsSnapshot Function()? _lastMetricsCallback;
-  // ignore: use_setters_to_change_properties
-  void setMetricsProvider(RunMetricsSnapshot Function() provider) {
-    _lastMetricsCallback = provider;
-  }
-
-  /// Registra no context manager um turno gerado fora da sessão Live (ex:
-  /// fallback HTTP). Garante que o preamble de rotação inclua esses cues.
-  void recordFallbackTurn({required String text, required String trigger}) {
-    final metrics = _lastMetricsCallback?.call() ?? const RunMetricsSnapshot();
-    _ctxMgr.recordCoachTurn(text: text, trigger: trigger, metrics: metrics);
-  }
-
-  /// Informa o tom da sessão atual pro context manager, para que o preamble
-  /// de rotação inclua a classificação (free/guide/performance).
-  void setSessionTone(String tone) => _ctxMgr.setSessionTone(tone);
 
   /// PCM 16-bit mono → WAV (RIFF). Usado só no web pra tocar via <audio>.
   Uint8List _pcmToWav(Uint8List pcm, int sampleRate) {
@@ -607,193 +452,4 @@ class LiveRunCoachSession {
     out.setRange(44, 44 + dataLen, pcm);
     return out;
   }
-
-  /// Envia uma atualização (largada/km/alerta/fim) → provoca uma fala curta.
-  /// Se a sessão tiver caído, a mensagem fica enfileirada pra ser drenada
-  /// quando a reconexão completar (preserva continuidade audível).
-  void sendTelemetry(String text) {
-    if (text.trim().isEmpty) return;
-    if (_open) {
-      try {
-        _lastSendKind = 'sendText';
-        _lastSendAtMs = DateTime.now().millisecondsSinceEpoch;
-        _session?.sendText(text);
-      } catch (e) {
-        // ignore: avoid_print
-        print('run.coach.live.send_failed: $e');
-      }
-      return;
-    }
-    // Fix TF 59: dedup por trigger + cap 3. User reportou "2 áudios quase
-    // iguais no início" — drain enfileirado disparava 2 cues consecutivos.
-    // Agora 2 `check_in` em fila viram 1 (último vence), e o array nunca
-    // passa de 3 cues (drop oldest se exceder).
-    final triggerHint = _currentTrigger;
-    if (triggerHint != null) {
-      _pendingSends.removeWhere((t) => t.startsWith('[$triggerHint]'));
-      _pendingSends.add('[$triggerHint] $text');
-    } else {
-      _pendingSends.add(text);
-    }
-    while (_pendingSends.length > 3) {
-      _pendingSends.removeAt(0);
-    }
-    // ignore: avoid_print
-    print('run.coach.live.send_queued queue=${_pendingSends.length}');
-    _maybeScheduleReconnect();
-  }
-
-  /// Drena fila de sends sequencialmente com throttle 2s entre cada.
-  /// Evita "2 áudios sobrepostos" quando reconnect recupera 2+ cues
-  /// enfileirados — cada um espera o anterior soltar antes de sair.
-  Future<void> _drainPendingSequential(
-    LiveSession session,
-    List<String> queued,
-  ) async {
-    for (var i = 0; i < queued.length; i++) {
-      if (!_open || _disposed) return;
-      final raw = queued[i];
-      // Remove sufixo `[trigger] ` injetado em sendTelemetry pra dedup.
-      final clean = raw.startsWith('[') ? raw.substring(raw.indexOf(']') + 2) : raw;
-      try {
-        session.sendText(clean);
-      } catch (_) {/* ignore */}
-      if (i < queued.length - 1) {
-        await Future<void>.delayed(const Duration(seconds: 2));
-      }
-    }
-  }
-
-  /// Abre janela de fala (push-to-talk): streama o mic pra sessão. NÃO usa
-  /// sendActivityStart/End — com VAD automático (default) esses sinais dão
-  /// erro; o modelo detecta início/fim de fala pelo próprio áudio.
-  Future<void> startTalk() async {
-    if (!_open) {
-      // ignore: avoid_print
-      print('run.coach.live.talk_skip reason=session_closed');
-      return;
-    }
-    if (_talking) return;
-    try {
-      final ok = await _audio.requestMicPermission();
-      // ignore: avoid_print
-      print('run.coach.live.talk_perm granted=$ok');
-      if (!ok) {
-        unawaited(_beacon('talk_no_permission'));
-        return;
-      }
-      await _audio.startCapture((chunk) {
-        try {
-          _session?.sendAudio(chunk);
-        } catch (_) {/* ignore */}
-      });
-      _talking = true;
-      _ctxMgr.recordUserPushToTalk();
-      // ignore: avoid_print
-      print('run.coach.live.talk_start ok');
-    } catch (e) {
-      // ignore: avoid_print
-      print('run.coach.live.talk_start_failed: $e');
-      unawaited(_beacon('talk_error', error: e.toString()));
-    }
-  }
-
-  /// Fecha a janela de fala → o VAD automático detecta o silêncio e o coach
-  /// responde.
-  Future<void> stopTalk() async {
-    if (!_talking) return;
-    _talking = false;
-    try {
-      await _audio.stopCapture();
-      // ignore: avoid_print
-      print('run.coach.live.talk_stop ok');
-    } catch (e) {
-      // ignore: avoid_print
-      print('run.coach.live.talk_stop_failed: $e');
-    }
-  }
-
-  Future<void> close() async {
-    _disposed = true;
-    _open = false;
-    _intentionalClose = true;
-    _reconnectTimer?.cancel();
-    _reconnectTimer = null;
-    _pendingSends.clear();
-    await stopTalk();
-    try {
-      await _session?.close();
-    } catch (_) {/* ignore */}
-    _session = null;
-    await _audio.dispose();
-    if (!_transcriptsCtrl.isClosed) await _transcriptsCtrl.close();
-  }
-
-  Future<_LiveCoachConfig?> _fetchConfig(String? planSessionId) async {
-    try {
-      // Snapshot de clima (se disponível) entra no systemInstruction da
-      // sessão Live pro coach considerar calor/umidade/vento na fala —
-      // sem impacto na UI da corrida ativa.
-      final weather = locationWeatherController.weather;
-      Logger.info('run.coach.live_token.weather_snapshot', context: {
-        'present': weather != null,
-        if (weather != null) 'tempC': weather.temperatureC,
-        if (weather != null) 'humidity': weather.humidityPercent,
-        if (weather != null) 'windKmh': weather.windKmh,
-        if (weather != null)
-          'ageMs': DateTime.now().difference(weather.fetchedAt).inMilliseconds,
-      });
-      final body = <String, dynamic>{
-        'planSessionId': ?planSessionId,
-        if (weather != null) ...{
-          'temperatureC': weather.temperatureC,
-          'humidityPercent': weather.humidityPercent,
-          'windKmh': weather.windKmh,
-        },
-      };
-      final res = await _dio.post<Map<String, dynamic>>(
-        '/coach/live-token',
-        data: body.isEmpty ? null : body,
-        options: Options(receiveTimeout: const Duration(seconds: 6)),
-      );
-      final data = res.data;
-      final token = data?['token'] as String?;
-      if (token == null || token.isEmpty) return null;
-      // Server manda 'models/<id>'; o pacote conecta com o id sem prefixo.
-      final rawModel = (data?['model'] as String?) ??
-          'models/gemini-2.5-flash-native-audio-latest';
-      final model = rawModel.replaceFirst('models/', '');
-      final expireRaw = data?['expireTime'] as String?;
-      if (expireRaw != null) {
-        _tokenExpiresAt = DateTime.tryParse(expireRaw)?.toUtc();
-      }
-      return _LiveCoachConfig(
-        token: token,
-        model: model,
-        voice: (data?['voice'] as String?) ?? _voiceDefault,
-        systemInstruction: data?['systemInstruction'] as String?,
-        outputTranscription: (data?['outputTranscription'] as bool?) ?? false,
-      );
-    } catch (e) {
-      // ignore: avoid_print
-      print('run.coach.live.config_failed: $e');
-      return null;
-    }
-  }
-}
-
-class _LiveCoachConfig {
-  _LiveCoachConfig({
-    required this.token,
-    required this.model,
-    required this.voice,
-    required this.systemInstruction,
-    required this.outputTranscription,
-  });
-
-  final String token;
-  final String model;
-  final String voice;
-  final String? systemInstruction;
-  final bool outputTranscription;
 }

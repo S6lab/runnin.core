@@ -106,6 +106,13 @@ class LiveAudioService {
     _speakerBuffer.add(pcmChunk);
   }
 
+  /// Descarta o buffer acumulado SEM tocar — usado quando o server
+  /// preempta a fala em curso (state `interrupted` do s6-ai): o áudio
+  /// parcial do cue perdedor não deve ir pro alto-falante.
+  void discardSpeakerBuffer() {
+    _speakerBuffer.clear();
+  }
+
   /// Envolve buffer acumulado num header WAV e toca; depois limpa o buffer.
   Future<void> flushAndPlay() async {
     if (_speakerBuffer.isEmpty) return;

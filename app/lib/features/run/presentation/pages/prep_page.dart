@@ -10,8 +10,6 @@ import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/warmup/warmup_exercises.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 import 'package:runnin/features/run/data/workout_realtime_service.dart';
-import 'package:runnin/features/location_weather/data/location_weather_controller.dart';
-import 'package:runnin/features/run/data/datasources/run_coach_remote_datasource.dart';
 import 'package:runnin/features/run/data/datasources/run_remote_datasource.dart';
 import 'package:runnin/features/run/domain/entities/run.dart';
 import 'package:runnin/features/run/presentation/bloc/run_bloc.dart';
@@ -38,7 +36,6 @@ class _PrepView extends StatefulWidget {
 }
 
 class _PrepViewState extends State<_PrepView> {
-  final _coachRemote = RunCoachRemoteDatasource();
   final _userRemote = UserRemoteDatasource();
   final _planRemote = PlanRemoteDatasource();
   final _runRemote = RunRemoteDatasource();
@@ -52,12 +49,8 @@ class _PrepViewState extends State<_PrepView> {
   // Usado pra mostrar planejado vs feito no card e badge "CONCLUÍDA".
   Run? _executedRunToday;
 
-  StreamSubscription<CoachCue>? _coachSub;
-  // Vira true ao navegar pra /run. PrepPage segue montada (push), então
-  // bloqueia qualquer cue pre_run tardio de tocar por cima da saudação.
-  bool _navigatedToRun = false;
-  Timer? _coachDebounce;
-  final bool _coachMuted = false;
+  // Cue `pre_run` REMOVIDO (migração s6-ai, 16→8 eventos): o coach passa a
+  // falar só a partir do 'start' na corrida — sem áudio na PrepPage.
   bool? _isPro;
 
   List<WarmupExercise> _exercises = const [];
@@ -305,7 +298,6 @@ class _PrepViewState extends State<_PrepView> {
       if (!mounted) return;
       final isPro = profile?.isPro ?? false;
       setState(() => _isPro = isPro);
-      if (isPro) _requestPreRunCue();
 
       final saved = profile?.preRunAlerts;
       if (saved != null) {
@@ -326,58 +318,9 @@ class _PrepViewState extends State<_PrepView> {
     if (mounted) setState(() => _exercises = list);
   }
 
-  @override
-  void dispose() {
-    _coachDebounce?.cancel();
-    _coachSub?.cancel();
-    super.dispose();
-  }
-
   void _selectType(String type) {
     setState(() => _selectedType = type);
     _loadExercises();
-    _coachDebounce?.cancel();
-    // Freemium não tem coach AI — não dispara cue de pre_run no backend.
-    // Premium mantém debounce pra re-pedir cue quando o tipo muda no prep.
-    if (_isPro != true) return;
-    _coachDebounce = Timer(
-      const Duration(milliseconds: 350),
-      _requestPreRunCue,
-    );
-  }
-
-  void _requestPreRunCue() {
-    if (_navigatedToRun) return;
-    // Hard gate: freemium não consome /coach/cue. Defensivo — call sites já
-    // bloqueiam, mas evita regressão se alguém esquecer.
-    if (_isPro != true) return;
-    _coachSub?.cancel();
-
-    final weather = locationWeatherController.weather;
-    _coachSub = _coachRemote
-        .streamCoachCue(
-          event: 'pre_run',
-          runType: _selectedType,
-          currentPaceMinKm: 0,
-          distanceM: 0,
-          elapsedS: 0,
-          temperatureC: weather?.temperatureC,
-          humidityPercent: weather?.humidityPercent,
-          windKmh: weather?.windKmh,
-        )
-        .listen(
-          (cue) {
-            if (!mounted) return;
-            final audio = cue.audioBase64;
-            if (!_navigatedToRun && !_coachMuted && audio != null && audio.isNotEmpty) {
-              playCoachAudio(
-                audio,
-                mimeType: cue.audioMimeType ?? 'audio/mpeg',
-                volume: 1.0,
-              );
-            }
-          },
-        );
   }
 
   // Toggle PER-SESSION: vale só pra esta corrida (herda do default global
@@ -855,18 +798,8 @@ class _PrepViewState extends State<_PrepView> {
       'isPremium': _isPro ?? subscriptionController.isPro,
     };
     if (!context.mounted) return;
-    // push() mantém a PrepPage viva sob a /run (dispose não roda), então o
-    // cue pre_run (stream + debounce do _selectType) continua tocando por
-    // cima da saudação da corrida = "dois coaches". Corta tudo e bloqueia
-    // novos cues via _navigatedToRun antes de navegar.
-    _navigatedToRun = true;
-    _coachDebounce?.cancel();
-    _coachSub?.cancel();
-    _coachSub = null;
-    // TF 70: para o player IMEDIATAMENTE. Antes só cancelávamos a stream
-    // do server (parava de receber chunks novos), mas o áudio em andamento
-    // continuava tocando — sobrepondo a saudação 'start' do bloco. Cenário
-    // "2 cues treparam" reportado no teste TF 69 do Eduardo.
+    // Para qualquer áudio de coach em andamento antes de navegar — evita
+    // sobrepor a saudação 'start' da corrida (lição TF 69/70).
     unawaited(stopCoachAudio());
     context.push('/run', extra: extra);
   }

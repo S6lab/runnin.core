@@ -30,32 +30,6 @@ class CoachLiveBeaconRemoteDatasource {
     );
   }
 
-  Future<void> logUserPushToTalk({
-    required String runId,
-    required String text,
-    required int sessionGeneration,
-    RunMetricsSnapshot? metrics,
-  }) async {
-    await _post(
-      runId: runId,
-      author: 'user',
-      text: text,
-      trigger: 'push_to_talk',
-      sessionGeneration: sessionGeneration,
-      metrics: metrics,
-    );
-  }
-
-  /// Triggers semânticos do cliente → enum do server. Server rejeita com 422
-  /// se vier algo fora do allowlist; sem mapping, o evento é omitido (campo é
-  /// .optional()), preservando a persistência do texto.
-  /// Server unificou `bpm_alert` → `high_bpm`, então essa entrada virou
-  /// identidade — mantenho o map vazio (com placeholder pra docs) pra ficar
-  /// claro que NÃO há mais renaming.
-  static const _triggerToServerEvent = <String, String>{
-    // 'no_movement' não tem equivalente no schema — segue sem `event` no body.
-  };
-
   Future<void> _post({
     required String runId,
     required String author,
@@ -66,7 +40,7 @@ class CoachLiveBeaconRemoteDatasource {
   }) async {
     final clean = text.trim();
     if (clean.isEmpty || runId.isEmpty) return;
-    final serverEvent = _triggerToServerEvent[trigger] ?? trigger;
+    final serverEvent = trigger;
     final body = <String, dynamic>{
       'runId': runId,
       'author': author,
@@ -89,21 +63,16 @@ class CoachLiveBeaconRemoteDatasource {
     }
   }
 
+  // Os 8 eventos canônicos da migração s6-ai (LiveTurnSchema do server).
   static const _serverEventAllowlist = <String>{
-    'pre_run',
     'start',
+    'half_km',
     'km_reached',
-    'km_split',
-    'pace_alert',
     'bpm_alert',
-    'motivation',
+    'pace_alert',
+    'goal_reached',
     'finish',
-    'question',
-    'preview',
-    'segment_start',
-    'segment_pace_off',
-    'segment_end',
-    'push_to_talk',
+    'no_movement',
   };
 
   static bool _isServerAllowedEvent(String e) =>

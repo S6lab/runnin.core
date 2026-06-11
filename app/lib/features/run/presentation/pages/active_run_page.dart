@@ -360,11 +360,8 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
                     right: 16,
                     child: _CoachLiveBanner(message: state.coachLiveMessage!),
                   ),
-                // Push-to-talk do coach (mic) oculto na UI. A infra
-                // (_CoachTalkButton + events CoachTalkStart/Stop + startTalk/
-                // stopTalk na sessão Live) fica dormindo pra reativação futura
-                // — reinserir este Positioned com const _CoachTalkButton().
-                // Cues automáticos do coach por km seguem funcionando.
+                // Push-to-talk REMOVIDO (migração s6-ai): sessão Live é
+                // unidirecional (telemetria → fala). Cues automáticos seguem.
                 // Topo: voltar (idle) + linha de chips em Wrap.
                 // GPS, COACH, MÚSICA, BPM. Tudo passível de toque (futuro).
                 Positioned(
@@ -1240,76 +1237,6 @@ class _CoachLiveBanner extends StatelessWidget {
         ],
       ),
     ).animate().fadeIn(duration: 220.ms);
-  }
-}
-
-/// Botão push-to-talk "Coach": segure pra abrir a janela de fala (streama o
-/// mic pra sessão Live), solte pra o coach responder. Canal bidirecional sob
-/// demanda — sem wake word, sem dependência extra.
-///
-/// OCULTO NA UI: o Positioned que renderizava este botão na tela de corrida
-/// ativa foi removido (push-to-talk desativado visualmente). A classe fica
-/// aqui dormindo pra reativação — reinserir o Positioned no build.
-// ignore: unused_element
-class _CoachTalkButton extends StatefulWidget {
-  const _CoachTalkButton();
-
-  @override
-  State<_CoachTalkButton> createState() => _CoachTalkButtonState();
-}
-
-class _CoachTalkButtonState extends State<_CoachTalkButton> {
-  bool _pressed = false;
-
-  void _start() {
-    setState(() => _pressed = true);
-    context.read<RunBloc>().add(CoachTalkStart());
-  }
-
-  void _stop() {
-    if (!_pressed) return;
-    setState(() => _pressed = false);
-    context.read<RunBloc>().add(CoachTalkStop());
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.runninPalette;
-    final type = context.runninType;
-    return GestureDetector(
-      onTapDown: (_) => _start(),
-      onTapUp: (_) => _stop(),
-      onTapCancel: _stop,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 64,
-            height: 64,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: _pressed
-                  ? palette.primary
-                  : palette.surface.withValues(alpha: 0.86),
-              border: Border.all(color: palette.primary, width: 2),
-            ),
-            child: Icon(
-              _pressed ? Icons.mic : Icons.mic_none,
-              color: _pressed ? palette.background : palette.primary,
-              size: 28,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'COACH',
-            style: type.bodyMd.copyWith(
-              fontSize: 10,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ],
-      ),
-    );
   }
 }
 
