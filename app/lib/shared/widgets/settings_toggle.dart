@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:runnin/shared/widgets/figma/figma_selection_button.dart';
+import 'package:runnin/shared/widgets/feedback_toggle.dart';
 
 class SettingsToggle extends StatefulWidget {
   final String id;
@@ -30,12 +30,17 @@ class _SettingsToggleState extends State<SettingsToggle> {
 
   @override
   Widget build(BuildContext context) {
-    return FigmaSelectionButton(
+    // FeedbackToggle (label + checkbox à direita) em vez de
+    // FigmaSelectionButton: o selection button não tem indicador de on/off
+    // — na página ALERTAS as linhas pareciam labels mortos, sem como saber
+    // o que estava ativo.
+    return FeedbackToggle(
       label: widget.label,
-      selected: _enabled,
-      onTap: () {
-        setState(() => _enabled = !_enabled);
-        widget.onToggle(_enabled);
+      feedbackKey: widget.id,
+      value: _enabled,
+      onChanged: (v) {
+        setState(() => _enabled = v);
+        widget.onToggle(v);
       },
     );
   }

@@ -57,7 +57,11 @@ class SectionHeading extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 8),
+        // flex 9 (vs 1 do Spacer): com ambos em flex 1 o label era limitado
+        // a METADE da largura e truncava ("TIPOS DE NOTIFICAÇ…",
+        // "PERSONALIDADE DO C…") mesmo com espaço de sobra na linha.
         Flexible(
+          flex: 9,
           child: Text(
             label,
             maxLines: 1,

@@ -134,7 +134,10 @@ class _CoachSettingsPageState extends State<CoachSettingsPage> {
           ),
           Expanded(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(20, 24, 20, 100),
+              // Bottom 240: a barra fixa (SALVAR + tab nav) cobre ~200px —
+              // com 100 a nota de ALERTAS POR CORRIDA ficava escondida
+              // atrás do botão mesmo com scroll no fim.
+              padding: const EdgeInsets.fromLTRB(20, 24, 20, 240),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
