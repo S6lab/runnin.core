@@ -1,0 +1,242 @@
+import WebSocket, { RawData } from 'ws';
+import { logger } from '@shared/logger/logger';
+
+// v1beta + modelo native-audio-dialog (suporte oficial BidiGenerateContent).
+// 'gemini-2.5-flash-native-audio-latest' só funciona com auth_tokens
+// (BidiGenerateContentConstrained), não com BidiGenerateContent direto.
+// 'gemini-2.5-flash-native-audio-latest' é o equivalente pro
+// endpoint não-constrained — capturado em prod tanto v1alpha quanto
+// v1beta rejeitavam o modelo anterior.
+const GEMINI_LIVE_URL = 'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent';
+// Alinhado com create-live-ephemeral-token.use-case.ts (mesmo env var).
+// O modelo anterior 'gemini-2.0-flash-live-001' foi removido do v1beta —
+// Google rejeitou com "models/gemini-2.0-flash-live-001 is not found for
+// API version v1beta, or is not supported for bidiGenerateContent".
+// 'gemini-2.5-flash-native-audio-latest' está ativo em v1alpha (auth_tokens)
+// E em v1beta (bidi WebSocket). Override via GEMINI_LIVE_MODEL env.
+// Deve bater com o modelo que o app usa pra conectar na Live API
+// (live_coach_voice_service.dart `_model`) — o token efêmero é vinculado ao
+// modelo; descasar gera áudio sobreposto/estranho no início da corrida.
+// Histórico das migrações:
+//   gemini-2.0-flash-live-001 → removido do v1beta (404)
+//   gemini-2.5-flash-native-audio-latest-preview-12-2025 → preview expirou,
+//     começou a retornar 1008 "Operation is not implemented" em
+//     Live sessions; visível no log do app como close imediato após
+//     coach.live.open_ok
+// GA atual: 'gemini-2.5-flash-native-audio-latest' (registry em
+// admin-registries.ts). Override via GEMINI_LIVE_MODEL pra testar
+// previews futuras sem mexer no código.
+const DEFAULT_MODEL = process.env['GEMINI_LIVE_MODEL']?.trim()
+  || 'models/gemini-2.5-flash-native-audio-latest';
+
+// Gate do open(): se o Gemini não responder setupComplete dentro dessa
+// janela, a Promise rejeita em vez de pendurar o caller pra sempre.
+const SETUP_TIMEOUT_MS = 10_000;
+
+export interface GeminiLiveConfig {
+  model?: string;
+  systemInstruction?: string;
+  /** voice = 'Puck' | 'Charon' | 'Kore' | 'Fenrir' | 'Aoede' (default voices Gemini Live) */
+  voice?: string;
+  /** "AUDIO" | "TEXT" — TEXT mode útil pra debug sem áudio */
+  responseModalities?: Array<'AUDIO' | 'TEXT'>;
+}
+
+/**
+ * Cliente WebSocket pro Gemini Live API (audio-to-audio bidirecional).
+ *
+ * Uso típico: chamado pelo CoachLiveSessionController que faz proxy entre
+ * Flutter (browser WebSocket) e Gemini Live (server-side WebSocket).
+ * Mantém API key segura no servidor.
+ *
+ * Fluxo:
+ *  1. open() — abre WS, envia setup, aguarda SetupComplete
+ *  2. sendAudio() / sendText() — envia chunks do user
+ *  3. onMessage callback recebe deltas do modelo (audio ou text)
+ *  4. close() — encerra
+ */
+export class GeminiLiveSession {
+  private ws: WebSocket | null = null;
+  private apiKey: string;
+  private config: Required<Pick<GeminiLiveConfig, 'model' | 'responseModalities'>> & GeminiLiveConfig;
+  private onMessage: (msg: GeminiLiveMessage) => void;
+  private onClose: ((code: number, reason: string) => void) | undefined;
+  private setupComplete = false;
+
+  constructor(args: {
+    config: GeminiLiveConfig;
+    onMessage: (msg: GeminiLiveMessage) => void;
+    onClose?: (code: number, reason: string) => void;
+  }) {
+    this.apiKey = (process.env.GEMINI_API_KEY ?? '').trim();
+    this.config = {
+      model: args.config.model ?? DEFAULT_MODEL,
+      responseModalities: args.config.responseModalities ?? ['AUDIO'],
+      systemInstruction: args.config.systemInstruction,
+      voice: args.config.voice,
+    };
+    this.onMessage = args.onMessage;
+    this.onClose = args.onClose;
+  }
+
+  open(): Promise<void> {
+    if (!this.apiKey) throw new Error('GEMINI_API_KEY not configured');
+
+    return new Promise((resolve, reject) => {
+      const url = `${GEMINI_LIVE_URL}?key=${this.apiKey}`;
+      this.ws = new WebSocket(url);
+
+      // A Promise só pode assentar uma vez. Sem isso, um close logo após o
+      // setupComplete tentaria reject de uma Promise já resolvida (no-op,
+      // mas mascara bugs) — e, pior, sem timeout um WS que fecha antes do
+      // setupComplete SEM emitir 'error' deixava open() pendurado pra
+      // sempre (caller travado num await infinito).
+      let settled = false;
+      const settle = (fn: () => void): void => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(setupTimer);
+        fn();
+      };
+      const setupTimer = setTimeout(() => {
+        settle(() => {
+          logger.error('gemini.live.setup_timeout', { timeoutMs: SETUP_TIMEOUT_MS });
+          try { this.ws?.close(); } catch { /* já fechando */ }
+          reject(new Error(`Gemini Live setup timeout after ${SETUP_TIMEOUT_MS}ms`));
+        });
+      }, SETUP_TIMEOUT_MS);
+
+      this.ws.on('open', () => {
+        const setupMsg: Record<string, unknown> = {
+          setup: {
+            model: this.config.model,
+            generationConfig: {
+              responseModalities: this.config.responseModalities,
+              ...(this.config.voice && this.config.responseModalities?.includes('AUDIO')
+                ? {
+                    speechConfig: {
+                      voiceConfig: { prebuiltVoiceConfig: { voiceName: this.config.voice } },
+                    },
+                  }
+                : {}),
+            },
+            // Transcript do ÁUDIO de saída (texto == voz, no idioma falado).
+            // Sem isso, parts.text do native-audio vem como "pensamento" em
+            // inglês — banner do app mostrava EN enquanto a voz era PT.
+            outputAudioTranscription: {},
+            ...(this.config.systemInstruction
+              ? { systemInstruction: { parts: [{ text: this.config.systemInstruction }] } }
+              : {}),
+          },
+        };
+        this.ws!.send(JSON.stringify(setupMsg));
+      });
+
+      this.ws.on('message', (data: RawData) => {
+        try {
+          const text = data.toString('utf-8');
+          const parsed = JSON.parse(text) as GeminiLiveServerEnvelope;
+          if (!this.setupComplete && parsed.setupComplete) {
+            this.setupComplete = true;
+            settle(resolve);
+            return;
+          }
+          if (parsed.serverContent) {
+            this.onMessage({ kind: 'content', serverContent: parsed.serverContent });
+          } else if (parsed.toolCall) {
+            this.onMessage({ kind: 'toolCall', toolCall: parsed.toolCall });
+          }
+        } catch (err) {
+          logger.warn('gemini.live.message_parse_failed', { err: String(err) });
+        }
+      });
+
+      this.ws.on('error', (err) => {
+        logger.error('gemini.live.ws_error', { err: String(err) });
+        if (!this.setupComplete) settle(() => reject(err));
+      });
+
+      this.ws.on('close', (code, reason) => {
+        if (!this.setupComplete) {
+          settle(() => reject(new Error(
+            `Gemini Live closed before setupComplete (code=${code})`,
+          )));
+        }
+        this.onClose?.(code, reason.toString('utf-8'));
+      });
+    });
+  }
+
+  /** Envia chunk PCM 16kHz 16-bit mono. data = base64. */
+  sendAudio(data: string, mimeType = 'audio/pcm;rate=16000'): void {
+    this.sendRealtime({ mimeType, data });
+  }
+
+  sendText(text: string): void {
+    this.ws?.send(JSON.stringify({
+      clientContent: {
+        turns: [{ role: 'user', parts: [{ text }] }],
+        turnComplete: true,
+      },
+    }));
+  }
+
+  private sendRealtime(media: { mimeType: string; data: string }): void {
+    this.ws?.send(JSON.stringify({ realtimeInput: { mediaChunks: [media] } }));
+  }
+
+  /**
+   * SPIKE (PR3): tenta cortar a fala em curso enviando um clientContent
+   * com turns vazios + turnComplete. Comportamento NÃO documentado pela
+   * API — se se provar não confiável no smoke de staging, o fallback do
+   * bridge (parar de encaminhar áudio + falar o P0 após o turnComplete)
+   * assume como mecanismo único de preempção.
+   */
+  interruptCurrentTurn(): void {
+    this.ws?.send(JSON.stringify({
+      clientContent: { turns: [], turnComplete: true },
+    }));
+  }
+
+  get isOpen(): boolean {
+    return this.ws !== null && this.setupComplete;
+  }
+
+  close(): void {
+    this.ws?.close();
+    this.ws = null;
+  }
+}
+
+// ───────────────────────────── Tipos ─────────────────────────────
+
+interface GeminiLiveServerEnvelope {
+  setupComplete?: Record<string, unknown>;
+  serverContent?: GeminiServerContent;
+  toolCall?: GeminiToolCall;
+}
+
+export interface GeminiServerContent {
+  modelTurn?: {
+    parts: Array<{
+      text?: string;
+      inlineData?: { mimeType: string; data: string };
+    }>;
+  };
+  /** Transcript do áudio de saída (texto == voz). Requer
+   *  outputAudioTranscription no setup. */
+  outputTranscription?: { text?: string };
+  turnComplete?: boolean;
+  /** Native-audio frequentemente sinaliza o fim da geração por aqui (o
+   *  turnComplete pode atrasar/no-show) — tratar como fim de turno. */
+  generationComplete?: boolean;
+  interrupted?: boolean;
+}
+
+export interface GeminiToolCall {
+  functionCalls?: Array<{ name: string; args: Record<string, unknown>; id?: string }>;
+}
+
+export type GeminiLiveMessage =
+  | { kind: 'content'; serverContent: GeminiServerContent }
+  | { kind: 'toolCall'; toolCall: GeminiToolCall };
