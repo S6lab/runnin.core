@@ -163,36 +163,45 @@ class _CoachSettingsPageState extends State<CoachSettingsPage> {
                   const SizedBox(height: 12),
                   FigmaSelectionButton(
                     label: 'A cada km',
+                    description:
+                        'Fecha cada km com pace, tempo e FC + check-in a cada 500m',
                     selected: _frequency == 'per_km',
                     onTap: () => setState(() => _frequency = 'per_km'),
                   ),
                   const SizedBox(height: AppSpacing.sm),
                   FigmaSelectionButton(
                     label: 'A cada 2km',
+                    description: 'Metade das falas — só nos km pares',
                     selected: _frequency == 'per_2km',
                     onTap: () => setState(() => _frequency = 'per_2km'),
                   ),
                   const SizedBox(height: AppSpacing.sm),
                   FigmaSelectionButton(
-                    label: 'Só em alertas (pace/BPM)',
+                    label: 'Só alertas críticos',
+                    description:
+                        'Fala apenas FC fora da zona, pace fora do alvo, meta e fim',
                     selected: _frequency == 'alerts_only',
                     onTap: () => setState(() => _frequency = 'alerts_only'),
                   ),
                   const SizedBox(height: AppSpacing.sm),
                   FigmaSelectionButton(
                     label: 'Silencioso',
+                    description:
+                        'Coach não fala durante a corrida — o resumo final sempre toca',
                     selected: _frequency == 'silent',
                     onTap: () => setState(() => _frequency = 'silent'),
                   ),
 
-                  // Sub-controle do modo silencioso: permitir furo pra
-                  // alertas críticos (pace fora do alvo, fim de run).
-                  // Aparece só quando frequency=silent — nas outras a flag
-                  // não tem efeito e a UI sumir reduz ruído.
+                  // Sub-controle do modo silencioso. Críticos no s6-ai =
+                  // bpm_alert + pace_alert (CRITICAL_EVENTS); o finish fura
+                  // o silêncio SEMPRE, independente deste toggle — o copy
+                  // antigo "(pace fora do alvo / fim)" omitia FC e citava
+                  // fim errado.
                   if (_frequency == 'silent') ...[
                     const SizedBox(height: AppSpacing.sm),
                     FeedbackToggle(
-                      label: 'Permitir alertas críticos (pace fora do alvo / fim)',
+                      label:
+                          'Furar o silêncio em alertas críticos: FC fora da zona e pace fora do alvo',
                       feedbackKey: 'allow_critical_in_silent',
                       value: _allowCriticalInSilent,
                       onChanged: (v) => setState(() => _allowCriticalInSilent = v),
