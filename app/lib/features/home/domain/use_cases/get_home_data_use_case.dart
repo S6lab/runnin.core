@@ -192,7 +192,13 @@ class GetHomeDataUseCase {
       (sum, run) => sum + (run.distanceM / 1000),
     );
     final plannedSessions = currentPlanWeek?.sessions.length ?? 0;
-    final completedSessions = weekDays.where((day) => day.isDone).length;
+    // Conta SÓ sessões do plano executadas. O isDone dos weekDays inclui o
+    // fallback "dia sem sessão + corrida livre" (correto pros dots do
+    // calendário), mas no contador inflava o X/Y: user com corridas livres
+    // em dias de descanso batia completedSessions >= plannedSessions e a
+    // recomendação dizia "semana completa" com sessões ainda pendentes.
+    final completedSessions =
+        weekDays.where((day) => day.session?.isExecuted ?? false).length;
 
     return HomeData(
       profile: profile,

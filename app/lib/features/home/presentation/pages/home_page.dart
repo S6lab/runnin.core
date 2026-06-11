@@ -1997,6 +1997,17 @@ String _weeklyRecommendation(HomeData data) {
   if (data.completedSessions >= data.plannedSessions) {
     return 'Semana completa. Priorize recuperacao, hidratacao e sono antes do proximo bloco.';
   }
+  // Volume estourou mas restam sessões do plano — caso real do user:
+  // corridas livres somam km, mas as sessões pendentes têm propósito
+  // próprio (qualidade/estrutura), não são só volume.
+  final planKm = _plannedWeeklyDistance(data);
+  final remaining = data.plannedSessions - data.completedSessions;
+  if (planKm > 0 && data.weeklyDistanceKm >= planKm) {
+    return 'Volume da semana ja superou o planejado '
+        '(${data.weeklyDistanceKm.toStringAsFixed(1)} de ${planKm.toStringAsFixed(1)} km), '
+        'mas ainda restam $remaining ${remaining == 1 ? 'sessao' : 'sessoes'} do plano. '
+        'Se for executa-las, va em intensidade leve — a carga extra ja conta no checkpoint semanal.';
+  }
   if (data.todaySession != null) {
     return 'Ha treino planejado hoje. Mantenha ritmo controlado e ajuste por sensacao se houver fadiga acumulada.';
   }
