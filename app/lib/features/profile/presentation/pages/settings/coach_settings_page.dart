@@ -5,7 +5,6 @@ import 'package:runnin/core/network/api_client.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
-import 'package:runnin/shared/widgets/feedback_toggle.dart';
 import 'package:runnin/shared/widgets/figma/figma_selection_button.dart';
 import 'package:runnin/shared/widgets/figma/figma_top_nav.dart';
 import 'package:runnin/shared/widgets/section_heading.dart';
@@ -31,6 +30,17 @@ class _CoachSettingsPageState extends State<CoachSettingsPage> {
   bool _allowCriticalInSilent = true;
 
   bool _saving = false;
+
+  /// Mapeamento dos 3 modos da UI pros valores persistidos. Valores
+  /// legados (per_2km/alerts_only de users antigos) caem no modo mais
+  /// próximo até o próximo SALVAR normalizar.
+  bool get _isModeTudo =>
+      _frequency == 'per_km' || _frequency == 'per_2km';
+  bool get _isModeInicioFim =>
+      _frequency == 'silent' && !_allowCriticalInSilent;
+  bool get _isModeCriticos =>
+      _frequency == 'alerts_only' ||
+      (_frequency == 'silent' && _allowCriticalInSilent);
 
   final _remote = UserRemoteDatasource();
 
@@ -158,55 +168,45 @@ class _CoachSettingsPageState extends State<CoachSettingsPage> {
 
                   const SizedBox(height: AppSpacing.xxl),
 
-                  // §2 Frequência
-                  const SectionHeading(label: 'FREQUÊNCIA DURANTE CORRIDA'),
+                  // §2 Modo de fala durante a corrida
+                  const SectionHeading(label: 'COACH DURANTE A CORRIDA'),
                   const SizedBox(height: 12),
+                  // 3 modos (decisão do produto: 4 frequências + sub-toggle
+                  // eram regras demais pra gerenciar). Mapeiam pros valores
+                  // que o s6-ai já entende — TUDO=per_km; INÍCIO E FIM=
+                  // silent sem críticos (start/finish furam o silent);
+                  // SÓ CRÍTICOS=silent com críticos.
                   FigmaSelectionButton(
-                    label: 'A cada km',
+                    label: 'Tudo',
                     description:
-                        'Fecha cada km com pace, tempo e FC + check-in a cada 500m',
-                    selected: _frequency == 'per_km',
-                    onTap: () => setState(() => _frequency = 'per_km'),
+                        'Saudação, fechamento de cada km, check-ins, alertas de FC/pace, meta e resumo final',
+                    selected: _isModeTudo,
+                    onTap: () => setState(() {
+                      _frequency = 'per_km';
+                      _allowCriticalInSilent = true;
+                    }),
                   ),
                   const SizedBox(height: AppSpacing.sm),
                   FigmaSelectionButton(
-                    label: 'A cada 2km',
-                    description: 'Metade das falas — só nos km pares',
-                    selected: _frequency == 'per_2km',
-                    onTap: () => setState(() => _frequency = 'per_2km'),
+                    label: 'Início e fim',
+                    description: 'Só a saudação e o resumo final da corrida',
+                    selected: _isModeInicioFim,
+                    onTap: () => setState(() {
+                      _frequency = 'silent';
+                      _allowCriticalInSilent = false;
+                    }),
                   ),
                   const SizedBox(height: AppSpacing.sm),
                   FigmaSelectionButton(
                     label: 'Só alertas críticos',
                     description:
-                        'Fala apenas FC fora da zona, pace fora do alvo, meta e fim',
-                    selected: _frequency == 'alerts_only',
-                    onTap: () => setState(() => _frequency = 'alerts_only'),
+                        'Início e fim + avisos de FC fora da zona e pace fora do alvo',
+                    selected: _isModeCriticos,
+                    onTap: () => setState(() {
+                      _frequency = 'silent';
+                      _allowCriticalInSilent = true;
+                    }),
                   ),
-                  const SizedBox(height: AppSpacing.sm),
-                  FigmaSelectionButton(
-                    label: 'Silencioso',
-                    description:
-                        'Coach não fala durante a corrida — o resumo final sempre toca',
-                    selected: _frequency == 'silent',
-                    onTap: () => setState(() => _frequency = 'silent'),
-                  ),
-
-                  // Sub-controle do modo silencioso. Críticos no s6-ai =
-                  // bpm_alert + pace_alert (CRITICAL_EVENTS); o finish fura
-                  // o silêncio SEMPRE, independente deste toggle — o copy
-                  // antigo "(pace fora do alvo / fim)" omitia FC e citava
-                  // fim errado.
-                  if (_frequency == 'silent') ...[
-                    const SizedBox(height: AppSpacing.sm),
-                    FeedbackToggle(
-                      label:
-                          'Furar o silêncio em alertas críticos: FC fora da zona e pace fora do alvo',
-                      feedbackKey: 'allow_critical_in_silent',
-                      value: _allowCriticalInSilent,
-                      onChanged: (v) => setState(() => _allowCriticalInSilent = v),
-                    ),
-                  ],
 
                   const SizedBox(height: AppSpacing.xxl),
 

@@ -20,7 +20,9 @@ export function applyPrefsGate(
   const prefs = session.context.prefs;
 
   if (prefs.freq === 'silent') {
-    if (event === 'finish') return null;
+    // start e finish furam o silent SEMPRE: silent+critical=false vira o
+    // modo "início e fim" da UI (só saudação e resumo final).
+    if (event === 'start' || event === 'finish') return null;
     if (prefs.allowCriticalAlertsInSilent && CRITICAL_EVENTS.has(event)) return null;
     return 'silent';
   }
