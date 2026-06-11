@@ -987,7 +987,7 @@ class _CoachAiWeeklySummary extends StatelessWidget {
                 _CoachSummaryBlock(
                   title: 'PROGRESSO',
                   body: hasPlan
-                      ? '${data.completedSessions} de ${data.plannedSessions} sessoes concluidas. Volume registrado: ${data.weeklyDistanceKm.toStringAsFixed(1)} de ${planKm.toStringAsFixed(1)} km planejados.'
+                      ? _progressBody(data, planKm)
                       : 'Sem plano semanal ativo. Gere um plano para o coach acompanhar sessoes, descanso e volume.',
                 ),
                 const SizedBox(height: 20),
@@ -1020,6 +1020,32 @@ class _CoachAiWeeklySummary extends StatelessWidget {
       ],
     );
   }
+}
+
+/// Texto do bloco PROGRESSO. Reconhece corridas EXTRAS além do plano em
+/// vez de truncar a realidade: "2 de 2 sessões + 2 corridas extras" conta
+/// a história inteira (user reportou que correr mais que o planejado
+/// sumia do resumo).
+String _progressBody(HomeData data, double planKm) {
+  final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
+  final monday = today.subtract(Duration(days: today.weekday - 1));
+  final weekRuns = data.completedRuns.where((r) {
+    final d = DateTime.tryParse(r.createdAt)?.toLocal();
+    return d != null && !d.isBefore(monday);
+  }).length;
+  final extras = (weekRuns - data.completedSessions).clamp(0, 99);
+  final sessoes =
+      '${data.completedSessions} de ${data.plannedSessions} sessoes do plano concluidas';
+  final extraTxt = extras > 0
+      ? ' + $extras ${extras == 1 ? 'corrida extra' : 'corridas extras'}'
+      : '';
+  final acima = planKm > 0 && data.weeklyDistanceKm > planKm
+      ? ' (acima do planejado)'
+      : '';
+  return '$sessoes$extraTxt. Volume registrado: '
+      '${data.weeklyDistanceKm.toStringAsFixed(1)} de '
+      '${planKm.toStringAsFixed(1)} km$acima.';
 }
 
 class _CoachSummaryBlock extends StatelessWidget {
