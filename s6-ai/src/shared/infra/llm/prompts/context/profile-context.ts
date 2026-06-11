@@ -98,6 +98,9 @@ export interface BiometricContextInput {
     totalSteps: number | null;
     avgHrv: number | null;
     latestWeight: number | null;
+    avgSpo2?: number | null;
+    avgRespiratoryRate?: number | null;
+    latestBodyFatPct?: number | null;
     sampleCount: number;
   } | null;
 }
@@ -119,6 +122,13 @@ export function formatBiometricContext(args: BiometricContextInput): string {
     if (summary.avgSleepHours) lines.push(`- Sono médio ${w}d: ${summary.avgSleepHours.toFixed(1)} h/noite`);
     if (summary.totalSteps) lines.push(`- Passos ${w}d: ${summary.totalSteps.toFixed(0)}`);
     if (summary.latestWeight) lines.push(`- Peso atual: ${summary.latestWeight.toFixed(1)} kg`);
+    if (summary.avgSpo2) lines.push(`- SpO2 média ${w}d: ${summary.avgSpo2.toFixed(1)}%`);
+    if (summary.avgRespiratoryRate) {
+      lines.push(`- Freq. respiratória média ${w}d: ${summary.avgRespiratoryRate.toFixed(1)} rpm`);
+    }
+    if (summary.latestBodyFatPct) {
+      lines.push(`- Gordura corporal: ${summary.latestBodyFatPct.toFixed(1)}%`);
+    }
     lines.push(`- Amostras recebidas no período: ${summary.sampleCount}`);
   }
 
@@ -133,6 +143,11 @@ export function formatBiometricContext(args: BiometricContextInput): string {
   if (summary?.avgHrv) {
     lines.push(
       `- HRV ${summary.avgHrv.toFixed(0)}ms: se vier deprimida em revisões semanais (queda >15% vs baseline), reduzir intensidade ou adicionar deload. Use como input nos checkpoints.`,
+    );
+  }
+  if (summary?.avgSpo2 && summary.avgSpo2 < 95) {
+    lines.push(
+      `- SpO2 média ${summary.avgSpo2.toFixed(1)}% abaixo do esperado (~95%+) — possível doença/overtraining/altitude. Comece conservador e cite o dado na rationale.`,
     );
   }
   if (summary?.avgSleepHours) {

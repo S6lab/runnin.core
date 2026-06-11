@@ -62,9 +62,13 @@ export function formatEventTurn(
   const avgPace = data.kmDone > 0.05 && data.elapsedS > 0
     ? formatPaceSpoken(data.elapsedS / 60 / data.kmDone)
     : null;
-  const totals = `No total já são ${dist}km em ${formatElapsed(data.elapsedS)}${
-    avgPace ? `, pace médio ${avgPace}/km` : ''
-  }.`;
+  // Indoor: sem GPS o kmDone fica 0 — totals vira só tempo pro LLM não
+  // narrar "0.00km" na esteira.
+  const totals = data.indoor === true
+    ? `Já se passaram ${formatElapsed(data.elapsedS)} de corrida na esteira.`
+    : `No total já são ${dist}km em ${formatElapsed(data.elapsedS)}${
+        avgPace ? `, pace médio ${avgPace}/km` : ''
+      }.`;
   // Bandeira de idle (Watch 0 passos ~1min): sem isso o LLM alucinava pace
   // de drift GPS ("5:42" parado — TF 75).
   const idlePrefix = data.idle === true
@@ -81,7 +85,9 @@ export function formatEventTurn(
 
   switch (event) {
     case 'start':
-      return 'Oi coach! Vou começar minha corrida agora.';
+      return data.indoor === true
+        ? 'Oi coach! Vou começar minha corrida agora, na esteira. [CORRIDA INDOOR: sem GPS — não mencione pace nem distância durante a corrida; foque em tempo decorrido, frequência cardíaca e ritmo percebido.]'
+        : 'Oi coach! Vou começar minha corrida agora.';
     case 'km_reached': {
       const m = [
         data.currentPace ? `pace deste km ${data.currentPace}/km` : null,

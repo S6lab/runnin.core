@@ -70,6 +70,9 @@ export const TelemetrySnapshotSchema = z.object({
   /** Atleta parado (~1min sem passos no Watch). O turn ganha bandeira de
    *  estado pro LLM não alucinar pace de drift GPS (lição TF 75). */
   idle: z.boolean().nullish(),
+  /** Corrida em esteira (indoor): sem GPS, distância/pace indisponíveis
+   *  durante a corrida. LLM deve focar em tempo + FC. */
+  indoor: z.boolean().nullish(),
 });
 
 export type TelemetrySnapshot = z.infer<typeof TelemetrySnapshotSchema>;
