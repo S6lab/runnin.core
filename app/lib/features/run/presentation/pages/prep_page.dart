@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import 'package:runnin/core/audio/coach_audio_player.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/warmup/warmup_exercises.dart';
@@ -106,6 +107,24 @@ class _PrepViewState extends State<_PrepView> {
   /// Alertas que dependem de GPS — não se aplicam na esteira (indoor),
   /// onde o coach faz check-ins por tempo.
   static const _gpsOnlyAlerts = {'kmAlert', 'paceOutOfRange'};
+
+  /// Modo do coach escolhido em Perfil → Ajustes → Coach (cache Hive que a
+  /// própria página de ajustes mantém em sync com o profile). Os toggles
+  /// daqui compõem com o gate do s6-ai como E lógico — mostrar um toggle
+  /// que o modo descarta seria opção não-factível na UI.
+  ///   'tudo'       → todos os toggles valem
+  ///   'criticos'   → km é descartado pelo s6-ai; só pace/FC valem
+  ///   'inicio_fim' → tudo descartado; nenhum toggle vale
+  String get _coachMode {
+    if (!Hive.isBoxOpen('runnin_settings')) return 'tudo';
+    final box = Hive.box<dynamic>('runnin_settings');
+    final f = box.get('coach_message_frequency', defaultValue: 'per_km');
+    final crit =
+        box.get('coach_allow_critical_in_silent', defaultValue: true) == true;
+    if (f == 'silent') return crit ? 'criticos' : 'inicio_fim';
+    if (f == 'alerts_only') return 'criticos';
+    return 'tudo';
+  }
 
   @override
   void initState() {
@@ -438,31 +457,57 @@ class _PrepViewState extends State<_PrepView> {
           style: type.bodyXs.copyWith(color: palette.muted),
         ),
         const SizedBox(height: 14),
-        // Indoor: alertas de GPS (km/pace) não se aplicam — só FC fica
-        // togglável, e o check-in vira por tempo (sempre-on).
-        if (_indoorMode) ...[
+        // Só toggles FACTÍVEIS aparecem: o modo do coach (Perfil → Ajustes
+        // → Coach) gateia no s6-ai DEPOIS destes toggles — exibir um toggle
+        // que o modo descarta seria opção que não executa nada.
+        //   inicio_fim → nenhum toggle (coach só fala na largada e no fim)
+        //   criticos   → só pace/FC (anúncio de km é descartado)
+        //   tudo       → todos
+        // Indoor remove os de GPS (km/pace) em qualquer modo.
+        if (_coachMode == 'inicio_fim')
           Padding(
             padding: const EdgeInsets.only(bottom: 14),
             child: Text(
-              'Na esteira o coach faz check-ins por tempo (a cada ~4min) com '
-              'tempo decorrido e FC. Alertas de km e pace dependem de GPS e '
-              'ficam desativados.',
+              'Seu coach está no modo "Início e fim" — ele fala só na '
+              'largada e no resumo final, sem alertas durante a corrida. '
+              'Pra reativar alertas, mude o modo em Perfil → Ajustes → Coach.',
               style: type.bodyXs.copyWith(color: palette.muted, height: 1.5),
             ),
-          ),
-        ],
-        ..._alerts.entries
-            .where((e) =>
-                _alertLabels.containsKey(e.key) &&
-                (!_indoorMode || !_gpsOnlyAlerts.contains(e.key)))
-            .map(
-              (e) => _AlertToggleRow(
-                label: _alertLabels[e.key] ?? e.key,
-                description: _alertDescriptions[e.key],
-                value: e.value,
-                onChanged: (v) => _toggleAlert(e.key, v),
+          )
+        else ...[
+          if (_coachMode == 'criticos')
+            Padding(
+              padding: const EdgeInsets.only(bottom: 14),
+              child: Text(
+                'Coach no modo "Só alertas críticos" — anúncios de km ficam '
+                'desativados. Mude em Perfil → Ajustes → Coach.',
+                style: type.bodyXs.copyWith(color: palette.muted, height: 1.5),
               ),
             ),
+          if (_indoorMode)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 14),
+              child: Text(
+                'Na esteira o coach faz check-ins por tempo (a cada ~4min) com '
+                'tempo decorrido e FC. Alertas de km e pace dependem de GPS e '
+                'ficam desativados.',
+                style: type.bodyXs.copyWith(color: palette.muted, height: 1.5),
+              ),
+            ),
+          ..._alerts.entries
+              .where((e) =>
+                  _alertLabels.containsKey(e.key) &&
+                  (!_indoorMode || !_gpsOnlyAlerts.contains(e.key)) &&
+                  (_coachMode != 'criticos' || e.key != 'kmAlert'))
+              .map(
+                (e) => _AlertToggleRow(
+                  label: _alertLabels[e.key] ?? e.key,
+                  description: _alertDescriptions[e.key],
+                  value: e.value,
+                  onChanged: (v) => _toggleAlert(e.key, v),
+                ),
+              ),
+        ],
         const SizedBox(height: 8),
         Align(
           alignment: Alignment.centerRight,
