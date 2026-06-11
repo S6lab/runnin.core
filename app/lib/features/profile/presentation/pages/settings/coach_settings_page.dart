@@ -13,7 +13,6 @@ import 'package:runnin/shared/widgets/section_heading.dart';
 const _hiveBox = 'runnin_settings';
 const _hiveKeyPersonality = 'coach_personality';
 const _hiveKeyFrequency = 'coach_message_frequency';
-const _hiveKeyFeedback = 'coach_feedback_enabled';
 const _hiveKeyAllowCriticalInSilent = 'coach_allow_critical_in_silent';
 
 class CoachSettingsPage extends StatefulWidget {
@@ -30,14 +29,6 @@ class _CoachSettingsPageState extends State<CoachSettingsPage> {
   // o silêncio. Default true (silêncio é pra ruído, não pra risco).
   // UI esconde toggle se frequency != silent — sem efeito nas outras.
   bool _allowCriticalInSilent = true;
-  Map<String, bool> _feedback = {
-    'pre_training': true,
-    'pace_alerts': true,
-    'bpm_alerts': true,
-    'live_splits': true,
-    'post_training': true,
-    'daily_notifications': true,
-  };
 
   bool _saving = false;
 
@@ -57,12 +48,6 @@ class _CoachSettingsPageState extends State<CoachSettingsPage> {
       _personality = box.get(_hiveKeyPersonality, defaultValue: 'motivador') as String;
       _frequency = box.get(_hiveKeyFrequency, defaultValue: 'per_km') as String;
       _allowCriticalInSilent = box.get(_hiveKeyAllowCriticalInSilent, defaultValue: true) as bool;
-      final stored = box.get(_hiveKeyFeedback);
-      if (stored is Map) {
-        _feedback = Map<String, bool>.from(stored.map(
-          (k, v) => MapEntry(k.toString(), v as bool? ?? true),
-        ));
-      }
     });
   }
 
@@ -76,9 +61,6 @@ class _CoachSettingsPageState extends State<CoachSettingsPage> {
         if (profile.allowCriticalAlertsInSilent != null) {
           _allowCriticalInSilent = profile.allowCriticalAlertsInSilent!;
         }
-        if (profile.coachFeedbackEnabled != null) {
-          _feedback = Map<String, bool>.from(profile.coachFeedbackEnabled!);
-        }
       });
       // Update Hive cache with remote values
       if (Hive.isBoxOpen(_hiveBox)) {
@@ -86,7 +68,6 @@ class _CoachSettingsPageState extends State<CoachSettingsPage> {
         await box.put(_hiveKeyPersonality, _personality);
         await box.put(_hiveKeyFrequency, _frequency);
         await box.put(_hiveKeyAllowCriticalInSilent, _allowCriticalInSilent);
-        await box.put(_hiveKeyFeedback, _feedback);
       }
     } catch (_) {
       // Remote load is best-effort; Hive values remain
@@ -99,17 +80,17 @@ class _CoachSettingsPageState extends State<CoachSettingsPage> {
     await box.put(_hiveKeyPersonality, _personality);
     await box.put(_hiveKeyFrequency, _frequency);
     await box.put(_hiveKeyAllowCriticalInSilent, _allowCriticalInSilent);
-    await box.put(_hiveKeyFeedback, _feedback);
   }
 
   Future<void> _save() async {
     setState(() => _saving = true);
     try {
+      // coachFeedbackEnabled saiu do payload: o mapa nunca foi consumido
+      // por server/s6-ai (toggles decorativos removidos da UI).
       await apiClient.patch('/users/me', data: {
         'coachPersonality': _personality,
         'coachMessageFrequency': _frequency,
         'allowCriticalAlertsInSilent': _allowCriticalInSilent,
-        'coachFeedbackEnabled': _feedback,
       });
       await _saveToHive();
       if (mounted) {
@@ -217,49 +198,23 @@ class _CoachSettingsPageState extends State<CoachSettingsPage> {
 
                   const SizedBox(height: AppSpacing.xxl),
 
-                  // §4 Tipos de feedback
-                  const SectionHeading(label: 'TIPOS DE FEEDBACK ATIVOS'),
+                  // §3 — O que mais dá pra controlar (e onde). A antiga
+                  // seção "TIPOS DE FEEDBACK ATIVOS" tinha 6 toggles que o
+                  // server/s6-ai NUNCA consumiram (decorativos) e dois deles
+                  // duplicavam os alertas do pré-corrida — removida.
+                  const SectionHeading(label: 'ALERTAS POR CORRIDA'),
                   const SizedBox(height: 12),
-                  FeedbackToggle(
-                    label: 'Análise pré-treino',
-                    feedbackKey: 'pre_training',
-                    value: _feedback['pre_training'] ?? true,
-                    onChanged: (v) => setState(() => _feedback['pre_training'] = v),
-                  ),
-                  const SizedBox(height: AppSpacing.sm),
-                  FeedbackToggle(
-                    label: 'Alertas de pace',
-                    feedbackKey: 'pace_alerts',
-                    value: _feedback['pace_alerts'] ?? true,
-                    onChanged: (v) => setState(() => _feedback['pace_alerts'] = v),
-                  ),
-                  const SizedBox(height: AppSpacing.sm),
-                  FeedbackToggle(
-                    label: 'Alertas de BPM',
-                    feedbackKey: 'bpm_alerts',
-                    value: _feedback['bpm_alerts'] ?? true,
-                    onChanged: (v) => setState(() => _feedback['bpm_alerts'] = v),
-                  ),
-                  const SizedBox(height: AppSpacing.sm),
-                  FeedbackToggle(
-                    label: 'Splits ao vivo',
-                    feedbackKey: 'live_splits',
-                    value: _feedback['live_splits'] ?? true,
-                    onChanged: (v) => setState(() => _feedback['live_splits'] = v),
-                  ),
-                  const SizedBox(height: AppSpacing.sm),
-                  FeedbackToggle(
-                    label: 'Relatório pós-treino',
-                    feedbackKey: 'post_training',
-                    value: _feedback['post_training'] ?? true,
-                    onChanged: (v) => setState(() => _feedback['post_training'] = v),
-                  ),
-                  const SizedBox(height: AppSpacing.sm),
-                  FeedbackToggle(
-                    label: 'Notificações diárias',
-                    feedbackKey: 'daily_notifications',
-                    value: _feedback['daily_notifications'] ?? true,
-                    onChanged: (v) => setState(() => _feedback['daily_notifications'] = v),
+                  Text(
+                    'Anúncio por km, pace fora do alvo e FC fora da zona são '
+                    'configurados no PRÉ-CORRIDA, valem por sessão e podem ser '
+                    'salvos como padrão. Na esteira (indoor), o coach faz '
+                    'check-ins por tempo (~4min) e os alertas de GPS ficam '
+                    'desativados. Notificações diárias ficam em Ajustes → '
+                    'Alertas.',
+                    style: context.runninType.bodyXs.copyWith(
+                      color: context.runninPalette.muted,
+                      height: 1.6,
+                    ),
                   ),
                 ],
               ),
