@@ -98,6 +98,11 @@ export function formatEventTurn(
       return `${pre}Coach, fechei o km ${Math.floor(data.kmDone)}. ${m}. ${totals}`;
     }
     case 'half_km': {
+      // Indoor: check-in disparado por TEMPO (4min) — não há 500m nem pace.
+      if (data.indoor === true) {
+        const fc = data.bpm != null ? ` Minha FC tá em ${Math.round(data.bpm)}.` : '';
+        return `${pre}Coach, check-in da esteira: ${totals}${fc} Como estou indo?`;
+      }
       const last500 = data.pace500m
         ? `pace dos últimos 500m: ${data.pace500m}/km`
         : 'mais 500m completados';
@@ -116,7 +121,10 @@ export function formatEventTurn(
     case 'no_movement':
       return 'Coach, iniciei mas ainda não comecei a me mover.';
     case 'goal_reached':
-      return `${pre}Coach, bati a meta de distância da sessão. ${totals}`;
+      // Indoor o alvo é por TEMPO (durationMin da sessão), não distância.
+      return data.indoor === true
+        ? `${pre}Coach, completei o tempo alvo da sessão na esteira. ${totals}`
+        : `${pre}Coach, bati a meta de distância da sessão. ${totals}`;
     case 'finish':
       return `${pre}Coach, finalizei! Total ${dist}km em ${formatElapsed(data.elapsedS)}${
         avgPace ? `, pace médio ${avgPace}/km` : ''
