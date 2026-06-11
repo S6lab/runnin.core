@@ -214,11 +214,15 @@ export async function postDiagnoseResetJourney(req: Request, res: Response, next
     const db = getFirestore();
     const user = await auth.getUserByEmail(email);
 
-    // 1. Apaga planos
+    // 1. Apaga planos + badges (gamificação zera junto do reset de plano —
+    // jornada nova não carrega conquistas da anterior; runs preservadas
+    // re-desbloqueiam o que valer no próximo complete-run).
     const plansCol = db.collection(`users/${user.uid}/plans`);
     const plansSnap = await plansCol.get();
+    const badgesSnap = await db.collection(`users/${user.uid}/badges`).get();
     const batch = db.batch();
     plansSnap.docs.forEach(d => batch.delete(d.ref));
+    badgesSnap.docs.forEach(d => batch.delete(d.ref));
     await batch.commit();
 
     // 2. Reset onboarded + planRevisions quota
@@ -235,6 +239,7 @@ export async function postDiagnoseResetJourney(req: Request, res: Response, next
       ok: true,
       uid: user.uid,
       plansDeleted: plansSnap.size,
+      badgesDeleted: badgesSnap.size,
       onboardedReset: true,
       tokensRevoked: true,
       note: 'User precisa fechar app + abrir de novo (ou hard refresh no web) pra cair em /login.',
@@ -711,6 +716,19 @@ export async function postUserReset(req: Request, res: Response, next: NextFunct
       await commitIfNeeded();
     }
     counts.plans = plansSnap.size;
+
+    // Gamificação zera nos DOIS modos (pedido 2026-06-11): reset de plano
+    // recomeça a jornada — badges da jornada anterior viram ruído e o
+    // popup de "novo badge" re-dispara errado. Em mode=plan as runs ficam,
+    // então o próximo complete-run reavalia o catálogo e re-desbloqueia o
+    // que ainda valer (com achievedAt da corrida original).
+    const badgesSnap = await db.collection(`users/${userId}/badges`).get();
+    for (const d of badgesSnap.docs) {
+      batch.delete(d.ref);
+      opsInBatch++;
+      await commitIfNeeded();
+    }
+    counts.badges = badgesSnap.size;
 
     if (mode === 'full') {
       // Subcollections que apagamos: runs (e nested gps_points/coach_messages/

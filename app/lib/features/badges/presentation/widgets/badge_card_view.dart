@@ -123,9 +123,13 @@ class BadgeCardView extends StatelessWidget {
             Text(
               // Data da corrida que conquistou (achievedAt) — em badges
               // retroativos o unlockedAt era a data do eval em lote.
+              // Galeria (compact): só "em 10-jun-26"; card cheio mantém
+              // o prefixo "Atingido".
               locked
                   ? 'Ainda não atingido'
-                  : 'Atingido em ${_fmtDate(badge.achievedOrUnlockedAt)}',
+                  : compact
+                      ? 'em ${_fmtDate(badge.achievedOrUnlockedAt)}'
+                      : 'Atingido em ${_fmtDate(badge.achievedOrUnlockedAt)}',
               style: type.bodyXs.copyWith(
                 color: palette.muted.withValues(alpha: 0.7),
                 fontSize: compact ? 10.0 : 11.0,
@@ -269,12 +273,18 @@ class BadgeCardView extends StatelessWidget {
     return null;
   }
 
+  static const _monthsAbbr = [
+    'jan', 'fev', 'mar', 'abr', 'mai', 'jun',
+    'jul', 'ago', 'set', 'out', 'nov', 'dez',
+  ];
+
+  /// "10-jun-26" — curto pro card da galeria não disputar espaço.
   String _fmtDate(int ms) {
     if (ms <= 0) return '—';
     final d = DateTime.fromMillisecondsSinceEpoch(ms);
     final dd = d.day.toString().padLeft(2, '0');
-    final mm = d.month.toString().padLeft(2, '0');
-    return '$dd/$mm/${d.year}';
+    final yy = (d.year % 100).toString().padLeft(2, '0');
+    return '$dd-${_monthsAbbr[d.month - 1]}-$yy';
   }
 
 }
