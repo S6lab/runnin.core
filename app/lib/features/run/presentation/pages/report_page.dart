@@ -401,9 +401,11 @@ class _CoachReportBlock extends StatelessWidget {
                 child: CircularProgressIndicator(strokeWidth: 1.5, color: palette.muted),
               ),
               const SizedBox(width: 10),
-              Text(
-                'Analisando sua corrida... (até 2 minutos)',
-                style: type.bodySm,
+              Expanded(
+                child: Text(
+                  'Analisando sua corrida... (até 2 minutos)',
+                  style: type.bodySm,
+                ),
               ),
             ])
           else if (summary != null && summary!.isNotEmpty)

@@ -1690,12 +1690,10 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
       // Mantém a sessão Live aberta até o resumo terminar de tocar (premium).
       // Freemium: a fala 'finish' já saiu pelo TTS local — não precisa esperar.
       if (_isPremium) {
-        // 30s (era 15s): o resumo do finish leva ~5-8s pra gerar no s6-ai e
-        // o áudio só toca completo após o turnComplete — 15s cortava a fala
-        // no meio (smoke 2026-06-11). dispose() derruba o player na hora.
-        Timer(const Duration(seconds: 30), () {
-          unawaited(_coachSession.close());
-        });
+        // Espera o playback REAL terminar em vez de timer fixo (30s ainda
+        // cortava o fim de resumos longos — feedback do sim 2026-06-11).
+        // waitPlaybackEnd tem teto duro de 90s; close() é garantido.
+        unawaited(_coachSession.closeAfterSpeech());
       }
     } else if (_isPremium) {
       unawaited(_coachSession.close());

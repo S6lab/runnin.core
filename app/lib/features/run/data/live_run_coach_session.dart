@@ -393,6 +393,17 @@ class LiveRunCoachSession {
     } catch (_) {/* diagnóstico é best-effort */}
   }
 
+  /// Fecha a sessão DEPOIS que a fala em curso terminar de tocar. Usado no
+  /// finish: o timer fixo de 30s cortava o fim do resumo quando a geração
+  /// (~5-8s) + fala longa passavam do teto. Espera o playback real
+  /// completar (com teto duro de 90s no waitPlaybackEnd) e só então fecha.
+  Future<void> closeAfterSpeech() async {
+    try {
+      await _audio.waitPlaybackEnd();
+    } catch (_) {/* best-effort — fecha mesmo assim */}
+    await close();
+  }
+
   Future<void> close() async {
     _disposed = true;
     _intentionalClose = true;

@@ -139,6 +139,36 @@ class LiveAudioService {
     }
   }
 
+  /// Espera a fala em curso (ou prestes a começar) terminar de tocar.
+  /// Usado no finish: a geração do resumo no Gemini leva ~5-8s ANTES do
+  /// primeiro byte de áudio — [startGrace] cobre esse gap; [maxWait] é o
+  /// teto duro pra nunca segurar a sessão pra sempre.
+  Future<void> waitPlaybackEnd({
+    Duration startGrace = const Duration(seconds: 20),
+    Duration maxWait = const Duration(seconds: 90),
+  }) async {
+    final deadline = DateTime.now().add(maxWait);
+    final startDeadline = DateTime.now().add(startGrace);
+    while (_player.state != PlayerState.playing &&
+        DateTime.now().isBefore(startDeadline)) {
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+    }
+    // Loop porque a fala pode chegar em mais de um flushAndPlay — espera
+    // cada playback completar e dá um respiro pro próximo começar.
+    while (_player.state == PlayerState.playing &&
+        DateTime.now().isBefore(deadline)) {
+      try {
+        await _player.onPlayerComplete.first.timeout(
+          const Duration(seconds: 30),
+          onTimeout: () {},
+        );
+      } catch (_) {
+        break;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 600));
+    }
+  }
+
   /// Libera o ducking sobre apps de música quando a sessão do coach cai
   /// inesperadamente (close non-1000). Sem isso, a categoria `playback +
   /// duckOthers` continua segurando o volume do Spotify/Apple Music
