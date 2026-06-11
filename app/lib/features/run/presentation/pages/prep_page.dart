@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
-import 'package:hive_flutter/hive_flutter.dart';
 import 'package:runnin/core/audio/coach_audio_player.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/warmup/warmup_exercises.dart';
@@ -19,6 +18,7 @@ import 'package:runnin/features/training/domain/entities/plan.dart';
 import 'package:runnin/features/subscriptions/presentation/subscription_controller.dart';
 import 'package:runnin/features/training/presentation/widgets/execution_timeline.dart';
 import 'package:runnin/features/run/presentation/widgets/gps_permission_modal.dart';
+import 'package:runnin/shared/widgets/coach_mode_selector.dart';
 import 'package:runnin/shared/widgets/planned_vs_actual_row.dart';
 import 'package:runnin/shared/widgets/runnin_app_bar.dart';
 
@@ -108,23 +108,11 @@ class _PrepViewState extends State<_PrepView> {
   /// onde o coach faz check-ins por tempo.
   static const _gpsOnlyAlerts = {'kmAlert', 'paceOutOfRange'};
 
-  /// Modo do coach escolhido em Perfil → Ajustes → Coach (cache Hive que a
-  /// própria página de ajustes mantém em sync com o profile). Os toggles
-  /// daqui compõem com o gate do s6-ai como E lógico — mostrar um toggle
-  /// que o modo descarta seria opção não-factível na UI.
-  ///   'tudo'       → todos os toggles valem
-  ///   'criticos'   → km é descartado pelo s6-ai; só pace/FC valem
-  ///   'inicio_fim' → tudo descartado; nenhum toggle vale
-  String get _coachMode {
-    if (!Hive.isBoxOpen('runnin_settings')) return 'tudo';
-    final box = Hive.box<dynamic>('runnin_settings');
-    final f = box.get('coach_message_frequency', defaultValue: 'per_km');
-    final crit =
-        box.get('coach_allow_critical_in_silent', defaultValue: true) == true;
-    if (f == 'silent') return crit ? 'criticos' : 'inicio_fim';
-    if (f == 'alerts_only') return 'criticos';
-    return 'tudo';
-  }
+  /// Modo do coach — MESMO seletor e persistência do Perfil→Ajustes→Coach
+  /// (CoachModePrefs: Hive + PATCH profile). Mudou aqui, refletiu lá.
+  /// Os toggles abaixo só aparecem quando o modo os torna factíveis (o
+  /// gate do s6-ai roda depois deles como E lógico).
+  String _coachModeSel = CoachMode.ativo;
 
   @override
   void initState() {
@@ -134,6 +122,7 @@ class _PrepViewState extends State<_PrepView> {
     // de entrada (home button, nav bar, deep link) — antes só 1 callsite
     // checava `coachIntroSeen` e os outros pulavam o briefing.
     _redirectToCoachIntroIfFirstTime();
+    _coachModeSel = CoachModePrefs.load();
     _resolvePremiumThenLoadCue();
     _loadTodaySessionFromPlan();
     _loadExercises();
@@ -448,42 +437,30 @@ class _PrepViewState extends State<_PrepView> {
           ),
           const SizedBox(height: 32),
         ],
-        Text('ALERTAS', style: type.displaySm),
-        const SizedBox(height: 4),
-        Text(
-          isPro
-              ? 'Valem só para esta corrida (herdam do seu padrão).'
-              : 'Na versão grátis, a telemetria fala automática a cada km com pace e tempo. Os toggles abaixo ainda valem para esta corrida.',
-          style: type.bodyXs.copyWith(color: palette.muted),
-        ),
+        // Mesmo seletor do Perfil→Ajustes→Coach — persiste global na hora
+        // (Hive + PATCH profile), as duas telas ficam espelhadas.
+        Text('COACH', style: type.displaySm),
         const SizedBox(height: 14),
-        // Só toggles FACTÍVEIS aparecem: o modo do coach (Perfil → Ajustes
-        // → Coach) gateia no s6-ai DEPOIS destes toggles — exibir um toggle
-        // que o modo descarta seria opção que não executa nada.
-        //   inicio_fim → nenhum toggle (coach só fala na largada e no fim)
-        //   criticos   → só pace/FC (anúncio de km é descartado)
-        //   tudo       → todos
-        // Indoor remove os de GPS (km/pace) em qualquer modo.
-        if (_coachMode == 'inicio_fim')
-          Padding(
-            padding: const EdgeInsets.only(bottom: 14),
-            child: Text(
-              'Seu coach está no modo "Início e fim" — ele fala só na '
-              'largada e no resumo final, sem alertas durante a corrida. '
-              'Pra reativar alertas, mude o modo em Perfil → Ajustes → Coach.',
-              style: type.bodyXs.copyWith(color: palette.muted, height: 1.5),
-            ),
-          )
-        else ...[
-          if (_coachMode == 'criticos')
-            Padding(
-              padding: const EdgeInsets.only(bottom: 14),
-              child: Text(
-                'Coach no modo "Só alertas críticos" — anúncios de km ficam '
-                'desativados. Mude em Perfil → Ajustes → Coach.',
-                style: type.bodyXs.copyWith(color: palette.muted, height: 1.5),
-              ),
-            ),
+        CoachModeSelector(
+          value: _coachModeSel,
+          onChanged: (m) {
+            setState(() => _coachModeSel = m);
+            unawaited(CoachModePrefs.save(m));
+          },
+        ),
+        // Toggles finos só no modo ATIVO — nos outros modos o s6-ai
+        // descarta os eventos e os toggles seriam opções não-factíveis.
+        if (_coachModeSel == CoachMode.ativo) ...[
+          const SizedBox(height: 32),
+          Text('ALERTAS', style: type.displaySm),
+          const SizedBox(height: 4),
+          Text(
+            isPro
+                ? 'Valem só para esta corrida (herdam do seu padrão).'
+                : 'Na versão grátis, a telemetria fala automática a cada km com pace e tempo. Os toggles abaixo ainda valem para esta corrida.',
+            style: type.bodyXs.copyWith(color: palette.muted),
+          ),
+          const SizedBox(height: 14),
           if (_indoorMode)
             Padding(
               padding: const EdgeInsets.only(bottom: 14),
@@ -497,8 +474,7 @@ class _PrepViewState extends State<_PrepView> {
           ..._alerts.entries
               .where((e) =>
                   _alertLabels.containsKey(e.key) &&
-                  (!_indoorMode || !_gpsOnlyAlerts.contains(e.key)) &&
-                  (_coachMode != 'criticos' || e.key != 'kmAlert'))
+                  (!_indoorMode || !_gpsOnlyAlerts.contains(e.key)))
               .map(
                 (e) => _AlertToggleRow(
                   label: _alertLabels[e.key] ?? e.key,
@@ -507,15 +483,15 @@ class _PrepViewState extends State<_PrepView> {
                   onChanged: (v) => _toggleAlert(e.key, v),
                 ),
               ),
-        ],
-        const SizedBox(height: 8),
-        Align(
-          alignment: Alignment.centerRight,
-          child: TextButton(
-            onPressed: _saveAlertsAsDefault,
-            child: const Text('SALVAR COMO PADRÃO'),
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(
+              onPressed: _saveAlertsAsDefault,
+              child: const Text('SALVAR COMO PADRÃO'),
+            ),
           ),
-        ),
+        ],
       ],
     );
   }
@@ -876,7 +852,16 @@ class _PrepViewState extends State<_PrepView> {
       'type': _selectedType,
       if (session != null) 'planSessionId': session.id,
       // Toggles per-session: o que o user ligou/desligou pra ESTA corrida.
-      'alertPrefs': Map<String, bool>.from(_alerts),
+      // Modo SILENCIOSO: críticos (FC/pace) forçados ON — os toggles ficam
+      // escondidos nesse modo e o comportamento precisa ser determinístico
+      // (críticos são a única coisa que fala além de início/fim).
+      'alertPrefs': {
+        ...Map<String, bool>.from(_alerts),
+        if (_coachModeSel == CoachMode.silencioso) ...{
+          'highBpm': true,
+          'paceOutOfRange': true,
+        },
+      },
       // Plano resolvido aqui: freemium → TTS de telemetria a cada km;
       // premium → Coach AI ao vivo (LiveRunCoachSession). Server checa
       // de novo, mas o client decide qual sessão abrir já no INICIAR

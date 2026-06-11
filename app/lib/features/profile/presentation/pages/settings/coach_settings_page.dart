@@ -5,6 +5,7 @@ import 'package:runnin/core/network/api_client.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
+import 'package:runnin/shared/widgets/coach_mode_selector.dart';
 import 'package:runnin/shared/widgets/figma/figma_selection_button.dart';
 import 'package:runnin/shared/widgets/figma/figma_top_nav.dart';
 import 'package:runnin/shared/widgets/section_heading.dart';
@@ -31,16 +32,16 @@ class _CoachSettingsPageState extends State<CoachSettingsPage> {
 
   bool _saving = false;
 
-  /// Mapeamento dos 3 modos da UI pros valores persistidos. Valores
-  /// legados (per_2km/alerts_only de users antigos) caem no modo mais
-  /// próximo até o próximo SALVAR normalizar.
-  bool get _isModeTudo =>
-      _frequency == 'per_km' || _frequency == 'per_2km';
-  bool get _isModeInicioFim =>
-      _frequency == 'silent' && !_allowCriticalInSilent;
-  bool get _isModeCriticos =>
-      _frequency == 'alerts_only' ||
-      (_frequency == 'silent' && _allowCriticalInSilent);
+  /// Modo da UI derivado de frequency+critical. Valores legados
+  /// (per_2km/alerts_only) caem em ativo até o próximo SALVAR normalizar.
+  String _mode = CoachMode.ativo;
+
+  String _deriveMode() {
+    if (_frequency == 'silent') {
+      return _allowCriticalInSilent ? CoachMode.silencioso : CoachMode.semAudio;
+    }
+    return CoachMode.ativo;
+  }
 
   final _remote = UserRemoteDatasource();
 
@@ -58,6 +59,7 @@ class _CoachSettingsPageState extends State<CoachSettingsPage> {
       _personality = box.get(_hiveKeyPersonality, defaultValue: 'motivador') as String;
       _frequency = box.get(_hiveKeyFrequency, defaultValue: 'per_km') as String;
       _allowCriticalInSilent = box.get(_hiveKeyAllowCriticalInSilent, defaultValue: true) as bool;
+      _mode = _deriveMode();
     });
   }
 
@@ -71,6 +73,7 @@ class _CoachSettingsPageState extends State<CoachSettingsPage> {
         if (profile.allowCriticalAlertsInSilent != null) {
           _allowCriticalInSilent = profile.allowCriticalAlertsInSilent!;
         }
+        _mode = _deriveMode();
       });
       // Update Hive cache with remote values
       if (Hive.isBoxOpen(_hiveBox)) {
@@ -171,40 +174,15 @@ class _CoachSettingsPageState extends State<CoachSettingsPage> {
                   // §2 Modo de fala durante a corrida
                   const SectionHeading(label: 'COACH DURANTE A CORRIDA'),
                   const SizedBox(height: 12),
-                  // 3 modos (decisão do produto: 4 frequências + sub-toggle
-                  // eram regras demais pra gerenciar). Mapeiam pros valores
-                  // que o s6-ai já entende — TUDO=per_km; INÍCIO E FIM=
-                  // silent sem críticos (start/finish furam o silent);
-                  // SÓ CRÍTICOS=silent com críticos.
-                  FigmaSelectionButton(
-                    label: 'Tudo',
-                    description:
-                        'Saudação, fechamento de cada km, check-ins, alertas de FC/pace, meta e resumo final',
-                    selected: _isModeTudo,
-                    onTap: () => setState(() {
-                      _frequency = 'per_km';
-                      _allowCriticalInSilent = true;
-                    }),
-                  ),
-                  const SizedBox(height: AppSpacing.sm),
-                  FigmaSelectionButton(
-                    label: 'Início e fim',
-                    description: 'Só a saudação e o resumo final da corrida',
-                    selected: _isModeInicioFim,
-                    onTap: () => setState(() {
-                      _frequency = 'silent';
-                      _allowCriticalInSilent = false;
-                    }),
-                  ),
-                  const SizedBox(height: AppSpacing.sm),
-                  FigmaSelectionButton(
-                    label: 'Só alertas críticos',
-                    description:
-                        'Início e fim + avisos de FC fora da zona e pace fora do alvo',
-                    selected: _isModeCriticos,
-                    onTap: () => setState(() {
-                      _frequency = 'silent';
-                      _allowCriticalInSilent = true;
+                  // Seletor compartilhado com o PRÉ-CORRIDA (mesma
+                  // persistência via CoachModePrefs — telas espelhadas).
+                  CoachModeSelector(
+                    value: _mode,
+                    onChanged: (m) => setState(() {
+                      _mode = m;
+                      final f = CoachModePrefs.fieldsFor(m);
+                      _frequency = f.frequency;
+                      _allowCriticalInSilent = f.allowCritical;
                     }),
                   ),
 

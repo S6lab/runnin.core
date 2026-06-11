@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import 'package:runnin/core/analytics/analytics_service.dart';
 import 'package:runnin/core/audio/telemetry_tts.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
@@ -417,6 +418,22 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
   /// True = corrida indoor (esteira): GPS desligado, distância manual no
   /// finish, cues dependentes de GPS suprimidos. Set em _onStart.
   bool _indoor = false;
+
+  /// Modo do coach (mesma fonte Hive do CoachModePrefs, sem importar o
+  /// widget). Premium é gateado server-side (s6-ai); este getter cobre o
+  /// TTS local do FREEMIUM, que falava incondicionalmente:
+  ///   ativo      → tudo fala
+  ///   silencioso → só saudação e finish
+  ///   sem_audio  → mudo total (banner continua)
+  String get _coachAudioMode {
+    if (!Hive.isBoxOpen('runnin_settings')) return 'ativo';
+    final box = Hive.box<dynamic>('runnin_settings');
+    final f = box.get('coach_message_frequency', defaultValue: 'per_km');
+    final crit =
+        box.get('coach_allow_critical_in_silent', defaultValue: true) == true;
+    if (f == 'silent') return crit ? 'silencioso' : 'sem_audio';
+    return 'ativo';
+  }
 
   // Preferências de alerta do user (set em _onStart via StartRun.alertPrefs).
   // Defaults conservadores: tudo on exceto kmSplits (mais ruidoso).
@@ -921,7 +938,10 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
         // silenciosa se engine indisponível).
         final greeting = TelemetryTts.formatStart(event.type, indoor: _indoor);
         emit(state.copyWith(coachLiveMessage: greeting));
-        unawaited(TelemetryTts.instance.speak(greeting));
+        // sem_audio: banner mostra, TTS não fala (modo mudo total).
+        if (_coachAudioMode != 'sem_audio') {
+          unawaited(TelemetryTts.instance.speak(greeting));
+        }
         _lastCoachSpeechAtMs = DateTime.now().millisecondsSinceEpoch;
         _lastAnyCoachCueAtMs = _lastCoachSpeechAtMs;
         _lastCoachSpeechDistanceM = 0;
@@ -1163,7 +1183,9 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
             elapsedS: newElapsed,
             bpm: state.bpmSourceActive ? state.currentBpm : null,
           ));
-        } else {
+        } else if (_coachAudioMode == 'ativo') {
+          // Check-in freemium só no modo ativo — silencioso/sem_audio não
+          // têm fala periódica.
           final msg = TelemetryTts.formatTimeCheckIn(
             elapsedS: newElapsed,
             bpm: state.bpmSourceActive ? state.currentBpm : null,
@@ -2334,15 +2356,18 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
     // eventos (motivation, pace_alert, segment_*) ficam silenciosos —
     // freemium é "métrica simples", sem coach AI conversando.
     if (!_isPremium) {
+      // Espelha o modo do coach no TTS local: km só no modo ativo;
+      // finish em ativo/silencioso; sem_audio não fala nada.
+      final mode = _coachAudioMode;
       String? msg;
-      if (event == 'km_reached' && kmReached != null) {
+      if (event == 'km_reached' && kmReached != null && mode == 'ativo') {
         msg = TelemetryTts.formatKmTelemetry(
           kmReached: kmReached,
           kmDurationS: kmDurationS,
           currentPaceMinKm: currentPaceMinKm,
           elapsedS: elapsedS,
         );
-      } else if (event == 'finish') {
+      } else if (event == 'finish' && mode != 'sem_audio') {
         msg = TelemetryTts.formatFinish(
           distanceM: state.distanceM,
           elapsedS: state.elapsedS,

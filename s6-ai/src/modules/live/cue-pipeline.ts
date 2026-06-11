@@ -20,10 +20,13 @@ export function applyPrefsGate(
   const prefs = session.context.prefs;
 
   if (prefs.freq === 'silent') {
-    // start e finish furam o silent SEMPRE: silent+critical=false vira o
-    // modo "início e fim" da UI (só saudação e resumo final).
-    if (event === 'start' || event === 'finish') return null;
-    if (prefs.allowCriticalAlertsInSilent && CRITICAL_EVENTS.has(event)) return null;
+    // Dois sub-modos da UI:
+    //   silent + critical=true  → SILENCIOSO: início, fim e críticos falam
+    //   silent + critical=false → SEM ÁUDIO: mudo total (nada fala)
+    if (prefs.allowCriticalAlertsInSilent &&
+        (event === 'start' || event === 'finish' || CRITICAL_EVENTS.has(event))) {
+      return null;
+    }
     return 'silent';
   }
   if (prefs.dnd && !CRITICAL_EVENTS.has(event) && event !== 'finish') {

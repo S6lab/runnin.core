@@ -38,19 +38,21 @@ describe('CueSession', () => {
 });
 
 describe('applyPrefsGate', () => {
-  it('silent: bloqueia narrativos, deixa bpm_alert/pace_alert/finish', () => {
+  it('SILENCIOSO (silent+critical): início, fim e críticos falam; narrativos não', () => {
     const s = new CueSession('s1', ctx({ prefs: { freq: 'silent', dnd: false, allowCriticalAlertsInSilent: true } }));
     expect(applyPrefsGate(s, 'km_reached')).toBe('silent');
     expect(applyPrefsGate(s, 'half_km')).toBe('silent');
+    expect(applyPrefsGate(s, 'start')).toBeNull();
     expect(applyPrefsGate(s, 'bpm_alert')).toBeNull();
     expect(applyPrefsGate(s, 'pace_alert')).toBeNull();
     expect(applyPrefsGate(s, 'finish')).toBeNull();
   });
 
-  it('silent + allowCritical=false: bloqueia até bpm_alert', () => {
+  it('SEM ÁUDIO (silent sem critical): mudo total, até start/finish bloqueados', () => {
     const s = new CueSession('s1', ctx({ prefs: { freq: 'silent', dnd: false, allowCriticalAlertsInSilent: false } }));
     expect(applyPrefsGate(s, 'bpm_alert')).toBe('silent');
-    expect(applyPrefsGate(s, 'finish')).toBeNull();
+    expect(applyPrefsGate(s, 'start')).toBe('silent');
+    expect(applyPrefsGate(s, 'finish')).toBe('silent');
   });
 
   it('dnd: só críticos e finish', () => {
