@@ -2,6 +2,7 @@ import { createHash } from 'crypto';
 import type { CoachContext } from './coach-message.use-case';
 import type { CoachRuntimeContext } from './coach-runtime-context.service';
 import type { PlanSession, PlanSegment } from '@modules/plans/domain/plan.entity';
+import { parseWeightKg } from '@modules/users/domain/user-metrics';
 
 /**
  * Templates determinísticos pros eventos mecânicos da corrida — substitui
@@ -146,8 +147,9 @@ function resolveVars(tctx: TemplateContext): ResolvedVars {
     ? Math.max(0, Number((plannedKm - kmDone).toFixed(1)))
     : null;
 
-  const calories = (typeof profile?.weight === 'number' && ctx.elapsedS > 0)
-    ? Math.round((9.8 * profile.weight * ctx.elapsedS) / 3600)
+  const weightKg = parseWeightKg(profile?.weight);
+  const calories = (weightKg != null && ctx.elapsedS > 0)
+    ? Math.round((9.8 * weightKg * ctx.elapsedS) / 3600)
     : null;
 
   return {

@@ -19,7 +19,8 @@ import { validateFrequencyForGoal, FrequencyError } from './validate-frequency-f
 import { validateAgeForGoal, AgeRestrictionError } from './validate-age-for-goal';
 import { validateMedicalForGoal, MedicalRestrictionError } from './validate-medical-for-goal';
 import { buildExecutionSegments, resolveEffectiveSessionType } from './build-execution-segments';
-import { deriveWeeksCountFromRaceDate, isoDateToDayOfWeek } from './race-date.helpers';
+import { isoDateToDayOfWeek } from './race-date.helpers';
+import { resolvePlanHorizon } from './resolve-plan-horizon';
 import { enforceRaceWeekStructure } from './enforce-race-week-structure';
 import { applyNarrativeFallbacks } from './hydrate-revised-sessions';
 import {
@@ -140,6 +141,11 @@ export const GeneratePlanSchema = z.object({
   /** Tempo máximo disponível pro long run em minutos. Coach respeita esse
    *  cap calculando distância = tempo / pace estimado. Null = sem limite. */
   longRunMaxMinutes: z.number().int().min(30).max(360).optional(),
+  /** Offset do fuso do device em minutos (DateTime.now().timeZoneOffset).
+   *  Defesa pra quando startDate vem ausente: "hoje" é resolvido na data
+   *  civil do atleta, não na data UTC do servidor (BRT à noite = amanhã
+   *  em UTC). */
+  tzOffsetMin: z.number().int().min(-840).max(840).nullish(),
 });
 
 export type GeneratePlanInput = z.infer<typeof GeneratePlanSchema>;
@@ -291,14 +297,13 @@ export class GeneratePlanUseCase {
 
     const planId = uuid();
     const now = new Date().toISOString();
-    // Derivação de weeksCount: quando o user marca uma raceDate, ela é
-    // soberana — o plano DEVE terminar nela. ceil((race - start) / 7) garante
-    // que a última semana inclua o dia da prova. resolvePlanWeeksCount() vira
-    // fallback pra fluxos sem raceDate (flow goal ou input legado).
-    const startDateForCount = input.startDate ?? new Date().toISOString().slice(0, 10);
-    const weeksCount = input.weeksCount
-      ?? deriveWeeksCountFromRaceDate(input, startDateForCount)
-      ?? resolvePlanWeeksCount(input);
+    // Horizonte canônico (startDate + weeksCount + âncoras de prova) numa
+    // fonte única. Quando há raceDate, o weeks DERIVADO dela vence o
+    // weeksCount do cliente — a prova é soberana, o plano DEVE terminar nela.
+    const horizon = resolvePlanHorizon(input, {
+      fallbackWeeks: resolvePlanWeeksCount(input),
+    });
+    const weeksCount = horizon.weeksCount;
 
     // Validação de meta (race) — só dispara quando o FE envia o payload
     // novo (goalKind + raceDistanceKm). Se a combinação distância × nível
@@ -463,24 +468,9 @@ export class GeneratePlanUseCase {
       }
     }
 
-    // startDate vem do onboarding (último step "quando começar"). Aceita
-    // qualquer data futura (ou hoje). Sem ela, default = hoje.
-    const startDate = input.startDate ?? new Date().toISOString().slice(0, 10);
-
-    // raceDate vira a âncora imutável quando presente. Caso contrário, o
-    // mesociclo dura weeksCount × 7d a partir do startDate (comportamento
-    // legado pra goals tipo flow).
-    const raceDate = input.goalKind === 'race' ? input.raceDate : undefined;
-    const raceDayOfWeek = raceDate ? isoDateToDayOfWeek(raceDate) : undefined;
-
-    // Prazo INICIAL (data prevista de conclusão na criação do plano). Fica
-    // imutável pro relatório final. Pra RACE plans = raceDate; pra resto =
-    // startDate + (weeksCount × 7) - 1.
-    const initialDeadlineAt = raceDate ?? (() => {
-      const d = new Date(`${startDate}T00:00:00Z`);
-      d.setUTCDate(d.getUTCDate() + weeksCount * 7 - 1);
-      return d.toISOString().slice(0, 10);
-    })();
+    // startDate/raceDate/raceDayOfWeek/initialDeadlineAt vêm do horizonte
+    // canônico resolvido acima (única fonte; raceDate é âncora imutável).
+    const { startDate, raceDate, raceDayOfWeek, initialDeadlineAt } = horizon;
 
     // Cria o plano como "generating" imediatamente
     const plan: Plan = {
@@ -620,7 +610,17 @@ export class GeneratePlanUseCase {
       // Frequency enforcement: o LLM ocasionalmente devolve 1 sessão/sem
       // mesmo com freq=5 (sub-prompt frouxo ou bias defensivo). Preenchemos
       // determinísticamente com Easy Run em dias livres até bater freq.
-      const paddedWeeks = this._padToFrequency(parsedWeeks, freq, input.startDate, input.availableDays ?? null);
+      const padRes = this._padToFrequency(parsedWeeks, freq, input.startDate, input.availableDays ?? null);
+      const paddedRaw = padRes.weeks;
+      // O user escolheu COMEÇAR nesse dia — se é dia treinável e a semana 1
+      // não tem sessão nele, ancora a primeira sessão no D0. Sem isso o
+      // plano "começa hoje" mas o primeiro treino aparece dias depois.
+      const paddedWeeks = this._anchorStartDaySession(
+        paddedRaw,
+        isoDateToDayOfWeek(input.startDate),
+        input.availableDays ?? null,
+        plan.id,
+      );
       // Marca a sessão-alvo (última da última semana) quando RACE. Garante
       // que o plano CULMINA com a distância exata da prova — isenta do cap
       // MAX_KM_PER_SESSION pq essa é a prova, não treino. Fix do bug
@@ -638,6 +638,15 @@ export class GeneratePlanUseCase {
       // Pós-LLM: estrutura da race week + taper week. Auto-repara quando o
       // LLM ignora as regras do prompt (7 sessões na semana da prova, tempo
       // run em D-1, volume igual ao pico). Loga drift pra captura.
+      if (input.goalKind === 'race' && input.raceDistanceKm && !plan.raceDayOfWeek) {
+        // Antes era skip silencioso — plano race sem raceDate perde o
+        // enforcement de estrutura da semana da prova inteiro.
+        logger.error('plan.generate.race_week_enforcement_skipped', {
+          planId: plan.id,
+          raceDistanceKm: input.raceDistanceKm,
+          raceDate: input.raceDate ?? null,
+        });
+      }
       const raceEnforced = (
         input.goalKind === 'race' &&
         input.raceDistanceKm &&
@@ -655,7 +664,7 @@ export class GeneratePlanUseCase {
       // ignorado mesmo com REGRAS DURAS no prompt. Ordem importa:
       //  1) dias permitidos → 2) long run day (move dentro do permitido)
       //  3) target pace → 4) caps de volume/long run
-      const startDow = (new Date(`${input.startDate}T00:00:00`).getDay() || 7);
+      const startDow = isoDateToDayOfWeek(input.startDate);
       const daysRes = enforceAvailableDays(raceEnforced, input.availableDays ?? null, startDow);
       const lrRes = enforceLongRunDay(daysRes.weeks, input.longRunDayOfWeek ?? null, input.availableDays ?? null);
       const paceRes = enforceTargetPace(
@@ -678,6 +687,7 @@ export class GeneratePlanUseCase {
       });
       const weeks = clampResult.weeks;
       const allOps = [
+        ...padRes.ops.map((o) => ({ kind: 'pad', ...o })),
         ...daysRes.ops.map((o) => ({ kind: 'days', ...o })),
         ...lrRes.ops.map((o) => ({ kind: 'long_run', ...o })),
         ...paceRes.ops.map((o) => ({ kind: 'pace', ...o })),
@@ -688,6 +698,7 @@ export class GeneratePlanUseCase {
           planId: plan.id,
           opsCount: allOps.length,
           countsByKind: {
+            pad: padRes.ops.length,
             days: daysRes.ops.length,
             long_run: lrRes.ops.length,
             pace: paceRes.ops.length,
@@ -1125,9 +1136,9 @@ ${weeksDigest}`;
     targetFreq: number,
     startDate: string,
     availableDays: number[] | null = null,
-  ): PlanWeek[] {
-    const start = new Date(`${startDate}T00:00:00`);
-    const startDow = start.getDay() || 7;
+  ): { weeks: PlanWeek[]; ops: { weekNumber: number; dayOfWeek: number; distanceKm: number }[] } {
+    const ops: { weekNumber: number; dayOfWeek: number; distanceKm: number }[] = [];
+    const startDow = isoDateToDayOfWeek(startDate);
     const allowed = availableDays && availableDays.length > 0
       ? new Set(availableDays)
       : null;
@@ -1175,6 +1186,7 @@ ${weeksDigest}`;
             targetPace,
             notes: `Easy Run complementar pra fechar a frequência de ${targetFreq}x/semana.`,
           } satisfies PlanSession);
+          ops.push({ weekNumber: w.weekNumber || idx + 1, dayOfWeek: dow, distanceKm: padDistanceKm });
           totalPadded++;
           continue;
         }
@@ -1196,6 +1208,7 @@ ${weeksDigest}`;
         } satisfies Omit<PlanSession, 'executionSegments'>;
         const segs = buildExecutionSegments(base as PlanSession, this._roteiroTpl);
         newSessions.push({ ...base, executionSegments: segs } satisfies PlanSession);
+        ops.push({ weekNumber: w.weekNumber || idx + 1, dayOfWeek: dow, distanceKm: padDistanceKm });
         totalPadded++;
       }
       const combined = [...w.sessions, ...newSessions].sort((a, b) => {
@@ -1218,8 +1231,57 @@ ${weeksDigest}`;
         countsBefore: weeks.map((w) => w.sessions.length),
         countsAfter: padded.map((w) => w.sessions.length),
       });
+      const totalAfter = padded.reduce((sum, w) => sum + w.sessions.length, 0);
+      if (totalAfter > 0 && totalPadded / totalAfter > 0.3) {
+        // Pad acima de 30% = o LLM entregou bem menos sessões que a freq
+        // pedida — sinal de prompt quebrado, não de ajuste pontual.
+        logger.warn('plan.generate.pad_ratio_high', {
+          targetFreq,
+          totalPadded,
+          totalSessions: totalAfter,
+          padRatio: Number((totalPadded / totalAfter).toFixed(2)),
+        });
+      }
     }
-    return padded;
+    return { weeks: padded, ops };
+  }
+
+  /**
+   * Garante treino no dia D0 quando ele é treinável. O LLM distribui a
+   * semana 1 livremente nos dias disponíveis; sem essa âncora, "começar
+   * hoje" frequentemente vira primeiro treino dias depois. Move a sessão
+   * mais próxima do D0 (preferindo não-long-run, pra não brigar com
+   * enforceLongRunDay que roda depois).
+   */
+  private _anchorStartDaySession(
+    weeks: PlanWeek[],
+    startDow: number,
+    availableDays: number[] | null,
+    planId: string,
+  ): PlanWeek[] {
+    const first = weeks[0];
+    if (!first || first.sessions.length === 0) return weeks;
+    if (first.sessions.some((s) => s.dayOfWeek === startDow)) return weeks;
+    if (availableDays && availableDays.length > 0 && !availableDays.includes(startDow)) {
+      return weeks;
+    }
+    const candidates = [...first.sessions].sort((a, b) => a.dayOfWeek - b.dayOfWeek);
+    const earliest = candidates.find((s) => !s.type.toLowerCase().includes('long'))
+      ?? candidates[0]!;
+    if (earliest.dayOfWeek < startDow) return weeks;
+    logger.info('plan.generate.start_day_anchored', {
+      planId,
+      startDow,
+      movedFromDow: earliest.dayOfWeek,
+      sessionType: earliest.type,
+    });
+    const sessions = first.sessions
+      .map((s) => (s.id === earliest.id ? { ...s, dayOfWeek: startDow } : s))
+      .sort((a, b) => {
+        if (a.dayOfWeek !== b.dayOfWeek) return a.dayOfWeek - b.dayOfWeek;
+        return a.id.localeCompare(b.id);
+      });
+    return [{ ...first, sessions }, ...weeks.slice(1)];
   }
 
   /**
@@ -1234,8 +1296,7 @@ ${weeksDigest}`;
     // Week 1 filtra sessões com dayOfWeek < startDayOfWeek (D0 escolhido
     // pelo user no onboarding). Sem fallback "manter tudo" — o prompt
     // já instrui a IA a respeitar isso. Mon=1...Sun=7.
-    const start = new Date(`${startDate}T00:00:00`);
-    const startDow = (start.getDay() || 7);
+    const startDow = isoDateToDayOfWeek(startDate);
 
     const normalized = parsed.map((week, weekIndex) => {
       // Geração two-tier: as 2 PRIMEIRAS semanas são 'full' (sessões

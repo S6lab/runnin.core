@@ -4,6 +4,7 @@ import { Run, KmSplit } from '@modules/runs/domain/run.entity';
 import { NotFoundError } from '@shared/errors/app-error';
 import { FirestoreUserRepository } from '@modules/users/infra/firestore-user.repository';
 import { GetProfileUseCase } from '@modules/users/domain/use-cases/get-profile.use-case';
+import { parseWeightKg } from '@modules/users/domain/user-metrics';
 import { FirestorePlanRepository } from '@modules/plans/infra/firestore-plan.repository';
 import { effectivePlanWeeks } from '@modules/plans/domain/plan.entity';
 import { logger } from '@shared/logger/logger';
@@ -90,13 +91,6 @@ function calcCalories(distanceM: number, durationS: number, weightKg: number): n
   return Math.round(met * weightKg * hours);
 }
 
-function parseWeightKg(raw: string | undefined): number {
-  if (!raw) return 70; // fallback genérico
-  const n = Number(raw.replace(/[^0-9.]/g, ''));
-  if (!Number.isFinite(n) || n <= 0) return 70;
-  return n;
-}
-
 export class CompleteRunUseCase {
   constructor(
     private readonly runRepo: RunRepository,
@@ -117,7 +111,7 @@ export class CompleteRunUseCase {
       const userRepo = new FirestoreUserRepository();
       const getProfileUC = new GetProfileUseCase(userRepo);
       const profile = await getProfileUC.execute(userId);
-      weightKg = parseWeightKg(profile?.weight);
+      weightKg = parseWeightKg(profile?.weight) ?? 70;
     } catch (_) {/* mantém fallback 70kg */}
 
     // Enriquece cada split com calorias usando o MET escalonado por pace do

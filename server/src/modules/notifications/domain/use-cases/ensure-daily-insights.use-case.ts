@@ -1,4 +1,5 @@
 import { UserRepository } from '@modules/users/domain/user.repository';
+import { parseWeightKg } from '@modules/users/domain/user-metrics';
 import { PlanRepository } from '@modules/plans/domain/plan.repository';
 import { RunRepository } from '@modules/runs/domain/run.repository';
 import { CreateNotificationInput, CreateNotificationUseCase } from './create-notification.use-case';
@@ -145,7 +146,7 @@ export class EnsureDailyInsightsUseCase {
 
     const hasBpmData = completedRuns.some(r => (r.avgBpm ?? 0) > 0 || (r.maxBpm ?? 0) > 0);
     const hasSleepData = false; // sem integração de sono ainda
-    const weight = profile.weight ? Number(profile.weight.replace(/[^0-9.]/g, '')) : null;
+    const weight = parseWeightKg(profile.weight);
     // Fallback CAP em 3.5L: pra weights muito altos (130kg+) a fórmula peso×0.035
     // dá 4.5L+ que ninguém bebe num dia normal. Cap em 3.5L é meta saudável
     // recomendada (WHO + American Council on Exercise) pra adultos comuns.

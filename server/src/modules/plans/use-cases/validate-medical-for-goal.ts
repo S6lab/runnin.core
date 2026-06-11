@@ -1,5 +1,6 @@
 import { AppError } from '@shared/errors/app-error';
 import {
+  MEDICAL_CONDITION_OPTIONS,
   RaceDistanceKm,
   SERIOUS_MEDICAL_KEYWORDS,
 } from './plan-windows.constants';
@@ -43,11 +44,17 @@ function normalize(s: string): string {
   return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 }
 
+const SERIOUS_CANONICAL = new Set(
+  MEDICAL_CONDITION_OPTIONS.filter((o) => o.serious).map((o) => normalize(o.label)),
+);
+
 function findSerious(conditions: string[]): string[] {
   const matched: string[] = [];
   for (const c of conditions) {
     const norm = normalize(c);
-    const hit = SERIOUS_MEDICAL_KEYWORDS.find((kw) => norm.includes(kw));
+    // Match exato na lista canônica primeiro; keywords cobrem texto livre.
+    const hit = SERIOUS_CANONICAL.has(norm)
+      || SERIOUS_MEDICAL_KEYWORDS.some((kw) => norm.includes(kw));
     if (hit) matched.push(c);
   }
   return matched;

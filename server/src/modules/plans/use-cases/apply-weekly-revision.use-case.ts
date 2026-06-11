@@ -1,4 +1,5 @@
 import { v4 as uuid } from 'uuid';
+import { parseWeightKg } from '@modules/users/domain/user-metrics';
 import { PlanRepository } from '../domain/plan.repository';
 import { PlanRevision } from '../domain/plan-revision.entity';
 import { PlanRevisionRepository } from '../domain/plan-revision.repository';
@@ -227,7 +228,7 @@ export class ApplyWeeklyRevisionUseCase {
       const profile = await repo.findById(userId);
       if (!profile) return null;
       return {
-        weight: typeof profile.weight === 'number' ? profile.weight : undefined,
+        weight: parseWeightKg(profile.weight) ?? undefined,
         level: typeof profile.level === 'string' ? profile.level : undefined,
       };
     } catch {

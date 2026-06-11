@@ -196,9 +196,33 @@ export const MAX_KM_PER_SESSION: Record<RunnerLevel, number> = {
   avancado: 32,
 };
 
+/** Lista canônica das condições médicas oferecidas como chips no
+ *  onboarding/app. `serious: true` força janela safe em metas longas
+ *  (validateMedicalForGoal). Fonte única server-side — o app consome via
+ *  config de admissibilidade em vez de manter cópia hardcoded. Texto
+ *  livre ("Outra condição") continua coberto pelo fallback de keywords. */
+export const MEDICAL_CONDITION_OPTIONS: { label: string; serious: boolean }[] = [
+  { label: 'Hipertensao', serious: false },
+  { label: 'Diabetes tipo 2', serious: false },
+  { label: 'Asma', serious: false },
+  { label: 'Historico de AVC', serious: true },
+  { label: 'Problemas cardiacos', serious: true },
+  { label: 'Lesao no joelho', serious: false },
+  { label: 'Lesao no tornozelo', serious: false },
+  { label: 'Hernia de disco', serious: true },
+  { label: 'Toma anticoagulante', serious: true },
+  { label: 'Toma betabloqueador', serious: false },
+  { label: 'Toma insulina', serious: true },
+  { label: 'Artrose', serious: false },
+  { label: 'Fibromialgia', serious: false },
+  { label: 'Ansiedade/depressao', serious: false },
+  { label: 'Cirurgia recente (<6m)', serious: true },
+];
+
 /** Comorbidades consideradas "sérias" — qualquer match (case+diacritic
- *  insensitive) força janela safe pra metas longas (21K+). Lista
- *  conservadora; expandir se aparecer caso real não coberto. */
+ *  insensitive) força janela safe pra metas longas (21K+). Fallback pra
+ *  texto livre fora da lista canônica acima. Lista conservadora;
+ *  expandir se aparecer caso real não coberto. */
 export const SERIOUS_MEDICAL_KEYWORDS: string[] = [
   'cirurgia',
   'hernia',
@@ -206,6 +230,7 @@ export const SERIOUS_MEDICAL_KEYWORDS: string[] = [
   'insulina',
   'cardiac',
   'cardio',
+  'avc',
   'lesao recente',
 ];
 
