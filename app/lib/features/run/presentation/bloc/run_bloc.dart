@@ -2215,7 +2215,12 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
         }());
       }
       unawaited(runBgNotificationService.cancel());
-      if (state.status == RunStatus.active) {
+      // Coach pós-suspensão longa: o backoff do WS desiste após ~3min de
+      // tentativas — se o iOS segurou o app suspenso além disso (tela
+      // bloqueada), a sessão nunca mais reconectava e o coach ficava mudo
+      // até o fim da corrida. Rearma no resume.
+      if (state.status == RunStatus.active && _isPremium) {
+        _coachSession.ensureConnected();
       }
     }
   }

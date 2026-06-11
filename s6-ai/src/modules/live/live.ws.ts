@@ -152,12 +152,27 @@ export function attachLiveWebSocket(httpServer: HttpServer): void {
       handleFrame(f.data, f.isBinary);
     }
 
+    // Keepalive: ping a cada 30s. Entre falas o WS fica MINUTOS sem
+    // tráfego (modo silencioso/esteira agravam) e intermediários derrubam
+    // conexão idle — com tela bloqueada o app nem percebe e o coach some
+    // até o próximo evento falhar. O pong é respondido pela lib ws no
+    // client automaticamente; tráfego periódico mantém o caminho vivo.
+    const keepalive = setInterval(() => {
+      if (ws.readyState === WebSocket.OPEN) {
+        try {
+          ws.ping();
+        } catch {/* close handler cuida */}
+      }
+    }, 30_000);
+
     ws.on('close', () => {
+      clearInterval(keepalive);
       logger.info('live.ws.client_disconnected', { sessionId, uid });
       teardown(sessionId, session, bridge);
     });
 
     ws.on('error', (err) => {
+      clearInterval(keepalive);
       logger.warn('live.ws.client_error', { sessionId, err: String(err) });
       teardown(sessionId, session, bridge);
     });

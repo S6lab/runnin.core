@@ -328,6 +328,24 @@ class LiveRunCoachSession {
     }
   }
 
+  /// Rearma a reconexão depois de uma suspensão longa (tela bloqueada).
+  /// O backoff desiste após [_maxReconnectAttempts] (~3min) — se o iOS
+  /// segurou o app suspenso por mais que isso, o coach ficava mudo até o
+  /// fim da corrida. Chamado pelo RunBloc quando o app volta pro
+  /// foreground com run ativa: zera o contador e tenta reconectar já.
+  void ensureConnected() {
+    if (_disposed || _intentionalClose || _open) return;
+    if (_reconnectAttempt >= _maxReconnectAttempts) {
+      Logger.info('run.coach.s6.reconnect_rearmed_on_resume', context: {
+        'previousAttempts': _reconnectAttempt,
+      });
+    }
+    _reconnectAttempt = 0;
+    _reconnectTimer?.cancel();
+    _reconnectTimer = null;
+    _maybeScheduleReconnect();
+  }
+
   void _maybeScheduleReconnect({Object? err}) {
     String? skipReason;
     if (_disposed) {
