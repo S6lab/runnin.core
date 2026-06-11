@@ -241,6 +241,7 @@ final appRouter = GoRouter(
             Map<String, bool>? alertPrefs;
             bool? isPremium;
             bool autoStart = false;
+            bool indoor = false;
             if (extra is String && extra.isNotEmpty) {
               type = extra;
             } else if (extra is Map<String, dynamic>) {
@@ -252,6 +253,7 @@ final appRouter = GoRouter(
               }
               isPremium = extra['isPremium'] as bool?;
               autoStart = extra['autoStart'] == true;
+              indoor = extra['indoor'] == true;
             }
             return ActiveRunPage(
               initialType: type,
@@ -259,6 +261,7 @@ final appRouter = GoRouter(
               alertPrefs: alertPrefs,
               isPremium: isPremium,
               autoStart: autoStart,
+              indoor: indoor,
             );
           },
         ),

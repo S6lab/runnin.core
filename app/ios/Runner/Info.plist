@@ -58,8 +58,6 @@
 		<string>O runnin usa seu GPS pra medir distância, ritmo e traçado da sua corrida.</string>
 		<key>NSMicrophoneUsageDescription</key>
 		<string>O runnin usa o microfone pro Coach Live, onde você conversa por voz com o assistente AI durante e fora do treino.</string>
-		<key>NSMotionUsageDescription</key>
-		<string>O runnin usa os sensores de movimento pra contar passos e estimar sua atividade durante o treino.</string>
 		<key>NSPhotoLibraryAddUsageDescription</key>
 		<string>O runnin salva fotos das suas corridas (cards de share) na sua galeria pra você compartilhar quando quiser.</string>
 		<key>NSPhotoLibraryUsageDescription</key>

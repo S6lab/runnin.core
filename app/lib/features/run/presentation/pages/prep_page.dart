@@ -68,6 +68,10 @@ class _PrepViewState extends State<_PrepView> {
   /// cacheada, denied=permissão recusada, off=serviço desligado.
   _GpsStatus _gpsStatus = _GpsStatus.unknown;
 
+  /// Corrida em esteira (indoor): GPS nem inicia, distância é informada no
+  /// finish (painel da esteira) e a sessão conta normalmente pro plano.
+  bool _indoorMode = false;
+
   final Map<String, bool> _alerts = {
     'kmAlert': true,
     'paceOutOfRange': true,
@@ -405,17 +409,21 @@ class _PrepViewState extends State<_PrepView> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Text('GPS', style: type.displaySm),
-            const SizedBox(width: 10),
-            _GpsStatusChip(
-              status: _gpsStatus,
-              onRetry: () => _warmGps(showModalIfNeeded: true),
-            ),
-          ],
-        ),
-        const SizedBox(height: 32),
+        // GPS some em corrida indoor (escolhida no step TIPO) — o toggle
+        // de esteira substitui a necessidade de fix GPS.
+        if (!_indoorMode) ...[
+          Row(
+            children: [
+              Text('GPS', style: type.displaySm),
+              const SizedBox(width: 10),
+              _GpsStatusChip(
+                status: _gpsStatus,
+                onRetry: () => _warmGps(showModalIfNeeded: true),
+              ),
+            ],
+          ),
+          const SizedBox(height: 32),
+        ],
         Text('ALERTAS', style: type.displaySm),
         const SizedBox(height: 4),
         Text(
@@ -502,6 +510,19 @@ class _PrepViewState extends State<_PrepView> {
             ),
           ],
         ],
+        // Ambiente mora aqui (decisão de "que corrida vou fazer", junto do
+        // tipo) — não no step de config. Indoor desliga GPS no fluxo todo;
+        // distância vem do painel da esteira no finish.
+        const SizedBox(height: 24),
+        Text('AMBIENTE', style: type.displaySm),
+        const SizedBox(height: 14),
+        _AlertToggleRow(
+          label: 'Esteira (indoor)',
+          description:
+              'Sem GPS: a corrida roda por tempo + batimentos e você informa a distância do painel no final.',
+          value: _indoorMode,
+          onChanged: (v) => setState(() => _indoorMode = v),
+        ),
       ],
     );
   }
@@ -796,6 +817,7 @@ class _PrepViewState extends State<_PrepView> {
       // pro subscriptionController quando _isPro ainda não resolveu
       // (network lenta no prep).
       'isPremium': _isPro ?? subscriptionController.isPro,
+      if (_indoorMode) 'indoor': true,
     };
     if (!context.mounted) return;
     // Para qualquer áudio de coach em andamento antes de navegar — evita

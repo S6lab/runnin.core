@@ -50,6 +50,10 @@ class StartRun extends RunEvent {
   /// é Watch — Watch já cobre o display, LA mirroreia como banner "Abrir
   /// no iPhone" sobrepondo a ActiveRunScreen.
   final String? startSource;
+  /// True = corrida em esteira: GPS nem inicia (zero drift, menos bateria),
+  /// distância vem do painel da esteira no finish (CompleteRun.manualDistanceM)
+  /// e cues dependentes de GPS (km/pace/no_movement) não disparam.
+  final bool indoor;
   StartRun({
     required this.type,
     this.targetPace,
@@ -58,6 +62,7 @@ class StartRun extends RunEvent {
     this.planSessionId,
     this.isPremium,
     this.startSource,
+    this.indoor = false,
   });
 }
 
@@ -77,7 +82,12 @@ class _CoachChunk extends RunEvent {
   _CoachChunk(this.cue);
 }
 
-class CompleteRun extends RunEvent {}
+class CompleteRun extends RunEvent {
+  /// Distância informada pelo user no finish de corrida indoor (painel da
+  /// esteira). Null em corrida outdoor — distância vem do GPS acumulado.
+  final double? manualDistanceM;
+  CompleteRun({this.manualDistanceM});
+}
 
 class AbandonRun extends RunEvent {}
 
@@ -208,6 +218,9 @@ class RunState {
   /// TF 75 Fase 12: SpO2 (oxigenação) em %. Apple Watch Series 6+ tem
   /// oxímetro de pulso. Null sem fonte; sample raro (~30-60s).
   final int? currentSpo2;
+  /// True = corrida em esteira (sem GPS). UI esconde mapa/pace e o finish
+  /// pede a distância do painel da esteira.
+  final bool indoor;
 
   const RunState({
     this.status = RunStatus.idle,
@@ -233,6 +246,7 @@ class RunState {
     this.watchStatus,
     this.telemetryTimeline = const [],
     this.currentSpo2,
+    this.indoor = false,
   });
 
   /// Compat com a UI antiga e o gating de coach cue `high_bpm`: ativo quando
@@ -264,6 +278,7 @@ class RunState {
     WatchPairingStatus? watchStatus,
     List<TelemetryPoint>? telemetryTimeline,
     int? currentSpo2,
+    bool? indoor,
   }) => RunState(
     status: status ?? this.status,
     runId: runId ?? this.runId,
@@ -288,6 +303,7 @@ class RunState {
     watchStatus: watchStatus ?? this.watchStatus,
     telemetryTimeline: telemetryTimeline ?? this.telemetryTimeline,
     currentSpo2: currentSpo2 ?? this.currentSpo2,
+    indoor: indoor ?? this.indoor,
   );
 
   String get formattedDistance => '${(distanceM / 1000).toStringAsFixed(2)}km';
@@ -398,6 +414,9 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
   /// (freemium). Setado em [_onStart] a partir de [StartRun.isPremium];
   /// default true mantém comportamento anterior pra qualquer caller antigo.
   bool _isPremium = true;
+  /// True = corrida indoor (esteira): GPS desligado, distância manual no
+  /// finish, cues dependentes de GPS suprimidos. Set em _onStart.
+  bool _indoor = false;
 
   // Preferências de alerta do user (set em _onStart via StartRun.alertPrefs).
   // Defaults conservadores: tudo on exceto kmSplits (mais ruidoso).
@@ -751,35 +770,41 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
       unawaited(_loadPlanSession(event.planSessionId!));
     }
 
+    _indoor = event.indoor;
     emit(
       state.copyWith(
         status: RunStatus.starting,
         runType: event.type,
         targetPace: event.targetPace,
         targetDistance: event.targetDistance,
+        indoor: event.indoor,
       ),
     );
     try {
-      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      if (!serviceEnabled) {
-        throw Exception('Ative o GPS do dispositivo para iniciar a corrida.');
-      }
+      // Indoor (esteira): GPS nem é checado — corrida roda por tempo + BPM,
+      // distância entra no finish via painel da esteira.
+      if (!_indoor) {
+        final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+        if (!serviceEnabled) {
+          throw Exception('Ative o GPS do dispositivo para iniciar a corrida.');
+        }
 
-      var permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-      }
+        var permission = await Geolocator.checkPermission();
+        if (permission == LocationPermission.denied) {
+          permission = await Geolocator.requestPermission();
+        }
 
-      if (permission == LocationPermission.denied) {
-        throw Exception(
-          'Permita o acesso a localizacao para iniciar a corrida.',
-        );
-      }
+        if (permission == LocationPermission.denied) {
+          throw Exception(
+            'Permita o acesso a localizacao para iniciar a corrida.',
+          );
+        }
 
-      if (permission == LocationPermission.deniedForever) {
-        throw Exception(
-          'A permissao de localizacao foi bloqueada. Libere nas configuracoes do aparelho.',
-        );
+        if (permission == LocationPermission.deniedForever) {
+          throw Exception(
+            'A permissao de localizacao foi bloqueada. Libere nas configuracoes do aparelho.',
+          );
+        }
       }
 
       String runId;
@@ -789,6 +814,7 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
           targetPace: event.targetPace,
           targetDistance: event.targetDistance,
           planSessionId: event.planSessionId,
+          environment: _indoor ? 'indoor' : null,
         );
         runId = run.id;
       } catch (_) {
@@ -865,6 +891,7 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
               _coachSession.sendEvent('start', {
                 'kmDone': 0,
                 'elapsedS': 0,
+                if (_indoor) 'indoor': true,
               });
               // Inicializa os trackers de check_in (500m / 4min) com a
               // saudação. Sem isso, os gates `_lastCoachSpeechAtMs > 0`
@@ -919,21 +946,25 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
       // de fix prévio.
       _stallCueFired = false;
       _stallCheckTimer?.cancel();
-      _stallCheckTimer = Timer(const Duration(seconds: 30), () {
-        if (isClosed || _stallCueFired) return;
-        if (state.status != RunStatus.active) return;
-        if (state.distanceM >= 5.0) return; // moveu, OK
-        _stallCueFired = true;
-        unawaited(_requestCoachCue(
-          event: 'no_movement',
-          distanceM: state.distanceM,
-          elapsedS: state.elapsedS,
-          currentPaceMinKm: state.currentPaceMinKm,
-        ));
-        _lastCueAt['no_movement'] = DateTime.now().millisecondsSinceEpoch;
-        // Pausa a run e pede o dialog de continuar/encerrar.
-        add(_NoMovementDetected());
-      });
+      // Indoor: sem GPS a distância fica 0 a corrida toda — o stall check
+      // dispararia sempre. Esteira não tem conceito de "parado por GPS".
+      if (!_indoor) {
+        _stallCheckTimer = Timer(const Duration(seconds: 30), () {
+          if (isClosed || _stallCueFired) return;
+          if (state.status != RunStatus.active) return;
+          if (state.distanceM >= 5.0) return; // moveu, OK
+          _stallCueFired = true;
+          unawaited(_requestCoachCue(
+            event: 'no_movement',
+            distanceM: state.distanceM,
+            elapsedS: state.elapsedS,
+            currentPaceMinKm: state.currentPaceMinKm,
+          ));
+          _lastCueAt['no_movement'] = DateTime.now().millisecondsSinceEpoch;
+          // Pausa a run e pede o dialog de continuar/encerrar.
+          add(_NoMovementDetected());
+        });
+      }
 
       // GPS: web browser não emite stream confiável (depende de
       // movimento real >5m, e WiFi-based geolocation tem accuracy 1000m+
@@ -941,7 +972,11 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
       // a cada 3s — sempre entrega um ponto, mesmo parado. Native
       // mantém stream com distanceFilter (mais eficiente, sem bateria
       // extra).
-      if (kIsWeb) {
+      // Indoor: nenhuma fonte GPS é assinada — corrida roda só com
+      // cronômetro + BPM/steps do wearable.
+      if (_indoor) {
+        // no-op
+      } else if (kIsWeb) {
         // Settings web: medium + timeLimit 20s. 8s era curto demais —
         // browser WiFi-triangulation pode levar 10s+ no cold-start
         // (especialmente em corp net/VPN). Polling continua 5s mas
@@ -1560,6 +1595,9 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
 
   Future<void> _onComplete(CompleteRun event, Emitter<RunState> emit) async {
     if (state.runId == null) return;
+    // Indoor: distância vem do painel da esteira (modal no finish). Outdoor
+    // mantém o acumulado GPS.
+    final effectiveDistanceM = event.manualDistanceM ?? state.distanceM;
     _bpmSub?.cancel(); _stepsSub?.cancel(); _spo2Sub?.cancel();
     _bpmSub = null;
     _bpmFallbackPollTimer?.cancel();
@@ -1575,10 +1613,10 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
       'type': 'run_state',
       'status': 'completed',
       'elapsedS': state.elapsedS,
-      'distanceM': state.distanceM,
+      'distanceM': effectiveDistanceM,
       'paceMinKm': state.currentPaceMinKm ?? 0,
       'bpm': state.currentBpm ?? 0,
-      'caloriesKcal': _approxCalories(state.distanceM),
+      'caloriesKcal': _approxCalories(effectiveDistanceM),
       'elevationM': _approxElevationGain(state.splits),
       'runType': state.runType ?? 'Free Run',
       'splits': state.splits
@@ -1591,7 +1629,10 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
               })
           .toList(),
     }));
-    if (state.distanceM >= stationaryDistanceThresholdM) {
+    // Indoor: state.distanceM fica 0 (sem GPS) — o gate de imobilidade não
+    // se aplica; finish dispara se a corrida durou mais que 1min.
+    final indoorRanEnough = _indoor && state.elapsedS >= 60;
+    if (indoorRanEnough || state.distanceM >= stationaryDistanceThresholdM) {
       _requestCoachCue(event: 'finish');
       // Mantém a sessão Live aberta até o resumo terminar de tocar (premium).
       // Freemium: a fala 'finish' já saiu pelo TTS local — não precisa esperar.
@@ -1618,6 +1659,7 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
           type: state.runType ?? 'Free Run',
           targetPace: state.targetPace,
           targetDistance: state.targetDistance,
+          environment: _indoor ? 'indoor' : null,
         );
         remoteRunId = created.id;
       }
@@ -1664,7 +1706,7 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
 
       final run = await _remote.completeRun(
         remoteRunId,
-        distanceM: state.distanceM,
+        distanceM: effectiveDistanceM,
         durationS: state.elapsedS,
         avgBpm: avgBpmFromSplits,
         maxBpm: maxBpmFinal,
@@ -1705,7 +1747,7 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
         'type': 'run_state',
         'status': 'completed',
         'elapsedS': state.elapsedS,
-        'distanceM': state.distanceM,
+        'distanceM': effectiveDistanceM,
       }));
       emit(state.copyWith(status: RunStatus.completed, completedRun: run));
     } catch (e) {
@@ -2006,7 +2048,10 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
       const Duration(seconds: 1),
       (_) => add(_TimerTick()),
     );
-    if (kIsWeb) {
+    // Indoor: GPS nunca esteve assinado — resume só retoma timer + BPM.
+    if (_indoor) {
+      // no-op
+    } else if (kIsWeb) {
       const webSettings = LocationSettings(
         accuracy: LocationAccuracy.medium,
         timeLimit: Duration(seconds: 20),
@@ -2280,8 +2325,10 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
         'deviationPct': ((pace - target) / target * 100),
       'activeSegmentIndex': ?currentSegmentIndex,
       // Bandeira de idle (Watch 0 passos ~1min) — evita alucinação de pace
-      // com drift GPS (TF 75).
-      if (_isStepIdle60s() == true) 'idle': true,
+      // com drift GPS (TF 75). Indoor não tem GPS — idle não se aplica.
+      if (!_indoor && _isStepIdle60s() == true) 'idle': true,
+      // Esteira: s6-ai troca totals pra tempo-only e o LLM não narra km/pace.
+      if (_indoor) 'indoor': true,
     };
     Logger.info('run.coach.send_event', context: {
       'event': event,

@@ -44,6 +44,8 @@ class ActiveRunPage extends StatelessWidget {
   /// WatchStartListener quando o Watch dispara `startRun` e o iPhone
   /// estava fora do shell de corrida.
   final bool autoStart;
+  /// True = corrida em esteira: GPS desligado, distância informada no finish.
+  final bool indoor;
   const ActiveRunPage({
     super.key,
     this.initialType = 'Free Run',
@@ -51,6 +53,7 @@ class ActiveRunPage extends StatelessWidget {
     this.alertPrefs,
     this.isPremium,
     this.autoStart = false,
+    this.indoor = false,
   });
 
   @override
@@ -75,6 +78,7 @@ class ActiveRunPage extends StatelessWidget {
         alertPrefs: alertPrefs,
         isPremium: isPremium,
         autoStart: autoStart,
+        indoor: indoor,
       ),
     );
   }
@@ -106,12 +110,14 @@ class _ActiveRunView extends StatefulWidget {
   /// Dispara StartRun no primeiro frame quando true. Usado pelo Watch que
   /// inicia corrida com iPhone fora do shell (ver WatchStartListener).
   final bool autoStart;
+  final bool indoor;
   const _ActiveRunView({
     required this.initialType,
     this.planSessionId,
     this.alertPrefs,
     this.isPremium,
     this.autoStart = false,
+    this.indoor = false,
   });
 
   @override
@@ -155,7 +161,8 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
       // _onStart trata permissão negada propagando erro pro state. Quando é
       // tap manual no iPhone (autoStart=false) e GPS está bloqueado, modal
       // ainda aparece pro user reagir.
-      if (needsAction && !widget.autoStart) {
+      // Indoor (esteira): GPS não é usado — não bloqueia com modal.
+      if (needsAction && !widget.autoStart && !widget.indoor) {
         final granted = await GpsPermissionModal.show(
           context,
           blocked: true,
@@ -174,6 +181,7 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
               planSessionId: widget.planSessionId,
               alertPrefs: widget.alertPrefs,
               isPremium: isPremium,
+              indoor: widget.indoor,
             ));
       }
     });
@@ -403,6 +411,14 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
                           spacing: 6,
                           runSpacing: 6,
                           children: [
+                            // Indoor: GPS não é usado — chip vira ESTEIRA.
+                            if (widget.indoor)
+                              _StatusChip(
+                                icon: Icons.directions_run,
+                                label: 'ESTEIRA · INDOOR',
+                                color: palette.primary,
+                              )
+                            else
                             _StatusChip(
                               icon: Icons.gps_fixed,
                               label: switch (gpsChipStatus) {
@@ -560,6 +576,7 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
                             planSessionId: widget.planSessionId,
                             alertPrefs: widget.alertPrefs,
                             isPremium: isPremium,
+                            indoor: widget.indoor,
                           ));
                     },
                   ),
@@ -1146,6 +1163,14 @@ class _StatsOverlay extends StatelessWidget {
   }
 
   Future<void> _finishRun(BuildContext context, RunState state) async {
+    // Indoor (esteira): sem GPS a distância fica 0 — pede o número do
+    // painel da esteira antes de completar. Cancelar mantém a corrida ativa.
+    if (state.indoor) {
+      final distanceM = await _IndoorDistanceDialog.show(context, state);
+      if (distanceM == null || !context.mounted) return;
+      context.read<RunBloc>().add(CompleteRun(manualDistanceM: distanceM));
+      return;
+    }
     if (state.distanceM >= RunBloc.stationaryDistanceThresholdM) {
       context.read<RunBloc>().add(CompleteRun());
       return;
@@ -1984,6 +2009,84 @@ class _MockGpsToggleState extends State<_MockGpsToggle> {
           ],
         ],
       ),
+    );
+  }
+}
+
+/// Dialog do finish indoor: user digita a distância exibida no painel da
+/// esteira. Retorna metros, ou null se cancelou (corrida continua ativa).
+class _IndoorDistanceDialog extends StatefulWidget {
+  final RunState runState;
+  const _IndoorDistanceDialog({required this.runState});
+
+  static Future<double?> show(BuildContext context, RunState state) {
+    return showDialog<double>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => _IndoorDistanceDialog(runState: state),
+    );
+  }
+
+  @override
+  State<_IndoorDistanceDialog> createState() => _IndoorDistanceDialogState();
+}
+
+class _IndoorDistanceDialogState extends State<_IndoorDistanceDialog> {
+  final _controller = TextEditingController();
+  double? _parsedKm;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _onChanged(String raw) {
+    final v = double.tryParse(raw.trim().replaceAll(",", "."));
+    // Sanidade: 0.05-100km cobre de teste curto a ultra de esteira.
+    setState(() => _parsedKm = (v != null && v >= 0.05 && v <= 100) ? v : null);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    return AlertDialog(
+      title: const Text("DISTÂNCIA DA ESTEIRA"),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            "Tempo de corrida: ${widget.runState.formattedElapsed}. "
+            "Digite a distância que o painel da esteira mostra.",
+            style: TextStyle(color: palette.muted, fontSize: 13),
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _controller,
+            autofocus: true,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            onChanged: _onChanged,
+            decoration: const InputDecoration(
+              labelText: "Distância (km)",
+              hintText: "Ex: 5.2",
+              suffixText: "km",
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text("VOLTAR"),
+        ),
+        ElevatedButton(
+          onPressed: _parsedKm == null
+              ? null
+              : () => Navigator.of(context).pop(_parsedKm! * 1000),
+          child: const Text("SALVAR CORRIDA"),
+        ),
+      ],
     );
   }
 }

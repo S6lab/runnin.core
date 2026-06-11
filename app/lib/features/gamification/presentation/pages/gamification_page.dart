@@ -538,8 +538,14 @@ class _BadgesTabLegacy extends StatelessWidget {
          title: 'Indoor Champion',
          description: 'Complete corrida em esteira de 10km+',
          icon: Icons.fitness_center_outlined,
-         isUnlocked: false,
-         progress: null,
+         isUnlocked: runs.any(
+           (r) => r.environment == 'indoor' && r.distanceM >= 10000,
+         ),
+         progress: runs.any(
+           (r) => r.environment == 'indoor' && r.distanceM >= 10000,
+         )
+             ? 1.0
+             : null,
        ),
        _BadgeDef(
          title: 'Maratonista',

@@ -28,14 +28,33 @@ class HealthSyncService {
   /// quebrados que deletamos via admin script. v2 força new backfill
   /// com a fórmula correta (dateTo - dateFrom).
   static const _backfillFlagKey = 'biometrics_backfill_v2';
+  /// Último sync que incluiu o tier lento ([_slowTypes]). Medidas corporais
+  /// e atividade agregada mudam devagar — consultar 1×/24h corta ~50% das
+  /// queries HealthKit do sync típico.
+  static const _lastSlowSyncKey = 'biometrics_last_slow_sync_at';
+  /// Último `wearable_permissions_breakdown` emitido no boot (stage
+  /// after_ensure). O breakdown roda 1 `hasPermissions` por tipo — barato
+  /// demais pra justificar em TODA abertura, 1×/24h basta pra observability.
+  static const _lastBreakdownLogKey = 'biometrics_breakdown_logged_at';
 
   final _health = Health();
   final _ds = BiometricRemoteDatasource();
 
-  static const _types = <HealthDataType>[
+  // Auditoria 2026-06: tipos clínicos sem consumo em summary/prompts/UI
+  // (pressão arterial, ECG, eventos de FC, fibrilação atrial, temperatura
+  // corporal) foram REMOVIDOS do request — deixavam o sheet do HealthKit
+  // com 38 linhas e cara de app médico, e custavam 8 queries por sync.
+  // Pra users existentes a Apple mantém os tipos já solicitados listados
+  // em Ajustes→Saúde→Runnin; o corte vale pra novas instalações.
+
+  /// Tier rápido — consultado em todos os syncs. Sinais que mudam ao longo do
+  /// dia e alimentam home/recovery/checkpoint: FC, HRV, sono, passos,
+  /// SpO2, calorias ativas, distância e freq. respiratória.
+  static const _fastTypes = <HealthDataType>[
     HealthDataType.HEART_RATE,
     HealthDataType.RESTING_HEART_RATE,
     HealthDataType.HEART_RATE_VARIABILITY_SDNN,
+    HealthDataType.HEART_RATE_VARIABILITY_RMSSD,
     // SLEEP_ASLEEP é o agregado total (iPhone Health). Em iOS 16+, Apple
     // Watch reporta sleep stages granulares (DEEP/REM/LIGHT) e ASLEEP pode
     // vir vazio mesmo com user concedendo Sono. Por isso pegamos as 3 fases
@@ -55,22 +74,26 @@ class HealthSyncService {
     HealthDataType.SLEEP_AWAKE,
     HealthDataType.STEPS,
     HealthDataType.BLOOD_OXYGEN,
-    HealthDataType.WEIGHT,
     HealthDataType.ACTIVE_ENERGY_BURNED,
-    HealthDataType.RESPIRATORY_RATE,
-    HealthDataType.BASAL_ENERGY_BURNED,
-    HealthDataType.BLOOD_PRESSURE_SYSTOLIC,
-    HealthDataType.BLOOD_PRESSURE_DIASTOLIC,
-    HealthDataType.BODY_TEMPERATURE,
-    HealthDataType.ELECTROCARDIOGRAM,
-    // Build 42 — bateria expandida cobrindo 4 cápsulas do Apple Health:
-    //   Atividade completa: distância caminhada/corrida + ciclismo, lances
-    //     de escada, tempo de exercício, Move/Stand do Apple Watch.
-    //   Mobilidade: velocidade de caminhada + BPM em caminhada.
-    //   Medidas corporais: altura, % gordura, BMI, massa magra, cintura.
-    //   Sinais vitais avançados: HRV RMSSD, eventos de FC alta/baixa,
-    //     fibrilação atrial, temperatura da pele.
     HealthDataType.DISTANCE_WALKING_RUNNING,
+    HealthDataType.RESPIRATORY_RATE,
+    // Hidratação registrada no Health — comparável à prescrição diária do
+    // plano (hydration por sessão). Tier rápido porque muda ao longo do dia.
+    HealthDataType.WATER,
+  ];
+
+  /// Tier lento — consultado no máximo 1×/24h ([_lastSlowSyncKey]). Medidas
+  /// corporais e atividade agregada mudam devagar; consultar a cada sync
+  /// era o grosso dos ~7.6s de I/O HealthKit na abertura da home.
+  static const _slowTypes = <HealthDataType>[
+    HealthDataType.WEIGHT,
+    HealthDataType.HEIGHT,
+    HealthDataType.BODY_FAT_PERCENTAGE,
+    HealthDataType.BODY_MASS_INDEX,
+    HealthDataType.LEAN_BODY_MASS,
+    HealthDataType.WAIST_CIRCUMFERENCE,
+    HealthDataType.SKIN_TEMPERATURE,
+    HealthDataType.BASAL_ENERGY_BURNED,
     HealthDataType.DISTANCE_CYCLING,
     HealthDataType.FLIGHTS_CLIMBED,
     HealthDataType.EXERCISE_TIME,
@@ -78,18 +101,9 @@ class HealthSyncService {
     HealthDataType.APPLE_STAND_TIME,
     HealthDataType.WALKING_SPEED,
     HealthDataType.WALKING_HEART_RATE,
-    HealthDataType.HEIGHT,
-    HealthDataType.BODY_FAT_PERCENTAGE,
-    HealthDataType.BODY_MASS_INDEX,
-    HealthDataType.LEAN_BODY_MASS,
-    HealthDataType.WAIST_CIRCUMFERENCE,
-    HealthDataType.HEART_RATE_VARIABILITY_RMSSD,
-    HealthDataType.HIGH_HEART_RATE_EVENT,
-    HealthDataType.LOW_HEART_RATE_EVENT,
-    HealthDataType.IRREGULAR_HEART_RATE_EVENT,
-    HealthDataType.ATRIAL_FIBRILLATION_BURDEN,
-    HealthDataType.SKIN_TEMPERATURE,
   ];
+
+  static const _types = <HealthDataType>[..._fastTypes, ..._slowTypes];
 
   bool get isSupported => !kIsWeb && (Platform.isIOS || Platform.isAndroid);
 
@@ -123,7 +137,14 @@ class HealthSyncService {
     try {
       final permissions = _types.map((_) => HealthDataAccess.READ).toList();
       await _health.requestAuthorization(_types, permissions: permissions);
-      unawaited(_logPermissionsBreakdown(stage: 'after_ensure'));
+      // Throttle 24h: o breakdown itera hasPermissions tipo-por-tipo; rodar
+      // em toda abertura só repete o mesmo dado no analytics.
+      final lastLog = await _readDateFlag(_lastBreakdownLogKey);
+      if (lastLog == null ||
+          DateTime.now().difference(lastLog) > const Duration(hours: 24)) {
+        await _saveDateFlag(_lastBreakdownLogKey, DateTime.now());
+        unawaited(_logPermissionsBreakdown(stage: 'after_ensure'));
+      }
     } catch (e, st) {
       analytics.recordError(
         e,
@@ -379,26 +400,42 @@ class HealthSyncService {
             : DateTime.now().subtract(const Duration(days: 7)));
     final to = DateTime.now();
 
+    // Tier lento: medidas corporais/atividade agregada entram no máximo
+    // 1×/24h. `since` explícito (backfill/forceFullResync) força tudo.
+    final lastSlowSync = await _readDateFlag(_lastSlowSyncKey);
+    final slowDue = since != null ||
+        lastSlowSync == null ||
+        to.difference(lastSlowSync) > const Duration(hours: 24);
+    final slowFrom = effectiveSince
+        ?? (lastSlowSync != null
+            ? lastSlowSync.subtract(const Duration(hours: 36))
+            : DateTime.now().subtract(const Duration(days: 7)));
+    final queries = <HealthDataType, DateTime>{
+      for (final t in _fastTypes) t: from,
+      if (slowDue)
+        for (final t in _slowTypes) t: slowFrom,
+    };
+
     // Fix TF 63: query POR TIPO em vez de batch. O plugin `health` lança
     // exception no PRIMEIRO tipo unsupported (ex: HRV_RMSSD em iOS) e ABORTA
     // a query inteira — sleep_deep/rem/light nem chegam a ser processados.
     // Iterando, um tipo ruim não mata os outros.
     final raw = <HealthDataPoint>[];
     final perTypeErrors = <String>[];
-    for (final t in _types) {
+    for (final q in queries.entries) {
       try {
         final batch = await _health.getHealthDataFromTypes(
-          startTime: from,
+          startTime: q.value,
           endTime: to,
-          types: [t],
+          types: [q.key],
         );
         raw.addAll(batch);
       } catch (e) {
-        final key = _typeMap[t] ?? t.name;
+        final key = _typeMap[q.key] ?? q.key.name;
         perTypeErrors.add('$key:${e.toString().substring(0, e.toString().length.clamp(0, 80))}');
       }
     }
-    if (raw.isEmpty && perTypeErrors.length == _types.length) {
+    if (raw.isEmpty && perTypeErrors.length == queries.length) {
       // Todos falharam — provavelmente permissão revogada ou platform bug.
       analytics.logEvent('wearable_sync_failed', params: {
         'stage': 'fetch_all_failed',
@@ -441,11 +478,13 @@ class HealthSyncService {
 
     if (samples.isEmpty) {
       await _saveLastSync(to);
+      if (slowDue) await _saveDateFlag(_lastSlowSyncKey, to);
       analytics.logEvent('wearable_sync_completed', params: {
         'platform': _platformLabel,
         'provider': _sourceLabel,
         'samples_saved': 0,
         'samples_fetched': raw.length,
+        'slow_tier': slowDue ? 1 : 0,
         ...byType.map((k, v) => MapEntry('fetched_$k', v)),
         ...mappedByType.map((k, v) => MapEntry('mapped_$k', v)),
       });
@@ -482,12 +521,14 @@ class HealthSyncService {
     }
 
     await _saveLastSync(to);
+    if (slowDue) await _saveDateFlag(_lastSlowSyncKey, to);
     analytics.logEvent('wearable_sync_completed', params: {
       'platform': _platformLabel,
       'provider': _sourceLabel,
       'samples_saved': totalSaved,
       'samples_fetched': raw.length,
       'failed_batches': failedBatches,
+      'slow_tier': slowDue ? 1 : 0,
       ...byType.map((k, v) => MapEntry('fetched_$k', v)),
       ...mappedByType.map((k, v) => MapEntry('mapped_$k', v)),
     });
@@ -568,10 +609,7 @@ class HealthSyncService {
     HealthDataType.ACTIVE_ENERGY_BURNED: 'calories_burned',
     HealthDataType.RESPIRATORY_RATE: 'respiratory_rate',
     HealthDataType.BASAL_ENERGY_BURNED: 'calories_basal',
-    HealthDataType.BLOOD_PRESSURE_SYSTOLIC: 'bp_systolic',
-    HealthDataType.BLOOD_PRESSURE_DIASTOLIC: 'bp_diastolic',
-    HealthDataType.BODY_TEMPERATURE: 'body_temperature',
-    HealthDataType.ELECTROCARDIOGRAM: 'ecg',
+    HealthDataType.WATER: 'water',
     HealthDataType.DISTANCE_WALKING_RUNNING: 'distance_walking_running',
     HealthDataType.DISTANCE_CYCLING: 'distance_cycling',
     HealthDataType.FLIGHTS_CLIMBED: 'flights_climbed',
@@ -586,10 +624,6 @@ class HealthSyncService {
     HealthDataType.LEAN_BODY_MASS: 'lean_body_mass',
     HealthDataType.WAIST_CIRCUMFERENCE: 'waist_circumference',
     HealthDataType.HEART_RATE_VARIABILITY_RMSSD: 'hrv_rmssd',
-    HealthDataType.HIGH_HEART_RATE_EVENT: 'high_hr_event',
-    HealthDataType.LOW_HEART_RATE_EVENT: 'low_hr_event',
-    HealthDataType.IRREGULAR_HEART_RATE_EVENT: 'irregular_hr_event',
-    HealthDataType.ATRIAL_FIBRILLATION_BURDEN: 'afib_burden',
     HealthDataType.SKIN_TEMPERATURE: 'skin_temperature',
   };
 
@@ -609,10 +643,7 @@ class HealthSyncService {
     HealthDataType.ACTIVE_ENERGY_BURNED: 'kcal',
     HealthDataType.RESPIRATORY_RATE: 'rpm',
     HealthDataType.BASAL_ENERGY_BURNED: 'kcal',
-    HealthDataType.BLOOD_PRESSURE_SYSTOLIC: 'mmHg',
-    HealthDataType.BLOOD_PRESSURE_DIASTOLIC: 'mmHg',
-    HealthDataType.BODY_TEMPERATURE: 'celsius',
-    HealthDataType.ELECTROCARDIOGRAM: 'classification',
+    HealthDataType.WATER: 'liters',
     HealthDataType.DISTANCE_WALKING_RUNNING: 'm',
     HealthDataType.DISTANCE_CYCLING: 'm',
     HealthDataType.FLIGHTS_CLIMBED: 'count',
@@ -627,25 +658,25 @@ class HealthSyncService {
     HealthDataType.LEAN_BODY_MASS: 'kg',
     HealthDataType.WAIST_CIRCUMFERENCE: 'm',
     HealthDataType.HEART_RATE_VARIABILITY_RMSSD: 'ms',
-    HealthDataType.HIGH_HEART_RATE_EVENT: 'count',
-    HealthDataType.LOW_HEART_RATE_EVENT: 'count',
-    HealthDataType.IRREGULAR_HEART_RATE_EVENT: 'count',
-    HealthDataType.ATRIAL_FIBRILLATION_BURDEN: '%',
     HealthDataType.SKIN_TEMPERATURE: 'celsius',
   };
 
-  Future<DateTime?> _readLastSync() async {
+  Future<DateTime?> _readLastSync() => _readDateFlag(_lastSyncKey);
+
+  Future<void> _saveLastSync(DateTime ts) => _saveDateFlag(_lastSyncKey, ts);
+
+  Future<DateTime?> _readDateFlag(String key) async {
     if (!Hive.isBoxOpen(_hiveBoxName)) return null;
-    final raw = Hive.box<dynamic>(_hiveBoxName).get(_lastSyncKey);
+    final raw = Hive.box<dynamic>(_hiveBoxName).get(key);
     if (raw is String) return DateTime.tryParse(raw);
     return null;
   }
 
-  Future<void> _saveLastSync(DateTime ts) async {
+  Future<void> _saveDateFlag(String key, DateTime ts) async {
     final box = Hive.isBoxOpen(_hiveBoxName)
         ? Hive.box<dynamic>(_hiveBoxName)
         : await Hive.openBox<dynamic>(_hiveBoxName);
-    await box.put(_lastSyncKey, ts.toIso8601String());
+    await box.put(key, ts.toIso8601String());
   }
 }
 
