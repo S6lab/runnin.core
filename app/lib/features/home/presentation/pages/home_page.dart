@@ -1182,6 +1182,10 @@ class _PerformanceSection extends StatelessWidget {
                           final liveBpm = snap.data;
                           final bpm = liveBpm ?? run?.avgBpm;
                           final isLive = liveBpm != null;
+                          // Méd/máx da SEMANA CIVIL corrente (seg→hoje) a
+                          // partir das corridas — antes o bloco de baixo
+                          // repetia o MESMO número do topo (bpm recente 2x).
+                          final week = _weekBpmStats(runs);
                           return Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -1204,7 +1208,7 @@ class _PerformanceSection extends StatelessWidget {
                               const SizedBox(height: 20),
                               if (bpm != null) ...[
                                 Text(
-                                  'ZONA ESTIMADA',
+                                  'SEMANA · MÉD / MÁX',
                                   style: TextStyle(
                                     color: palette.muted,
                                     fontSize: 10,
@@ -1213,7 +1217,9 @@ class _PerformanceSection extends StatelessWidget {
                                 ),
                                 const SizedBox(height: 20),
                                 Text(
-                                  '$bpm',
+                                  week == null
+                                      ? '--'
+                                      : '${week.avg} / ${week.max}',
                                   style: TextStyle(
                                     color: palette.secondary,
                                     fontSize: 15,
@@ -1221,10 +1227,14 @@ class _PerformanceSection extends StatelessWidget {
                                   ),
                                 ),
                                 const SizedBox(height: 20),
-                                _ZoneBars(avgBpm: bpm),
+                                _ZoneBars(avgBpm: week?.avg ?? bpm),
                               ] else
+                                // Sem BPM = sem wearable/permissão → manda
+                                // pra conexão de plataformas de saúde (antes
+                                // ia pro /profile/edit, que não resolve).
                                 TextButton(
-                                  onPressed: () => context.push('/profile/edit'),
+                                  onPressed: () =>
+                                      context.push('/profile/health/devices'),
                                   child: const Text('REVISAR DADOS'),
                                 ),
                             ],
@@ -1341,6 +1351,34 @@ class _PerformanceSection extends StatelessWidget {
       ],
     );
   }
+}
+
+/// Méd/máx de BPM das corridas da SEMANA CIVIL corrente (segunda→hoje,
+/// local time — mesma janela civil do histórico/tendências). Méd pondera
+/// o avgBpm de cada corrida; máx é o pico de maxBpm (fallback avgBpm).
+/// Null quando nenhuma corrida da semana tem BPM.
+({int avg, int max})? _weekBpmStats(List<Run> runs) {
+  final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
+  final monday = today.subtract(Duration(days: today.weekday - 1));
+  final weekRuns = runs.where((r) {
+    final d = DateTime.tryParse(r.createdAt)?.toLocal();
+    return d != null && !d.isBefore(monday);
+  }).toList();
+  final avgs = weekRuns
+      .map((r) => r.avgBpm)
+      .whereType<int>()
+      .where((b) => b > 0)
+      .toList();
+  if (avgs.isEmpty) return null;
+  final maxes = weekRuns
+      .map((r) => r.maxBpm ?? r.avgBpm)
+      .whereType<int>()
+      .where((b) => b > 0)
+      .toList();
+  final avg = (avgs.reduce((a, b) => a + b) / avgs.length).round();
+  final max = maxes.reduce((a, b) => a > b ? a : b);
+  return (avg: avg, max: max);
 }
 
 class _ZoneBars extends StatelessWidget {
