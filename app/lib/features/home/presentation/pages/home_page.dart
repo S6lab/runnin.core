@@ -1354,9 +1354,12 @@ class _PerformanceSection extends StatelessWidget {
 }
 
 /// Méd/máx de BPM das corridas da SEMANA CIVIL corrente (segunda→hoje,
-/// local time — mesma janela civil do histórico/tendências). Méd pondera
-/// o avgBpm de cada corrida; máx é o pico de maxBpm (fallback avgBpm).
-/// Null quando nenhuma corrida da semana tem BPM.
+/// local time — mesma janela civil do histórico/tendências).
+/// MÉD: ponderada pela DURAÇÃO de cada corrida (média simples deixava
+/// corrida de 5min pesar igual a 1h — mesma distorção corrigida no pace
+/// agregado). MÁX: pico de run.maxBpm, que é o máximo INSTANTÂNEO real
+/// visto pelo wearable (maxBpmSeen, TF 59); fallback avgBpm só pra
+/// corrida sem BPM ao vivo. Null quando nenhuma corrida da semana tem BPM.
 ({int avg, int max})? _weekBpmStats(List<Run> runs) {
   final now = DateTime.now();
   final today = DateTime(now.year, now.month, now.day);
@@ -1365,18 +1368,22 @@ class _PerformanceSection extends StatelessWidget {
     final d = DateTime.tryParse(r.createdAt)?.toLocal();
     return d != null && !d.isBefore(monday);
   }).toList();
-  final avgs = weekRuns
-      .map((r) => r.avgBpm)
-      .whereType<int>()
-      .where((b) => b > 0)
-      .toList();
-  if (avgs.isEmpty) return null;
+  var weightedSum = 0.0;
+  var totalWeightS = 0;
+  for (final r in weekRuns) {
+    final bpm = r.avgBpm;
+    if (bpm == null || bpm <= 0) continue;
+    final w = r.durationS > 0 ? r.durationS : 1;
+    weightedSum += bpm * w;
+    totalWeightS += w;
+  }
+  if (totalWeightS == 0) return null;
   final maxes = weekRuns
       .map((r) => r.maxBpm ?? r.avgBpm)
       .whereType<int>()
       .where((b) => b > 0)
       .toList();
-  final avg = (avgs.reduce((a, b) => a + b) / avgs.length).round();
+  final avg = (weightedSum / totalWeightS).round();
   final max = maxes.reduce((a, b) => a > b ? a : b);
   return (avg: avg, max: max);
 }
