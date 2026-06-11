@@ -16,21 +16,18 @@ import {
   TrendEntry,
 } from '../stats-aggregate.entity';
 
-const PERIOD_DAYS: Record<StatsPeriod, number> = {
-  week: 7,
-  month: 30,
-  threeMonths: 90,
-};
-
 /**
  * Corridas curtas (<30s) ou sem deslocamento (<100m) são ruído (user tocou
  * INICIAR e fechou, ou GPS perdeu sinal). Filtra antes de agregar pra não
  * sujar pace trend / averages / deltas da Home > Performance. Espelhado
  * em get-stats-breakdown.use-case.ts.
+ * `status === 'completed'` espelha o filtro do client (history_page) —
+ * antes runs abandonadas entravam nos deltas mas não nos valores exibidos.
  */
 const MIN_VALID_DURATION_S = 30;
 const MIN_VALID_DISTANCE_M = 100;
 const isValidRun = (r: Run): boolean =>
+  r.status === 'completed' &&
   (r.durationS ?? 0) >= MIN_VALID_DURATION_S &&
   (r.distanceM ?? 0) >= MIN_VALID_DISTANCE_M;
 
@@ -40,26 +37,45 @@ export class GetStatsAggregateUseCase {
     private readonly userRepo: UserRepository,
   ) {}
 
-  async execute(userId: string, period: StatsPeriod): Promise<StatsAggregate> {
-    const days = PERIOD_DAYS[period];
+  async execute(
+    userId: string,
+    period: StatsPeriod,
+    tzOffsetMin: number = 0,
+  ): Promise<StatsAggregate> {
+    // Janela CIVIL alinhada com o client (history_page._periodRange):
+    // semana = segunda→agora, mês = 1º→agora, trimestre = 3 meses civis.
+    // Antes era rolling (últimos N dias a partir de agora) — o valor da
+    // tile (janela civil, client-side) e o delta (rolling, server-side)
+    // falavam de períodos diferentes e a tendência parecia "errada".
     const now = new Date();
-    const from = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
-    const prevFrom = new Date(from.getTime() - days * 24 * 60 * 60 * 1000);
+    const { start, prevStart } = civilWindows(period, now, tzOffsetMin);
 
     const [currentRaw, previousRaw, user] = await Promise.all([
-      this.runs.findByDateRange(userId, from, now),
-      this.runs.findByDateRange(userId, prevFrom, from),
+      this.runs.findByDateRange(userId, start, now),
+      this.runs.findByDateRange(userId, prevStart, start),
       this.userRepo.findById(userId),
     ]);
     const current = currentRaw.filter(isValidRun);
     const previous = previousRaw.filter(isValidRun);
 
+    // Cumulativos (volume/corridas) comparam pro-rata: só a fatia do
+    // período anterior com o MESMO tempo decorrido do atual. Sem isso,
+    // numa quarta-feira o volume da semana parcial perdia sempre pra
+    // semana anterior completa e o delta vivia negativo.
+    const elapsedMs = now.getTime() - start.getTime();
+    const prevCut = new Date(
+      Math.min(prevStart.getTime() + elapsedMs, start.getTime()),
+    );
+    const previousProRata = previous.filter(
+      (r) => new Date(r.createdAt) < prevCut,
+    );
+
     return {
       totals: this.totals(current),
       averages: this.averages(current),
-      deltas: this.deltas(current, previous),
+      deltas: this.deltas(current, previous, previousProRata),
       zoneDistribution: this.zones(current, user),
-      weeklyVolume: this.weeklyVolume(current, from, now),
+      weeklyVolume: this.weeklyVolume(current, start, now),
       paceTrend: this.paceTrend(current),
       bpmTrend: this.bpmTrend(current),
     };
@@ -101,14 +117,30 @@ export class GetStatsAggregateUseCase {
     };
   }
 
-  private deltas(current: Run[], previous: Run[]): StatsDeltas {
+  /// Deltas vs período anterior. Pace/BPM (médias) comparam contra o
+  /// período anterior INTEIRO; volume/corridas (cumulativos) contra a
+  /// fatia pro-rata [previousProRata] — mesmo tempo decorrido do atual.
+  private deltas(
+    current: Run[],
+    previous: Run[],
+    previousProRata: Run[],
+  ): StatsDeltas {
+    // Pace numérico direto dos totais — antes parseava a string formatada
+    // ("5:30"), perdendo precisão de arredondamento no delta.
+    const paceMin = (runs: Run[]): number | null => {
+      const dist = runs.reduce((s, r) => s + (r.distanceM || 0), 0);
+      const dur = runs.reduce((s, r) => s + (r.durationS || 0), 0);
+      return dist > 0 && dur > 0 ? (dur / dist) * 1000 / 60 : null;
+    };
+    const currPace = paceMin(current);
+    const prevPace = paceMin(previous);
     const curr = this.averages(current);
     const prev = this.averages(previous);
     const currVol = current.reduce((s, r) => s + (r.distanceM || 0), 0);
-    const prevVol = previous.reduce((s, r) => s + (r.distanceM || 0), 0);
+    const prevVol = previousProRata.reduce((s, r) => s + (r.distanceM || 0), 0);
 
-    const pacePctVsPrev = curr.avgPaceMinKm && prev.avgPaceMinKm
-      ? this.pctChange(this.paceToMin(prev.avgPaceMinKm)!, this.paceToMin(curr.avgPaceMinKm)!)
+    const pacePctVsPrev = currPace !== null && prevPace !== null
+      ? this.pctChange(prevPace, currPace)
       : null;
     const volumePctVsPrev = prevVol > 0 ? this.pctChange(prevVol, currVol) : null;
     const bpmDeltaBpm = curr.avgBpm !== null && prev.avgBpm !== null ? curr.avgBpm - prev.avgBpm : null;
@@ -117,7 +149,7 @@ export class GetStatsAggregateUseCase {
       pacePctVsPrev,
       volumePctVsPrev,
       bpmDeltaBpm,
-      runsCountDelta: current.length - previous.length,
+      runsCountDelta: current.length - previousProRata.length,
     };
   }
 
@@ -211,8 +243,13 @@ export class GetStatsAggregateUseCase {
   }
 
   private minToPace(min: number): string {
-    const m = Math.floor(min);
-    const s = Math.round((min - m) * 60);
+    let m = Math.floor(min);
+    let s = Math.round((min - m) * 60);
+    // Carry: 5.999 min arredondava pra "5:60" em vez de "6:00".
+    if (s === 60) {
+      m += 1;
+      s = 0;
+    }
     return `${m}:${s.toString().padStart(2, '0')}`;
   }
 
@@ -220,4 +257,51 @@ export class GetStatsAggregateUseCase {
     if (prev === 0) return 0;
     return Math.round(((curr - prev) / prev) * 100);
   }
+}
+
+/**
+ * Janelas civis do período na timezone do CLIENT (tzOffsetMin, ex: BRT
+ * = -180), alinhadas 1:1 com history_page._periodRange do app:
+ *   week        → segunda da semana corrente; anterior = segunda anterior
+ *   month       → 1º do mês corrente; anterior = 1º do mês anterior
+ *   threeMonths → 1º de (mês-2); anterior = 1º de (mês-5)
+ * Mesma técnica local-as-UTC do buildBuckets (get-stats-breakdown).
+ */
+function civilWindows(
+  period: StatsPeriod,
+  now: Date,
+  tzOffsetMin: number,
+): { start: Date; prevStart: Date } {
+  const offsetMs = tzOffsetMin * 60 * 1000;
+  const localNow = new Date(now.getTime() + offsetMs);
+  const toUtc = (d: Date): Date => new Date(d.getTime() - offsetMs);
+  const y = localNow.getUTCFullYear();
+  const m = localNow.getUTCMonth();
+
+  if (period === 'week') {
+    const day = new Date(Date.UTC(y, m, localNow.getUTCDate()));
+    const dow = day.getUTCDay() === 0 ? 7 : day.getUTCDay(); // Mon=1..Sun=7
+    const monday = new Date(
+      Date.UTC(y, m, localNow.getUTCDate() - (dow - 1)),
+    );
+    const prevMonday = new Date(
+      Date.UTC(
+        monday.getUTCFullYear(),
+        monday.getUTCMonth(),
+        monday.getUTCDate() - 7,
+      ),
+    );
+    return { start: toUtc(monday), prevStart: toUtc(prevMonday) };
+  }
+  if (period === 'month') {
+    return {
+      start: toUtc(new Date(Date.UTC(y, m, 1))),
+      prevStart: toUtc(new Date(Date.UTC(y, m - 1, 1))),
+    };
+  }
+  // threeMonths
+  return {
+    start: toUtc(new Date(Date.UTC(y, m - 2, 1))),
+    prevStart: toUtc(new Date(Date.UTC(y, m - 5, 1))),
+  };
 }

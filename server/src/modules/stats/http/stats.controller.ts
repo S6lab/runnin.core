@@ -23,7 +23,12 @@ export async function getStatsAggregate(req: Request, res: Response, next: NextF
       res.status(400).json({ error: `Invalid period. Use one of: ${VALID_PERIODS.join(', ')}` });
       return;
     }
-    const result = await getStats.execute(req.uid, period as StatsPeriod);
+    // Mesma semântica do breakdown: janelas civis na TZ do user.
+    const tzRaw = req.query['tzOffsetMin'];
+    const tzOffsetMin = typeof tzRaw === 'string' && /^-?\d+$/.test(tzRaw)
+      ? Math.max(-840, Math.min(840, Number(tzRaw)))
+      : 0;
+    const result = await getStats.execute(req.uid, period as StatsPeriod, tzOffsetMin);
     res.json(result);
   } catch (err) {
     next(err);
