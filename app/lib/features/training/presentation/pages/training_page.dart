@@ -2277,34 +2277,26 @@ class _PlanCompletedBanner extends StatelessWidget {
   }
 }
 
-/// Data em que o checkpoint da semana M-1 deve rodar (Sunday cron + user
-/// aceitar a proposta) e promover a semana [weekNumber] de skeleton pra full.
-/// Regra: cada checkpoint enriquece as 2 próximas semanas (ver
-/// server/checkpoint-shared.ts:enrichTwoTier), então a semana M só é
-/// detalhada no final da semana M-1.
-/// Retorna label tipo "segunda, 12/07". Se já passou, retorna
-/// "no próximo checkpoint" (raro — server propaga rápido).
-///
-/// NOTA: weekday em PT-BR é computado manualmente em vez de via
-/// DateFormat('EEEE', 'pt_BR'), porque `initializeDateFormatting('pt_BR')`
-/// não é chamado no boot — usar locale custom no DateFormat lança
-/// LocaleDataException e quebra o dialog (tela branca).
+/// Data em que o checkpoint deve promover a semana [weekNumber] de
+/// skeleton pra full. O cron de proposta roda AOS DOMINGOS (Cloud
+/// Scheduler → weekly-proposals) e cada checkpoint enriquece as 2
+/// próximas semanas (server/checkpoint-shared.ts:enrichTwoTier) — então o
+/// unlock real é o ÚLTIMO DOMINGO antes do início da semana M, não o
+/// "último dia da semana M-1" relativo ao startDate (plano começando na
+/// quarta mostrava "liberado em quarta", dia em que cron nenhum roda).
+/// Se já passou, retorna "no próximo checkpoint".
 String _checkpointUnlockLabel(Plan plan, int weekNumber) {
   final startDate = plan.effectiveStartDate;
-  // M=1: nunca skeleton, mas tratamos como "hoje" se chegar aqui.
-  // M=2: nunca skeleton (criado full), idem.
-  // M>=3: liberado em startDate + (M-1)*7 - 1 dias = último dia da semana M-1.
-  final unlockDate = startDate.add(Duration(days: (weekNumber - 1) * 7 - 1));
+  final weekStart = startDate.add(Duration(days: (weekNumber - 1) * 7));
+  // Domingo estritamente anterior ao início da semana M (weekday: Mon=1..Sun=7).
+  final daysBack = weekStart.weekday == DateTime.sunday ? 7 : weekStart.weekday;
+  final unlockDate = weekStart.subtract(Duration(days: daysBack));
   final today = DateTime.now();
   final todayDateOnly = DateTime(today.year, today.month, today.day);
   if (unlockDate.isBefore(todayDateOnly)) return 'no próximo checkpoint';
-  const weekdays = <String>[
-    '', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado', 'domingo',
-  ];
-  final wd = weekdays[unlockDate.weekday];
   final dd = unlockDate.day.toString().padLeft(2, '0');
   final mm = unlockDate.month.toString().padLeft(2, '0');
-  return 'em $wd, $dd/$mm';
+  return 'no checkpoint de domingo, $dd/$mm';
 }
 
 /// Diálogo único compartilhado por MENSAL e SEMANAL quando o user toca numa
