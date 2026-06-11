@@ -30,8 +30,7 @@ import {
 import { ScheduleCheckpointsUseCase } from './schedule-checkpoints.use-case';
 import { FirestorePlanCheckpointRepository } from '../infra/firestore-plan-checkpoint.repository';
 import { logger } from '@shared/logger/logger';
-import { formatRunningKnowledgeContext } from '@shared/knowledge/running/running-knowledge';
-import { buildPlanInitPrompt } from '@shared/infra/llm/prompts';
+import { S6AiClient } from '@shared/infra/s6ai/s6ai.client';
 import { CoachRuntimeContextService } from '@modules/coach/use-cases/coach-runtime-context.service';
 import { container } from '@shared/container';
 import { CooldownError } from '@shared/errors/app-error';
@@ -146,7 +145,10 @@ export const GeneratePlanSchema = z.object({
 export type GeneratePlanInput = z.infer<typeof GeneratePlanSchema>;
 
 export class GeneratePlanUseCase {
+  // LLM local só pros enriquecimentos de prosa (rationale/narratives) —
+  // a geração estrutural das weeks vive no s6-ai via S6AiClient.
   private llm = getPlanLLM();
+  private s6ai = new S6AiClient();
   private runtime = new CoachRuntimeContextService();
   // Default impl injetada via construtor de classe pra não exigir DI
   // explícita no callsite, mas trocável em testes.
@@ -546,10 +548,6 @@ export class GeneratePlanUseCase {
 
     this._roteiroTpl = await getRoteiroTemplates();
     const runtime = await this.runtime.getContext(plan.userId);
-    const knowledgeContext = await formatRunningKnowledgeContext(
-      `${input.goal} ${input.level} ${input.weeksCount} semanas corrida`,
-      5,
-    );
 
     // windowMode derivado a posteriori a partir da combinação
     // (raceDistanceKm × level × weeksCount). Resultado já foi validado em
@@ -582,52 +580,43 @@ export class GeneratePlanUseCase {
       });
     }
 
-    const built = await buildPlanInitPrompt({
-      profile: runtime.profile,
-      biometricSummary,
-      input: {
-        goal: input.goal,
-        level: input.level,
-        frequency: freq,
-        weeksCount: input.weeksCount,
-        startDate: input.startDate,
-        // Contexto da jornada nova (5 níveis + Flow + dias + pace/volume atuais):
-        // o builder injeta `journey` no userTemplate; campos null/undefined
-        // são tratados pelo template via condicionais.
-        levelHint: input.levelHint ?? null,
-        currentWeeklyKm: input.currentWeeklyKm ?? null,
-        currentPaceMinKm: input.currentPaceMinKm ?? null,
-        capacityDistanceKm: input.capacityDistanceKm ?? null,
-        availableDays: input.availableDays ?? null,
-        goalKind: input.goalKind,
-        flowSubgoal: input.flowSubgoal,
-        raceDistanceKm: input.raceDistanceKm,
-        raceMode: input.raceMode,
-        targetPaceMinKm: input.targetPaceMinKm,
-        windowMode,
-        longRunDayOfWeek: input.longRunDayOfWeek,
-        longRunMaxMinutes: input.longRunMaxMinutes,
-        raceDate: input.raceDate,
-      },
-      ragContext: knowledgeContext,
-    });
-
     const startedAt = Date.now();
     try {
       const llmStart = Date.now();
-      const raw = await this.llm.generate(built.userPrompt, {
-        systemPrompt: built.systemPrompt,
-        maxTokens: built.maxTokens,
-        temperature: built.temperature,
+      // Geração das semanas delegada ao s6-ai: prompt (plan-init) + RAG +
+      // LLM JSON mode + parse leniente + repair + rebalance de count vivem
+      // lá. Aqui fica só o domínio: normalização (ids, segments, clamps,
+      // two-tier), enforcement e persistência.
+      const s6Result = await this.s6ai.generatePlanWeeks({
         userId: plan.userId,
-        useCase: 'generate-plan',
-        // JSON mode: Gemini garante schema válido. Elimina ~90% das
-        // falhas de parse que levavam plano a "failed" status.
-        responseJson: true,
+        profile: runtime.profile,
+        biometricSummary,
+        input: {
+          goal: input.goal,
+          level: input.level,
+          frequency: freq,
+          weeksCount: input.weeksCount,
+          startDate: input.startDate,
+          levelHint: input.levelHint ?? null,
+          currentWeeklyKm: input.currentWeeklyKm ?? null,
+          currentPaceMinKm: input.currentPaceMinKm ?? null,
+          capacityDistanceKm: input.capacityDistanceKm ?? null,
+          availableDays: input.availableDays ?? null,
+          goalKind: input.goalKind,
+          flowSubgoal: input.flowSubgoal,
+          raceDistanceKm: input.raceDistanceKm,
+          raceMode: input.raceMode,
+          targetPaceMinKm: input.targetPaceMinKm,
+          windowMode,
+          longRunDayOfWeek: input.longRunDayOfWeek,
+          longRunMaxMinutes: input.longRunMaxMinutes,
+          raceDate: input.raceDate,
+        },
       });
       const llmMs = Date.now() - llmStart;
       const parseStart = Date.now();
-      const parsedWeeks = await this._parseWeeks(raw, input.weeksCount, input.startDate, input.level);
+      const normalizedWeeks = this._normalizeWeeks(s6Result.weeks, input.startDate, input.level);
+      const parsedWeeks = await this._ensureWeeksCount(normalizedWeeks, input.weeksCount, input.startDate);
       // Frequency enforcement: o LLM ocasionalmente devolve 1 sessão/sem
       // mesmo com freq=5 (sub-prompt frouxo ou bias defensivo). Preenchemos
       // determinísticamente com Easy Run em dias livres até bater freq.
@@ -719,8 +708,8 @@ export class GeneratePlanUseCase {
       const totalMs = Date.now() - startedAt;
       logger.info('plan.generate.completed', {
         planId: plan.id,
-        version: built.version,
-        source: built.source,
+        version: s6Result.meta.promptVersion,
+        source: s6Result.meta.promptSource,
         llmMs,
         parseMs,
         totalMs,
@@ -1110,73 +1099,9 @@ ${weeksDigest}`;
     return ['', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'][i] ?? '?';
   }
 
-  private async _parseWeeks(raw: string, weeksCount: number, startDate: string, level: RunnerLevel = 'iniciante'): Promise<PlanWeek[]> {
-    try {
-      const normalized = this._normalizeWeeks(raw, startDate, level);
-      return this._ensureWeeksCount(normalized, weeksCount, startDate);
-    } catch (initialError) {
-      const firstErrorMessage =
-        initialError instanceof Error ? initialError.message : String(initialError);
-      logger.warn('plan.parse.initial_failed', {
-        err: firstErrorMessage,
-      });
-      // Sem isso, diagnosticar falhas de parse é impossível: o erro do Zod
-      // diz "field X invalid at path Y" mas a gente nunca vê o JSON real
-      // que veio do LLM. 800 chars cobre o início do array de weeks, que
-      // é onde os bugs aparecem (weekNumber missing, sessions: []).
-      logger.warn('plan.parse.raw_sample', {
-        sample: raw.slice(0, 800),
-        rawLen: raw.length,
-      });
-
-      const repaired = await this.llm.generate(
-        `Converta a resposta abaixo em JSON valido estritamente no formato esperado.
-Erro identificado no parse: ${firstErrorMessage}
-Resposta original:
-${raw}`,
-        {
-          systemPrompt:
-            'Retorne somente JSON valido. Preserve o conteudo util e descarte texto fora do JSON.',
-          maxTokens: 3000,
-          temperature: 0,
-          responseJson: true,
-        },
-      );
-
-      try {
-        const normalized = this._normalizeWeeks(repaired, startDate, level);
-        return this._ensureWeeksCount(normalized, weeksCount, startDate);
-      } catch (repairError) {
-        const secondErrorMessage =
-          repairError instanceof Error ? repairError.message : String(repairError);
-        logger.warn('plan.parse.repair_failed', {
-          err: secondErrorMessage,
-        });
-
-        const repairedAgain = await this.llm.generate(
-          `Repare o JSON de plano abaixo.
-Regras obrigatorias:
-- Retorne somente JSON.
-- O JSON deve ser array de semanas com sessions.
-- Escape corretamente aspas e quebras de linha em strings.
-- Nao inclua comentarios.
-
-Conteudo recebido:
-${repaired}`,
-          {
-            systemPrompt:
-              'Voce e um reparador de JSON. Retorne apenas JSON valido e parseavel.',
-            responseJson: true,
-            maxTokens: 3000,
-            temperature: 0,
-          },
-        );
-
-        const normalized = this._normalizeWeeks(repairedAgain, startDate, level);
-        return this._ensureWeeksCount(normalized, weeksCount, startDate);
-      }
-    }
-  }
+  // REMOVIDO: _parseWeeks + cadeia de parse leniente/repair de JSON —
+  // movidos pro s6-ai (s6-ai/src/modules/plan/), que é o dono de
+  // "LLM output → weeks válidas". Aqui chega shape já validado.
 
   // REMOVIDO: _buildDeterministicFallbackPlan. Plano só faz sentido
   // com IA personalizada. Sem isso o produto perde propósito. Em vez de
@@ -1297,15 +1222,14 @@ ${repaired}`,
     return padded;
   }
 
-  private _normalizeWeeks(raw: string, startDate: string, level: RunnerLevel = 'iniciante'): PlanWeek[] {
-    const parsedJson = this._parseJsonLenient(raw);
-    // Parse tolerante: descarta sessions inválidas (campos undefined/null)
-    // ao invés de invalidar o array inteiro. Gemini ocasionalmente omite
-    // dayOfWeek/type/distanceKm em 1-2 sessions; antes isso fazia
-    // PlanWeeksSchema.parse() rejeitar TUDO e o user ficar com plano falso.
-    const candidate = this._extractWeeksCandidate(parsedJson);
-    const lenientWeeks = this._coerceWeeksLenient(candidate);
-    const parsed = PlanWeeksSchema.parse(lenientWeeks);
+  /**
+   * Normalização de DOMÍNIO das weeks cruas vindas do s6-ai (que já fez
+   * parse leniente + repair + validação do shape LLM): ids, sanitize de
+   * tipo, clamps por nível, segments determinísticos, two-tier, filtro de
+   * week 1 pré-D0 e ratio do long run.
+   */
+  private _normalizeWeeks(rawWeeks: unknown, startDate: string, level: RunnerLevel = 'iniciante'): PlanWeek[] {
+    const parsed = PlanWeeksSchema.parse(rawWeeks);
 
     // Week 1 filtra sessões com dayOfWeek < startDayOfWeek (D0 escolhido
     // pelo user no onboarding). Sem fallback "manter tudo" — o prompt
@@ -1429,76 +1353,9 @@ ${repaired}`,
     return normalized;
   }
 
-  private _parseJsonLenient(raw: string): unknown {
-    const candidates = this._buildJsonCandidates(raw);
-    const errors: string[] = [];
-
-    for (const candidate of candidates) {
-      try {
-        return JSON.parse(candidate) as unknown;
-      } catch (err) {
-        const parseError = err instanceof Error ? err.message : String(err);
-        errors.push(parseError);
-
-        try {
-          const repaired = this._repairCommonJsonIssues(candidate);
-          return JSON.parse(repaired) as unknown;
-        } catch (repairErr) {
-          errors.push(repairErr instanceof Error ? repairErr.message : String(repairErr));
-
-          try {
-            const repaired = this._repairCommonJsonIssues(candidate);
-            const extracted =
-              this._extractTopLevelJsonArray(repaired) ??
-              this._extractTopLevelJsonObject(repaired);
-            if (extracted) return JSON.parse(extracted) as unknown;
-          } catch (extractErr) {
-            errors.push(extractErr instanceof Error ? extractErr.message : String(extractErr));
-          }
-        }
-      }
-    }
-
-    throw new Error(
-      `Unable to parse plan JSON after ${candidates.length} attempts: ${errors.join(' | ')}`,
-    );
-  }
-
-  private _buildJsonCandidates(raw: string): string[] {
-    const normalized = raw.replace(/\r/g, '').trim();
-    const withoutFences = this._stripMarkdownFences(normalized);
-    const candidates: string[] = [];
-    const add = (value: string | undefined) => {
-      if (!value) return;
-      const trimmed = value.trim();
-      if (!trimmed) return;
-      if (!candidates.includes(trimmed)) candidates.push(trimmed);
-    };
-
-    add(normalized);
-    add(withoutFences);
-
-    const fenceRegex = /```(?:json)?\s*([\s\S]*?)```/gi;
-    for (const match of normalized.matchAll(fenceRegex)) {
-      add(match[1]);
-    }
-
-    const firstArray = withoutFences.indexOf('[');
-    const lastArray = withoutFences.lastIndexOf(']');
-    if (firstArray !== -1 && lastArray !== -1 && lastArray > firstArray) {
-      add(withoutFences.slice(firstArray, lastArray + 1));
-    }
-    add(this._extractTopLevelJsonArray(withoutFences));
-
-    const firstObject = withoutFences.indexOf('{');
-    const lastObject = withoutFences.lastIndexOf('}');
-    if (firstObject !== -1 && lastObject !== -1 && lastObject > firstObject) {
-      add(withoutFences.slice(firstObject, lastObject + 1));
-    }
-    add(this._extractTopLevelJsonObject(withoutFences));
-
-    return candidates;
-  }
+  // REMOVIDO: helpers de parse leniente de JSON — movidos pro s6-ai
+  // (s6-ai/src/modules/plan/json-lenient.ts), dono canônico de
+  // "LLM output → JSON válido".
 
   private _repairCommonJsonIssues(input: string): string {
     // Remove BOM and non-printable control characters that frequently break parsing.
@@ -1902,7 +1759,7 @@ ${repaired}`,
     return this._applyTwoTier(result);
   }
 
-  private async _ensureWeeksCountRaw(weeks: PlanWeek[], weeksCount: number, startDate: string): Promise<PlanWeek[]> {
+  private async _ensureWeeksCountRaw(weeks: PlanWeek[], weeksCount: number, _startDate: string): Promise<PlanWeek[]> {
     const normalizedWeeks = this._renumberWeeks(weeks);
     if (normalizedWeeks.length === weeksCount) return normalizedWeeks;
     if (normalizedWeeks.length > weeksCount) {
@@ -1913,38 +1770,13 @@ ${repaired}`,
       return this._renumberWeeks(normalizedWeeks.slice(0, weeksCount));
     }
 
-    const rebalancedRaw = await this.llm.generate(
-      `Você recebeu um plano com ${normalizedWeeks.length} semanas e precisa devolver exatamente ${weeksCount}.
-Expanda ou reestruture o plano mantendo o objetivo e a progressao.
-Retorne SOMENTE um array JSON com ${weeksCount} objetos.
-Os objetos devem ter weekNumber de 1 ate ${weeksCount}; nao agrupe varias semanas em um objeto.
-
-Plano atual:
-${JSON.stringify(normalizedWeeks)}`,
-      {
-        systemPrompt:
-          'Retorne somente JSON valido no formato array de semanas com sessions.',
-        maxTokens: 6000,
-        temperature: 0.2,
-      },
-    );
-
-    const rebalanced = this._normalizeWeeks(rebalancedRaw, startDate);
-    if (rebalanced.length !== weeksCount) {
-      logger.warn('plan.parse.weeks_rebalance_incomplete', {
-        requestedWeeks: weeksCount,
-        receivedWeeks: rebalanced.length,
-      });
-      return this._expandWeeksDeterministically(
-        rebalanced.length > 0 ? rebalanced : normalizedWeeks,
-        weeksCount,
-      );
-    }
-    logger.warn('plan.parse.weeks_rebalanced', {
-      fromWeeks: normalizedWeeks.length,
-      toWeeks: rebalanced.length,
+    // Rebalance via LLM mora no s6-ai (countMismatch=true quando nem lá
+    // bateu). Aqui só resta a expansão determinística como último recurso.
+    logger.warn('plan.parse.weeks_expand_deterministic', {
+      requestedWeeks: weeksCount,
+      receivedWeeks: normalizedWeeks.length,
     });
-    return this._renumberWeeks(rebalanced);
+    return this._expandWeeksDeterministically(normalizedWeeks, weeksCount);
   }
 
   private _renumberWeeks(weeks: PlanWeek[]): PlanWeek[] {

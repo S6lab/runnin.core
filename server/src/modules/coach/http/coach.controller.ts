@@ -1,14 +1,15 @@
 import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
-import { CoachMessageUseCase, CoachContextSchema, isCueSkipped } from '../use-cases/coach-message.use-case';
 import { CoachChatSchema, CoachChatUseCase } from '../use-cases/coach-chat.use-case';
 import { GetCoachReportUseCase } from '../use-cases/get-coach-report.use-case';
 import { GenerateReportUseCase } from '../use-cases/generate-report.use-case';
 import { GeneratePeriodAnalysisUseCase } from '../use-cases/generate-period-analysis.use-case';
-import { CreateLiveEphemeralTokenUseCase } from '../use-cases/create-live-ephemeral-token.use-case';
 import { LogLiveTurnUseCase } from '../use-cases/log-live-turn.use-case';
+import { ListCoachMessagesUseCase } from '../use-cases/list-coach-messages.use-case';
 import { CoachRuntimeContextService } from '../use-cases/coach-runtime-context.service';
-import { buildRunCoachInstruction } from '../use-cases/build-run-coach-instruction';
+import { isInDndWindow } from '@shared/infra/llm/prompts';
+import { S6AiClient, S6LiveSessionContext } from '@shared/infra/s6ai/s6ai.client';
+import { s6WsProxyEnabled } from '@shared/infra/s6ai/s6-proxy';
 import { FirestoreCoachReportRepository } from '../infra/firestore-coach-report.repository';
 import { FirestoreCoachMessageLogRepository } from '../infra/firestore-coach-message-log.repository';
 import { FirestoreRunRepository } from '@modules/runs/infra/firestore-run.repository';
@@ -18,47 +19,117 @@ import { logger } from '@shared/logger/logger';
 const reportRepo = new FirestoreCoachReportRepository();
 const runRepoForReports = new FirestoreRunRepository();
 const coachMessageLogRepo = new FirestoreCoachMessageLogRepository();
-const coachMessage = new CoachMessageUseCase();
 const coachChat = new CoachChatUseCase();
 const getReport = new GetCoachReportUseCase(reportRepo);
 const generateReport = new GenerateReportUseCase(reportRepo, runRepoForReports);
 const generatePeriodAnalysis = new GeneratePeriodAnalysisUseCase(runRepoForReports, reportRepo);
-const createLiveToken = new CreateLiveEphemeralTokenUseCase();
 const logLiveTurn = new LogLiveTurnUseCase(coachMessageLogRepo);
+const listCoachMessages = new ListCoachMessagesUseCase(coachMessageLogRepo);
 const liveRuntimeContext = new CoachRuntimeContextService();
 
-export async function postCoachLiveToken(req: Request, res: Response, next: NextFunction): Promise<void> {
+// REMOVIDO na migração s6-ai: postCoachLiveToken (token efêmero pra conexão
+// app→Google direta). O app agora abre sessão via postCoachLiveSession e
+// conecta no WS do s6-ai — GEMINI_API_KEY nunca mais encosta no cliente.
+
+const s6ai = new S6AiClient();
+
+/**
+ * Cria a sessão Live no s6-ai (que é o dono do socket Gemini). BFF: monta
+ * o blob de contexto agnóstico a partir do Firestore (profile, sessão
+ * planejada, prefs) + weather do body, e devolve {sessionId, wsUrl} pro
+ * app conectar DIRETO no WS do s6-ai. Substitui o token efêmero
+ * (postCoachLiveToken) — o app não fala mais com o Google.
+ */
+export async function postCoachLiveSession(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    // planSessionId (opcional) resolve a sessão planejada do dia → o coach
-    // recebe o roteiro/segments no systemInstruction. Sem ele = corrida livre.
-    const planSessionId =
-      (req.query['planSessionId'] as string | undefined) ??
-      (req.body?.['planSessionId'] as string | undefined);
-    const runtime = await liveRuntimeContext.getContext(req.uid, planSessionId);
-    // Weather opcional — app passa snapshot capturado no início da corrida.
     const body = (req.body ?? {}) as {
+      planSessionId?: string;
       temperatureC?: number;
       humidityPercent?: number;
       windKmh?: number;
     };
+    const runtime = await liveRuntimeContext.getContext(req.uid, body.planSessionId);
+    const p = runtime.profile;
+
+    const profileSnippet = p
+      ? [
+          p.name ? `nome ${p.name}` : null,
+          p.level ? `nível ${p.level}` : null,
+          p.goal ? `objetivo "${p.goal}"` : null,
+          p.frequency ? `${p.frequency}x/semana` : null,
+        ].filter(Boolean).join(', ')
+      : 'sem perfil completo';
+
+    const session = runtime.currentSession;
+    const briefingParts: string[] = [];
+    if (session) {
+      const head = [`SESSÃO DE HOJE: ${session.type}`];
+      if (typeof session.distanceKm === 'number') head.push(`${session.distanceKm}km`);
+      if (session.targetPace) head.push(`pace alvo ${session.targetPace}`);
+      if (typeof session.durationMin === 'number') head.push(`~${session.durationMin}min`);
+      briefingParts.push(head.join(' · '));
+    } else {
+      briefingParts.push('SESSÃO DE HOJE: corrida livre (sem roteiro planejado). Comente o esforço real.');
+    }
+
+    // Perfil usa 'per_km' como default falante → mapeia pra 'normal' do
+    // s6-ai (que já fala a cada km/500m).
+    const freqRaw = p?.coachMessageFrequency;
+    const freq: NonNullable<S6LiveSessionContext['prefs']>['freq'] =
+      freqRaw === 'silent' || freqRaw === 'alerts_only' || freqRaw === 'per_2km'
+        ? freqRaw
+        : 'normal';
+
     const weather =
       typeof body.temperatureC === 'number' ||
       typeof body.humidityPercent === 'number' ||
       typeof body.windKmh === 'number'
         ? {
-            temperatureC: body.temperatureC,
-            humidityPercent: body.humidityPercent,
-            windKmh: body.windKmh,
+            temperatureC: body.temperatureC ?? null,
+            humidityPercent: body.humidityPercent ?? null,
+            windKmh: body.windKmh ?? null,
           }
-        : undefined;
-    const systemInstruction = await buildRunCoachInstruction(
-      runtime,
-      runtime.profile?.coachPersonality,
+        : null;
+
+    const context: S6LiveSessionContext = {
+      userId: req.uid,
+      persona: p?.coachPersonality ?? null,
+      voice: 'Charon',
+      locale: 'pt-BR',
+      profileSnippet,
+      sessionBriefing: briefingParts.join('\n'),
+      sessionNotes: session?.notes ?? null,
+      segments: (session?.executionSegments ?? []).map(s => ({
+        kmStart: s.kmStart,
+        kmEnd: s.kmEnd,
+        phase: s.phase,
+        targetPace: s.targetPace ?? null,
+        instruction: s.instruction ?? null,
+      })),
       weather,
-    );
-    const result = await createLiveToken.execute({
-      systemInstruction,
-      outputTranscription: true,
+      prefs: {
+        freq,
+        dnd: !!(p?.dndWindow && isInDndWindow(p.dndWindow)),
+        allowCriticalAlertsInSilent: p?.allowCriticalAlertsInSilent ?? true,
+      },
+      athleteName: p?.name?.split(/\s+/)[0] ?? null,
+    };
+
+    const result = await s6ai.createLiveSession(context);
+    // STAGING: s6-ai roda sem allUsers (IAM travado) — o app conecta no
+    // túnel /v1/live DESTE host, que encaminha autenticado pro s6-ai
+    // (vide s6-proxy.ts). S6_WS_PROXY=false volta ao s6-ai direto quando
+    // o owner aplicar o binding.
+    if (s6WsProxyEnabled()) {
+      const host = req.get('host') ?? '';
+      const proto = (req.get('x-forwarded-proto') ?? req.protocol) === 'http' ? 'ws' : 'wss';
+      result.wsUrl = `${proto}://${host}/v1/live`;
+    }
+    logger.info('coach.live_session.created', {
+      uid: req.uid,
+      sessionId: result.sessionId,
+      hasPlanSession: !!session,
+      wsUrl: result.wsUrl,
     });
     res.json(result);
   } catch (err) {
@@ -70,22 +141,18 @@ const LiveTurnSchema = z.object({
   runId: z.string().min(1),
   author: z.enum(['coach', 'user']),
   text: z.string().min(1),
+  // Os 8 eventos canônicos (migração s6-ai, 16→8). question/push_to_talk
+  // morreram junto com o push-to-talk do app.
   event: z
     .enum([
-      'pre_run',
       'start',
+      'half_km',
       'km_reached',
-      'km_split',
+      'bpm_alert',
       'pace_alert',
-      'high_bpm',
-      'motivation',
+      'goal_reached',
       'finish',
-      'question',
-      'preview',
-      'segment_start',
-      'segment_pace_off',
-      'segment_end',
-      'push_to_talk',
+      'no_movement',
     ])
     .optional(),
   kmAtTime: z.number().optional(),
@@ -175,58 +242,9 @@ export function triggerReportGeneration(runId: string, userId: string): void {
   });
 }
 
-export async function postCoachMessage(req: Request, res: Response, next: NextFunction): Promise<void> {
-  // Logamos o event ANTES do parse pra capturar até payloads que falham
-  // validação (sem isso, eventos novos rejeitados ficavam invisíveis nos logs
-  // — usuário via "coach não fala" mas nada aparecia aqui).
-  const rawEvent = (req.body as { event?: unknown })?.event;
-  const rawKm = (req.body as { kmReached?: unknown })?.kmReached;
-  const rawRunId = (req.body as { runId?: unknown })?.runId;
-  logger.info('coach.message.received', { event: rawEvent, kmReached: rawKm, runId: rawRunId, uid: req.uid });
-
-  try {
-    const ctx = CoachContextSchema.parse(req.body);
-    const result = await coachMessage.generate(ctx, req.uid);
-
-    if (isCueSkipped(result)) {
-      logger.info('coach.message.skipped', { event: ctx.event, reason: result.reason, uid: req.uid });
-      res.status(204).setHeader('X-Coach-Skip-Reason', result.reason).end();
-      return;
-    }
-
-    logger.info('coach.message.completed', {
-      event: ctx.event,
-      textLen: result.text.length,
-      hasAudio: !!result.audioBase64,
-      uid: req.uid,
-    });
-
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
-    res.flushHeaders();
-
-    res.write(`data: ${JSON.stringify(result)}\n\n`);
-    res.write('data: [DONE]\n\n');
-    res.end();
-  } catch (err) {
-    // Inclui body inteira (sanitizada) pra ver QUAL valor foi rejeitado
-    // pelo schema — Zod mostrava só os valid values, sem o input que falhou.
-    const safeBody: Record<string, unknown> = {};
-    if (req.body && typeof req.body === 'object') {
-      for (const [k, v] of Object.entries(req.body as Record<string, unknown>)) {
-        safeBody[k] = typeof v === 'string' && v.length > 80 ? `${v.slice(0, 80)}…` : v;
-      }
-    }
-    logger.warn('coach.message.failed', {
-      event: rawEvent,
-      body: safeBody,
-      err: String(err),
-      uid: req.uid,
-    });
-    next(err);
-  }
-}
+// REMOVIDO na migração s6-ai: postCoachMessage (/coach/message). Cues de
+// corrida agora viajam como frames de evento no WS do s6-ai, com fallback
+// HTTP direto no s6-ai (POST /v1/live/sessions/:id/events).
 
 export async function postCoachChat(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
@@ -241,7 +259,7 @@ export async function postCoachChat(req: Request, res: Response, next: NextFunct
 export async function getCoachMessagesByRun(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const runId = req.params['runId'] as string;
-    const items = await coachMessage.listForRun(req.uid, runId);
+    const items = await listCoachMessages.execute(req.uid, runId);
     res.json({ items });
   } catch (err) {
     next(err);

@@ -29,6 +29,10 @@ const GEMINI_LIVE_URL = 'wss://generativelanguage.googleapis.com/ws/google.ai.ge
 const DEFAULT_MODEL = process.env['GEMINI_LIVE_MODEL']?.trim()
   || 'models/gemini-2.5-flash-native-audio-latest';
 
+// Gate do open(): se o Gemini não responder setupComplete dentro dessa
+// janela, a Promise rejeita em vez de pendurar o caller pra sempre.
+const SETUP_TIMEOUT_MS = 10_000;
+
 export interface GeminiLiveConfig {
   model?: string;
   systemInstruction?: string;
@@ -82,6 +86,26 @@ export class GeminiLiveSession {
       const url = `${GEMINI_LIVE_URL}?key=${this.apiKey}`;
       this.ws = new WebSocket(url);
 
+      // A Promise só pode assentar uma vez. Sem isso, um close logo após o
+      // setupComplete tentaria reject de uma Promise já resolvida (no-op,
+      // mas mascara bugs) — e, pior, sem timeout um WS que fecha antes do
+      // setupComplete SEM emitir 'error' deixava open() pendurado pra
+      // sempre (caller travado num await infinito).
+      let settled = false;
+      const settle = (fn: () => void): void => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(setupTimer);
+        fn();
+      };
+      const setupTimer = setTimeout(() => {
+        settle(() => {
+          logger.error('gemini.live.setup_timeout', { timeoutMs: SETUP_TIMEOUT_MS });
+          try { this.ws?.close(); } catch { /* já fechando */ }
+          reject(new Error(`Gemini Live setup timeout after ${SETUP_TIMEOUT_MS}ms`));
+        });
+      }, SETUP_TIMEOUT_MS);
+
       this.ws.on('open', () => {
         const setupMsg: Record<string, unknown> = {
           setup: {
@@ -110,7 +134,7 @@ export class GeminiLiveSession {
           const parsed = JSON.parse(text) as GeminiLiveServerEnvelope;
           if (!this.setupComplete && parsed.setupComplete) {
             this.setupComplete = true;
-            resolve();
+            settle(resolve);
             return;
           }
           if (parsed.serverContent) {
@@ -125,10 +149,15 @@ export class GeminiLiveSession {
 
       this.ws.on('error', (err) => {
         logger.error('gemini.live.ws_error', { err: String(err) });
-        if (!this.setupComplete) reject(err);
+        if (!this.setupComplete) settle(() => reject(err));
       });
 
       this.ws.on('close', (code, reason) => {
+        if (!this.setupComplete) {
+          settle(() => reject(new Error(
+            `Gemini Live closed before setupComplete (code=${code})`,
+          )));
+        }
         this.onClose?.(code, reason.toString('utf-8'));
       });
     });

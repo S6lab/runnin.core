@@ -23,6 +23,7 @@ ENV_VARS=$(grep -v '^#' "$ENV_FILE" \
   | grep -v '^$' \
   | grep -v '^PORT=' \
   | grep -v '^X_CRON_TOKEN=' \
+  | grep -v '^S6_INTERNAL_TOKEN=' \
   | grep -v '=$' \
   | tr '\n' ',' \
   | sed 's/,$//')
@@ -34,7 +35,7 @@ gcloud run deploy "$SERVICE_NAME" \
   --project="$PROJECT_ID" \
   --service-account="$SA" \
   --set-env-vars="$ENV_VARS" \
-  --set-secrets="X_CRON_TOKEN=cron-token-prod:latest" \
+  --set-secrets="X_CRON_TOKEN=cron-token-prod:latest,S6_INTERNAL_TOKEN=s6-internal-token-prod:latest" \
   --allow-unauthenticated \
   --port=8080 \
   --memory=512Mi \

@@ -9,7 +9,6 @@ import { getPromptConfig } from '@shared/infra/llm/prompts/config-store';
 import { renderTemplate } from '@shared/infra/llm/prompts/render';
 import { FirestoreCoachMessageLogRepository } from '@modules/coach/infra/firestore-coach-message-log.repository';
 import { CoachMessageLog } from '@modules/coach/domain/coach-message-log.entity';
-import { registerLiveSession, unregisterLiveSession } from '@modules/coach/use-cases/live-session-registry';
 import { logger } from '@shared/logger/logger';
 
 /**
@@ -141,7 +140,6 @@ export function attachCoachLiveWebSocket(httpServer: HttpServer): void {
       },
       onClose: (code, reason) => {
         logger.info('coach.live.gemini_closed', { uid, code, reason });
-        if (runId) unregisterLiveSession(uid, runId);
         if (clientWs.readyState === WebSocket.OPEN) clientWs.close(1000, 'gemini_closed');
       },
     });
@@ -149,13 +147,9 @@ export function attachCoachLiveWebSocket(httpServer: HttpServer): void {
     try {
       await session.open();
       clientWs.send(JSON.stringify({ kind: 'ready' }));
-      // Registra no registry pra coach-message.use-case routar cues HTTP
-      // via essa sessão Live (latência ~500ms vs ~2-3s abrindo TTS novo).
-      // Só registra quando runId presente — sessões sem run (settings,
-      // preview) não devem receber cues de corrida.
-      if (runId) {
-        registerLiveSession(uid, runId, session);
-      }
+      // Registry de cue routing REMOVIDO (migração s6-ai): cues de corrida
+      // não passam mais por aqui — este proxy atende só o chat de voz
+      // avulso (CoachLivePage).
     } catch (err) {
       logger.error('coach.live.gemini_open_failed', { uid, err: String(err) });
       clientWs.send(JSON.stringify({ kind: 'error', message: 'Gemini Live indisponível' }));
@@ -187,13 +181,11 @@ export function attachCoachLiveWebSocket(httpServer: HttpServer): void {
 
     clientWs.on('close', () => {
       logger.info('coach.live.client_disconnected', { uid });
-      if (runId) unregisterLiveSession(uid, runId);
       session.close();
     });
 
     clientWs.on('error', (err) => {
       logger.warn('coach.live.client_ws_error', { uid, err: String(err) });
-      if (runId) unregisterLiveSession(uid, runId);
       session.close();
     });
   });

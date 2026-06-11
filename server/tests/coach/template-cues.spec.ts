@@ -73,7 +73,8 @@ describe('template-cues', () => {
       expect(r?.kind).toBe('text');
       const text = (r as any).text as string;
       expect(text).toMatch(/Eduardo/);
-      expect(text).toMatch(/5:30/); // pace formatado
+      // TF 81: formato falável `5min30` (era `5:30`) — spec ficou pra trás.
+      expect(text).toMatch(/5min30/);
     });
 
     it('omite vocativo quando sem nome', () => {

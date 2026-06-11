@@ -18,6 +18,7 @@ import { biometricRouter } from '@modules/biometrics/http/biometric.routes';
 import { statsRouter } from '@modules/stats';
 import { weatherRouter } from '@modules/weather/http/weather.routes';
 import { badgesRouter } from '@modules/badges/http/badges.routes';
+import { s6LiveHttpProxy } from '@shared/infra/s6ai/s6-proxy';
 
 export function createServer(): express.Application {
   const app = express();
@@ -76,6 +77,10 @@ export function createServer(): express.Application {
   app.use('/v1/stats', statsRouter);
   app.use('/v1/weather', weatherRouter);
   app.use('/v1/badges', badgesRouter);
+  // Proxy autenticado pro s6-ai (staging sem allUsers — vide s6-proxy.ts).
+  // Cobre o fallback HTTP de eventos e o DELETE de sessão que o app faz
+  // no host do wsUrl. O upgrade WS correspondente vive em main.ts.
+  app.use('/v1/live', s6LiveHttpProxy);
 
   app.use(errorMiddleware);
 

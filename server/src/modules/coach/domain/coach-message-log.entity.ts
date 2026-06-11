@@ -5,24 +5,18 @@
  * Allows the "VER CONVERSA COM COACH" view (HIST > run detail) to replay the
  * conversation that happened during a specific run.
  */
+// Os 8 eventos canônicos (migração s6-ai, 16→8). Docs históricos no
+// Firestore podem carregar valores legados (check_in, segment_*, etc) —
+// replay lê como string, sem validação runtime, então não quebra.
 export type CoachMessageEvent =
-  | 'pre_run'
   | 'start'
+  | 'half_km'
   | 'km_reached'
-  | 'km_split'
+  | 'bpm_alert'
   | 'pace_alert'
-  | 'high_bpm'
-  | 'motivation'
-  | 'finish'
-  | 'question'
-  | 'preview'
-  | 'segment_start'
-  | 'segment_pace_off'
-  | 'segment_end'
   | 'goal_reached'
-  | 'check_in'
-  | 'no_movement'
-  | 'push_to_talk';
+  | 'finish'
+  | 'no_movement';
 
 export type CoachMessageAuthor = 'coach' | 'user';
 

@@ -1,6 +1,5 @@
 import { v4 as uuid } from 'uuid';
 import { z } from 'zod';
-import { getAsyncLLM } from '@shared/infra/llm/llm.factory';
 import { PlanRepository } from '../domain/plan.repository';
 import { PlanRevisionRepository } from '../domain/plan-revision.repository';
 import { UserRepository } from '@modules/users/domain/user.repository';
@@ -8,8 +7,7 @@ import { PlanRevision, PlanRevisionRequestType, PlanRevisionStatus } from '../do
 import { UserProfile } from '@modules/users/domain/user.entity';
 import { Plan, PlanWeek, effectivePlanWeeks } from '../domain/plan.entity';
 import { logger } from '@shared/logger/logger';
-import { formatRunningKnowledgeContext } from '@shared/knowledge/running/running-knowledge';
-import { buildPlanRevisionPrompt } from '@shared/infra/llm/prompts';
+import { S6AiClient, S6RevisePlanResponse } from '@shared/infra/s6ai/s6ai.client';
 import { enforceRevisionInvariants } from './enforce-race-week-structure';
 
 export class QuotaExhaustedError extends Error {
@@ -41,28 +39,10 @@ export const RequestRevisionSchema = z.object({
 
 export type RequestRevisionInput = z.infer<typeof RequestRevisionSchema>;
 
-const PlanSessionSchema = z.object({
-  dayOfWeek: z.number().int().min(1).max(7),
-  type: z.string().min(1),
-  distanceKm: z.number().positive(),
-  targetPace: z.string().min(1).optional(),
-  notes: z.string(),
-});
-
-const PlanWeekSchema = z.object({
-  weekNumber: z.number().int().positive(),
-  sessions: z.array(PlanSessionSchema),
-  focus: z.string().optional(),
-  narrative: z.string().optional(),
-});
-
-const RevisionResponseSchema = z.object({
-  coachExplanation: z.string().min(20).max(400),
-  newWeeks: z.array(PlanWeekSchema).min(1),
-});
-
 export class RequestRevisionUseCase {
-  private llm = getAsyncLLM();
+  // Prompt + LLM + parse/repair vivem no s6-ai. Aqui: quota, merge,
+  // invariantes de race week e persistência.
+  private s6ai = new S6AiClient();
 
   constructor(
     private readonly plans: PlanRepository,
@@ -107,60 +87,46 @@ export class RequestRevisionUseCase {
     const effectiveWeeks = effectivePlanWeeks(plan);
     const oldWeeksSnapshot = [...effectiveWeeks];
 
-    const knowledgeContext = await formatRunningKnowledgeContext(
-      `${plan.goal} ${plan.level} corrida plano de ${plan.weeksCount} semanas`,
-      5,
-    );
-
     const futureWeeks = effectiveWeeks.slice(currentWeekIndex);
-
-    const built = await buildPlanRevisionPrompt({
-      profile,
-      plan: {
-        goal: plan.goal,
-        level: plan.level,
-        weeksCount: plan.weeksCount,
-        weeks: futureWeeks,
-        raceDate: plan.raceDate,
-        raceDayOfWeek: plan.raceDayOfWeek,
-      },
-      revision: {
-        type: input.type,
-        subOption: input.subOption,
-        freeText: input.freeText,
-      },
-      currentWeekNumber: currentWeekIndex + 1, // 1-based pro prompt
-      ragContext: knowledgeContext,
-    });
 
     let coachExplanation: string;
     let newWeeks: typeof plan.weeks;
 
     try {
-      const raw = await this.llm.generate(built.userPrompt, {
-        systemPrompt: built.systemPrompt,
-        maxTokens: built.maxTokens,
-        temperature: built.temperature,
+      const s6 = await this.s6ai.revisePlan({
         userId,
-        useCase: 'plan-revision-manual',
-        // Antes LLM cuspia texto fora do JSON ou stoppava no meio
-        // de string ("Unterminated string at position 4030"). JSON mode
-        // (responseMimeType) força saída sintaticamente válida.
-        responseJson: true,
+        profile,
+        plan: {
+          goal: plan.goal,
+          level: plan.level,
+          weeksCount: plan.weeksCount,
+          weeks: futureWeeks,
+          raceDate: plan.raceDate ?? null,
+          raceDayOfWeek: plan.raceDayOfWeek ?? null,
+        },
+        revision: {
+          type: input.type,
+          subOption: input.subOption,
+          freeText: input.freeText,
+        },
+        currentWeekNumber: currentWeekIndex + 1, // 1-based pro prompt
       });
 
-      const parsed = this._parseRevisionResponse(raw);
-      coachExplanation = parsed.coachExplanation;
+      coachExplanation = s6.coachExplanation;
       // Merge sobre o snapshot VIGENTE (cumulativo). plan.weeks é a BASE
       // imutável; comparamos contra ela só pra invariantes estruturais.
-      const merged = this._mergeWeeks(effectiveWeeks, parsed.newWeeks, currentWeekIndex);
+      const merged = this._mergeWeeks(effectiveWeeks, s6.newWeeks, currentWeekIndex);
       const enforced = enforceRevisionInvariants(merged, {
         plan,
         originalWeeks: plan.weeks,
         currentWeekNumber: currentWeekIndex + 1,
       });
       newWeeks = enforced.weeks;
-      logger.info('plan.revision.generated', { planId, version: built.version, source: built.source });
+      logger.info('plan.revision.generated', {
+        planId,
+        version: s6.meta.promptVersion,
+        source: s6.meta.promptSource,
+      });
     } catch (err) {
       logger.error('plan.revision.llm_failed', {
         planId,
@@ -230,47 +196,9 @@ export class RequestRevisionUseCase {
     return Math.min(diffWeeks, plan.weeksCount - 1);
   }
 
-  private _parseRevisionResponse(raw: string): { coachExplanation: string; newWeeks: z.infer<typeof PlanWeekSchema>[] } {
-    try {
-      const normalized = this._normalizeJson(raw);
-      const parsed = RevisionResponseSchema.parse(normalized);
-      return parsed;
-    } catch (err) {
-      throw new Error(`Invalid LLM response format: ${err instanceof Error ? err.message : String(err)}`);
-    }
-  }
-
-  private _normalizeJson(raw: string): unknown {
-    let normalized = raw.replace(/\r/g, '').trim();
-    normalized = this._stripMarkdownFences(normalized);
-
-    // Bug histórico: slice por `[`/`]` cortava o JSON OBJECT do revision
-    // (que tem shape {coachExplanation, newWeeks}) em só o array de
-    // newWeeks → Zod falhava com "expected object, received array".
-    // Detecta o shape esperado pelo primeiro char não-whitespace e
-    // recorta os boundaries corretos.
-    const firstChar = normalized[0];
-    if (firstChar === '{') {
-      const lastBrace = normalized.lastIndexOf('}');
-      if (lastBrace > 0) normalized = normalized.slice(0, lastBrace + 1);
-    } else if (firstChar === '[') {
-      const lastBracket = normalized.lastIndexOf(']');
-      if (lastBracket > 0) normalized = normalized.slice(0, lastBracket + 1);
-    }
-
-    return JSON.parse(normalized) as unknown;
-  }
-
-  private _stripMarkdownFences(input: string): string {
-    return input
-      .replace(/```(?:json)?\s*/gi, '')
-      .replace(/```/g, '')
-      .trim();
-  }
-
   private _mergeWeeks(
     originalWeeks: Plan['weeks'],
-    newWeeks: z.infer<typeof PlanWeekSchema>[],
+    newWeeks: S6RevisePlanResponse['newWeeks'],
     currentWeekIndex: number,
   ): Plan['weeks'] {
     const oldPrefix = originalWeeks.slice(0, currentWeekIndex);

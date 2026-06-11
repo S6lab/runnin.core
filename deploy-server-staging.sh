@@ -23,6 +23,7 @@ ENV_VARS=$(grep -v '^#' "$ENV_FILE" \
   | grep -v '^$' \
   | grep -v '^PORT=' \
   | grep -v '^X_CRON_TOKEN=' \
+  | grep -v '^S6_INTERNAL_TOKEN=' \
   | grep -v '=$' \
   | tr '\n' ',' \
   | sed 's/,$//')
@@ -41,15 +42,18 @@ gcloud run deploy "$SERVICE_NAME" \
   --project="$PROJECT_ID" \
   --service-account="$SA" \
   --set-env-vars="$ENV_VARS" \
-  --set-secrets="X_CRON_TOKEN=cron-token:latest" \
+  --set-secrets="X_CRON_TOKEN=cron-token:latest,S6_INTERNAL_TOKEN=s6-internal-token:latest" \
   --allow-unauthenticated \
   --port=8080 \
   --memory=512Mi \
   --cpu=1 \
   --min-instances=0 \
   --max-instances=5 \
-  --timeout=300 \
+  --timeout=3600 \
   --quiet
+# timeout=3600 (era 300): o túnel WS /v1/live (app↔s6-ai via proxy) é um
+# request longo — 300s derrubava o coach a cada 5min de corrida (smoke
+# 2026-06-11: km1/km2/km3 mudos sempre nos múltiplos de 5min).
 
 echo "✓ Deploy STAGING concluído!"
 echo ""

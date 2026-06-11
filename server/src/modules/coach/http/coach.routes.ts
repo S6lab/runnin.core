@@ -1,23 +1,23 @@
 import { Router } from 'express';
 import { authMiddleware } from '@shared/infra/http/middlewares/auth.middleware';
 import { requireFeature } from '@shared/infra/http/middlewares/require-feature.middleware';
-import { postCoachMessage, postCoachChat, getCoachReport, postGenerateReport, getCoachMessagesByRun, getPeriodAnalysis, postCoachLiveToken, postCoachLiveDiag, postCoachLiveTurn, getCoachRuntimeConfigHandler } from './coach.controller';
+import { postCoachChat, getCoachReport, postGenerateReport, getCoachMessagesByRun, getPeriodAnalysis, postCoachLiveDiag, postCoachLiveTurn, postCoachLiveSession, getCoachRuntimeConfigHandler } from './coach.controller';
 
 export const coachRouter = Router();
 
 coachRouter.use(authMiddleware);
-// Token efêmero pra app conectar direto no Gemini Live (sem expor a
-// API key real). Token tem 30min de validade, 1 uso. Premium-gated
-// pelo mesmo feature flag dos cues durante a corrida.
-coachRouter.post('/live-token', requireFeature('coachVoiceDuringRun'), postCoachLiveToken);
+// Sessão Live no s6-ai (microsserviço dono do socket Gemini). App recebe
+// {sessionId, wsUrl} e conecta no WS do s6-ai. Substituiu o /live-token
+// (token efêmero app→Google direto, removido na migração s6-ai).
+coachRouter.post('/live-session', requireFeature('coachVoiceDuringRun'), postCoachLiveSession);
 // Beacon de diagnóstico da sessão Live (open/close/error) — pra rastrear 1008.
 coachRouter.post('/live-diag', postCoachLiveDiag);
-// Persistência de cada turno da sessão Live (coach/user) pra replay e
-// auditoria — cliente conecta direto no Google, então o conteúdo só
-// chega aqui via beacon.
+// Persistência de cada turno da sessão Live (coach) pra replay e auditoria
+// — o app beacona o cue_text recebido do WS do s6-ai (o histórico vive no
+// schema do app, então fica aqui, não no s6-ai).
 coachRouter.post('/live-turn', requireFeature('coachVoiceDuringRun'), postCoachLiveTurn);
-// Coach durante corrida (voz/cues)
-coachRouter.post('/message', requireFeature('coachVoiceDuringRun'), postCoachMessage);
+// /coach/message REMOVIDO (migração s6-ai): cues vão pelo WS do s6-ai
+// com fallback HTTP direto lá (POST /v1/live/sessions/:id/events).
 // Chat texto
 coachRouter.post('/chat', requireFeature('coachChat'), postCoachChat);
 // Reports + análises pós-corrida

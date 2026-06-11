@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { getAsyncLLM } from '@shared/infra/llm/llm.factory';
+import { S6AiClient } from '@shared/infra/s6ai/s6ai.client';
 import {
   buildPlanInitPrompt,
   buildPlanRevisionPrompt,
@@ -150,6 +151,10 @@ export async function getPromptDefaults(_req: Request, res: Response, next: Next
 
 export function postInvalidateCache(_req: Request, res: Response): void {
   invalidatePromptsCache();
+  // Fan-out pro s6-ai: ele lê o MESMO app_config/prompts com cache 60s
+  // próprio — sem invalidar lá, plan-init/plan-revision/live-voice servem
+  // prompt velho por até 1min após edição no admin. Best-effort.
+  void new S6AiClient().invalidatePromptCache();
   res.json({ ok: true });
 }
 
