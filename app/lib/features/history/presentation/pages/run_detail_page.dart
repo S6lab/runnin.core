@@ -182,7 +182,37 @@ class _RunDetailPageState extends State<RunDetailPage> {
 
                               // 1 ── MAPA: trajeto salvo da corrida (mesmo mapa
                               //      do compartilhar, em altura contida).
-                              _RunRouteMap(points: _gpsPoints),
+                              //      Indoor: sem rota — banner de esteira no
+                              //      lugar do mapa vazio.
+                              if (_run!.environment == 'indoor')
+                                Container(
+                                  width: double.infinity,
+                                  height: 120,
+                                  decoration: BoxDecoration(
+                                    color: palette.surface,
+                                    border: Border.all(color: palette.border),
+                                  ),
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        Icons.fitness_center_outlined,
+                                        size: 32,
+                                        color: palette.primary,
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Text(
+                                        'CORRIDA INDOOR · ESTEIRA',
+                                        style: type.labelCaps.copyWith(
+                                          color: palette.muted,
+                                          letterSpacing: 1.5,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                )
+                              else
+                                _RunRouteMap(points: _gpsPoints),
                               const SizedBox(height: 24),
 
                               // 2 ── DADOS DA CORRIDA: grid 2×2 de MetricCard

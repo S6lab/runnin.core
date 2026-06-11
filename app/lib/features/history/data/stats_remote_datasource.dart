@@ -14,8 +14,15 @@ class StatsRemoteDatasource {
   StatsRemoteDatasource() : _dio = apiClient;
 
   /// period: 'week' | 'month' | 'threeMonths'
+  /// tzOffsetMin: server calcula as janelas CIVIS (semana/mês) na TZ do
+  /// device — mesma razão do breakdown; sem isso os deltas comparavam
+  /// janelas rolling UTC e divergiam dos valores civis exibidos.
   Future<StatsAggregate> getAggregate(String period) async {
-    final res = await _dio.get('/stats/aggregate', queryParameters: {'period': period});
+    final tz = DateTime.now().timeZoneOffset.inMinutes;
+    final res = await _dio.get(
+      '/stats/aggregate',
+      queryParameters: {'period': period, 'tzOffsetMin': tz},
+    );
     return StatsAggregate.fromJson(res.data as Map<String, dynamic>);
   }
 

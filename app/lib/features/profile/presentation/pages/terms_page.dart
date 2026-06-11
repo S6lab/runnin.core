@@ -72,12 +72,14 @@ class TermsPage extends StatelessWidget {
                   _Section(
                     title: '4. INTELIGÊNCIA ARTIFICIAL',
                     body:
-                        'O coach AI usa modelos de linguagem (Google Gemini) '
-                        'pra gerar planos, dicas e feedback. As respostas são '
-                        'geradas com base no seu perfil e histórico, mas podem '
-                        'conter imprecisões. Use o bom senso — se algo parecer '
+                        'O coach AI usa inteligência artificial pra gerar '
+                        'planos, dicas e feedback com base no seu perfil e '
+                        'histórico. Conteúdo gerado por IA pode conter erros, '
+                        'imprecisões ou recomendações inadequadas ao seu caso — '
+                        'as respostas não constituem aconselhamento médico ou '
+                        'profissional. Use o bom senso: se algo parecer '
                         'inadequado pro seu nível ou saúde, ajuste ou consulte '
-                        'um treinador humano.',
+                        'um treinador humano ou médico.',
                   ),
                   _Section(
                     title: '5. ASSINATURA PREMIUM',

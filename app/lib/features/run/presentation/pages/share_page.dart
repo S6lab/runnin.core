@@ -19,6 +19,8 @@ import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
 import 'package:runnin/features/run/data/datasources/run_remote_datasource.dart';
 import 'package:runnin/features/run/domain/entities/run.dart';
+import 'package:runnin/features/location_weather/data/location_weather_controller.dart';
+import 'package:runnin/features/run/presentation/widgets/share_indoor_card.dart';
 import 'package:runnin/features/run/presentation/widgets/share_map_card.dart';
 
 // Só toggles que de fato desenham algo sobre a foto (revisado): chips de
@@ -550,9 +552,13 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
           letterSpacing: 1.1,
         ),
         dividerHeight: 0,
-        tabs: const [
-          Tab(height: 44, text: 'MAPA'),
-          Tab(height: 44, text: 'FOTO'),
+        // Indoor: a aba mostra o card estilo badge, não mapa.
+        tabs: [
+          Tab(
+            height: 44,
+            text: _run?.environment == 'indoor' ? 'CARD' : 'MAPA',
+          ),
+          const Tab(height: 44, text: 'FOTO'),
         ],
       ),
     );
@@ -562,6 +568,7 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
 
   Widget _buildMapTab() {
     final hasRoute = _gpsPoints.length >= 2;
+    final isIndoor = _run?.environment == 'indoor';
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Column(
@@ -572,13 +579,21 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
           const SizedBox(height: 12),
           RepaintBoundary(
             key: _mapBoundaryKey,
-            child: ShareMapCard(
-              run: _run!,
-              points: _gpsPoints,
-              aspectRatio: _aspectRatio,
-            ),
+            // Indoor: sem rota GPS — card estilo badge (INDOOR RUN +
+            // esteira/cidade/data) no lugar do mapa vazio.
+            child: isIndoor
+                ? ShareIndoorCard(
+                    run: _run!,
+                    aspectRatio: _aspectRatio,
+                    city: locationWeatherController.city,
+                  )
+                : ShareMapCard(
+                    run: _run!,
+                    points: _gpsPoints,
+                    aspectRatio: _aspectRatio,
+                  ),
           ),
-          if (!hasRoute) ...[
+          if (!hasRoute && !isIndoor) ...[
             const SizedBox(height: 12),
             Text(
               'Sem GPS suficiente nessa corrida — card mostra fundo neutro.',
@@ -866,6 +881,10 @@ class _SharePageState extends State<SharePage> with SingleTickerProviderStateMix
             spacing: 8,
             runSpacing: 8,
             children: List.generate(_overlayToggleLabels.length, (i) {
+              // Indoor não tem rota — chip Trajeto (4) vira ruído.
+              if (i == 4 && _run?.environment == 'indoor') {
+                return const SizedBox.shrink();
+              }
               final active = _activeToggles.contains(i);
               return GestureDetector(
                 onTap: () => setState(() {
