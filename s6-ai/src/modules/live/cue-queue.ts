@@ -39,6 +39,17 @@ export class CueQueue {
    * Aplica dedup/cooldown/prioridade. Retorna se aceitou e se o caller
    * deve interromper a fala ativa (P0, ou km_reached sobre half_km ativo).
    */
+  /** Bucket de dedup do half_km. Outdoor: meio-km (floor(kmDone*2)).
+   *  Indoor: kmDone fica 0 a corrida toda (sem GPS) — o 1º check-in
+   *  ocupava o bucket 0 e TODOS os seguintes eram dropados (bug visto no
+   *  sim: check-ins de 8/12min mudos). Indoor usa janela de 3min de
+   *  elapsedS: o trigger do app dispara a cada 4min, então cada check-in
+   *  cai num bucket novo e o dedup só barra retry duplicado. */
+  private halfKmBucketOf(data: TelemetrySnapshot): number {
+    if (data.indoor === true) return Math.floor(data.elapsedS / 180);
+    return Math.floor(data.kmDone * 2);
+  }
+
   tryEnqueue(event: CueEvent, data: TelemetrySnapshot): EnqueueResult {
     const now = this.clock();
     const priority = CUE_PRIORITY[event];
@@ -63,7 +74,7 @@ export class CueQueue {
     }
 
     if (event === 'half_km') {
-      const halfBucket = Math.floor(data.kmDone * 2);
+      const halfBucket = this.halfKmBucketOf(data);
       if (halfBucket <= this.lastHalfKmBucket) {
         return { accepted: false, reason: 'dedup_half_km_bucket' };
       }
@@ -72,7 +83,9 @@ export class CueQueue {
       // kmDone==N (halfBucket 2N). floor(kmDone) <= N dropava o half de
       // 1.5km (floor=1) depois do km 1 — coach mudou no 1.5km (smoke
       // 2026-06-11, cue_skipped superseded_by_km).
-      if (this.lastKmBucket >= 0 && halfBucket <= this.lastKmBucket * 2) {
+      // Indoor não tem km_reached — guard só vale outdoor.
+      if (data.indoor !== true &&
+          this.lastKmBucket >= 0 && halfBucket <= this.lastKmBucket * 2) {
         return { accepted: false, reason: 'superseded_by_km' };
       }
     }
@@ -114,7 +127,7 @@ export class CueQueue {
     // Buckets/one-shot marcados no ACEITE (não na fala): mesmo que a entrega
     // falhe, não queremos repetir o mesmo marco numa corrida.
     if (event === 'km_reached') this.lastKmBucket = Math.floor(data.kmDone);
-    if (event === 'half_km') this.lastHalfKmBucket = Math.floor(data.kmDone * 2);
+    if (event === 'half_km') this.lastHalfKmBucket = this.halfKmBucketOf(data);
     if (ONE_SHOT_EVENTS.has(event)) this.firedOnce.add(event);
     if (CUE_COOLDOWN_MS[event] !== undefined) this.lastFiredAtMs.set(event, now);
 
