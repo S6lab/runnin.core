@@ -20,6 +20,11 @@ import { RunnerLevel } from '@modules/users/domain/user.entity';
 export type RaceDistanceKm = 5 | 10 | 21 | 42;
 export type WindowMode = 'aggressive' | 'feasible' | 'safe';
 
+/** Versão do payload de GET /plans/admissibility-config. Bump manual a
+ *  cada mudança nas tabelas deste arquivo — o app usa pra invalidar cache
+ *  local e cair no fallback hardcoded quando o shape divergir. */
+export const ADMISSIBILITY_CONFIG_VERSION = 1;
+
 /** Subgoal pra FLOW (treino sem prova). REDIRECT não se aplica aqui —
  *  todos os subgoals são sempre válidos. */
 export type FlowSubgoal = 'start' | 'improve' | 'injury_return' | 'postpartum';

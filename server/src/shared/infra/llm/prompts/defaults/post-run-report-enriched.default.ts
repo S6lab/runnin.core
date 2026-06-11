@@ -33,7 +33,7 @@ export const POST_RUN_REPORT_ENRICHED_DEFAULTS = {
     '',
     'CONTEÚDO POR SEÇÃO:',
     '- runAnalysis: o que rolou nesta corrida específica. Pace médio vs alvo do plano (ou tendência das últimas), execução de segments (se houve), esforço (BPM se disponível), execução vs briefing. Concreto, cite números.',
-    '- planEvolution: como esta corrida se encaixa nas últimas 1-2 semanas. Consistência, volume semanal, tendência de pace, % de sessões executadas. Se houver resultado de revisão automática do plano, MENCIONE em 1 frase o que mudou e por quê.',
+    '- planEvolution: como esta corrida se encaixa nas últimas 1-2 semanas E no objetivo do plano. Feche com 1-2 frases amarrando ao destino: cite o objetivo (meta/prova e data, se houver) e o progresso acumulado (semana atual e % do volume planejado já concluído — os números estão no contexto do plano). Consistência, volume semanal, tendência de pace. Se houver resultado de revisão automática do plano, MENCIONE em 1 frase o que mudou e por quê.',
     '- nextSessions: PRÓXIMA sessão do plano (nome + distância + pace alvo) e a seguinte. Se há ajuste recomendado, diga claramente. Se for Free Run sem plano, sugira foco da próxima saída baseado no padrão recente.',
     '- recommendations: 1-2 práticas pra agora/amanhã. Hidratação, alimentação pós, sinais a observar (dor, sono), recuperação ativa se aplicável. Conecte com o perfil (condições médicas se houver).',
     '',

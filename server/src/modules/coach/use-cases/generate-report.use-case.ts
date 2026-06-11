@@ -12,6 +12,7 @@ import { CoachReportRepository } from '../domain/coach-report.repository';
 import { CoachRuntimeContextService } from './coach-runtime-context.service';
 import { getFirestore } from '@shared/infra/firebase/firebase.client';
 import { Plan, PlanRevision, PlanSession, effectivePlanWeeks } from '@modules/plans/domain/plan.entity';
+import { currentWeekNumber } from '@modules/plans/use-cases/checkpoint-shared';
 
 /**
  * Geração two-phase do relatório pós-corrida:
@@ -312,21 +313,39 @@ export class GenerateReportUseCase {
     if (!plan || plan.status !== 'ready' || weeks.length === 0) {
       return 'Sem plano ativo.';
     }
-    const createdAt = Date.parse(plan.createdAt);
-    const idx = Number.isNaN(createdAt)
-      ? 0
-      : Math.min(
-          Math.floor((Date.now() - createdAt) / (7 * 86_400_000)),
-          weeks.length - 1,
-        );
+    // Semana civil canônica (seg-dom ancorada no startDate) — mesma régua
+    // do cron/checkpoints, não rolling-7d desde createdAt.
+    const weekNo = currentWeekNumber(plan);
+    const idx = Math.min(Math.max(weekNo - 1, 0), weeks.length - 1);
     const slice = [
       weeks[idx - 1],
       weeks[idx],
       weeks[idx + 1],
     ].filter((w): w is NonNullable<typeof w> => !!w);
+
+    // Objetivo + prova: o parágrafo de evolução precisa amarrar a corrida
+    // ao DESTINO do plano, não só às semanas vizinhas.
+    const goalLines = [`Objetivo do plano: ${plan.goal} (${plan.level}, ${plan.weeksCount} semanas)`];
+    if (plan.raceDate) {
+      const daysLeft = Math.round(
+        (Date.parse(`${plan.raceDate}T00:00:00Z`) - Date.now()) / 86_400_000,
+      );
+      goalLines.push(`Prova-alvo: ${plan.raceDate}${daysLeft >= 0 ? ` (faltam ${daysLeft} dias)` : ''}`);
+    }
+
+    // Progresso agregado até a semana atual (sessões executadas têm
+    // executedRunId setado pelo fluxo de conclusão de corrida).
+    const upToCurrent = weeks.filter(w => w.weekNumber <= weekNo);
+    const allSessions = upToCurrent.flatMap(w => w.sessions);
+    const doneSessions = allSessions.filter(s => s.executedRunId);
+    const plannedKm = allSessions.reduce((a, s) => a + s.distanceKm, 0);
+    const doneKm = doneSessions.reduce((a, s) => a + s.distanceKm, 0);
+    const volumePct = plannedKm > 0 ? Math.round((doneKm / plannedKm) * 100) : 0;
+
     const lines = [
-      `Plano: ${plan.goal} (${plan.level}, ${plan.weeksCount} semanas)`,
-      `Semana atual: ${idx + 1}/${plan.weeksCount}`,
+      ...goalLines,
+      `Semana atual: ${weekNo}/${plan.weeksCount}`,
+      `Progresso até aqui: ${doneSessions.length}/${allSessions.length} sessões concluídas (~${doneKm.toFixed(0)}km de ${plannedKm.toFixed(0)}km planejados, ${volumePct}% do volume)`,
       '',
       ...slice.map(w => {
         const sessionsTxt = w.sessions

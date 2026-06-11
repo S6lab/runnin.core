@@ -7,6 +7,22 @@ import { getRunningKnowledgeCorpusWithStorage } from '@shared/knowledge/running/
 import { Plan, PlanSession } from '../domain/plan.entity';
 import { buildExecutionSegments } from '../use-cases/build-execution-segments';
 import { getRoteiroTemplates } from '@shared/knowledge/running/roteiro-templates.store';
+import {
+  ADMISSIBILITY_CONFIG_VERSION,
+  AGE_RESTRICTION_THRESHOLDS,
+  BLOCKED_BY_LEVEL,
+  IMPROVE_PACE_BYPASS_BY_LEVEL,
+  MAX_KM_PER_SESSION,
+  MEDICAL_CONDITION_OPTIONS,
+  MIN_FREQ_BY_PROFILE_DISTANCE,
+  PACE_IMPROVEMENT_CEILING_PCT,
+  PEAK_WEEKLY_KM,
+  RACE_WINDOWS,
+  RAMP_BASE_FLOOR_KM,
+  REDIRECT_TARGET,
+  WEEKLY_RAMP_RATE,
+  WINDOW_RESTRICTION_BY_PROFILE,
+} from '../use-cases/plan-windows.constants';
 
 const repo = new FirestorePlanRepository();
 const userRepo = new FirestoreUserRepository();
@@ -118,6 +134,31 @@ export async function getPlanKnowledge(_req: Request, res: Response, next: NextF
       chunks: chunks.map(({ embedding: _embedding, ...chunk }) => chunk),
     });
   } catch (err) { next(err); }
+}
+
+/**
+ * Config de admissibilidade pro wizard do app. Fonte única das regras que
+ * antes viviam duplicadas/hardcoded em plan_admissibility.dart (sync
+ * manual = drift). App busca no open do wizard, com cache + fallback
+ * local quando offline ou em version mismatch.
+ */
+export function getAdmissibilityConfig(_req: Request, res: Response): void {
+  res.json({
+    version: ADMISSIBILITY_CONFIG_VERSION,
+    raceWindows: RACE_WINDOWS,
+    redirectTarget: REDIRECT_TARGET,
+    peakWeeklyKm: PEAK_WEEKLY_KM,
+    weeklyRampRate: WEEKLY_RAMP_RATE,
+    rampBaseFloorKm: RAMP_BASE_FLOOR_KM,
+    minFreqByProfileDistance: MIN_FREQ_BY_PROFILE_DISTANCE,
+    blockedSentinel: BLOCKED_BY_LEVEL,
+    windowRestrictionByProfile: WINDOW_RESTRICTION_BY_PROFILE,
+    improvePaceBypassByLevel: IMPROVE_PACE_BYPASS_BY_LEVEL,
+    maxKmPerSession: MAX_KM_PER_SESSION,
+    medicalConditionOptions: MEDICAL_CONDITION_OPTIONS,
+    ageRestrictionThresholds: AGE_RESTRICTION_THRESHOLDS,
+    paceImprovementCeilingPct: PACE_IMPROVEMENT_CEILING_PCT,
+  });
 }
 
 export async function postGeneratePlan(req: Request, res: Response, next: NextFunction): Promise<void> {
