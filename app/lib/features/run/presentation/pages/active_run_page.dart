@@ -322,8 +322,12 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
               children: [
                 // Mapa em DESTAQUE no FUNDO (tela cheia). A telemetria fica na
                 // metade de baixo e o cronômetro no meio-esquerda (overlays).
+                // Indoor: sem GPS não há rota — fundo dark sólido no lugar
+                // do mapa (mapa vazio em (0,0) parecia bug).
                 if (isIdle)
                   const _IdleHeroBackground()
+                else if (widget.indoor)
+                  const _IndoorBackground()
                 else
                   _RouteMap(points: state.points),
                 // Banner discreto quando Live Activities está desabilitada
@@ -1164,10 +1168,25 @@ class _StatsOverlay extends StatelessWidget {
 
   Future<void> _finishRun(BuildContext context, RunState state) async {
     // Indoor (esteira): sem GPS a distância fica 0 — pede o número do
-    // painel da esteira antes de completar. Cancelar mantém a corrida ativa.
+    // painel da esteira, mostra o resumo do que será salvo (km/tempo/pace/
+    // data + aviso de imutabilidade) e só então completa. VOLTAR em
+    // qualquer etapa mantém a corrida ativa; DESCARTAR abandona.
     if (state.indoor) {
       final distanceM = await _IndoorDistanceDialog.show(context, state);
       if (distanceM == null || !context.mounted) return;
+      if (distanceM == _IndoorDistanceDialog.discardSentinel) {
+        context.read<RunBloc>().add(AbandonRun());
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Corrida indoor descartada.'),
+            duration: Duration(seconds: 3),
+          ),
+        );
+        context.go('/home');
+        return;
+      }
+      final confirmed = await _confirmIndoorSave(context, state, distanceM);
+      if (confirmed != true || !context.mounted) return;
       context.read<RunBloc>().add(CompleteRun(manualDistanceM: distanceM));
       return;
     }
@@ -1188,6 +1207,76 @@ class _StatsOverlay extends StatelessWidget {
       ),
     );
     context.go('/home');
+  }
+
+  /// Confirmação do save indoor: mostra exatamente o que será gravado
+  /// (distância digitada, tempo, pace derivado e data) + aviso de que a
+  /// corrida não poderá ser apagada depois.
+  Future<bool?> _confirmIndoorSave(
+    BuildContext context,
+    RunState state,
+    double distanceM,
+  ) {
+    final palette = context.runninPalette;
+    final km = distanceM / 1000.0;
+    final paceSecPerKm = km > 0 ? (state.elapsedS / km).round() : 0;
+    final pace = km > 0
+        ? '${paceSecPerKm ~/ 60}:${(paceSecPerKm % 60).toString().padLeft(2, '0')}/km'
+        : '--:--';
+    final now = DateTime.now();
+    final date = '${now.day.toString().padLeft(2, '0')}/'
+        '${now.month.toString().padLeft(2, '0')}/${now.year}';
+
+    Widget row(String label, String value) => Padding(
+          padding: const EdgeInsets.symmetric(vertical: 3),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(label, style: TextStyle(color: palette.muted, fontSize: 13)),
+              Text(
+                value,
+                style: TextStyle(
+                  color: palette.text,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        );
+
+    return showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('SALVAR CORRIDA INDOOR?'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            row('Distância', '${km.toStringAsFixed(2)} km'),
+            row('Tempo', state.formattedElapsed),
+            row('Pace', pace),
+            row('Data', date),
+            const SizedBox(height: 12),
+            Text(
+              'Depois de salva, a corrida entra no seu histórico e não poderá ser apagada.',
+              style: TextStyle(color: palette.secondary, fontSize: 12),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('VOLTAR'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('CONFIRMAR E SALVAR'),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -2013,11 +2102,36 @@ class _MockGpsToggleState extends State<_MockGpsToggle> {
   }
 }
 
+/// Fundo da corrida indoor: dark sólido com ícone sutil de corrida no
+/// terço superior — substitui o mapa (sem GPS não há rota; mapa vazio em
+/// (0,0) parecia bug).
+class _IndoorBackground extends StatelessWidget {
+  const _IndoorBackground();
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    return Container(
+      color: palette.background,
+      alignment: const Alignment(0, -0.45),
+      child: Icon(
+        Icons.directions_run,
+        size: 120,
+        color: palette.primary.withValues(alpha: 0.08),
+      ),
+    );
+  }
+}
+
 /// Dialog do finish indoor: user digita a distância exibida no painel da
-/// esteira. Retorna metros, ou null se cancelou (corrida continua ativa).
+/// esteira. Retorna metros; null = VOLTAR (corrida continua ativa);
+/// [discardSentinel] = DESCARTAR (caller abandona a run).
 class _IndoorDistanceDialog extends StatefulWidget {
   final RunState runState;
   const _IndoorDistanceDialog({required this.runState});
+
+  /// Valor retornado quando o user escolhe DESCARTAR a corrida.
+  static const discardSentinel = -1.0;
 
   static Future<double?> show(BuildContext context, RunState state) {
     return showDialog<double>(
@@ -2077,6 +2191,14 @@ class _IndoorDistanceDialogState extends State<_IndoorDistanceDialog> {
       ),
       actions: [
         TextButton(
+          onPressed: () => Navigator.of(context)
+              .pop(_IndoorDistanceDialog.discardSentinel),
+          child: Text(
+            "DESCARTAR",
+            style: TextStyle(color: palette.secondary),
+          ),
+        ),
+        TextButton(
           onPressed: () => Navigator.of(context).pop(),
           child: const Text("VOLTAR"),
         ),
@@ -2084,7 +2206,7 @@ class _IndoorDistanceDialogState extends State<_IndoorDistanceDialog> {
           onPressed: _parsedKm == null
               ? null
               : () => Navigator.of(context).pop(_parsedKm! * 1000),
-          child: const Text("SALVAR CORRIDA"),
+          child: const Text("SALVAR"),
         ),
       ],
     );

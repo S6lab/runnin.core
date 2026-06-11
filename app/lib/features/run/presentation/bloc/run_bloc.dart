@@ -440,6 +440,16 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
   double _lastCoachSpeechDistanceM = 0;
   static const _checkInDistanceM = 500.0;
 
+  /// Check-in por TEMPO na corrida indoor (esteira). Sem GPS, os triggers
+  /// por distância (km_reached/half_km 500m) nunca disparam — este intervalo
+  /// garante presença do coach (mesmos 4min do antigo motivation timer).
+  static const _indoorCheckInS = 240;
+
+  /// Duração alvo (s) da sessão planejada — base do goal_reached por TEMPO
+  /// na corrida indoor. De session.durationMin, com fallback
+  /// distanceKm × targetPace. Null = sem goal por tempo (Free Run).
+  int? _plannedDurationS;
+
   /// TF 75 Fase 3: cooldown global entre QUALQUER cue. Sem isso, check_in
   /// (500m) + km_reached + segment_start podiam disparar no mesmo ciclo GPS
   /// — Eduardo ouviu 2-3 cues sobrepostos.
@@ -753,6 +763,7 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
     _segments = const [];
     _currentSegmentIdx = -1;
     _plannedDistanceM = null;
+    _plannedDurationS = null;
     _goalReachedFired = false;
     // Premium: usa LiveRunCoachSession (Gemini Live). Freemium: TTS local
     // de telemetria a cada km. Default true mantém retro-compat se um
@@ -908,7 +919,7 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
         // Freemium: pula a sessão Live e fala localmente. Banner mostra a
         // saudação; TTS on-device toca em paralelo (best-effort, falha
         // silenciosa se engine indisponível).
-        final greeting = TelemetryTts.formatStart(event.type);
+        final greeting = TelemetryTts.formatStart(event.type, indoor: _indoor);
         emit(state.copyWith(coachLiveMessage: greeting));
         unawaited(TelemetryTts.instance.speak(greeting));
         _lastCoachSpeechAtMs = DateTime.now().millisecondsSinceEpoch;
@@ -1121,6 +1132,48 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
       emit(state.copyWith(elapsedS: newElapsed, bpmStaleness: target));
     } else {
       emit(state.copyWith(elapsedS: newElapsed));
+    }
+    // Coach indoor: triggers por TEMPO. Sem GPS, todos os cues por distância
+    // (km_reached/half_km/goal_reached) do _onGpsUpdate nunca disparam —
+    // sem isso o coach ficava mudo a corrida inteira na esteira.
+    if (_indoor) {
+      final nowMs = DateTime.now().millisecondsSinceEpoch;
+      if (!_goalReachedFired &&
+          _plannedDurationS != null &&
+          newElapsed >= _plannedDurationS!) {
+        // Tempo alvo da sessão cruzado — anuncia 1x e segue (não auto-completa,
+        // mesma semântica do goal_reached por distância).
+        _goalReachedFired = true;
+        unawaited(_requestCoachCue(
+          event: 'goal_reached',
+          distanceM: state.distanceM,
+          elapsedS: newElapsed,
+        ));
+        _lastCueAt['goal_reached'] = nowMs;
+      } else if (_lastAnyCoachCueAtMs > 0 &&
+          nowMs - _lastAnyCoachCueAtMs >= _indoorCheckInS * 1000) {
+        if (_isPremium) {
+          // Reusa o evento canônico de check-in (half_km); o s6-ai formata
+          // a variante indoor (tempo + FC, sem 500m/pace) via flag `indoor`
+          // do snapshot. Cooldown global do _requestCoachCue protege contra
+          // colisão com bpm_alert.
+          unawaited(_requestCoachCue(
+            event: 'half_km',
+            distanceM: state.distanceM,
+            elapsedS: newElapsed,
+            bpm: state.bpmSourceActive ? state.currentBpm : null,
+          ));
+        } else {
+          final msg = TelemetryTts.formatTimeCheckIn(
+            elapsedS: newElapsed,
+            bpm: state.bpmSourceActive ? state.currentBpm : null,
+          );
+          if (!isClosed) add(_CoachChunk(CoachCue(text: msg)));
+          unawaited(TelemetryTts.instance.speak(msg));
+          _lastCoachSpeechAtMs = nowMs;
+          _lastAnyCoachCueAtMs = nowMs;
+        }
+      }
     }
     // Live Activity ALWAYS — não condiciona em background. Apple exige que
     // `Activity.request()` seja chamado em FOREGROUND (lança em bg) — antes
@@ -2205,6 +2258,18 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
       // Alvo de distância vem da sessão planejada — cue goal_reached
       // dispara quando newDistance cruza isso. distanceKm vem em km double.
       _plannedDistanceM = found.distanceKm > 0 ? found.distanceKm * 1000 : null;
+      // Alvo de TEMPO — goal_reached da corrida indoor (sem GPS, distância
+      // não acumula). durationMin direto do plano; fallback estimado por
+      // distância × pace alvo da sessão.
+      final durMin = found.durationMin;
+      if (durMin != null && durMin > 0) {
+        _plannedDurationS = (durMin * 60).round();
+      } else {
+        final paceMinKm = _parsePaceMinKm(state.targetPace);
+        _plannedDurationS = (found.distanceKm > 0 && paceMinKm != null)
+            ? (found.distanceKm * paceMinKm * 60).round()
+            : null;
+      }
       // Marca o 1º segment (aquecimento) como JÁ entrado: no km 0 o detector
       // de transição não dispara segment_start pro segment inicial — a
       // saudação já anuncia a largada. Sem isso, o segment_start do warmup

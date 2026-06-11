@@ -89,8 +89,20 @@ class TelemetryTts {
     return parts.join(' ');
   }
 
-  static String formatStart(String runType) {
+  static String formatStart(String runType, {bool indoor = false}) {
+    if (indoor) return 'Iniciando $runType na esteira. Bom treino.';
     return 'Iniciando $runType. GPS ativo. Bom treino.';
+  }
+
+  /// Check-in por tempo (corrida indoor, freemium): sem GPS não há km
+  /// pra anunciar — fala tempo decorrido e FC quando disponível.
+  static String formatTimeCheckIn({required int elapsedS, int? bpm}) {
+    final parts = <String>['${_fmtDuration(elapsedS)} de corrida.'];
+    if (bpm != null && bpm > 0) {
+      parts.add('Frequência cardíaca $bpm.');
+    }
+    parts.add('Segue firme.');
+    return parts.join(' ');
   }
 
   static String formatFinish({
