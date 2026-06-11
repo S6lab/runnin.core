@@ -51,6 +51,7 @@ const SampleInputSchema = z.object({
     'irregular_hr_event',
     'afib_burden',
     'skin_temperature',
+    'water',
   ]),
   value: z.number().finite(),
   unit: z.string().min(1),

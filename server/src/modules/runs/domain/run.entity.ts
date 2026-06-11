@@ -48,6 +48,11 @@ export interface TelemetryPoint {
   paceSec?: number;
 }
 
+/** Onde a corrida aconteceu. 'indoor' = esteira: distância vem do painel
+ *  da esteira (input manual no finish) ou de estimativa por passos — sem
+ *  GPS, sem rota. Ausente = outdoor (runs antigas). */
+export type RunEnvironment = 'outdoor' | 'indoor';
+
 export interface Run {
   id: string;
   userId: string;
@@ -56,6 +61,7 @@ export interface Run {
   targetPace?: string;
   targetDistance?: string;
   planSessionId?: string;
+  environment?: RunEnvironment;
   distanceM: number;
   durationS: number;
   avgPace?: string;

@@ -46,7 +46,9 @@ export type BiometricSampleType =
   | 'low_hr_event'             // evento FC baixa
   | 'irregular_hr_event'       // ritmo irregular detectado
   | 'afib_burden'              // % do tempo em fibrilação atrial
-  | 'skin_temperature';        // temperatura da pele (Apple Watch Series 8+)
+  | 'skin_temperature'         // temperatura da pele (Apple Watch Series 8+)
+  // Nutrição/hidratação
+  | 'water';                   // água ingerida (litros) — comparável à prescrição do plano
 
 export type BiometricSource =
   | 'apple_health'

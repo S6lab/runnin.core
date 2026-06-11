@@ -27,6 +27,16 @@ export interface BiometricSummary {
   totalSteps: number | null;
   avgHrv: number | null;
   latestWeight: number | null;
+  /// SpO2 média no período (%). Queda sustentada é sinal de overtraining,
+  /// doença ou altitude — checkpoint cita quando presente.
+  avgSpo2: number | null;
+  /// Frequência respiratória média (rpm). Elevação vs baseline acompanha
+  /// fadiga/doença.
+  avgRespiratoryRate: number | null;
+  /// % de gordura corporal mais recente no período.
+  latestBodyFatPct: number | null;
+  /// BPM médio em caminhada — proxy barato de fitness aeróbico basal.
+  avgWalkingBpm: number | null;
   sampleCount: number;
 }
 
@@ -52,9 +62,18 @@ export class GetSummaryUseCase {
       'sleep_deep',
       'sleep_rem',
       'sleep_light',
+      // Fix: o cascade TF 60 (stages > inBed-awake > legacy) referencia
+      // sleep_in_bed/sleep_awake mas eles não eram carregados — o fallback
+      // pra Watch SE/sleep schedule sem stages nunca via dados.
+      'sleep_in_bed',
+      'sleep_awake',
       'steps',
       'hrv',
       'weight',
+      'spo2',
+      'respiratory_rate',
+      'body_fat_pct',
+      'walking_bpm',
     ];
     const samples = await this.repo.findByDateRangeAndTypes(
       userId,
@@ -109,6 +128,12 @@ export class GetSummaryUseCase {
     const weights = byType('weight')
       .sort((a, b) => b.recordedAt.localeCompare(a.recordedAt))
       .map((s) => s.value);
+    const spo2s = byType('spo2').map((s) => s.value);
+    const respRates = byType('respiratory_rate').map((s) => s.value);
+    const bodyFats = byType('body_fat_pct')
+      .sort((a, b) => b.recordedAt.localeCompare(a.recordedAt))
+      .map((s) => s.value);
+    const walkingBpms = byType('walking_bpm').map((s) => s.value);
 
     // Médias por stage e quality score baseado em stages reais. Quando o
     // user tem só sleep_hours (Android antigo ou iOS pré-16), pulamos o
@@ -154,6 +179,10 @@ export class GetSummaryUseCase {
       totalSteps: sum(steps),
       avgHrv: avg(hrvs),
       latestWeight: weights[0] ?? null,
+      avgSpo2: avg(spo2s),
+      avgRespiratoryRate: avg(respRates),
+      latestBodyFatPct: bodyFats[0] ?? null,
+      avgWalkingBpm: avg(walkingBpms),
       sampleCount: samples.length,
     };
   }

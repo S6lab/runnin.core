@@ -195,6 +195,26 @@ const FIRST_LONG_RUN: BadgeDefinition = {
   },
 };
 
+const INDOOR_CHAMPION: BadgeDefinition = {
+  badgeId: 'indoor_champion',
+  category: 'first',
+  title: 'Indoor Champion',
+  subtitle: 'Corrida em esteira de 10 km ou mais',
+  evaluate: ({ allRuns }) => {
+    const r = allRuns.find(
+      (x) => x.environment === 'indoor' && (x.distanceM ?? 0) >= 10000,
+    );
+    if (!r) return null;
+    return {
+      primaryDisplay: `${((r.distanceM ?? 0) / 1000).toFixed(1)}`,
+      primaryUnit: 'km',
+      stats: buildStatsFromRun(r),
+      context: { runId: r.id },
+      badgeChip: 'INDOOR CHAMPION',
+    };
+  },
+};
+
 const FIRST_HALF_MARATHON: BadgeDefinition = {
   badgeId: 'first_half_marathon',
   category: 'first',
@@ -648,6 +668,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
   FIRST_10K,
   FIRST_HALF_MARATHON,
   FIRST_MARATHON,
+  INDOOR_CHAMPION,
   // Acumulada
   CUM_10K,
   CUM_50K,

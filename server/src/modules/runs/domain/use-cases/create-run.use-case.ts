@@ -8,6 +8,7 @@ export const CreateRunSchema = z.object({
   targetPace: z.string().optional(),
   targetDistance: z.string().optional(),
   planSessionId: z.string().optional(),
+  environment: z.enum(['outdoor', 'indoor']).optional(),
 });
 
 export type CreateRunInput = z.infer<typeof CreateRunSchema>;
@@ -24,6 +25,7 @@ export class CreateRunUseCase {
       targetPace: input.targetPace,
       targetDistance: input.targetDistance,
       planSessionId: input.planSessionId,
+      environment: input.environment,
       distanceM: 0,
       durationS: 0,
       createdAt: new Date().toISOString(),

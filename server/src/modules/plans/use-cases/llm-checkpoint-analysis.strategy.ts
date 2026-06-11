@@ -90,6 +90,12 @@ export class LlmCheckpointAnalysisStrategy
           biometricSummary.totalSteps != null
             ? `- Passos totais 7d: ${biometricSummary.totalSteps.toLocaleString('pt-BR')}`
             : null,
+          biometricSummary.avgSpo2 != null
+            ? `- SpO2 média 7d: ${biometricSummary.avgSpo2.toFixed(1)}% (abaixo de ~95% sustentado = sinal de doença/overtraining — reduza intensidade)`
+            : null,
+          biometricSummary.avgRespiratoryRate != null
+            ? `- Freq. respiratória média 7d: ${biometricSummary.avgRespiratoryRate.toFixed(1)} rpm (elevação vs semanas anteriores acompanha fadiga/doença)`
+            : null,
         ].filter(Boolean).join('\n')
       : '(sem dados biométricos sincronizados — decida com base nas corridas e chips)';
 
