@@ -93,10 +93,11 @@ class TermsPage extends StatelessWidget {
                   _Section(
                     title: '6. PROPRIEDADE INTELECTUAL',
                     body:
-                        'O código, design e marca Runnin pertencem ao time '
-                        'Runnin. Os dados pessoais que você gera (sessões, '
-                        'estatísticas, conversas com o coach) pertencem a você '
-                        '— pode exportar ou excluir a qualquer momento.',
+                        'O runnin.ai é um produto da s6lab (s6lab.com). O '
+                        'código, design e marca pertencem à s6lab. Os dados '
+                        'pessoais que você gera (sessões, estatísticas, '
+                        'conversas com o coach) pertencem a você — pode '
+                        'exportar ou excluir a qualquer momento.',
                   ),
                   _Section(
                     title: '7. RESPONSABILIDADE',
@@ -128,6 +129,14 @@ class TermsPage extends StatelessWidget {
                     style: type.bodyXs.copyWith(
                       color: palette.muted,
                       height: 1.5,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'runnin.ai é um produto da s6lab · s6lab.com',
+                    style: type.bodyXs.copyWith(
+                      color: palette.muted,
+                      letterSpacing: 0.5,
                     ),
                   ),
                 ],

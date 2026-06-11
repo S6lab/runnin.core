@@ -234,15 +234,28 @@ class _HealthDevicesPageState extends State<HealthDevicesPage> {
                   ..._kCompatibleProviders
                       .where((p) => _isAvailableNow(p) && !_providerConnected(p))
                       .map(
-                        (p) => Padding(
-                          padding: const EdgeInsets.only(bottom: AppSpacing.md),
-                          child: FigmaCompatibleDeviceCard(
-                            icon: p.icon,
-                            deviceName: p.name,
-                            dataLabel: p.metrics,
-                            onConnect: () => _onConnectProvider(context, p),
-                          ),
-                        ),
+                        (p) {
+                          // Plataforma do OUTRO sistema operacional aparece
+                          // com cadeado: Health Connect não existe no iPhone
+                          // nem Apple Health no Android. Antes o tap pedia
+                          // permissão do HealthKit e marcava o provider
+                          // errado como conectado.
+                          final locked = _isLockedOnThisPlatform(p);
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: AppSpacing.md),
+                            child: FigmaCompatibleDeviceCard(
+                              icon: p.icon,
+                              deviceName: p.name,
+                              dataLabel: locked
+                                  ? '${p.metrics} · ${p.name == 'Apple Health' ? 'disponível no iPhone' : 'disponível no Android'}'
+                                  : p.metrics,
+                              locked: locked,
+                              onConnect: locked
+                                  ? null
+                                  : () => _onConnectProvider(context, p),
+                            ),
+                          );
+                        },
                       ),
                   const SizedBox(height: AppSpacing.xxl),
                   _FieldLabel(label: 'INTEGRAÇÕES DIRETAS (EM BREVE)'),
@@ -275,6 +288,16 @@ class _HealthDevicesPageState extends State<HealthDevicesPage> {
   /// — não vão pelas plataformas de saúde do SO.
   bool _isAvailableNow(_ProviderSpec p) =>
       p.name == 'Apple Health' || p.name == 'Google Health Connect';
+
+  /// Plataforma do outro SO: Health Connect num iPhone (ou Apple Health num
+  /// Android) aparece com cadeado — não dá pra conectar deste device.
+  /// Web: ambas travadas (plugin health não roda no browser).
+  bool _isLockedOnThisPlatform(_ProviderSpec p) {
+    if (kIsWeb) return true;
+    if (p.name == 'Google Health Connect') return Platform.isIOS;
+    if (p.name == 'Apple Health') return Platform.isAndroid;
+    return false;
+  }
 
   void _onConnectProvider(BuildContext context, _ProviderSpec p) {
     analytics.logEvent('wearable_connect_tapped', params: {

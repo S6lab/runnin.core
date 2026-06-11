@@ -126,6 +126,7 @@ class FigmaCompatibleDeviceCard extends StatelessWidget {
     required this.dataLabel,
     this.onConnect,
     this.isConnected = false,
+    this.locked = false,
   });
 
   final IconData icon;
@@ -136,14 +137,19 @@ class FigmaCompatibleDeviceCard extends StatelessWidget {
   /// tap. Source-of-truth fica fora do card (profile.hasWearable +
   /// healthSyncService.hasPermissions()).
   final bool isConnected;
+  /// Plataforma indisponível neste device (ex: Health Connect no iPhone):
+  /// cadeado no lugar do CTA, tap desabilitado, visual esmaecido.
+  final bool locked;
 
   @override
   Widget build(BuildContext context) {
     final palette = context.runninPalette;
     return GestureDetector(
-      onTap: isConnected ? null : onConnect,
+      onTap: (isConnected || locked) ? null : onConnect,
       behavior: HitTestBehavior.opaque,
-      child: Container(
+      child: Opacity(
+        opacity: locked ? 0.55 : 1.0,
+        child: Container(
         padding: const EdgeInsets.all(13.718),
         decoration: BoxDecoration(
           color: FigmaColors.surfaceCard,
@@ -186,16 +192,24 @@ class FigmaCompatibleDeviceCard extends StatelessWidget {
                 ],
               ),
             ),
-            Text(
-              isConnected ? '✓ Conectado' : 'Conectar  ↗',
-              style: GoogleFonts.jetBrainsMono(
-                fontSize: 11,
-                letterSpacing: 0.55,
-                fontWeight: FontWeight.w500,
-                color: palette.primary,
+            if (locked)
+              Icon(
+                Icons.lock_outline,
+                size: 18,
+                color: FigmaColors.textMuted,
+              )
+            else
+              Text(
+                isConnected ? '✓ Conectado' : 'Conectar  ↗',
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 11,
+                  letterSpacing: 0.55,
+                  fontWeight: FontWeight.w500,
+                  color: palette.primary,
+                ),
               ),
-            ),
           ],
+        ),
         ),
       ),
     );
