@@ -51,6 +51,15 @@ export class EvaluateBadgesUseCase {
       }
       const res = def.evaluate(ctx);
       if (!res) continue;
+      // Cronologia real: a data da CORRIDA que conquistou (não a do eval —
+      // batch retroativo carimbava tudo com o mesmo unlockedAt e a galeria
+      // ficava fora de ordem).
+      const achievedRun = res.context?.runId
+        ? allRuns.find((r) => r.id === res.context?.runId)
+        : undefined;
+      const achievedAt = achievedRun
+        ? Date.parse(achievedRun.createdAt)
+        : undefined;
       const badge: Badge = {
         badgeId: def.badgeId,
         category: def.category,
@@ -61,6 +70,9 @@ export class EvaluateBadgesUseCase {
         primaryUnit: res.primaryUnit,
         badgeChip: res.badgeChip,
         unlockedAt: Date.now(),
+        ...(achievedAt !== undefined && Number.isFinite(achievedAt)
+          ? { achievedAt }
+          : {}),
         context: res.context,
         stats: res.stats,
         seen: false,

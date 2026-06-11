@@ -80,6 +80,9 @@ class Badge {
   final String primaryDisplay;
   final String? primaryUnit;
   final int unlockedAt;
+  /// Timestamp (ms) da CORRIDA que conquistou o badge — cronologia real.
+  /// 0 em badges antigos (server não carimbava); use [achievedOrUnlockedAt].
+  final int achievedAt;
   final String? runId;
   final String? weekStart;
   final String? monthKey;
@@ -97,6 +100,7 @@ class Badge {
     required this.primaryDisplay,
     this.primaryUnit,
     required this.unlockedAt,
+    this.achievedAt = 0,
     this.runId,
     this.weekStart,
     this.monthKey,
@@ -117,6 +121,7 @@ class Badge {
       primaryDisplay: j['primaryDisplay'] as String? ?? '',
       primaryUnit: j['primaryUnit'] as String?,
       unlockedAt: (j['unlockedAt'] as num?)?.toInt() ?? 0,
+      achievedAt: (j['achievedAt'] as num?)?.toInt() ?? 0,
       runId: ctx['runId'] as String?,
       weekStart: ctx['weekStart'] as String?,
       monthKey: ctx['monthKey'] as String?,
@@ -127,4 +132,8 @@ class Badge {
       shareCount: (j['shareCount'] as num?)?.toInt() ?? 0,
     );
   }
+
+  /// Data da conquista pra ordenação/exibição: data da corrida quando o
+  /// server carimbou, senão o timestamp do desbloqueio (badges antigos).
+  int get achievedOrUnlockedAt => achievedAt > 0 ? achievedAt : unlockedAt;
 }

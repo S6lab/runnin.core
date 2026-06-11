@@ -60,8 +60,14 @@ export interface Badge {
   primaryDisplay: string;
   /** Sufixo do display ("km", "dias", "corridas"). */
   primaryUnit?: string;
-  /** Timestamp do desbloqueio (ms). */
+  /** Timestamp do desbloqueio (ms) — momento em que o EVAL rodou. Em
+   *  avaliação retroativa (badges antigos destravados em lote), todos
+   *  saem com o mesmo valor. */
   unlockedAt: number;
+  /** Timestamp (ms) da CORRIDA que conquistou o badge (context.runId →
+   *  run.createdAt). É a cronologia real pra ordenar a galeria; ausente
+   *  em badges antigos/sem run associada — fallback unlockedAt. */
+  achievedAt?: number;
   /** Run/contexto associado ao desbloqueio. */
   context?: {
     runId?: string;

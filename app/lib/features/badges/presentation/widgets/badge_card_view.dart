@@ -121,9 +121,11 @@ class BadgeCardView extends StatelessWidget {
               ),
             SizedBox(height: compact ? 6.0 : 10.0),
             Text(
+              // Data da corrida que conquistou (achievedAt) — em badges
+              // retroativos o unlockedAt era a data do eval em lote.
               locked
                   ? 'Ainda não atingido'
-                  : 'Atingido em ${_fmtDate(badge.unlockedAt)}',
+                  : 'Atingido em ${_fmtDate(badge.achievedOrUnlockedAt)}',
               style: type.bodyXs.copyWith(
                 color: palette.muted.withValues(alpha: 0.7),
                 fontSize: compact ? 10.0 : 11.0,

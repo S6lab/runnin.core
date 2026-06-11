@@ -118,72 +118,91 @@ class _BadgesGalleryPageState extends State<BadgesGalleryPage> {
       );
     }
 
-    // Sorted: atingidos primeiro (por unlockedAt desc), depois bloqueados.
-    final sorted = [...catalog]..sort((a, b) {
-        if (a.unlocked != b.unlocked) return a.unlocked ? -1 : 1;
-        final aTs = a.unlock?.unlockedAt ?? 0;
-        final bTs = b.unlock?.unlockedAt ?? 0;
+    // Duas seções: CONQUISTADOS em cronologia real (data da corrida que
+    // destravou — achievedAt — com fallback no unlockedAt pra badges
+    // antigos, mais recente primeiro) e A CONQUISTAR na ordem do catálogo.
+    final unlocked = catalog.where((e) => e.unlocked).toList()
+      ..sort((a, b) {
+        final aTs = a.unlock?.achievedOrUnlockedAt ?? 0;
+        final bTs = b.unlock?.achievedOrUnlockedAt ?? 0;
         return bTs.compareTo(aTs);
       });
+    final locked = catalog.where((e) => !e.unlocked).toList();
 
-    final unlockedCount = catalog.where((e) => e.unlocked).length;
+    SliverGrid grid(List<BadgeCatalogEntry> entries) => SliverGrid(
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            mainAxisSpacing: 12,
+            crossAxisSpacing: 12,
+            // TF 79: aspect 1.0 (quadrado) — cabe lockup + hero + label +
+            // título 1-linha + data sem overflow vertical.
+            childAspectRatio: 1.0,
+          ),
+          delegate: SliverChildBuilderDelegate(
+            (_, i) {
+              final entry = entries[i];
+              return GestureDetector(
+                onTap: () => _openDetail(entry),
+                child: BadgeCardView(
+                  badge: _toBadge(entry),
+                  compact: true,
+                  locked: !entry.unlocked,
+                ),
+              );
+            },
+            childCount: entries.length,
+          ),
+        );
+
+    Widget sectionHeader(String label, String counter) => Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+          child: Row(
+            children: [
+              Text(
+                label,
+                style: type.labelCaps.copyWith(
+                  color: palette.muted,
+                  fontSize: 11.0,
+                  letterSpacing: 1.5,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                counter,
+                style: type.labelCaps.copyWith(
+                  color: palette.primary,
+                  fontSize: 12.0,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        );
 
     return CustomScrollView(
       physics: const AlwaysScrollableScrollPhysics(),
       slivers: [
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-            child: Row(
-              children: [
-                Text(
-                  'CATÁLOGO',
-                  style: type.labelCaps.copyWith(
-                    color: palette.muted,
-                    fontSize: 11.0,
-                    letterSpacing: 1.5,
-                  ),
-                ),
-                const Spacer(),
-                Text(
-                  '$unlockedCount / ${catalog.length}',
-                  style: type.labelCaps.copyWith(
-                    color: palette.primary,
-                    fontSize: 12.0,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
+        if (unlocked.isNotEmpty) ...[
+          SliverToBoxAdapter(
+            child: sectionHeader(
+              'CONQUISTADOS',
+              '${unlocked.length} / ${catalog.length}',
             ),
           ),
-        ),
-        SliverPadding(
-          padding: const EdgeInsets.all(16),
-          sliver: SliverGrid(
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              mainAxisSpacing: 12,
-              crossAxisSpacing: 12,
-              // TF 79: aspect 1.0 (quadrado) — cabe lockup + hero + label +
-              // título 1-linha + data sem overflow vertical.
-              childAspectRatio: 1.0,
-            ),
-            delegate: SliverChildBuilderDelegate(
-              (_, i) {
-                final entry = sorted[i];
-                return GestureDetector(
-                  onTap: () => _openDetail(entry),
-                  child: BadgeCardView(
-                    badge: _toBadge(entry),
-                    compact: true,
-                    locked: !entry.unlocked,
-                  ),
-                );
-              },
-              childCount: sorted.length,
-            ),
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+            sliver: grid(unlocked),
           ),
-        ),
+        ],
+        if (locked.isNotEmpty) ...[
+          SliverToBoxAdapter(
+            child: sectionHeader('A CONQUISTAR', '${locked.length}'),
+          ),
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+            sliver: grid(locked),
+          ),
+        ],
       ],
     );
   }
