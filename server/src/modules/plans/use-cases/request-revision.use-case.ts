@@ -9,6 +9,7 @@ import { Plan, PlanWeek, effectivePlanWeeks } from '../domain/plan.entity';
 import { logger } from '@shared/logger/logger';
 import { S6AiClient, S6RevisePlanResponse } from '@shared/infra/s6ai/s6ai.client';
 import { enforceRevisionInvariants } from './enforce-race-week-structure';
+import { currentWeekNumber } from './checkpoint-shared';
 
 export class QuotaExhaustedError extends Error {
   public readonly quota: { usedThisWeek: number; max: number; resetAt: string };
@@ -188,12 +189,13 @@ export class RequestRevisionUseCase {
     return { revision, updatedPlan };
   }
 
+  /** Semana corrente 0-based via helper CANÔNICO (semana civil ancorada
+   *  em startDate — checkpoint-shared). A fórmula antiga (ceil rolling-7d
+   *  desde createdAt) mirava semana errada pra plano que não começa na
+   *  segunda: a revisão manual recortava futureWeeks fora de fase com o
+   *  cron de domingo. */
   private _getCurrentWeekIndex(plan: Plan): number {
-    const now = new Date();
-    const planDate = new Date(plan.createdAt);
-    const diffTime = Math.abs(now.getTime() - planDate.getTime());
-    const diffWeeks = Math.ceil(diffTime / (1000 * 60 * 60 * 24 * 7));
-    return Math.min(diffWeeks, plan.weeksCount - 1);
+    return currentWeekNumber(plan) - 1;
   }
 
   private _mergeWeeks(

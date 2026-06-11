@@ -1,5 +1,6 @@
 import { getFirestore } from '@shared/infra/firebase/firebase.client';
 import { Plan, PlanSession, PlanWeek, effectivePlanWeeks } from '@modules/plans/domain/plan.entity';
+import { currentWeekNumber } from '@modules/plans/use-cases/checkpoint-shared';
 import { Run } from '@modules/runs/domain/run.entity';
 import { UserProfile } from '@modules/users/domain/user.entity';
 import { logger } from '@shared/logger/logger';
@@ -263,9 +264,10 @@ function latestPlan(plans: Plan[]): Plan | null {
 function currentPlanWeek(plan: Plan): PlanWeek | null {
   const weeks = effectivePlanWeeks(plan);
   if (weeks.length === 0) return null;
-  const createdAt = Date.parse(plan.createdAt);
-  if (Number.isNaN(createdAt)) return weeks[0] ?? null;
-  const elapsedDays = Math.max(0, Math.floor((Date.now() - createdAt) / 86_400_000));
-  const weekIndex = Math.min(Math.floor(elapsedDays / 7), weeks.length - 1);
+  // Helper canônico (semana civil ancorada em startDate — checkpoint-shared).
+  // A fórmula antiga (floor rolling-7d desde createdAt) dava semana errada
+  // pro coach quando o plano não começava na segunda: briefing/contexto
+  // citavam sessões fora de fase.
+  const weekIndex = Math.min(currentWeekNumber(plan) - 1, weeks.length - 1);
   return weeks[weekIndex] ?? weeks[0] ?? null;
 }

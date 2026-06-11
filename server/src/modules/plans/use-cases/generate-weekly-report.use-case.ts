@@ -14,6 +14,7 @@ import {
   WeeklyReportMetrics,
 } from '../domain/weekly-report.entity';
 import { WeeklyReportRepository } from '../domain/weekly-report.repository';
+import { civilWeekRange } from './checkpoint-shared';
 import { NotFoundError } from '@shared/errors/app-error';
 
 export class GenerateWeeklyReportUseCase {
@@ -138,6 +139,17 @@ export class GenerateWeeklyReportUseCase {
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 function computeWeekWindow(plan: Plan, weekNumber: number): { weekStart: Date; weekEnd: Date } {
+  // Janela civil CANÔNICA (checkpoint-shared.civilWeekRange — seg→dom
+  // ancorada no startDate). A fórmula antiga era rolling-7d a partir do
+  // createdAt: plano criado dias antes do startDate (ou começando fora da
+  // segunda) agregava corridas de uma semana completamente errada — até de
+  // antes do plano existir.
+  const range = civilWeekRange(plan, weekNumber);
+  if (range) {
+    const weekEnd = new Date(range.end.getTime() - 1); // end é exclusivo
+    return { weekStart: range.start, weekEnd };
+  }
+  // Fallback improvável: createdAt não parseável.
   const planStart = new Date(plan.createdAt);
   const weekStart = new Date(
     Date.UTC(planStart.getUTCFullYear(), planStart.getUTCMonth(), planStart.getUTCDate()),
