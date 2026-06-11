@@ -1085,28 +1085,33 @@ class _WeekTile extends StatelessWidget {
                   ),
                   if (isLastWeek) ...[
                     const SizedBox(width: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 7,
-                        vertical: 3,
-                      ),
-                      color: palette.primary,
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.flag, size: 10, color: palette.background),
-                          const SizedBox(width: 4),
-                          Text(
-                            raceDateIso != null
-                                ? 'META · ${_formatRaceDate(raceDateIso!)}'
-                                : 'SEMANA DA META',
-                            style: context.runninType.labelCaps.copyWith(
-                              color: palette.background,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: 0.8,
+                    Tooltip(
+                      triggerMode: TooltipTriggerMode.tap,
+                      message: 'A data da prova é fixa neste plano — as '
+                          'revisões semanais ajustam o caminho, não o destino.',
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 7,
+                          vertical: 3,
+                        ),
+                        color: palette.primary,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.flag, size: 10, color: palette.background),
+                            const SizedBox(width: 4),
+                            Text(
+                              raceDateIso != null
+                                  ? 'META · ${_formatRaceDate(raceDateIso!)}'
+                                  : 'SEMANA DA META',
+                              style: context.runninType.labelCaps.copyWith(
+                                color: palette.background,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 0.8,
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                   ],

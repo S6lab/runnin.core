@@ -22,7 +22,11 @@ class RaceWindowRow {
 }
 
 class AdmissibilityConstants {
-  static const raceWindows = <int, Map<String, RaceWindowRow>>{
+  /// Tabelas mutáveis: os literais abaixo são o FALLBACK hardcoded (espelho
+  /// do server no momento do build). `applyRemoteConfig` sobrescreve com o
+  /// payload de GET /plans/admissibility-config no open do wizard — a fonte
+  /// única passa a ser o server, sem release do app pra mudar regra.
+  static Map<int, Map<String, RaceWindowRow>> raceWindows = <int, Map<String, RaceWindowRow>>{
     5: {
       'iniciante':     RaceWindowRow(8, 10, 12),
       'intermediario': RaceWindowRow(6, 8, 10),
@@ -46,7 +50,7 @@ class AdmissibilityConstants {
   };
 
   /// 5K skip volume check (entry point).
-  static const peakWeeklyKm = <int, int>{5: 0, 10: 18, 21: 32, 42: 45};
+  static Map<int, int> peakWeeklyKm = <int, int>{5: 0, 10: 18, 21: 32, 42: 45};
 
   /// Sentinel: distância bloqueada pra esse subnível (não importa freq).
   static const int blockedByLevel = 9999;
@@ -56,7 +60,7 @@ class AdmissibilityConstants {
   /// `resolveProfileKey()`.
   ///
   /// MIRROR de server/.../plan-windows.constants.ts: MIN_FREQ_BY_PROFILE_DISTANCE.
-  static const minFreqByProfileDistance = <String, Map<int, int>>{
+  static Map<String, Map<int, int>> minFreqByProfileDistance = <String, Map<int, int>>{
     'iniciante_nunca': {5: 2, 10: 3, 21: blockedByLevel, 42: blockedByLevel},
     'iniciante_esp':   {5: 2, 10: 3, 21: blockedByLevel, 42: blockedByLevel},
     'iniciante_freq':  {5: 2, 10: 3, 21: 4, 42: blockedByLevel},
@@ -66,14 +70,14 @@ class AdmissibilityConstants {
 
   /// Restrições estáticas de window por (subnível × distância). null = sem
   /// restrição (todas as 3 janelas permitidas).
-  static const windowRestrictionByProfile = <String, Map<int, List<String>>>{
+  static Map<String, Map<int, List<String>>> windowRestrictionByProfile = <String, Map<int, List<String>>>{
     'iniciante_nunca': {10: ['safe']},
     'iniciante_esp':   {10: ['safe']},
   };
 
   /// Bypass de improve_pace por nível backend → distâncias liberadas
   /// totalmente. Iniciante (qualquer subtipo) NÃO está aqui.
-  static const improvePaceBypassByLevel = <String, List<int>>{
+  static Map<String, List<int>> improvePaceBypassByLevel = <String, List<int>>{
     'intermediario': [5, 10],
     'avancado':      [5, 10, 21, 42],
   };
@@ -119,38 +123,186 @@ class AdmissibilityConstants {
   }
 
   /// Cap km/sessão por nível (long run máximo).
-  static const maxKmPerSession = <String, int>{
+  static Map<String, int> maxKmPerSession = <String, int>{
     'iniciante': 14,
     'intermediario': 22,
     'avancado': 32,
   };
 
   /// Subdistância sugerida quando bloqueia. null = sem subdistância.
-  static const redirectTarget = <int, int?>{5: null, 10: 5, 21: 10, 42: 21};
+  static Map<int, int?> redirectTarget = <int, int?>{5: null, 10: 5, 21: 10, 42: 21};
 
   /// Crescimento semanal sustentável (regra dos 10%).
-  static const weeklyRampRate = 1.10;
+  static double weeklyRampRate = 1.10;
 
   /// Base mínima (walk-run permite 5km/sem desde sem 1).
-  static const rampBaseFloorKm = 5;
+  static int rampBaseFloorKm = 5;
 
   /// Comorbidades sérias — match substring case+diacritic insensitive.
-  static const seriousMedicalKeywords = <String>[
+  static List<String> seriousMedicalKeywords = <String>[
     'cirurgia', 'hernia', 'anticoagulante', 'insulina',
-    'cardiac', 'cardio', 'lesao recente',
+    'cardiac', 'cardio', 'avc', 'lesao recente',
   ];
 
   /// Faixas etárias com restrição de janela.
-  static const blockAggressiveAge = 55;       // ≥55 + 42K → ≥feasible
-  static const forceFeasibleHalfAge = 65;     // ≥65 + 21K → ≥feasible
-  static const forceSafeMarathonAge = 65;     // ≥65 + 42K → safe
+  static int blockAggressiveAge = 55;       // ≥55 + 42K → ≥feasible
+  static int forceFeasibleHalfAge = 65;     // ≥65 + 21K → ≥feasible
+  static int forceSafeMarathonAge = 65;     // ≥65 + 42K → safe
 
   /// Ceiling de ganho % pace por nível em 12 sem (escala 0.5x..1.5x).
-  static const paceImprovementCeilingPct = <String, double>{
+  static Map<String, double> paceImprovementCeilingPct = <String, double>{
     'iniciante': 8.0,
     'intermediario': 5.0,
     'avancado': 3.0,
   };
+
+  /// Versão do config aplicado (null = só fallback local).
+  static int? appliedConfigVersion;
+
+  /// Sobrescreve as tabelas com o payload de GET /plans/admissibility-config.
+  /// Parse defensivo campo a campo: qualquer pedaço malformado mantém o
+  /// fallback daquele pedaço (nunca deixa o motor sem regra).
+  static void applyRemoteConfig(Map<String, dynamic> json) {
+    if (json['version'] != 1) return; // shape desconhecido → fallback total
+
+    Map<int, Map<String, RaceWindowRow>>? windows;
+    final rw = json['raceWindows'];
+    if (rw is Map) {
+      windows = {};
+      for (final e in rw.entries) {
+        final dist = int.tryParse(e.key.toString());
+        final byLevel = e.value;
+        if (dist == null || byLevel is! Map) continue;
+        final levelMap = <String, RaceWindowRow>{};
+        for (final le in byLevel.entries) {
+          final v = le.value;
+          if (v is! Map) continue;
+          final safe = (v['safe'] as num?)?.toInt();
+          if (safe == null) continue;
+          levelMap[le.key.toString()] = RaceWindowRow(
+            (v['aggressive'] as num?)?.toInt(),
+            (v['feasible'] as num?)?.toInt(),
+            safe,
+          );
+        }
+        if (levelMap.isNotEmpty) windows[dist] = levelMap;
+      }
+    }
+    if (windows != null && windows.isNotEmpty) raceWindows = windows;
+
+    Map<int, int>? intIntMap(dynamic raw) {
+      if (raw is! Map) return null;
+      final out = <int, int>{};
+      for (final e in raw.entries) {
+        final k = int.tryParse(e.key.toString());
+        final v = (e.value as num?)?.toInt();
+        if (k != null && v != null) out[k] = v;
+      }
+      return out.isEmpty ? null : out;
+    }
+
+    final peak = intIntMap(json['peakWeeklyKm']);
+    if (peak != null) peakWeeklyKm = peak;
+
+    final minFreq = json['minFreqByProfileDistance'];
+    if (minFreq is Map) {
+      final out = <String, Map<int, int>>{};
+      for (final e in minFreq.entries) {
+        final inner = intIntMap(e.value);
+        if (inner != null) out[e.key.toString()] = inner;
+      }
+      if (out.isNotEmpty) minFreqByProfileDistance = out;
+    }
+
+    final winRestr = json['windowRestrictionByProfile'];
+    if (winRestr is Map) {
+      final out = <String, Map<int, List<String>>>{};
+      for (final e in winRestr.entries) {
+        final byDist = e.value;
+        if (byDist is! Map) continue;
+        final inner = <int, List<String>>{};
+        for (final de in byDist.entries) {
+          final k = int.tryParse(de.key.toString());
+          final v = de.value;
+          if (k != null && v is List) inner[k] = v.map((x) => x.toString()).toList();
+        }
+        out[e.key.toString()] = inner;
+      }
+      windowRestrictionByProfile = out;
+    }
+
+    final bypass = json['improvePaceBypassByLevel'];
+    if (bypass is Map) {
+      final out = <String, List<int>>{};
+      for (final e in bypass.entries) {
+        final v = e.value;
+        if (v is List) {
+          out[e.key.toString()] =
+              v.map((x) => (x as num).toInt()).toList();
+        }
+      }
+      if (out.isNotEmpty) improvePaceBypassByLevel = out;
+    }
+
+    final caps = json['maxKmPerSession'];
+    if (caps is Map) {
+      final out = <String, int>{};
+      for (final e in caps.entries) {
+        final v = (e.value as num?)?.toInt();
+        if (v != null) out[e.key.toString()] = v;
+      }
+      if (out.isNotEmpty) maxKmPerSession = out;
+    }
+
+    final redirect = json['redirectTarget'];
+    if (redirect is Map) {
+      final out = <int, int?>{};
+      for (final e in redirect.entries) {
+        final k = int.tryParse(e.key.toString());
+        if (k != null) out[k] = (e.value as num?)?.toInt();
+      }
+      if (out.isNotEmpty) redirectTarget = out;
+    }
+
+    final ramp = (json['weeklyRampRate'] as num?)?.toDouble();
+    if (ramp != null && ramp > 1.0 && ramp < 2.0) weeklyRampRate = ramp;
+    final floor = (json['rampBaseFloorKm'] as num?)?.toInt();
+    if (floor != null && floor > 0) rampBaseFloorKm = floor;
+
+    final age = json['ageRestrictionThresholds'];
+    if (age is Map) {
+      blockAggressiveAge = (age['blockAggressiveAge'] as num?)?.toInt() ?? blockAggressiveAge;
+      forceFeasibleHalfAge = (age['forceFeasibleHalfAge'] as num?)?.toInt() ?? forceFeasibleHalfAge;
+      forceSafeMarathonAge = (age['forceSafeMarathonAge'] as num?)?.toInt() ?? forceSafeMarathonAge;
+    }
+
+    final pace = json['paceImprovementCeilingPct'];
+    if (pace is Map) {
+      final out = <String, double>{};
+      for (final e in pace.entries) {
+        final v = (e.value as num?)?.toDouble();
+        if (v != null) out[e.key.toString()] = v;
+      }
+      if (out.isNotEmpty) paceImprovementCeilingPct = out;
+    }
+
+    // Labels canônicos sérios entram como keywords extras (match exato
+    // normalizado vira substring match — labels são específicos o bastante).
+    final medOptions = json['medicalConditionOptions'];
+    if (medOptions is List) {
+      final extra = <String>[];
+      for (final o in medOptions) {
+        if (o is Map && o['serious'] == true && o['label'] is String) {
+          extra.add(_normalize(o['label'] as String));
+        }
+      }
+      if (extra.isNotEmpty) {
+        seriousMedicalKeywords = {...seriousMedicalKeywords, ...extra}.toList();
+      }
+    }
+
+    appliedConfigVersion = (json['version'] as num).toInt();
+  }
 }
 
 // ─── Input state ───────────────────────────────────────────────────────────

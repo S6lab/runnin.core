@@ -163,6 +163,10 @@ class PlanRemoteDatasource {
           'raceDate': ?raceDate,
           'longRunDayOfWeek': ?longRunDayOfWeek,
           'longRunMaxMinutes': ?longRunMaxMinutes,
+          // Defesa de fuso: quando startDate vem ausente o server resolve
+          // "hoje" na data civil do atleta (22h BRT ainda é hoje, não a
+          // data UTC do servidor).
+          'tzOffsetMin': DateTime.now().timeZoneOffset.inMinutes,
         },
       );
       // Plano novo no servidor — invalida o cache pra forçar refetch.
@@ -170,6 +174,18 @@ class PlanRemoteDatasource {
       return (res.data as Map<String, dynamic>)['planId'] as String;
     } finally {
       _generateInFlight = false;
+    }
+  }
+
+  /// Config de admissibilidade do server (fonte única das janelas/regras).
+  /// Consumido por `AdmissibilityConstants.applyRemoteConfig` no open do
+  /// wizard. Falha = null (app segue com o fallback hardcoded local).
+  Future<Map<String, dynamic>?> getAdmissibilityConfig() async {
+    try {
+      final res = await _dio.get('/plans/admissibility-config');
+      return res.data as Map<String, dynamic>;
+    } catch (_) {
+      return null;
     }
   }
 

@@ -1,6 +1,10 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 import 'package:runnin/features/history/data/stats_remote_datasource.dart';
@@ -9,6 +13,7 @@ import 'package:runnin/features/subscriptions/presentation/subscription_controll
 import 'package:runnin/features/subscriptions/presentation/widgets/premium_locked_card.dart';
 import 'package:runnin/features/training/data/datasources/plan_remote_datasource.dart';
 import 'package:runnin/features/training/domain/plan_admissibility.dart';
+import 'package:runnin/features/training/presentation/steps/step_assessment_offer.dart';
 import 'package:runnin/features/training/presentation/steps/step_current_capacity.dart';
 import 'package:runnin/features/training/presentation/steps/step_days.dart';
 import 'package:runnin/features/training/presentation/steps/step_goal_v3.dart';
@@ -18,13 +23,14 @@ import 'package:runnin/features/training/presentation/steps/step_routine.dart';
 import 'package:runnin/features/training/presentation/widgets/admissibility_sheet.dart';
 import 'package:runnin/shared/widgets/figma/export.dart';
 
-/// Jornada V3 de criação do plano com branching FLOW/RACE:
-///  - sempre: intro → nível → goalKind → capacidade atual → dias+freq+longRun → startDate
-///  - FLOW adiciona: flowSubgoal entre goalKind e capacidade
-///  - RACE adiciona: raceDistance/mode → (targetPace se improve_pace) → window → raceDate
+/// Jornada V4 de criação do plano com branching FLOW/RACE:
+///  - sempre: intro → goalKind → nível → capacidade → sub-meta → dias+freq
+///  - FLOW fecha com: startDate → rotina
+///  - RACE fecha com: (targetPace se improve_pace) → raceTiming
+///    (início + janela + dia exato numa tela; raceDate é DERIVADA) → rotina
 ///
-/// Total: 7 telas FLOW, 9-10 telas RACE. Wizard usa lista dinâmica calculada
-/// a cada build (`_resolveSteps()`) baseada em goalKind + raceMode.
+/// Wizard usa lista dinâmica calculada a cada build (`_resolveSteps()`).
+/// Draft persistido no Hive: sair do app no meio da jornada não perde nada.
 class PlanSetupPage extends StatefulWidget {
   const PlanSetupPage({super.key});
 
@@ -35,6 +41,7 @@ class PlanSetupPage extends StatefulWidget {
 /// Identificadores das telas. Ordem aqui não importa — sequência é montada em
 /// `_resolveSteps()`. Cada enum tem builder próprio em `_buildStep()`.
 enum _Step {
+  assessmentOffer,
   intro,
   level,
   goalKind,
@@ -42,8 +49,7 @@ enum _Step {
   raceDistance,
   currentCapacity,
   raceTargetPace,
-  raceWindow,
-  raceDate,
+  raceTiming,
   daysAndFreq,
   routine,
   startDate,
@@ -65,7 +71,12 @@ class _PlanSetupPageState extends State<PlanSetupPage> {
   PlanRaceMode? _raceMode;
   String? _targetPaceMinKm; // M:SS/km
   String? _windowMode; // 'aggressive' | 'feasible' | 'safe'
-  DateTime? _raceDate;
+  /// Dia exato da prova dentro da semana final (1=seg..7=dom). Default
+  /// domingo — dia clássico de prova.
+  int _raceDayOfWeek = 7;
+  /// Escape hatch "já tenho prova com data marcada". Quando setado, vence
+  /// a derivação janela+dia.
+  DateTime? _explicitRaceDate;
   Set<int> _availableDays = {1, 3, 5, 6};
   int _frequency = 4;
   int? _longRunDayOfWeek;
@@ -86,11 +97,139 @@ class _PlanSetupPageState extends State<PlanSetupPage> {
   bool _submitting = false;
   String? _error;
 
+  static const _draftKey = 'plan_setup_draft_json';
+  Timer? _draftTimer;
+
+  Box<dynamic>? get _settingsBox =>
+      Hive.isBoxOpen('runnin_settings') ? Hive.box<dynamic>('runnin_settings') : null;
+
   @override
   void initState() {
     super.initState();
+    _restoreDraft();
     _loadHistoryAndSuggest();
     _loadProfileForAdmissibility();
+    _loadRemoteAdmissibilityConfig();
+  }
+
+  @override
+  void dispose() {
+    _draftTimer?.cancel();
+    super.dispose();
+  }
+
+  /// Todo setState agenda um save do draft (debounced) — sair do app no
+  /// meio da jornada (ex: ir correr a avaliação) não perde o progresso.
+  @override
+  void setState(VoidCallback fn) {
+    super.setState(fn);
+    _draftTimer?.cancel();
+    _draftTimer = Timer(const Duration(milliseconds: 600), _saveDraft);
+  }
+
+  void _saveDraft() {
+    if (!mounted) return;
+    _settingsBox?.put(_draftKey, jsonEncode({
+      'v': 1,
+      'stepIdx': _stepIdx,
+      'levelId': _level?.id,
+      'goalKind': _goalKind?.backendValue,
+      'flowSubgoal': _flowSubgoal?.backendValue,
+      'raceDistanceKm': _raceDistanceKm,
+      'raceMode': _raceMode?.backendValue,
+      'targetPaceMinKm': _targetPaceMinKm,
+      'windowMode': _windowMode,
+      'raceDayOfWeek': _raceDayOfWeek,
+      'explicitRaceDate': _explicitRaceDate?.toIso8601String(),
+      'availableDays': _availableDays.toList(),
+      'frequency': _frequency,
+      'longRunDayOfWeek': _longRunDayOfWeek,
+      'longRunMaxMinutes': _longRunMaxMinutes,
+      'alreadyRuns': _alreadyRuns,
+      'capacityDistanceKm': _capacityDistanceKm,
+      'capacityTimeSec': _capacityTimeSec,
+      'weeklyKm': _weeklyKm,
+      'runPeriod': _runPeriod,
+      'wakeTime': _wakeTime,
+      'sleepTime': _sleepTime,
+      'startChoice': _startChoice,
+      'customDate': _customDate.toIso8601String(),
+      'savedAt': DateTime.now().toIso8601String(),
+    }));
+  }
+
+  void _clearDraft() {
+    _draftTimer?.cancel();
+    _settingsBox?.delete(_draftKey);
+  }
+
+  void _restoreDraft() {
+    final raw = _settingsBox?.get(_draftKey);
+    if (raw is! String || raw.isEmpty) return;
+    try {
+      final d = jsonDecode(raw) as Map<String, dynamic>;
+      if (d['v'] != 1) return;
+      // Draft envelhece mal (datas de início/projeções deslizam) — 48h.
+      final savedAt = DateTime.tryParse(d['savedAt'] as String? ?? '');
+      if (savedAt == null || DateTime.now().difference(savedAt).inHours > 48) {
+        _clearDraft();
+        return;
+      }
+      T? enumFrom<T>(List<T> values, String? v, String Function(T) key) {
+        if (v == null) return null;
+        for (final e in values) {
+          if (key(e) == v) return e;
+        }
+        return null;
+      }
+
+      _level = PlanLevelChoice.fromId(d['levelId'] as String?);
+      _goalKind = enumFrom(PlanGoalKind.values, d['goalKind'] as String?, (g) => g.backendValue);
+      _flowSubgoal = enumFrom(PlanFlowSubgoal.values, d['flowSubgoal'] as String?, (g) => g.backendValue);
+      _raceMode = enumFrom(PlanRaceMode.values, d['raceMode'] as String?, (g) => g.backendValue);
+      _raceDistanceKm = (d['raceDistanceKm'] as num?)?.toInt();
+      _targetPaceMinKm = d['targetPaceMinKm'] as String?;
+      _windowMode = d['windowMode'] as String?;
+      _raceDayOfWeek = (d['raceDayOfWeek'] as num?)?.toInt() ?? 7;
+      _explicitRaceDate = DateTime.tryParse(d['explicitRaceDate'] as String? ?? '');
+      _availableDays = ((d['availableDays'] as List?) ?? const [])
+          .map((e) => (e as num).toInt())
+          .toSet();
+      if (_availableDays.isEmpty) _availableDays = {1, 3, 5, 6};
+      _frequency = (d['frequency'] as num?)?.toInt() ?? 4;
+      _longRunDayOfWeek = (d['longRunDayOfWeek'] as num?)?.toInt();
+      _longRunMaxMinutes = (d['longRunMaxMinutes'] as num?)?.toInt();
+      _alreadyRuns = d['alreadyRuns'] as bool?;
+      _capacityDistanceKm = (d['capacityDistanceKm'] as num?)?.toInt();
+      _capacityTimeSec = (d['capacityTimeSec'] as num?)?.toInt();
+      _weeklyKm = (d['weeklyKm'] as num?)?.toDouble();
+      _runPeriod = d['runPeriod'] as String?;
+      _wakeTime = d['wakeTime'] as String?;
+      _sleepTime = d['sleepTime'] as String?;
+      _startChoice = d['startChoice'] as String? ?? 'today';
+      final custom = DateTime.tryParse(d['customDate'] as String? ?? '');
+      _customDate = custom ?? OnboardingStartDateStep.today();
+      // Datas de início no passado voltam pra hoje (draft de ontem).
+      if (_startChoice != 'today' &&
+          _customDate.isBefore(OnboardingStartDateStep.today())) {
+        _startChoice = 'today';
+        _customDate = OnboardingStartDateStep.today();
+      }
+      final idx = (d['stepIdx'] as num?)?.toInt() ?? 0;
+      final total = _resolveSteps().length;
+      _stepIdx = idx.clamp(0, total - 1);
+    } catch (_) {
+      _clearDraft();
+    }
+  }
+
+  Future<void> _loadRemoteAdmissibilityConfig() async {
+    final json = await _planDs.getAdmissibilityConfig();
+    if (json == null) return;
+    try {
+      AdmissibilityConstants.applyRemoteConfig(json);
+    } catch (_) {/* payload inesperado → segue com fallback local */}
+    if (mounted) setState(() {/* re-renderiza cards com tabelas novas */});
   }
 
   Future<void> _loadProfileForAdmissibility() async {
@@ -121,17 +260,54 @@ class _PlanSetupPageState extends State<PlanSetupPage> {
     return '$m:${s.toString().padLeft(2, '0')}';
   }
 
-  /// Semanas alvo derivadas da janela escolhida (RACE) ou padrão (FLOW).
+  /// Semanas alvo derivadas da raceDate (RACE) ou null (FLOW). Espelho do
+  /// server: `ceil((race − start) / 7)`.
   int? get _weeksCount {
-    if (_goalKind == PlanGoalKind.race && _raceDate != null) {
-      final start = _startDateValue();
-      return ((_raceDate!.difference(start).inDays + 1) / 7).round();
+    final race = _raceDate;
+    if (_goalKind == PlanGoalKind.race && race != null) {
+      final days = race.difference(_startDateValue()).inDays;
+      if (days <= 0) return null;
+      return (days / 7).ceil();
     }
     return null;
   }
 
+  /// Início resolvido à MEIA-NOITE local (não DateTime.now() — hora corrente
+  /// distorcia a derivação de datas).
   DateTime _startDateValue() {
-    return _startChoice == 'today' ? DateTime.now() : _customDate;
+    return _startChoice == 'today' ? OnboardingStartDateStep.today() : _customDate;
+  }
+
+  /// raceDate DERIVADA de (início, janela, dia exato) — ou a explícita do
+  /// escape hatch. Estado derivado: mudar o início re-deriva sozinho, sem
+  /// data stale (bug da V3: raceDate capturava o startDate do momento da
+  /// escolha da janela).
+  DateTime? get _raceDate {
+    if (_goalKind != PlanGoalKind.race) return null;
+    if (_explicitRaceDate != null) return _explicitRaceDate;
+    final mode = _windowMode;
+    if (mode == null) return null;
+    final weeks = _windowWeeks(mode);
+    if (weeks == null) return null;
+    // Range válido pra W semanas: start + [(W−1)*7+1 .. W*7] dias — 7 dias
+    // consecutivos, um por dia-da-semana. ceil((race−start)/7)==W garantido.
+    final firstDay = _startDateValue().add(Duration(days: (weeks - 1) * 7 + 1));
+    for (var i = 0; i < 7; i++) {
+      final d = firstDay.add(Duration(days: i));
+      if (d.weekday == _raceDayOfWeek) return d;
+    }
+    return null;
+  }
+
+  int? _windowWeeks(String mode) {
+    final row = RaceWindowsTable.lookup(
+        _raceDistanceKm ?? 10, _level?.backendLevel ?? 'iniciante');
+    if (row == null) return null;
+    return mode == 'aggressive'
+        ? (row.aggressive ?? row.feasible ?? row.safe)
+        : mode == 'feasible'
+            ? (row.feasible ?? row.safe)
+            : row.safe;
   }
 
   /// `goal` legado pro backend (string livre). Server prefere goalKind +
@@ -193,33 +369,37 @@ class _PlanSetupPageState extends State<PlanSetupPage> {
   /// levelHint.
   List<_Step> _resolveSteps() {
     final steps = <_Step>[
+      // Pré-jornada: oferta da corrida de avaliação (atrás de flag até a
+      // rota /assessment-run existir — Fase C).
+      if (kAssessmentRunEnabled) _Step.assessmentOffer,
       _Step.intro,
       _Step.goalKind,
       _Step.level,
-      _Step.daysAndFreq,
     ];
+    // Capacidade logo após o nível: é o dado que o resto da jornada
+    // consome (distâncias factíveis, janelas, pace alvo). Pula quando
+    // "nunca corri" — server recebe null e cai no ramp-from-zero.
+    if (_level?.levelHint != 'nunca_corri') {
+      steps.add(_Step.currentCapacity);
+    }
     if (_goalKind == PlanGoalKind.flow) {
       steps.add(_Step.flowSubgoal);
     } else if (_goalKind == PlanGoalKind.race) {
       steps.add(_Step.raceDistance);
     }
-    // Pula capacity quando user marcou "nunca corri" — não há capacidade
-    // pra reportar. Server recebe currentWeeklyKm=null/0 e currentPaceMinKm=null,
-    // o que joga o user direto no ramp-from-zero (walk-run 5km/sem baseline).
-    if (_level?.levelHint != 'nunca_corri') {
-      steps.add(_Step.currentCapacity);
-    }
+    steps.add(_Step.daysAndFreq);
     if (_goalKind == PlanGoalKind.race) {
       if (_raceMode == PlanRaceMode.improvePace) {
         steps.add(_Step.raceTargetPace);
       }
-      steps.add(_Step.raceWindow);
-      steps.add(_Step.raceDate);
+      // Início + janela + dia exato numa tela; raceDate sai DERIVADA.
+      steps.add(_Step.raceTiming);
+    } else {
+      steps.add(_Step.startDate);
     }
     // Rotina (período + acorda + dorme) — coach distribui sessões duras
-    // nos horários de pico de energia. Vem antes do startDate.
+    // nos horários de pico de energia.
     steps.add(_Step.routine);
-    steps.add(_Step.startDate);
     return steps;
   }
 
@@ -352,6 +532,10 @@ class _PlanSetupPageState extends State<PlanSetupPage> {
 
   Widget _buildStep(BuildContext context, _Step step) {
     switch (step) {
+      case _Step.assessmentOffer:
+        return StepAssessmentOffer(
+          onRunNow: () => context.push('/assessment-run'),
+        );
       case _Step.intro:
         return const OnboardingPrepStep();
       case _Step.level:
@@ -381,7 +565,7 @@ class _PlanSetupPageState extends State<PlanSetupPage> {
               _raceMode = null;
               _targetPaceMinKm = null;
               _windowMode = null;
-              _raceDate = null;
+              _explicitRaceDate = null;
             } else {
               _flowSubgoal = null;
               // Race mínimo absoluto = 2 treinos/sem (1 não periodiza).
@@ -489,42 +673,33 @@ class _PlanSetupPageState extends State<PlanSetupPage> {
               12,
           onSelect: (p) => setState(() => _targetPaceMinKm = p),
         );
-      case _Step.raceWindow:
-        return StepRaceWindow(
+      case _Step.raceTiming:
+        return StepRaceTiming(
+          startChoice: _startChoice,
+          customStartDate: _customDate,
+          onStartSelect: (choice, date) => setState(() {
+            _startChoice = choice;
+            _customDate = date;
+            // raceDate é derivada de (início, janela, dia) — re-deriva
+            // sozinha. Só o escape hatch precisa ser revalidado pelo user.
+            _explicitRaceDate = null;
+          }),
+          startDate: _startDateValue(),
           raceDistanceKm: _raceDistanceKm ?? 10,
           level: _level?.backendLevel ?? 'iniciante',
           levelHint: _level?.levelHint,
           raceMode: _raceMode?.backendValue,
-          startDate: _startDateValue(),
           selectedMode: _windowMode,
           userAge: _computeAgeFromBirthDate(),
           medicalConditions: _profileMedicalConditions,
           frequency: _frequency,
           currentWeeklyKm: _weeklyKm,
-          onSelect: (mode) => setState(() {
-            _windowMode = mode;
-            // Auto-set raceDate baseado na janela escolhida
-            final row = RaceWindowsTable.lookup(
-                _raceDistanceKm ?? 10, _level?.backendLevel ?? 'iniciante');
-            if (row != null) {
-              final weeks = mode == 'aggressive'
-                  ? row.aggressive ?? row.feasible ?? row.safe
-                  : mode == 'feasible'
-                      ? row.feasible ?? row.safe
-                      : row.safe;
-              _raceDate = _startDateValue().add(Duration(days: weeks * 7 - 1));
-            }
-          }),
-        );
-      case _Step.raceDate:
-        final row = RaceWindowsTable.lookup(
-            _raceDistanceKm ?? 10, _level?.backendLevel ?? 'iniciante');
-        final defaultWeeks = row?.feasible ?? row?.safe ?? 12;
-        return StepRaceDate(
-          startDate: _startDateValue(),
-          defaultWeeks: defaultWeeks,
-          selectedDate: _raceDate,
-          onSelect: (d) => setState(() => _raceDate = d),
+          onWindowSelect: (mode) => setState(() => _windowMode = mode),
+          raceDayOfWeek: _raceDayOfWeek,
+          onRaceDaySelect: (dow) => setState(() => _raceDayOfWeek = dow),
+          explicitRaceDate: _explicitRaceDate,
+          onExplicitRaceDateChange: (d) => setState(() => _explicitRaceDate = d),
+          derivedRaceDate: _raceDate,
         );
       case _Step.routine:
         return StepRoutine(
@@ -588,6 +763,8 @@ class _PlanSetupPageState extends State<PlanSetupPage> {
   bool _canProceed(_Step step) {
     if (_submitting) return false;
     switch (step) {
+      case _Step.assessmentOffer:
+        return true; // CONTINUAR = "prefiro informar" (capacity manual)
       case _Step.intro:
         return true;
       case _Step.level:
@@ -614,9 +791,7 @@ class _PlanSetupPageState extends State<PlanSetupPage> {
             _weeklyKm! > 0;
       case _Step.raceTargetPace:
         return _targetPaceMinKm != null;
-      case _Step.raceWindow:
-        return _windowMode != null;
-      case _Step.raceDate:
+      case _Step.raceTiming:
         return _raceDate != null;
       case _Step.routine:
         return _runPeriod != null && _wakeTime != null && _sleepTime != null;
@@ -635,8 +810,10 @@ class _PlanSetupPageState extends State<PlanSetupPage> {
     }
   }
 
+  /// SEMPRE explícita (inclusive "hoje") — mandar null deixava o server
+  /// resolver "hoje" em UTC, e às 21h+ BRT o plano nascia amanhã.
   String _startDateIso() {
-    final d = _customDate;
+    final d = _startDateValue();
     return '${d.year.toString().padLeft(4, '0')}-'
         '${d.month.toString().padLeft(2, '0')}-'
         '${d.day.toString().padLeft(2, '0')}';
@@ -673,10 +850,26 @@ class _PlanSetupPageState extends State<PlanSetupPage> {
       availableDaysCount: _availableDays.length,
       currentWeeklyKm: _weeklyKm,
       weeksCount: _weeksCount,
-      windowMode: _windowMode,
+      windowMode: _effectiveWindowMode,
       birthDate: _profileBirthDate,
       medicalConditions: _profileMedicalConditions,
     );
+  }
+
+  /// Janela efetiva pro motor de admissibilidade. No modo guiado é a
+  /// escolhida; no escape hatch (data explícita) é derivada das semanas —
+  /// espelho do matchedMode de `validateGoalWindow` no server.
+  String? get _effectiveWindowMode {
+    if (_explicitRaceDate == null) return _windowMode;
+    final weeks = _weeksCount;
+    if (weeks == null) return null;
+    final row = RaceWindowsTable.lookup(
+        _raceDistanceKm ?? 10, _level?.backendLevel ?? 'iniciante');
+    if (row == null) return null;
+    if (weeks >= row.safe) return 'safe';
+    if (row.feasible != null && weeks >= row.feasible!) return 'feasible';
+    if (row.aggressive != null && weeks >= row.aggressive!) return 'aggressive';
+    return null;
   }
 
   /// Aplica uma sugestão do BottomSheet — muta state + navega pra step
@@ -697,13 +890,13 @@ class _PlanSetupPageState extends State<PlanSetupPage> {
       } else if (s is SwitchDistance) {
         _raceDistanceKm = s.toKm;
         _windowMode = null;
-        _raceDate = null;
+        _explicitRaceDate = null;
         _targetPaceMinKm = null;
         _stepIdx = steps.indexOf(_Step.raceDistance);
       } else if (s is SwitchToSafeWindow) {
         _windowMode = 'safe';
-        _raceDate = _startDateValue().add(Duration(days: s.weeks * 7 - 1));
-        final idx = _resolveSteps().indexOf(_Step.raceWindow);
+        _explicitRaceDate = null; // raceDate re-deriva da janela nova
+        final idx = _resolveSteps().indexOf(_Step.raceTiming);
         if (idx >= 0) _stepIdx = idx;
       } else if (s is RelaxPaceTarget) {
         _targetPaceMinKm = s.toPace;
@@ -719,7 +912,7 @@ class _PlanSetupPageState extends State<PlanSetupPage> {
         _raceMode = null;
         _targetPaceMinKm = null;
         _windowMode = null;
-        _raceDate = null;
+        _explicitRaceDate = null;
         _stepIdx = _resolveSteps().indexOf(_Step.goalKind);
       }
       // Clamp pra evitar index inválido após mudança da árvore
@@ -768,7 +961,7 @@ class _PlanSetupPageState extends State<PlanSetupPage> {
 
     final level = _level!;
     final availableDays = (_availableDays.toList()..sort());
-    final startDate = _startChoice == 'today' ? null : _startDateIso();
+    final startDate = _startDateIso();
 
     try {
       // Limpa cache do plan ANTES do generate. Sem isso, a tela seguinte
@@ -792,9 +985,9 @@ class _PlanSetupPageState extends State<PlanSetupPage> {
         confirmOverwrite: false,
       );
 
+      _clearDraft(); // jornada concluída — não restaurar na próxima visita
       if (!mounted) return;
-      final qp = startDate == null ? '' : '?startDate=$startDate';
-      context.go('/plan-loading$qp');
+      context.go('/plan-loading?startDate=$startDate');
     } catch (_) {
       if (mounted) {
         setState(() => _submitting = false);
@@ -805,7 +998,7 @@ class _PlanSetupPageState extends State<PlanSetupPage> {
   }
 
   Future<void> _generateWithRetry({
-    required String? startDate,
+    required String startDate,
     required List<int> availableDays,
     required bool confirmOverwrite,
   }) async {
@@ -892,7 +1085,7 @@ class _PlanSetupPageState extends State<PlanSetupPage> {
             _error = 'Aos $age anos pra essa distância, recomendamos janela $label no mínimo. Volta e escolhe a opção compatível.';
             // Auto-reset windowMode pra forçar nova escolha
             _windowMode = null;
-            _raceDate = null;
+            _explicitRaceDate = null;
           });
         }
         return;
@@ -903,7 +1096,7 @@ class _PlanSetupPageState extends State<PlanSetupPage> {
           setState(() {
             _error = 'Pelas suas condições (${conditions.join(', ')}), recomendamos janela SEGURA. Volta e escolhe a opção segura.';
             _windowMode = null;
-            _raceDate = null;
+            _explicitRaceDate = null;
           });
         }
         return;
@@ -963,12 +1156,12 @@ class _PlanSetupPageState extends State<PlanSetupPage> {
       setState(() {
         _raceDistanceKm = distanceKm;
         _windowMode = null;
-        _raceDate = null;
+        _explicitRaceDate = null;
         _error = null;
       });
-      // Volta o user pra tela de janela pra reescolher
+      // Volta o user pra tela de timing pra reescolher
       final steps = _resolveSteps();
-      final windowIdx = steps.indexOf(_Step.raceWindow);
+      final windowIdx = steps.indexOf(_Step.raceTiming);
       if (windowIdx >= 0) {
         setState(() => _stepIdx = windowIdx);
       }

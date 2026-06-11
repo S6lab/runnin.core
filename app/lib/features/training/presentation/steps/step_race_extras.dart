@@ -5,59 +5,22 @@ import 'package:runnin/shared/widgets/figma/export.dart';
 
 /// Steps que só aparecem quando goalKind=race:
 ///  - StepRaceTargetPace (só se raceMode=improve_pace)
-///  - StepRaceWindow (sempre — 3 opções agressivo/factível/seguro)
-///  - StepRaceDate (sempre — data específica da prova/alvo)
+///  - StepRaceTiming (sempre — início + janela + dia exato, numa tela)
 ///
-/// Os limites das janelas + ceiling de pace são duplicados do server
-/// (`plan-windows.constants.ts`). Manter em sync ao mudar a tabela lá.
+/// As regras vêm de `AdmissibilityConstants` (config remoto do server com
+/// fallback hardcoded) — não há mais tabela espelho local neste arquivo.
 
-/// Janelas em semanas por (distância × nível). null = REDIRECT (server
-/// bloqueia, FE não mostra essa opção). MIRROR de server RACE_WINDOWS.
-class RaceWindowRow {
-  final int? aggressive;
-  final int? feasible;
-  final int safe;
-  const RaceWindowRow(this.aggressive, this.feasible, this.safe);
-}
-
+/// Delegate fino pra `AdmissibilityConstants.raceWindows` (mantém o call
+/// site `RaceWindowsTable.lookup` usado pelo wizard).
 class RaceWindowsTable {
-  // [distance][level] = { agg, fea, safe }
-  static const _table = <int, Map<String, RaceWindowRow>>{
-    5: {
-      'iniciante':     RaceWindowRow(8, 10, 12),
-      'intermediario': RaceWindowRow(6, 8, 10),
-      'avancado':      RaceWindowRow(6, 6, 8),
-    },
-    10: {
-      'iniciante':     RaceWindowRow(10, 12, 14),
-      'intermediario': RaceWindowRow(8, 10, 12),
-      'avancado':      RaceWindowRow(6, 8, 10),
-    },
-    21: {
-      'iniciante':     RaceWindowRow(null, 16, 20),
-      'intermediario': RaceWindowRow(12, 14, 18),
-      'avancado':      RaceWindowRow(10, 12, 14),
-    },
-    42: {
-      'iniciante':     RaceWindowRow(null, null, 26),
-      'intermediario': RaceWindowRow(16, 18, 22),
-      'avancado':      RaceWindowRow(14, 16, 20),
-    },
-  };
-
   static RaceWindowRow? lookup(int distanceKm, String level) =>
-      _table[distanceKm]?[level];
+      AdmissibilityConstants.raceWindows[distanceKm]?[level];
 }
 
 /// Ceiling % de ganho de pace por nível em 12 sem (escala linear por weeks/12,
-/// cap 0.5x a 1.5x). MIRROR de PACE_IMPROVEMENT_CEILING_PCT.
+/// cap 0.5x a 1.5x). Fonte: AdmissibilityConstants (remoto com fallback).
 double maxPaceImprovementPct(String level, int weeksCount) {
-  final base = switch (level) {
-    'iniciante' => 8.0,
-    'intermediario' => 5.0,
-    'avancado' => 3.0,
-    _ => 5.0,
-  };
+  final base = AdmissibilityConstants.paceImprovementCeilingPct[level] ?? 5.0;
   final scale = (weeksCount / 12.0).clamp(0.5, 1.5);
   return base * scale;
 }
@@ -240,52 +203,208 @@ class _PaceChip extends StatelessWidget {
   }
 }
 
-// ─── Tela: janela (agressivo/factível/seguro) ───────────────────────────────
+// ─── Tela: timing da prova (início + janela + dia exato) ────────────────────
 
-class StepRaceWindow extends StatelessWidget {
+/// Funde os antigos StepRaceWindow + StepRaceDate + startDate (pra race) em
+/// 3 partes progressivas. A raceDate vira ESTADO DERIVADO de
+/// (início, janela, dia) — o picker livre morreu, então
+/// `ceil((race−start)/7) == weeks` por construção e mudar o início
+/// re-deriva a data sem estado stale.
+class StepRaceTiming extends StatelessWidget {
+  // Parte 1 — início
+  final String startChoice; // 'today' | 'tomorrow' | 'next_monday' | 'custom'
+  final DateTime customStartDate;
+  final void Function(String choice, DateTime date) onStartSelect;
+  /// Início resolvido (meia-noite local) — fonte das projeções de data.
+  final DateTime startDate;
+
+  // Parte 2 — janela
   final int raceDistanceKm;
   final String level;
-  /// Refinamento do iniciante (nunca_corri|esporadico|iniciante_freq).
-  /// Define restrições estáticas de janela via getAllowedWindows.
   final String? levelHint;
-  /// 'complete' | 'improve_pace' | null. Quando improve_pace + (level,
-  /// distance) elegível, libera todas as janelas (bypass total).
   final String? raceMode;
-  final DateTime startDate;
-  /// Modo escolhido: 'aggressive' | 'feasible' | 'safe'. null = ainda não escolheu.
   final String? selectedMode;
-  /// Idade calculada (do birthDate do profile). null = sem dado → sem restrição.
   final int? userAge;
-  /// Condições médicas marcadas. Usadas pra desabilitar cards que violam.
   final List<String> medicalConditions;
-  /// Frequência escolhida. null = ainda não passou pelo step de dias.
-  /// Usada pra calcular projectedKmPerSession e desabilitar cards
-  /// onde o volume estouraria o cap.
   final int? frequency;
-  /// Volume semanal atual reportado em step_currentCapacity (km/sem).
-  /// null = não reportou (ex: nunca_corri) → usa rampBaseFloorKm como base.
-  /// Mirror do server `validate-volume-for-goal.ts` (max(floor, reported)).
   final double? currentWeeklyKm;
-  final ValueChanged<String> onSelect;
+  final ValueChanged<String> onWindowSelect;
 
-  const StepRaceWindow({
+  // Parte 3 — dia exato dentro da semana final
+  final int raceDayOfWeek; // 1=seg..7=dom
+  final ValueChanged<int> onRaceDaySelect;
+
+  // Escape hatch — prova com data já marcada
+  final DateTime? explicitRaceDate;
+  final ValueChanged<DateTime?> onExplicitRaceDateChange;
+
+  /// Data derivada final (parent computa; inclui o caso explícito).
+  final DateTime? derivedRaceDate;
+
+  const StepRaceTiming({
     super.key,
+    required this.startChoice,
+    required this.customStartDate,
+    required this.onStartSelect,
+    required this.startDate,
     required this.raceDistanceKm,
     required this.level,
     required this.levelHint,
     required this.raceMode,
-    required this.startDate,
     required this.selectedMode,
     required this.userAge,
     required this.medicalConditions,
     required this.frequency,
     required this.currentWeeklyKm,
-    required this.onSelect,
+    required this.onWindowSelect,
+    required this.raceDayOfWeek,
+    required this.onRaceDaySelect,
+    required this.explicitRaceDate,
+    required this.onExplicitRaceDateChange,
+    required this.derivedRaceDate,
   });
 
-  String _projectedEndDate(int weeks) {
-    final end = startDate.add(Duration(days: weeks * 7 - 1));
-    return '${end.day.toString().padLeft(2, '0')}/${end.month.toString().padLeft(2, '0')}/${end.year}';
+  static DateTime _todayMidnight() {
+    final n = DateTime.now();
+    return DateTime(n.year, n.month, n.day);
+  }
+
+  static DateTime _nextMonday() {
+    final t = _todayMidnight();
+    final daysAhead = t.weekday == 1 ? 7 : (8 - t.weekday);
+    return t.add(Duration(days: daysAhead));
+  }
+
+  static const _dowShort = ['', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB', 'DOM'];
+  static const _dowLong = ['', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado', 'domingo'];
+
+  String _ddmm(DateTime d) =>
+      '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}';
+
+  String _ddmmyyyy(DateTime d) => '${_ddmm(d)}/${d.year}';
+
+  int? _weeksForMode(String mode) {
+    final row = RaceWindowsTable.lookup(raceDistanceKm, level);
+    if (row == null) return null;
+    return mode == 'aggressive'
+        ? (row.aggressive ?? row.feasible ?? row.safe)
+        : mode == 'feasible'
+            ? (row.feasible ?? row.safe)
+            : row.safe;
+  }
+
+  /// Primeiro dia da semana final do plano de W semanas: o intervalo de
+  /// datas válidas pra W é `start + [(W−1)*7+1 .. W*7]` dias (espelho do
+  /// `ceil` do server) — 7 dias consecutivos, um por dia-da-semana.
+  DateTime _finalWeekFirstDay(int weeks) =>
+      startDate.add(Duration(days: (weeks - 1) * 7 + 1));
+
+  /// Menor janela permitida pro perfil (pra restringir o picker do escape
+  /// hatch). Considera windowRestrictionByProfile/dinâmica via
+  /// getAllowedWindows; age/medical são validados no submit.
+  int? _minAllowedWeeks() {
+    final row = RaceWindowsTable.lookup(raceDistanceKm, level);
+    if (row == null) return null;
+    final allowed = AdmissibilityConstants.getAllowedWindows(
+          level, raceDistanceKm, frequency ?? 0, levelHint: levelHint,
+        ) ??
+        const ['aggressive', 'feasible', 'safe'];
+    int? min;
+    for (final mode in allowed) {
+      final w = mode == 'aggressive'
+          ? row.aggressive
+          : mode == 'feasible'
+              ? row.feasible
+              : row.safe;
+      if (w != null && (min == null || w < min)) min = w;
+    }
+    return min;
+  }
+
+  String? _windowLabelForWeeks(int weeks) {
+    final row = RaceWindowsTable.lookup(raceDistanceKm, level);
+    if (row == null) return null;
+    if (weeks >= row.safe) return 'SEGURA';
+    if (row.feasible != null && weeks >= row.feasible!) return 'FACTÍVEL';
+    if (row.aggressive != null && weeks >= row.aggressive!) return 'AGRESSIVA';
+    return null;
+  }
+
+  String? _disabledReasonFor(String mode, int weeks) {
+    final isImprovePaceBypassed = raceMode == 'improve_pace' &&
+        AdmissibilityConstants.hasImprovePaceBypass(level, raceDistanceKm);
+    if (isImprovePaceBypassed) return null;
+    // Window restriction por (subnível × distância × freq).
+    if (frequency != null && frequency! > 0) {
+      final allowed = AdmissibilityConstants.getAllowedWindows(
+        level, raceDistanceKm, frequency!,
+        levelHint: levelHint,
+      );
+      if (allowed != null && !allowed.contains(mode)) {
+        final label = allowed.map((w) {
+          if (w == 'safe') return 'SEGURA';
+          if (w == 'feasible') return 'FACTÍVEL';
+          return 'AGRESSIVA';
+        }).join(' / ');
+        return 'Pra ${raceDistanceKm}K nesse perfil, só janela $label.';
+      }
+    }
+    // Age cap
+    if (userAge != null) {
+      if (userAge! >= AdmissibilityConstants.forceSafeMarathonAge && raceDistanceKm == 42 && mode != 'safe') {
+        return 'Pelos seus $userAge anos pra maratona, só janela SEGURA.';
+      }
+      if (userAge! >= AdmissibilityConstants.forceFeasibleHalfAge && raceDistanceKm == 21 && mode == 'aggressive') {
+        return 'Pelos seus $userAge anos pra meia, mínimo FACTÍVEL.';
+      }
+      if (userAge! >= AdmissibilityConstants.blockAggressiveAge && raceDistanceKm == 42 && mode == 'aggressive') {
+        return 'Pelos seus $userAge anos pra maratona, mínimo FACTÍVEL.';
+      }
+    }
+    // Medical cap
+    final med = medicalConditions.where((c) => c.trim().isNotEmpty).toList();
+    if (med.isNotEmpty && mode != 'safe') {
+      if (med.length >= 3) {
+        return 'Você marcou ${med.length} condições — só janela SEGURA.';
+      }
+      if (raceDistanceKm >= 21) {
+        for (final c in med) {
+          final norm = c.toLowerCase()
+              .replaceAll(RegExp(r'[áàâã]'), 'a').replaceAll(RegExp(r'[éèê]'), 'e')
+              .replaceAll(RegExp(r'[íì]'), 'i').replaceAll(RegExp(r'[óòôõ]'), 'o')
+              .replaceAll(RegExp(r'[úù]'), 'u').replaceAll('ç', 'c');
+          for (final kw in AdmissibilityConstants.seriousMedicalKeywords) {
+            if (norm.contains(kw)) return 'Condição "$c" pede janela SEGURA.';
+          }
+        }
+      }
+    }
+    // Volume cap (ramping). Base = max(floor, currentWeeklyKm reportado).
+    final peak = AdmissibilityConstants.peakWeeklyKm[raceDistanceKm] ?? 0;
+    if (peak > 0) {
+      final reported = currentWeeklyKm ?? 0;
+      final base = reported > AdmissibilityConstants.rampBaseFloorKm
+          ? reported
+          : AdmissibilityConstants.rampBaseFloorKm.toDouble();
+      var ramped = base;
+      for (var i = 0; i < weeks; i++) {
+        ramped *= AdmissibilityConstants.weeklyRampRate;
+      }
+      if (ramped < peak) {
+        return 'Saindo de ${base.toStringAsFixed(0)}km/sem, em $weeks sem ramp chega '
+            'só ${ramped.toStringAsFixed(0)}km/sem — pico ${peak}km/sem não cabe.';
+      }
+    }
+    // Frequency cap (km/sessão)
+    if (frequency != null && peak > 0 && frequency! > 0) {
+      final cap = AdmissibilityConstants.maxKmPerSession[level] ?? 32;
+      final projected = peak / frequency!;
+      if (projected > cap) {
+        return 'Com ${frequency!} treinos/sem cada sessão fica ~${projected.toStringAsFixed(0)}km — '
+            'acima do cap ${cap}km. Aumenta a freq antes.';
+      }
+    }
+    return null;
   }
 
   @override
@@ -298,138 +417,282 @@ class StepRaceWindow extends StatelessWidget {
           style: type.bodyMd.copyWith(color: palette.error));
     }
 
-    // 0. Bypass de improve_pace pra (level × distance) elegíveis. Libera
-    //    todos os cards sem restrição (atleta toma decisão).
-    final isImprovePaceBypassed = raceMode == 'improve_pace' &&
-        AdmissibilityConstants.hasImprovePaceBypass(level, raceDistanceKm);
+    final today = _todayMidnight();
+    final tomorrow = today.add(const Duration(days: 1));
+    final nextMonday = _nextMonday();
 
-    String? reasonFor(String mode, int weeks) {
-      if (isImprovePaceBypassed) return null;
-      // 0.5 Window restriction por (subnível × distância × freq).
-      //     Estática (nunca/esporadico + 10K → só safe) OU dinâmica
-      //     (intermediario + 21K + freq=3 → só safe).
-      if (frequency != null && frequency! > 0) {
-        final allowed = AdmissibilityConstants.getAllowedWindows(
-          level, raceDistanceKm, frequency!,
-          levelHint: levelHint,
+    Widget sectionLabel(String text) => Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: Text(
+            text,
+            style: type.labelMd.copyWith(
+              color: palette.muted, letterSpacing: 1.2, fontSize: 11,
+            ),
+          ),
         );
-        if (allowed != null && !allowed.contains(mode)) {
-          final label = allowed.map((w) {
-            if (w == 'safe') return 'SEGURA';
-            if (w == 'feasible') return 'FACTÍVEL';
-            return 'AGRESSIVA';
-          }).join(' / ');
-          return 'Pra ${raceDistanceKm}K nesse perfil, só janela $label.';
-        }
+
+    final children = <Widget>[
+      const SizedBox(height: 12),
+      const FigmaAssessmentLabel(text: '// DATA DA META'),
+      const SizedBox(height: 14),
+      const FigmaAssessmentHeading(text: 'Vamos montar a data.'),
+      const SizedBox(height: 10),
+      const FigmaAssessmentDescription(
+        text: 'Início + janela de preparo + dia exato. A data da prova fica '
+            'fixa no plano — o coach periodiza pra chegar nela.',
+      ),
+      const SizedBox(height: 22),
+
+      // ── Parte 1: início ──
+      sectionLabel('1 · QUANDO VOCÊ COMEÇA'),
+      Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          _TimingChip(
+            label: 'HOJE',
+            sub: _ddmm(today),
+            selected: startChoice == 'today',
+            onTap: () => onStartSelect('today', today),
+          ),
+          _TimingChip(
+            label: 'AMANHÃ',
+            sub: _ddmm(tomorrow),
+            selected: startChoice == 'tomorrow',
+            onTap: () => onStartSelect('tomorrow', tomorrow),
+          ),
+          _TimingChip(
+            label: 'SEGUNDA',
+            sub: _ddmm(nextMonday),
+            selected: startChoice == 'next_monday',
+            onTap: () => onStartSelect('next_monday', nextMonday),
+          ),
+          _TimingChip(
+            label: 'OUTRA DATA',
+            sub: startChoice == 'custom' ? _ddmm(customStartDate) : '…',
+            selected: startChoice == 'custom',
+            onTap: () async {
+              final picked = await showDatePicker(
+                context: context,
+                initialDate: startChoice == 'custom' ? customStartDate : today,
+                firstDate: today,
+                lastDate: today.add(const Duration(days: 60)),
+              );
+              if (picked != null) onStartSelect('custom', picked);
+            },
+          ),
+        ],
+      ),
+      const SizedBox(height: 22),
+    ];
+
+    if (explicitRaceDate == null) {
+      // ── Parte 2: janela ──
+      children.add(sectionLabel('2 · QUANTO TEMPO DE PREPARO'));
+      final cards = <_WindowOption>[
+        if (row.aggressive != null)
+          _WindowOption('aggressive', 'AGRESSIVO', row.aggressive!,
+              'Janela enxuta. Requer base sólida e regularidade.',
+              disabledReason: _disabledReasonFor('aggressive', row.aggressive!)),
+        if (row.feasible != null)
+          _WindowOption('feasible', 'FACTÍVEL', row.feasible!,
+              'Equilíbrio entre progressão e folga. Recomendado.',
+              disabledReason: _disabledReasonFor('feasible', row.feasible!)),
+        _WindowOption('safe', 'SEGURO', row.safe,
+            'Mais semanas pra construir base com calma.',
+            disabledReason: _disabledReasonFor('safe', row.safe)),
+      ];
+      for (final c in cards) {
+        final end = startDate.add(Duration(days: c.weeks * 7 - 1));
+        children.add(Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: _WindowCard(
+            option: c,
+            isSelected: selectedMode == c.mode,
+            palette: palette,
+            type: type,
+            projectedEndDate: _ddmmyyyy(end),
+            onTap: () {
+              if (c.disabledReason != null) {
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                  content: Text(c.disabledReason!),
+                  backgroundColor: palette.surface,
+                  behavior: SnackBarBehavior.floating,
+                  duration: const Duration(seconds: 4),
+                ));
+                return;
+              }
+              onWindowSelect(c.mode);
+            },
+          ),
+        ));
       }
-      // 1. Age cap
-      if (userAge != null) {
-        if (userAge! >= AdmissibilityConstants.forceSafeMarathonAge && raceDistanceKm == 42 && mode != 'safe') {
-          return 'Pelos seus $userAge anos pra maratona, só janela SEGURA.';
-        }
-        if (userAge! >= AdmissibilityConstants.forceFeasibleHalfAge && raceDistanceKm == 21 && mode == 'aggressive') {
-          return 'Pelos seus $userAge anos pra meia, mínimo FACTÍVEL.';
-        }
-        if (userAge! >= AdmissibilityConstants.blockAggressiveAge && raceDistanceKm == 42 && mode == 'aggressive') {
-          return 'Pelos seus $userAge anos pra maratona, mínimo FACTÍVEL.';
-        }
+
+      // ── Parte 3: dia exato (após escolher a janela) ──
+      final weeks = selectedMode != null ? _weeksForMode(selectedMode!) : null;
+      if (weeks != null) {
+        final firstDay = _finalWeekFirstDay(weeks);
+        final lastDay = firstDay.add(const Duration(days: 6));
+        children
+          ..add(const SizedBox(height: 12))
+          ..add(sectionLabel('3 · QUE DIA EXATO?'))
+          ..add(Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Text(
+              'Semana da prova: ${_ddmm(firstDay)} — ${_ddmm(lastDay)}',
+              style: type.bodySm.copyWith(color: palette.muted),
+            ),
+          ))
+          ..add(Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (var i = 0; i < 7; i++)
+                Builder(builder: (context) {
+                  final d = firstDay.add(Duration(days: i));
+                  return _TimingChip(
+                    label: _dowShort[d.weekday],
+                    sub: _ddmm(d),
+                    selected: raceDayOfWeek == d.weekday,
+                    onTap: () => onRaceDaySelect(d.weekday),
+                  );
+                }),
+            ],
+          ));
       }
-      // 2. Medical cap
-      final med = medicalConditions.where((c) => c.trim().isNotEmpty).toList();
-      if (med.isNotEmpty && mode != 'safe') {
-        if (med.length >= 3) {
-          return 'Você marcou ${med.length} condições — só janela SEGURA.';
-        }
-        if (raceDistanceKm >= 21) {
-          for (final c in med) {
-            final norm = c.toLowerCase()
-                .replaceAll(RegExp(r'[áàâã]'), 'a').replaceAll(RegExp(r'[éèê]'), 'e')
-                .replaceAll(RegExp(r'[íì]'), 'i').replaceAll(RegExp(r'[óòôõ]'), 'o')
-                .replaceAll(RegExp(r'[úù]'), 'u').replaceAll('ç', 'c');
-            for (final kw in AdmissibilityConstants.seriousMedicalKeywords) {
-              if (norm.contains(kw)) return 'Condição "$c" pede janela SEGURA.';
-            }
-          }
-        }
-      }
-      // 3. Volume cap (ramping). Base = max(floor, currentWeeklyKm reportado).
-      //    Sem isso, intermediário (que já corre 25km/sem) é tratado como
-      //    iniciante absoluto e nem 21K cabe — bug que travava as 3 janelas.
-      final peak = AdmissibilityConstants.peakWeeklyKm[raceDistanceKm] ?? 0;
-      if (peak > 0) {
-        final reported = currentWeeklyKm ?? 0;
-        final base = reported > AdmissibilityConstants.rampBaseFloorKm
-            ? reported
-            : AdmissibilityConstants.rampBaseFloorKm.toDouble();
-        var ramped = base;
-        for (var i = 0; i < weeks; i++) {
-          ramped *= AdmissibilityConstants.weeklyRampRate;
-        }
-        if (ramped < peak) {
-          return 'Saindo de ${base.toStringAsFixed(0)}km/sem, em $weeks sem ramp chega '
-              'só ${ramped.toStringAsFixed(0)}km/sem — pico ${peak}km/sem não cabe.';
-        }
-      }
-      // 4. Frequency cap (km/sessão)
-      if (frequency != null && peak > 0 && frequency! > 0) {
-        final cap = AdmissibilityConstants.maxKmPerSession[level] ?? 32;
-        final projected = peak / frequency!;
-        if (projected > cap) {
-          return 'Com ${frequency!} treinos/sem cada sessão fica ~${projected.toStringAsFixed(0)}km — '
-              'acima do cap ${cap}km. Aumenta a freq antes.';
-        }
-      }
-      return null;
+    } else {
+      // ── Escape hatch ativo: prova com data marcada ──
+      final picked = explicitRaceDate!;
+      final days = picked.difference(startDate).inDays;
+      final weeks = (days / 7).ceil();
+      final windowLabel = _windowLabelForWeeks(weeks);
+      children
+        ..add(sectionLabel('2 · SUA PROVA'))
+        ..add(Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: palette.primary.withValues(alpha: 0.12),
+            border: Border.all(color: palette.primary),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '${_dowLong[picked.weekday]} · ${_ddmmyyyy(picked)}',
+                style: type.dataMd.copyWith(color: palette.primary, fontSize: 20),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                windowLabel != null
+                    ? '$weeks semanas de preparo — janela $windowLabel'
+                    : '$weeks semanas — abaixo do mínimo pro seu perfil',
+                style: type.bodySm.copyWith(
+                  color: windowLabel != null ? palette.muted : palette.warning,
+                ),
+              ),
+            ],
+          ),
+        ))
+        ..add(const SizedBox(height: 10))
+        ..add(TextButton(
+          onPressed: () => onExplicitRaceDateChange(null),
+          child: const Text('USAR MODO GUIADO (JANELA + DIA)'),
+        ));
     }
 
-    final cards = <_WindowOption>[
-      if (row.aggressive != null)
-        _WindowOption('aggressive', 'AGRESSIVO', row.aggressive!, 'Janela enxuta. Requer base sólida e regularidade.',
-            disabledReason: reasonFor('aggressive', row.aggressive!)),
-      if (row.feasible != null)
-        _WindowOption('feasible', 'FACTÍVEL', row.feasible!, 'Equilíbrio entre progressão e folga. Recomendado.',
-            disabledReason: reasonFor('feasible', row.feasible!)),
-      _WindowOption('safe', 'SEGURO', row.safe, 'Mais semanas pra construir base com calma.',
-          disabledReason: reasonFor('safe', row.safe)),
-    ];
+    // Resumo + escape hatch
+    if (explicitRaceDate == null && derivedRaceDate != null) {
+      final d = derivedRaceDate!;
+      children
+        ..add(const SizedBox(height: 8))
+        ..add(Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: palette.surface,
+            border: Border.all(color: palette.border),
+          ),
+          child: Text(
+            'PROVA: ${_dowLong[d.weekday]} · ${_ddmmyyyy(d)}. '
+            'A data fica fixa no plano.',
+            style: type.bodySm.copyWith(color: palette.text, height: 1.4),
+          ),
+        ));
+    }
+    if (explicitRaceDate == null) {
+      children
+        ..add(const SizedBox(height: 8))
+        ..add(TextButton(
+          onPressed: () async {
+            final minWeeks = _minAllowedWeeks() ?? row.safe;
+            final firstDate = startDate.add(Duration(days: minWeeks * 7 - 6));
+            final lastDate = startDate.add(const Duration(days: 365));
+            final picked = await showDatePicker(
+              context: context,
+              initialDate: firstDate,
+              firstDate: firstDate,
+              lastDate: lastDate,
+              helpText: 'DATA DA SUA PROVA',
+            );
+            if (picked != null) {
+              onExplicitRaceDateChange(DateTime(picked.year, picked.month, picked.day));
+            }
+          },
+          child: const Text('JÁ TENHO PROVA COM DATA MARCADA >'),
+        ));
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SizedBox(height: 12),
-        const FigmaAssessmentLabel(text: '// JANELA DE PREPARAÇÃO'),
-        const SizedBox(height: 14),
-        FigmaAssessmentHeading(text: 'Quanto tempo você tem?'),
-        const SizedBox(height: 10),
-        FigmaAssessmentDescription(
-          text: 'Tempo total que o plano leva. Se teu desempenho permitir, '
-              'o coach pode antecipar a meta via checkpoint semanal.',
+      children: children,
+    );
+  }
+}
+
+class _TimingChip extends StatelessWidget {
+  final String label;
+  final String sub;
+  final bool selected;
+  final VoidCallback onTap;
+  const _TimingChip({
+    required this.label,
+    required this.sub,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    final type = context.runninType;
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+        decoration: BoxDecoration(
+          color: selected ? palette.primary.withValues(alpha: 0.12) : palette.surface,
+          border: Border.all(color: selected ? palette.primary : palette.border),
         ),
-        const SizedBox(height: 22),
-        for (final c in cards)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: _WindowCard(
-              option: c,
-              isSelected: selectedMode == c.mode,
-              palette: palette,
-              type: type,
-              projectedEndDate: _projectedEndDate(c.weeks),
-              onTap: () {
-                if (c.disabledReason != null) {
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                    content: Text(c.disabledReason!),
-                    backgroundColor: palette.surface,
-                    behavior: SnackBarBehavior.floating,
-                    duration: const Duration(seconds: 4),
-                  ));
-                  return;
-                }
-                onSelect(c.mode);
-              },
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              style: type.labelMd.copyWith(
+                color: selected ? palette.primary : palette.text,
+                letterSpacing: 1.1,
+                fontSize: 11,
+              ),
             ),
-          ),
-      ],
+            const SizedBox(height: 2),
+            Text(
+              sub,
+              style: type.bodyXs.copyWith(color: palette.muted),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -509,7 +772,7 @@ class _WindowCard extends StatelessWidget {
               Text(
                 disabled
                     ? option.disabledReason!
-                    : 'chega ~ $projectedEndDate',
+                    : 'semana da prova termina ~ $projectedEndDate',
                 style: type.bodyXs.copyWith(
                   color: disabled ? palette.warning : palette.muted,
                 ),
@@ -518,97 +781,6 @@ class _WindowCard extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
-}
-
-// ─── Tela: data alvo da prova ───────────────────────────────────────────────
-
-class StepRaceDate extends StatelessWidget {
-  final DateTime startDate;
-  final int defaultWeeks;
-  final DateTime? selectedDate;
-  final ValueChanged<DateTime> onSelect;
-
-  const StepRaceDate({
-    super.key,
-    required this.startDate,
-    required this.defaultWeeks,
-    required this.selectedDate,
-    required this.onSelect,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.runninPalette;
-    final type = context.runninType;
-    final defaultEnd = startDate.add(Duration(days: defaultWeeks * 7 - 1));
-    final picked = selectedDate ?? defaultEnd;
-    final weeksFromStart = ((picked.difference(startDate).inDays + 1) / 7).round();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SizedBox(height: 12),
-        const FigmaAssessmentLabel(text: '// DATA DA META'),
-        const SizedBox(height: 14),
-        const FigmaAssessmentHeading(text: 'Quando vai correr?'),
-        const SizedBox(height: 10),
-        const FigmaAssessmentDescription(
-          text: 'Data específica da prova ou do dia que vai bater a meta. '
-              'Coach periodiza pra chegar lá.',
-        ),
-        const SizedBox(height: 22),
-        InkWell(
-          onTap: () async {
-            final result = await showDatePicker(
-              context: context,
-              initialDate: picked,
-              firstDate: startDate,
-              lastDate: startDate.add(const Duration(days: 365)),
-            );
-            if (result != null) onSelect(result);
-          },
-          child: Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: palette.surface,
-              border: Border.all(color: palette.primary, width: 1.5),
-            ),
-            child: Row(
-              children: [
-                Icon(Icons.calendar_today_outlined, color: palette.primary, size: 22),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '${picked.day.toString().padLeft(2, '0')} / '
-                        '${picked.month.toString().padLeft(2, '0')} / '
-                        '${picked.year}',
-                        style: type.dataMd.copyWith(color: palette.primary, fontSize: 22),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '$weeksFromStart semanas de preparação',
-                        style: type.bodySm.copyWith(color: palette.muted),
-                      ),
-                    ],
-                  ),
-                ),
-                Icon(Icons.chevron_right, color: palette.muted),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 14),
-        Text(
-          'A data fica fixa. Se o teu desempenho permitir, o coach pode antecipar '
-          'a meta — o objetivo virá antes via checkpoint semanal.',
-          style: type.bodyXs.copyWith(color: palette.muted),
-        ),
-      ],
     );
   }
 }
