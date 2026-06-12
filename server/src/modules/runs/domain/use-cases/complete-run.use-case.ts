@@ -172,6 +172,45 @@ export class CompleteRunUseCase {
       }
     }
 
+    // Assessment run: o resultado medido vira capacidade no profile —
+    // pace real + distância completada substituem o auto-reportado do
+    // wizard (provenance "medido"). Parcial (<50% do alvo) registra só o
+    // lastAssessment (com completedKm real, pra UI ofertar repetir) sem
+    // sobrescrever capacity/pace. Best-effort: falha silenciosa.
+    if (typeof run.assessmentTargetKm === 'number' && run.assessmentTargetKm > 0) {
+      try {
+        const completedKm = input.distanceM / 1000;
+        const paceMinKm = formatPace(input.distanceM, input.durationS);
+        const userRepo = new FirestoreUserRepository();
+        const patch: Partial<import('@modules/users/domain/user.entity').UserProfile> = {
+          lastAssessment: {
+            runId,
+            at: new Date().toISOString(),
+            targetKm: run.assessmentTargetKm,
+            completedKm: Number(completedKm.toFixed(2)),
+            paceMinKm,
+            ...(typeof input.avgBpm === 'number' ? { avgBpm: input.avgBpm } : {}),
+          },
+        };
+        const completedEnough = completedKm >= run.assessmentTargetKm * 0.5;
+        if (completedEnough && paceMinKm) {
+          patch.capacityDistanceKm = Math.max(1, Math.floor(completedKm));
+          patch.currentPaceMinKm = paceMinKm;
+        }
+        await userRepo.updatePartial(userId, patch);
+        logger.info('run.assessment.persisted', {
+          userId,
+          runId,
+          targetKm: run.assessmentTargetKm,
+          completedKm: Number(completedKm.toFixed(2)),
+          paceMinKm,
+          overwroteCapacity: completedEnough,
+        });
+      } catch (err) {
+        logger.warn('run.assessment.persist_failed', { userId, runId, err: String(err) });
+      }
+    }
+
     // TF 77: dispara evaluator de badges pós-completar. Se a run desbloqueou
     // algum marco (1ª corrida, 5K, 10K, streak, etc), persiste o badge
     // unlocked pra mostrar no próximo open do app. Best-effort — falha

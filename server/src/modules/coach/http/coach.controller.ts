@@ -44,6 +44,9 @@ export async function postCoachLiveSession(req: Request, res: Response, next: Ne
   try {
     const body = (req.body ?? {}) as {
       planSessionId?: string;
+      /** Corrida de AVALIAÇÃO: alvo em km. Troca o briefing pra persona de
+       *  MEDIÇÃO — sem citar plano/meta de treino, que ainda não existem. */
+      assessmentTargetKm?: number;
       temperatureC?: number;
       humidityPercent?: number;
       windKmh?: number;
@@ -62,7 +65,23 @@ export async function postCoachLiveSession(req: Request, res: Response, next: Ne
 
     const session = runtime.currentSession;
     const briefingParts: string[] = [];
-    if (session) {
+    const assessmentKm =
+      typeof body.assessmentTargetKm === 'number' && body.assessmentTargetKm > 0
+        ? body.assessmentTargetKm
+        : null;
+    if (assessmentKm != null) {
+      // Persona de MEDIÇÃO durante a sessão inteira: o propósito é capturar
+      // o ritmo real do atleta pra calibrar o plano que vem DEPOIS. Não
+      // existe plano/sessão/meta de treino ainda — não citar.
+      briefingParts.push(
+        `SESSÃO DE HOJE: CORRIDA DE AVALIAÇÃO · ${assessmentKm}km.`,
+        'MODO MEDIÇÃO — regras desta sessão:',
+        '- Briefing: explique o propósito ("vou medir seu ritmo real; corre constante e confortável, sem forçar").',
+        '- Check-ins por km: fale só do MEDIDO ("ritmo estável em X:XX, segue assim") — NUNCA cite plano, sessão planejada ou meta de treino (não existem ainda).',
+        '- goal_reached: anuncie o resultado medido ("avaliação completa: Xkm a Y/km, FC média Z").',
+        '- finish: feche conectando o dado ao que vem: esse ritmo vai calibrar o plano personalizado que o atleta vai criar em seguida.',
+      );
+    } else if (session) {
       const head = [`SESSÃO DE HOJE: ${session.type}`];
       if (typeof session.distanceKm === 'number') head.push(`${session.distanceKm}km`);
       if (session.targetPace) head.push(`pace alvo ${session.targetPace}`);

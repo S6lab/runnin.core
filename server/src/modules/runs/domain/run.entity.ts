@@ -62,6 +62,9 @@ export interface Run {
   targetDistance?: string;
   planSessionId?: string;
   environment?: RunEnvironment;
+  /** Alvo em km da corrida de AVALIAÇÃO. Presença marca a run como
+   *  assessment — complete-run persiste o resultado medido no profile. */
+  assessmentTargetKm?: number;
   distanceM: number;
   durationS: number;
   avgPace?: string;

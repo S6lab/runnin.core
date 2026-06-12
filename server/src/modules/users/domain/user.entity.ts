@@ -56,6 +56,20 @@ export interface UserProfile {
   currentPaceMinKm?: string;
   /** Distância confortável recente auto-reportada (km). */
   capacityDistanceKm?: number;
+  /** Resultado da última corrida de AVALIAÇÃO (assessment run) — capacidade
+   *  MEDIDA, não declarada. Persistido pelo complete-run quando a corrida
+   *  tem `assessmentTargetKm`. Prevalece sobre o auto-reportado no prefill
+   *  do wizard e dá provenance "medido" no prompt de geração de plano.
+   *  Parcial (<50% do alvo) NÃO sobrescreve capacity/pace acima — só este
+   *  registro, com completedKm real. */
+  lastAssessment?: {
+    runId: string;
+    at: string; // ISO
+    targetKm: number;
+    completedKm: number;
+    paceMinKm: string; // M:SS
+    avgBpm?: number;
+  };
   /** Matiz fino do nível "iniciante" (jornada nova). */
   levelHint?: 'nunca_corri' | 'esporadico' | 'iniciante_freq';
   /** Tipo de objetivo do plano atual: 'flow' (sem prova) ou 'race' (meta). */

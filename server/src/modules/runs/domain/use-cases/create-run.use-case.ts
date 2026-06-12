@@ -9,6 +9,10 @@ export const CreateRunSchema = z.object({
   targetDistance: z.string().optional(),
   planSessionId: z.string().optional(),
   environment: z.enum(['outdoor', 'indoor']).optional(),
+  /** Corrida de AVALIAÇÃO: alvo em km escolhido pelo user. Presença deste
+   *  campo marca a run como assessment — complete-run mede pace/distância
+   *  e persiste como capacidade MEDIDA no profile. */
+  assessmentTargetKm: z.number().positive().max(42).optional(),
 });
 
 export type CreateRunInput = z.infer<typeof CreateRunSchema>;
@@ -26,6 +30,7 @@ export class CreateRunUseCase {
       targetDistance: input.targetDistance,
       planSessionId: input.planSessionId,
       environment: input.environment,
+      assessmentTargetKm: input.assessmentTargetKm,
       distanceM: 0,
       durationS: 0,
       createdAt: new Date().toISOString(),

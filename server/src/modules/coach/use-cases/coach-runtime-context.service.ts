@@ -23,6 +23,7 @@ export type CoachRuntimeProfile = Pick<
   | 'restingBpm'
   | 'maxBpm'
   | 'medicalConditions'
+  | 'lastAssessment'
   | 'coachPersonality'
   | 'coachMessageFrequency'
   | 'coachFeedbackEnabled'
@@ -183,6 +184,7 @@ export class CoachRuntimeContextService {
               restingBpm: profile.restingBpm,
               maxBpm: profile.maxBpm,
               medicalConditions: profile.medicalConditions,
+              lastAssessment: profile.lastAssessment,
               coachPersonality: profile.coachPersonality,
               coachMessageFrequency: profile.coachMessageFrequency,
               coachFeedbackEnabled: profile.coachFeedbackEnabled,

@@ -74,6 +74,14 @@ export function formatProfileContext(profile: Partial<UserProfile> | null | unde
     lines.push(`- Condições: ${profile.medicalConditions.join(', ')}`);
   }
   if (profile.coachPersonality) lines.push(`- Persona escolhida: ${profile.coachPersonality}`);
+  if (profile.lastAssessment) {
+    const a = profile.lastAssessment;
+    lines.push(
+      `- Avaliação MEDIDA (${a.at.slice(0, 10)}): ${a.completedKm}km de ${a.targetKm}km alvo, `
+      + `pace real ${a.paceMinKm}/km${a.avgBpm ? `, FC média ${a.avgBpm}` : ''} — `
+      + 'dado medido em corrida, prevalece sobre o auto-reportado.',
+    );
+  }
 
   return lines.length > 0 ? lines.join('\n') : '- Perfil sem dados relevantes.';
 }

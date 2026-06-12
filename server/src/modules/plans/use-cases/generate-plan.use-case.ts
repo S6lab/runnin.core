@@ -21,6 +21,7 @@ import { validateMedicalForGoal, MedicalRestrictionError } from './validate-medi
 import { buildExecutionSegments, resolveEffectiveSessionType } from './build-execution-segments';
 import { isoDateToDayOfWeek } from './race-date.helpers';
 import { resolvePlanHorizon } from './resolve-plan-horizon';
+import { computeAge } from '@shared/infra/llm/prompts/context/profile-context';
 import { enforceRaceWeekStructure } from './enforce-race-week-structure';
 import { applyNarrativeFallbacks } from './hydrate-revised-sessions';
 import {
@@ -761,7 +762,7 @@ export class GeneratePlanUseCase {
         );
       // Fire-and-forget: gera narrativa longa pra página de detalhe sem
       // bloquear a resposta. Se falhar, o plano segue funcional sem texto.
-      void this._generateCoachRationale(plan, weeks, runtime.profile);
+      void this._generateCoachRationale(plan, weeks, runtime.profile, input);
       // Gera narrativas curtas per-week + mesocycle. Roda em paralelo
       // ao rationale longo. Falha silenciosa.
       void this._generateWeekNarratives(plan, weeks, runtime.profile);
@@ -811,6 +812,7 @@ export class GeneratePlanUseCase {
     plan: Plan,
     weeks: PlanWeek[],
     profile: import('@modules/coach/use-cases/coach-runtime-context.service').CoachRuntimeProfile | null,
+    input: GeneratePlanInput & { weeksCount: number; startDate: string },
   ): Promise<void> {
     try {
       const totalKm = weeks.reduce(
@@ -820,15 +822,32 @@ export class GeneratePlanUseCase {
       const sessionsBySection = weeks
         .map((w, i) => `Semana ${i + 1}: ${w.sessions.length} sessões / ${w.sessions.reduce((s, x) => s + x.distanceKm, 0).toFixed(1)}km`)
         .join('\n');
+      // IDADE: SEMPRE computada server-side. Passar birthDate cru rotulado
+      // como "Idade" deixava o LLM calcular — e ele errava (TF: rationale
+      // dizia 41 com perfil certo). Mesma fórmula dos validators.
+      const age = computeAge(profile?.birthDate);
+      const dowNames = ['', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb', 'dom'];
+      const availableDaysLabel = (input.availableDays ?? [])
+        .map((d) => dowNames[d] ?? `${d}`)
+        .join('/');
       const profileLines = profile
         ? [
             `- Nome: ${profile.name ?? '—'}`,
-            `- Nível: ${profile.level ?? '—'}`,
+            `- Gênero: ${profile.gender ?? '—'}`,
+            `- Idade: ${age != null ? `${age} anos` : '—'} (NÃO recalcule — use este valor)`,
+            `- Nível: ${profile.level ?? '—'}${input.levelHint ? ` (${input.levelHint})` : ''}`,
             `- Objetivo: ${profile.goal ?? '—'}`,
-            `- Frequência alvo: ${profile.frequency ?? '—'}x/semana`,
+            `- Capacidade declarada: ${input.currentWeeklyKm != null ? `${input.currentWeeklyKm}km/sem` : '—'} | pace ${input.currentPaceMinKm ?? '—'}/km | maior distância confortável ${input.capacityDistanceKm != null ? `${input.capacityDistanceKm}km` : '—'}`,
+            ...(profile.lastAssessment
+              ? [`- Capacidade MEDIDA (avaliação ${profile.lastAssessment.at.slice(0, 10)}): ${profile.lastAssessment.completedKm}km a ${profile.lastAssessment.paceMinKm}/km${profile.lastAssessment.avgBpm ? `, FC média ${profile.lastAssessment.avgBpm}` : ''} — prevalece sobre o declarado`]
+              : []),
+            `- Frequência alvo: ${input.frequency ?? profile.frequency ?? '—'}x/semana | dias disponíveis: ${availableDaysLabel || '—'}`,
+            `- Long run: ${input.longRunDayOfWeek != null ? `dia preferido ${dowNames[input.longRunDayOfWeek]}` : 'dia livre'}${input.longRunMaxMinutes != null ? ` | tempo máx ${input.longRunMaxMinutes}min` : ''}`,
+            ...(input.goalKind === 'race' && input.raceDistanceKm
+              ? [`- Meta de prova: ${input.raceDistanceKm}K (${input.raceMode === 'improve_pace' ? `bater pace ${input.targetPaceMinKm ?? '—'}/km` : 'completar'})${plan.raceDate ? ` em ${plan.raceDate}` : ''} — janela de ${input.weeksCount} semanas a partir de ${input.startDate}`]
+              : [`- Início do plano: ${input.startDate} (${input.weeksCount} semanas)`]),
             `- Período preferido: ${profile.runPeriod ?? '—'}`,
             `- Janela do dia: acorda ${profile.wakeTime ?? '—'} / dorme ${profile.sleepTime ?? '—'}`,
-            `- Idade: ${profile.birthDate ?? '—'}`,
             `- Peso: ${profile.weight ?? '—'} | Altura: ${profile.height ?? '—'}`,
             `- FC repouso: ${profile.restingBpm ?? '—'} | FC máx: ${profile.maxBpm ?? '—'}`,
             `- Condições médicas: ${(profile.medicalConditions ?? []).join(', ') || 'nenhuma'}`,
