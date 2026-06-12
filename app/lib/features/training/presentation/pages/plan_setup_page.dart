@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:runnin/core/router/app_router.dart' show markOnboardingPending;
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/features/auth/data/user_remote_datasource.dart';
 import 'package:runnin/features/history/data/stats_remote_datasource.dart';
@@ -1101,6 +1102,21 @@ class _PlanSetupPageState extends State<PlanSetupPage> {
       if (status == 403) {
         if (!mounted) return;
         context.push('/paywall?next=/training/criar-plano');
+        return;
+      }
+      if (status == 422 &&
+          (code == 'ONBOARDING_REQUIRED' || code == 'ONBOARDING_INCOMPLETE')) {
+        // Server diz que o onboarding não está completo mas o cache local
+        // achava que sim (reset de conta zera onboarded no server e o Hive
+        // não sabe). Sem este handler caía na mensagem genérica de conexão.
+        markOnboardingPending();
+        if (mounted) {
+          setState(() {
+            _error = 'Seu cadastro foi reiniciado — completa o onboarding '
+                'rapidinho (campos já preenchidos) e volta pra gerar o plano.';
+          });
+          context.go('/onboarding');
+        }
         return;
       }
       if (status == 422 && code == 'GOAL_WINDOW_INVALID') {
