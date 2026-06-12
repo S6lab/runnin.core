@@ -839,7 +839,16 @@ export class GeneratePlanUseCase {
             `- Objetivo: ${profile.goal ?? '—'}`,
             `- Capacidade declarada: ${input.currentWeeklyKm != null ? `${input.currentWeeklyKm}km/sem` : '—'} | pace ${input.currentPaceMinKm ?? '—'}/km | maior distância confortável ${input.capacityDistanceKm != null ? `${input.capacityDistanceKm}km` : '—'}`,
             ...(profile.lastAssessment
-              ? [`- Capacidade MEDIDA (avaliação ${profile.lastAssessment.at.slice(0, 10)}): ${profile.lastAssessment.completedKm}km a ${profile.lastAssessment.paceMinKm}/km${profile.lastAssessment.avgBpm ? `, FC média ${profile.lastAssessment.avgBpm}` : ''} — prevalece sobre o declarado`]
+              ? [(() => {
+                  const a = profile.lastAssessment!;
+                  const effort = a.effortLabel
+                    ? ` | esforço ${a.effortLabel.toUpperCase()}${a.pctHrr != null ? ` (${a.pctHrr}% FCR)` : ''}${a.cardiacDriftPct != null ? `, drift ${a.cardiacDriftPct}%` : ''}`
+                    : '';
+                  const caveat = (a.effortLabel === 'forte' || a.effortLabel === 'maximo')
+                    ? ` — ATENÇÃO: pace medido em esforço de prova, NÃO é confortável; pace base = ${a.easyPaceMinKm ?? 'medido +60-90s'}/km`
+                    : ' — prevalece sobre o declarado';
+                  return `- Capacidade MEDIDA (avaliação ${a.at.slice(0, 10)}): ${a.completedKm}km a ${a.paceMinKm}/km${a.avgBpm ? `, FC média ${a.avgBpm}` : ''}${effort}${caveat}`;
+                })()]
               : []),
             `- Frequência alvo: ${input.frequency ?? profile.frequency ?? '—'}x/semana | dias disponíveis: ${availableDaysLabel || '—'}`,
             `- Long run: ${input.longRunDayOfWeek != null ? `dia preferido ${dowNames[input.longRunDayOfWeek]}` : 'dia livre'}${input.longRunMaxMinutes != null ? ` | tempo máx ${input.longRunMaxMinutes}min` : ''}`,

@@ -76,10 +76,19 @@ export function formatProfileContext(profile: Partial<UserProfile> | null | unde
   if (profile.coachPersonality) lines.push(`- Persona escolhida: ${profile.coachPersonality}`);
   if (profile.lastAssessment) {
     const a = profile.lastAssessment;
+    const effortBits: string[] = [];
+    if (a.pctHrr != null) effortBits.push(`${a.pctHrr}% da reserva de FC`);
+    if (a.cardiacDriftPct != null) effortBits.push(`drift cardíaco ${a.cardiacDriftPct}%`);
+    const effortTxt = a.effortLabel
+      ? ` Esforço: ${a.effortLabel.toUpperCase()}${effortBits.length ? ` (${effortBits.join(', ')})` : ''}.`
+      : '';
+    const interpretTxt = (a.effortLabel === 'forte' || a.effortLabel === 'maximo')
+      ? ` ESSE PACE NÃO É CONFORTÁVEL — é esforço de prova; use ${a.easyPaceMinKm ?? 'um pace ~60-90s mais lento'}/km como base easy.`
+      : '';
     lines.push(
       `- Avaliação MEDIDA (${a.at.slice(0, 10)}): ${a.completedKm}km de ${a.targetKm}km alvo, `
-      + `pace real ${a.paceMinKm}/km${a.avgBpm ? `, FC média ${a.avgBpm}` : ''} — `
-      + 'dado medido em corrida, prevalece sobre o auto-reportado.',
+      + `pace real ${a.paceMinKm}/km${a.avgBpm ? `, FC média ${a.avgBpm}` : ''}.${effortTxt}${interpretTxt} `
+      + 'Dado medido em corrida — prevalece sobre o auto-reportado.',
     );
   }
 

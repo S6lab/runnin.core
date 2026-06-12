@@ -334,6 +334,34 @@ double? rollingPaceMinKm(
   return pace;
 }
 
+/// Classificação de esforço da corrida de avaliação (computada no server).
+class AssessmentResult {
+  /// % da reserva de FC (Karvonen). ≥85 = esforço máximo.
+  final int? pctHrr;
+  /// Drift cardíaco Pa:Hr 1ª vs 2ª metade (%). >5% = insustentável.
+  final double? cardiacDriftPct;
+  final String? effortLabel; // 'confortavel'|'moderado'|'forte'|'maximo'
+  /// Pace base (easy) estimado a partir do medido + esforço.
+  final String? easyPaceMinKm;
+
+  const AssessmentResult({
+    this.pctHrr,
+    this.cardiacDriftPct,
+    this.effortLabel,
+    this.easyPaceMinKm,
+  });
+
+  static AssessmentResult? fromJson(Map<String, dynamic>? j) {
+    if (j == null) return null;
+    return AssessmentResult(
+      pctHrr: (j['pctHrr'] as num?)?.toInt(),
+      cardiacDriftPct: (j['cardiacDriftPct'] as num?)?.toDouble(),
+      effortLabel: j['effortLabel'] as String?,
+      easyPaceMinKm: j['easyPaceMinKm'] as String?,
+    );
+  }
+}
+
 class Run {
   final String id;
   final String status;
@@ -364,6 +392,9 @@ class Run {
   /// Alvo da corrida de AVALIAÇÃO (km). Presença marca a run como
   /// assessment — ReportPage mostra o card "Avaliação concluída".
   final double? assessmentTargetKm;
+  /// Classificação de esforço da avaliação (server computa no complete:
+  /// %HRR Karvonen + drift cardíaco + pace base estimado).
+  final AssessmentResult? assessmentResult;
   final List<KmSplit> splits;
   /// Feedback subjetivo submetido pelo user na ReportPage (chips + note).
   /// Substitui o fluxo de checkpoint "solto" — agora a leitura do user
@@ -400,6 +431,7 @@ class Run {
     this.coachQuote,
     this.environment,
     this.assessmentTargetKm,
+    this.assessmentResult,
     this.splits = const [],
     this.userFeedback = const [],
     this.feedbackAt,
@@ -431,6 +463,9 @@ class Run {
     coachQuote: j['coachQuote'] as String?,
     environment: j['environment'] as String?,
     assessmentTargetKm: (j['assessmentTargetKm'] as num?)?.toDouble(),
+    assessmentResult: AssessmentResult.fromJson(
+      j['assessmentResult'] as Map<String, dynamic>?,
+    ),
     splits: j['splits'] != null
         ? (j['splits'] as List)
             .map((e) => KmSplit.fromJson(e as Map<String, dynamic>))

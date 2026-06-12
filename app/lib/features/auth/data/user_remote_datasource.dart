@@ -8,8 +8,15 @@ class LastAssessment {
   final String at; // ISO
   final double targetKm;
   final double completedKm;
-  final String paceMinKm; // M:SS
+  final String paceMinKm; // M:SS — pace CRU medido
   final int? avgBpm;
+  /// % da reserva de FC (Karvonen) do esforço médio da avaliação.
+  final int? pctHrr;
+  final double? cardiacDriftPct;
+  final String? effortLabel; // 'confortavel'|'moderado'|'forte'|'maximo'
+  /// Pace base estimado — em esforço forte/máximo é este que vira o
+  /// currentPaceMinKm do perfil (anti-gaming).
+  final String? easyPaceMinKm;
 
   const LastAssessment({
     required this.runId,
@@ -18,6 +25,10 @@ class LastAssessment {
     required this.completedKm,
     required this.paceMinKm,
     this.avgBpm,
+    this.pctHrr,
+    this.cardiacDriftPct,
+    this.effortLabel,
+    this.easyPaceMinKm,
   });
 
   static LastAssessment? fromJson(Map<String, dynamic>? j) {
@@ -33,6 +44,10 @@ class LastAssessment {
       completedKm: (j['completedKm'] as num?)?.toDouble() ?? 0,
       paceMinKm: paceMinKm,
       avgBpm: (j['avgBpm'] as num?)?.toInt(),
+      pctHrr: (j['pctHrr'] as num?)?.toInt(),
+      cardiacDriftPct: (j['cardiacDriftPct'] as num?)?.toDouble(),
+      effortLabel: j['effortLabel'] as String?,
+      easyPaceMinKm: j['easyPaceMinKm'] as String?,
     );
   }
 }

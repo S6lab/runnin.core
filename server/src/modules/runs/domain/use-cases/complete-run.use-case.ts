@@ -53,6 +53,97 @@ export const CompleteRunSchema = z.object({
 
 export type CompleteRunInput = z.infer<typeof CompleteRunSchema>;
 
+export type AssessmentEffortLabel = 'confortavel' | 'moderado' | 'forte' | 'maximo';
+
+export interface AssessmentEffort {
+  /** % da reserva de FC (Karvonen) do esforço médio. Null sem FC/perfil. */
+  pctHrr: number | null;
+  /** Drift cardíaco Pa:Hr (1ª vs 2ª metade dos splits): FC subindo com o
+   *  mesmo pace = esforço insustentável. Null com <2 splits ou sem FC. */
+  cardiacDriftPct: number | null;
+  effortLabel: AssessmentEffortLabel | null;
+  /** Pace base (easy) estimado a partir do medido + esforço. Igual ao
+   *  medido quando o esforço foi confortável. */
+  easyPaceMinKm: string | null;
+}
+
+/**
+ * Anti-gaming da avaliação: iniciante que "entrega a vida" em 2km pra
+ * cravar um pace bom é detectado pela FC — %HRR alto + drift cardíaco
+ * denunciam esforço de prova, não capacidade confortável. O pace BASE do
+ * plano é derivado do esforço, não do número cru.
+ */
+function classifyAssessmentEffort(opts: {
+  avgBpm?: number;
+  restingBpm?: number;
+  maxBpm?: number;
+  paceMinKm: string;
+  splits?: CompleteRunInput['splits'];
+}): AssessmentEffort {
+  const { avgBpm, restingBpm, maxBpm } = opts;
+  let pctHrr: number | null = null;
+  if (
+    typeof avgBpm === 'number' && avgBpm > 0 &&
+    typeof restingBpm === 'number' && restingBpm > 0 &&
+    typeof maxBpm === 'number' && maxBpm > restingBpm
+  ) {
+    pctHrr = Math.round(((avgBpm - restingBpm) / (maxBpm - restingBpm)) * 100);
+    pctHrr = Math.max(0, Math.min(120, pctHrr));
+  }
+
+  // Pa:Hr decoupling: ratio velocidade/FC da 1ª metade vs 2ª metade dos
+  // splits. >5% = aeróbico não sustenta o pace (Maffetone usa esse corte).
+  let cardiacDriftPct: number | null = null;
+  const splits = (opts.splits ?? []).filter(
+    (s) => typeof s.avgBpm === 'number' && s.avgBpm > 0 && s.durationS > 0,
+  );
+  if (splits.length >= 2) {
+    const mid = Math.floor(splits.length / 2);
+    const ratioOf = (part: typeof splits) => {
+      const speed = part.reduce((a, s) => {
+        const dist = typeof s.distanceM === 'number' ? s.distanceM : 1000;
+        return a + dist / s.durationS;
+      }, 0) / part.length;
+      const hr = part.reduce((a, s) => a + (s.avgBpm ?? 0), 0) / part.length;
+      return hr > 0 ? speed / hr : null;
+    };
+    const r1 = ratioOf(splits.slice(0, mid));
+    const r2 = ratioOf(splits.slice(mid));
+    if (r1 != null && r2 != null && r2 > 0) {
+      cardiacDriftPct = Math.round(((r1 / r2) - 1) * 1000) / 10;
+    }
+  }
+
+  let effortLabel: AssessmentEffortLabel | null = null;
+  if (pctHrr != null) {
+    effortLabel = pctHrr >= 85 ? 'maximo'
+      : pctHrr >= 75 ? 'forte'
+      : pctHrr >= 65 ? 'moderado'
+      : 'confortavel';
+    // Drift alto promove o label: pace caiu OU FC subiu pra sustentar —
+    // mesmo com %HRR médio "ok", o esforço não era confortável.
+    if (cardiacDriftPct != null && cardiacDriftPct > 8 && effortLabel === 'confortavel') {
+      effortLabel = 'moderado';
+    }
+  }
+
+  // Easy pace estimado: offset conservador sobre o medido por banda de
+  // esforço (~75s pra all-out ≈ diferença pace de prova 5K vs easy).
+  let easyPaceMinKm: string | null = null;
+  const paceMatch = /^(\d{1,2}):(\d{2})$/.exec(opts.paceMinKm);
+  if (paceMatch && effortLabel != null) {
+    const baseSec = parseInt(paceMatch[1]!, 10) * 60 + parseInt(paceMatch[2]!, 10);
+    const offset = effortLabel === 'maximo' ? 75
+      : effortLabel === 'forte' ? 45
+      : effortLabel === 'moderado' ? 20
+      : 0;
+    const easySec = baseSec + offset;
+    easyPaceMinKm = `${Math.floor(easySec / 60)}:${(easySec % 60).toString().padStart(2, '0')}`;
+  }
+
+  return { pctHrr, cardiacDriftPct, effortLabel, easyPaceMinKm };
+}
+
 function formatPace(distanceM: number, durationS: number): string {
   if (distanceM <= 0) return '--:--';
   const paceSecPerKm = (durationS / distanceM) * 1000;
@@ -107,13 +198,18 @@ export class CompleteRunUseCase {
     if (!run) throw new NotFoundError('Run');
 
     // Busca peso do perfil pra calcular calorias com precisão real.
-    // Sem peso, usa fallback 70kg.
+    // Sem peso, usa fallback 70kg. resting/max BPM alimentam a
+    // classificação de esforço da avaliação (Karvonen).
     let weightKg = 70;
+    let profileRestingBpm: number | undefined;
+    let profileMaxBpm: number | undefined;
     try {
       const userRepo = new FirestoreUserRepository();
       const getProfileUC = new GetProfileUseCase(userRepo);
       const profile = await getProfileUC.execute(userId);
       weightKg = parseWeightKg(profile?.weight) ?? 70;
+      profileRestingBpm = profile?.restingBpm;
+      profileMaxBpm = profile?.maxBpm;
     } catch (_) {/* mantém fallback 70kg */}
 
     // Enriquece cada split com calorias usando o MET escalonado por pace do
@@ -137,6 +233,19 @@ export class CompleteRunUseCase {
       return base;
     });
 
+    // Esforço da avaliação computado ANTES do update — vai junto na run
+    // (report renderiza sem fetch extra) e no lastAssessment do profile.
+    const isAssessment = typeof run.assessmentTargetKm === 'number' && run.assessmentTargetKm > 0;
+    const assessmentEffort = isAssessment
+      ? classifyAssessmentEffort({
+          avgBpm: input.avgBpm,
+          restingBpm: profileRestingBpm,
+          maxBpm: profileMaxBpm,
+          paceMinKm: formatPace(input.distanceM, input.durationS),
+          splits: input.splits,
+        })
+      : null;
+
     const updates: Partial<Run> = {
       status: 'completed',
       distanceM: input.distanceM,
@@ -147,6 +256,7 @@ export class CompleteRunUseCase {
       calories: calcCalories(input.distanceM, input.durationS, weightKg),
       xpEarned: calcXp(input.distanceM, input.durationS),
       completedAt: new Date().toISOString(),
+      ...(assessmentEffort ? { assessmentResult: assessmentEffort } : {}),
       ...(enrichedSplits && enrichedSplits.length > 0 ? { splits: enrichedSplits } : {}),
       ...(input.telemetryTimeline && input.telemetryTimeline.length > 0
         ? { telemetryTimeline: input.telemetryTimeline }
@@ -180,10 +290,11 @@ export class CompleteRunUseCase {
     // wizard (provenance "medido"). Parcial (<50% do alvo) registra só o
     // lastAssessment (com completedKm real, pra UI ofertar repetir) sem
     // sobrescrever capacity/pace. Best-effort: falha silenciosa.
-    if (typeof run.assessmentTargetKm === 'number' && run.assessmentTargetKm > 0) {
+    if (isAssessment && run.assessmentTargetKm) {
       try {
         const completedKm = input.distanceM / 1000;
         const paceMinKm = formatPace(input.distanceM, input.durationS);
+        const effort = assessmentEffort!;
         const userRepo = new FirestoreUserRepository();
         const patch: Partial<import('@modules/users/domain/user.entity').UserProfile> = {
           lastAssessment: {
@@ -193,12 +304,23 @@ export class CompleteRunUseCase {
             completedKm: Number(completedKm.toFixed(2)),
             paceMinKm,
             ...(typeof input.avgBpm === 'number' ? { avgBpm: input.avgBpm } : {}),
+            ...(effort.pctHrr != null ? { pctHrr: effort.pctHrr } : {}),
+            ...(effort.cardiacDriftPct != null ? { cardiacDriftPct: effort.cardiacDriftPct } : {}),
+            ...(effort.effortLabel != null ? { effortLabel: effort.effortLabel } : {}),
+            ...(effort.easyPaceMinKm != null ? { easyPaceMinKm: effort.easyPaceMinKm } : {}),
           },
         };
         const completedEnough = completedKm >= run.assessmentTargetKm * 0.5;
         if (completedEnough && paceMinKm) {
           patch.capacityDistanceKm = Math.max(1, Math.floor(completedKm));
-          patch.currentPaceMinKm = paceMinKm;
+          // Anti-gaming: `currentPaceMinKm` significa pace CONFORTÁVEL.
+          // Esforço forte/máximo (detectado pela FC) grava o easy estimado,
+          // não o pace cru de quem "entregou a vida" pra cravar número.
+          const sustainable =
+            effort.effortLabel === 'forte' || effort.effortLabel === 'maximo'
+              ? effort.easyPaceMinKm ?? paceMinKm
+              : paceMinKm;
+          patch.currentPaceMinKm = sustainable;
         }
         await userRepo.updatePartial(userId, patch);
         logger.info('run.assessment.persisted', {
@@ -207,6 +329,10 @@ export class CompleteRunUseCase {
           targetKm: run.assessmentTargetKm,
           completedKm: Number(completedKm.toFixed(2)),
           paceMinKm,
+          pctHrr: effort.pctHrr,
+          cardiacDriftPct: effort.cardiacDriftPct,
+          effortLabel: effort.effortLabel,
+          easyPaceMinKm: effort.easyPaceMinKm,
           overwroteCapacity: completedEnough,
         });
       } catch (err) {

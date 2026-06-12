@@ -67,6 +67,14 @@ export interface Run {
   /** Alvo em km da corrida de AVALIAÇÃO. Presença marca a run como
    *  assessment — complete-run persiste o resultado medido no profile. */
   assessmentTargetKm?: number;
+  /** Classificação de esforço da avaliação (Karvonen %HRR + drift Pa:Hr).
+   *  Report renderiza direto da run, sem fetch do profile. */
+  assessmentResult?: {
+    pctHrr: number | null;
+    cardiacDriftPct: number | null;
+    effortLabel: 'confortavel' | 'moderado' | 'forte' | 'maximo' | null;
+    easyPaceMinKm: string | null;
+  };
   distanceM: number;
   durationS: number;
   avgPace?: string;

@@ -2359,8 +2359,10 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
     // TF 75 Fase 3: cooldown global entre cues. `finish` ignora (precisa
     // falar no fim). Pre-run, motivation_timer, e os outros respeitam.
     // TF 77 F2: pre_run agora respeita cooldown (Watch+iPhone race causa 2x).
-    // finish ignora — precisa falar no fim.
-    if (event != 'finish') {
+    // TF 82: `goal_reached` também ignora — é one-shot e colide com o
+    // km_reached do MESMO instante (cruzar a meta cruza um km), então o
+    // cooldown o engolia e o anúncio do resultado (avaliação!) nunca saía.
+    if (event != 'finish' && event != 'goal_reached') {
       final nowMs = DateTime.now().millisecondsSinceEpoch;
       if (nowMs - _lastAnyCoachCueAtMs < _globalCueCooldownS * 1000) {
         Logger.warn('coach.cue.suppressed_global_cooldown', context: {

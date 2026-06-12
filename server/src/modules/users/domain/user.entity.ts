@@ -67,8 +67,16 @@ export interface UserProfile {
     at: string; // ISO
     targetKm: number;
     completedKm: number;
-    paceMinKm: string; // M:SS
+    paceMinKm: string; // M:SS — pace CRU medido na avaliação
     avgBpm?: number;
+    /** % da reserva de FC (Karvonen) — detector de "entreguei a vida". */
+    pctHrr?: number;
+    /** Drift cardíaco Pa:Hr 1ª vs 2ª metade (%). >5% = insustentável. */
+    cardiacDriftPct?: number;
+    effortLabel?: 'confortavel' | 'moderado' | 'forte' | 'maximo';
+    /** Pace base estimado a partir do medido + esforço. Em esforço
+     *  forte/máximo, é ESTE que sobrescreve currentPaceMinKm. */
+    easyPaceMinKm?: string;
   };
   /** Matiz fino do nível "iniciante" (jornada nova). */
   levelHint?: 'nunca_corri' | 'esporadico' | 'iniciante_freq';

@@ -133,10 +133,36 @@ class LiveAudioService {
       // o formato e estoura "Failed to set playerItem". Com mimeType,
       // AVURLAssetOverrideMIMETypeKey força a decodificação WAV.
       await _player.play(BytesSource(wav, mimeType: 'audio/wav'));
-      Logger.info('live_audio.played', context: {'wav_bytes': wav.length});
+      // ETA determinística do fim do playback: PCM 16-bit mono →
+      // bytes/(rate×2) segundos. waitPlaybackEnd usa isto como fonte
+      // primária — o stream onPlayerComplete morre quando o player é
+      // descartado na navegação pro report (TF 82: finish cortado a 350ms).
+      final durMs = (pcm.length / (_speakerSampleRate * 2) * 1000).round();
+      _playbackEta = DateTime.now().add(Duration(milliseconds: durMs + 400));
+      Logger.info('live_audio.played', context: {
+        'wav_bytes': wav.length,
+        'durMs': durMs,
+      });
     } catch (e, st) {
       Logger.error('live_audio.play_failed', e, st, {'wav_bytes': wav.length});
     }
+  }
+
+  /// Fim previsto do playback em curso (duração do WAV + buffer).
+  DateTime? _playbackEta;
+
+  bool _stillPlaying() {
+    try {
+      return _player.state == PlayerState.playing;
+    } catch (_) {
+      return false; // player descartado = não está tocando
+    }
+  }
+
+  bool _playbackActive() {
+    final eta = _playbackEta;
+    final etaPending = eta != null && DateTime.now().isBefore(eta);
+    return etaPending || _stillPlaying();
   }
 
   /// Espera a fala em curso (ou prestes a começar) terminar de tocar.
@@ -150,40 +176,38 @@ class LiveAudioService {
     final startedAt = DateTime.now();
     final deadline = startedAt.add(maxWait);
     final startDeadline = startedAt.add(startGrace);
-    while (_player.state != PlayerState.playing &&
-        DateTime.now().isBefore(startDeadline)) {
+    while (!_playbackActive() && DateTime.now().isBefore(startDeadline)) {
       await Future<void>.delayed(const Duration(milliseconds: 500));
     }
-    final playbackStarted = _player.state == PlayerState.playing;
-    if (!playbackStarted) {
-      // TF 82 (áudio de finalização "comido"): este é o caminho suspeito —
-      // a geração demorou mais que o grace e fechamos antes do 1º byte.
+    if (!_playbackActive()) {
+      // Geração demorou mais que o grace — fechamos antes do 1º byte.
       Logger.warn('live_audio.wait_playback.never_started', context: {
         'graceMs': startGrace.inMilliseconds,
         'waitedMs': DateTime.now().difference(startedAt).inMilliseconds,
-        'playerState': _player.state.name,
       });
       return;
     }
-    // Loop porque a fala pode chegar em mais de um flushAndPlay — espera
-    // cada playback completar e dá um respiro pro próximo começar.
-    while (_player.state == PlayerState.playing &&
-        DateTime.now().isBefore(deadline)) {
-      try {
-        await _player.onPlayerComplete.first.timeout(
-          const Duration(seconds: 30),
-          onTimeout: () {},
-        );
-      } catch (_) {
-        break;
+    // Espera por ETA (duração real do WAV) + estado do player, via POLLING.
+    // O caminho antigo (`onPlayerComplete.first`) morria com "Bad state:
+    // No element" quando o player era descartado na navegação pro report —
+    // o catch dava break e o close() cortava o finish a 350ms (TF 82,
+    // capturado em log 2026-06-11 23:07). Streak de 3 checks quietos
+    // (~900ms) cobre o respiro entre chunks multi-turn.
+    var quietChecks = 0;
+    while (DateTime.now().isBefore(deadline)) {
+      if (_playbackActive()) {
+        quietChecks = 0;
+      } else {
+        quietChecks++;
+        if (quietChecks >= 3) break;
       }
-      await Future<void>.delayed(const Duration(milliseconds: 600));
+      await Future<void>.delayed(const Duration(milliseconds: 300));
     }
     final hitMaxWait = !DateTime.now().isBefore(deadline);
     Logger.info('live_audio.wait_playback.done', context: {
       'totalMs': DateTime.now().difference(startedAt).inMilliseconds,
       'hitMaxWait': hitMaxWait,
-      'playerState': _player.state.name,
+      'stillPlaying': _stillPlaying(),
     });
   }
 

@@ -251,6 +251,42 @@ const FIRST_MARATHON: BadgeDefinition = {
   },
 };
 
+const FIRST_ASSESSMENT: BadgeDefinition = {
+  badgeId: 'first_assessment_run',
+  category: 'first',
+  title: 'Primeira Avaliação',
+  subtitle: 'Ritmo medido em corrida de avaliação',
+  description: 'Você correu a avaliação — o plano nasce do seu ritmo real, medido, não chutado.',
+  evaluate: ({ allRuns }) => {
+    const r = allRuns.find(
+      (x) => typeof x.assessmentTargetKm === 'number' && x.assessmentTargetKm > 0,
+    );
+    if (!r) return null;
+    const km = r.distanceM ? (r.distanceM / 1000).toFixed(1) : '?';
+    const pace = r.avgPace ?? '—';
+    const effort = r.assessmentResult?.effortLabel;
+    const effortNote = effort === 'maximo' || effort === 'forte'
+      ? ' Esforço alto detectado pela FC — o coach calibrou o pace base pelo sustentável.'
+      : '';
+    const stats = buildStatsFromRun(r);
+    stats.extra = {
+      ...(stats.extra ?? {}),
+      ...(r.assessmentResult?.pctHrr != null ? { pctHrr: r.assessmentResult.pctHrr } : {}),
+      ...(effort ? { effortLabel: effort } : {}),
+      coachQuote:
+        `Avaliação concluída: ${km}km a ${pace}/km.${effortNote} ` +
+        'A partir daqui, o plano mede contra o seu ritmo REAL.',
+    };
+    return {
+      primaryDisplay: pace,
+      primaryUnit: '/km',
+      stats,
+      context: { runId: r.id },
+      badgeChip: 'RITMO MEDIDO',
+    };
+  },
+};
+
 const FIRST_PLAN_RUN: BadgeDefinition = {
   badgeId: 'first_plan_run',
   category: 'first',
@@ -659,6 +695,7 @@ function getISOWeek(d: Date): number {
 export const BADGE_DEFINITIONS: BadgeDefinition[] = [
   // Primeiras vezes
   FIRST_RUN,
+  FIRST_ASSESSMENT,
   FIRST_PLAN_RUN,
   FIRST_DAWN_RUN,
   FIRST_NIGHT_RUN,

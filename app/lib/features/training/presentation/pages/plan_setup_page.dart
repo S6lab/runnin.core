@@ -91,6 +91,10 @@ class _PlanSetupPageState extends State<PlanSetupPage> {
   /// Última avaliação do profile — a tela de oferta mostra "última feita
   /// em dd/mm" e vira refazer-ou-seguir em vez de oferta fria.
   LastAssessment? _profileLastAssessment;
+  /// Pace MEDIDO na avaliação (s/km). Quando setado, trocar a distância no
+  /// step de capacidade recalcula o TEMPO mantendo o pace — o pace é o
+  /// dado confiável, não o par distância+tempo (que era sintético).
+  int? _measuredPaceSec;
   String? _runPeriod;
   String? _wakeTime;
   String? _sleepTime;
@@ -262,11 +266,15 @@ class _PlanSetupPageState extends State<PlanSetupPage> {
           _capacityDistanceKm = a.completedKm.floor().clamp(1, 100);
           final paceSec = _paceLabelToSec(a.paceMinKm);
           if (paceSec != null) {
+            _measuredPaceSec = paceSec;
             _capacityTimeSec = (paceSec * a.completedKm).round();
           }
+          final effortNote = (a.effortLabel == 'forte' || a.effortLabel == 'maximo')
+              ? ' (esforço alto — pace base ${a.easyPaceMinKm ?? a.paceMinKm})'
+              : '';
           _historyHint =
               'MEDIDO na avaliação de ${at.day.toString().padLeft(2, '0')}/${at.month.toString().padLeft(2, '0')}: '
-              '${a.completedKm.toStringAsFixed(1)}km a ${a.paceMinKm}/km';
+              '${a.completedKm.toStringAsFixed(1)}km a ${a.paceMinKm}/km$effortNote';
         }
       });
     } catch (_) {/* sem profile = sem checks de age/medical */}
@@ -366,9 +374,12 @@ class _PlanSetupPageState extends State<PlanSetupPage> {
       setState(() {
         _suggestedLevel = suggestion;
         _level ??= suggestion;
-        if (stats.runs > 0) {
+        // Hint de histórico só com amostra decente (≥3 corridas no mês):
+        // com 1-2 runs, "0,7km/sem" é ruído que confunde. E NUNCA
+        // sobrescreve o hint MEDIDO da avaliação (corrida entre os loads).
+        if (stats.runs >= 3 && _measuredPaceSec == null) {
           final weeklyKm = stats.totalDistanceKm / 4.345;
-          _historyHint = 'Últimas 4 semanas: ${weeklyKm.toStringAsFixed(1)} km/sem · pace ${stats.avgPace ?? '—'}';
+          _historyHint ??= 'Últimas 4 semanas: ${weeklyKm.toStringAsFixed(1)} km/sem · pace ${stats.avgPace ?? '—'}';
           _weeklyKm ??= weeklyKm;
         }
       });
@@ -683,7 +694,15 @@ class _PlanSetupPageState extends State<PlanSetupPage> {
               _weeklyKm = null;
             }
           }),
-          onDistanceChange: (d) => setState(() => _capacityDistanceKm = d),
+          onDistanceChange: (d) => setState(() {
+            _capacityDistanceKm = d;
+            // Prefill medido: o pace é o dado confiável — trocar a
+            // distância recalcula o tempo pra MANTER o pace (sem isso,
+            // clicar 5K com tempo da avaliação de 3km dava pace fictício).
+            if (_measuredPaceSec != null) {
+              _capacityTimeSec = _measuredPaceSec! * d;
+            }
+          }),
           onTimeChange: (s) => setState(() => _capacityTimeSec = s),
           onWeeklyKmChange: (v) => setState(() => _weeklyKm = v),
         );

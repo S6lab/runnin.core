@@ -789,6 +789,10 @@ class _AssessmentDoneCard extends StatelessWidget {
             'Esse é seu ritmo MEDIDO — o plano sai calibrado por ele.',
             style: type.bodySm.copyWith(color: palette.text, height: 1.45),
           ),
+          if (run.assessmentResult != null) ...[
+            const SizedBox(height: 8),
+            _effortDetail(context),
+          ],
           const SizedBox(height: 12),
           SizedBox(
             width: double.infinity,
@@ -799,6 +803,41 @@ class _AssessmentDoneCard extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  /// Leitura de esforço (FC): %HRR + drift + pace base estimado. É o
+  /// anti-gaming visível — "entreguei a vida" vira esforço MÁXIMO e o
+  /// plano calibra pelo sustentável.
+  Widget _effortDetail(BuildContext context) {
+    final type = context.runninType;
+    final r = run.assessmentResult!;
+    final labelTxt = switch (r.effortLabel) {
+      'maximo' => 'ESFORÇO MÁXIMO',
+      'forte' => 'ESFORÇO FORTE',
+      'moderado' => 'ESFORÇO MODERADO',
+      'confortavel' => 'ESFORÇO CONFORTÁVEL',
+      _ => null,
+    };
+    if (labelTxt == null) {
+      return Text(
+        'Sem FC na corrida — esforço não classificado. Com o watch, a '
+        'próxima avaliação calibra ainda melhor.',
+        style: type.bodyXs.copyWith(color: palette.muted, height: 1.4),
+      );
+    }
+    final bits = <String>[
+      if (r.pctHrr != null) '${r.pctHrr}% da reserva de FC',
+      if (r.cardiacDriftPct != null) 'drift cardíaco ${r.cardiacDriftPct!.toStringAsFixed(1)}%',
+    ];
+    final isHigh = r.effortLabel == 'forte' || r.effortLabel == 'maximo';
+    return Text(
+      '$labelTxt${bits.isNotEmpty ? ' · ${bits.join(' · ')}' : ''}.'
+      '${isHigh && r.easyPaceMinKm != null ? ' Pace base sustentável estimado: ${r.easyPaceMinKm}/km — é por ele que o plano calibra.' : ''}',
+      style: type.bodyXs.copyWith(
+        color: isHigh ? palette.warning : palette.muted,
+        height: 1.4,
       ),
     );
   }
