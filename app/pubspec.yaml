@@ -1,7 +1,7 @@
 name: runnin
 description: "runnin.ai — AI Running Coach"
 publish_to: 'none'
-version: 1.0.3+83
+version: 1.0.3+23
 
 environment:
   sdk: ^3.11.4
