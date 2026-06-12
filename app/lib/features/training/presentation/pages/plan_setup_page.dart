@@ -88,6 +88,9 @@ class _PlanSetupPageState extends State<PlanSetupPage> {
   String? _historyHint;
   String? _profileBirthDate;
   List<String> _profileMedicalConditions = const [];
+  /// Última avaliação do profile — a tela de oferta mostra "última feita
+  /// em dd/mm" e vira refazer-ou-seguir em vez de oferta fria.
+  LastAssessment? _profileLastAssessment;
   String? _runPeriod;
   String? _wakeTime;
   String? _sleepTime;
@@ -244,6 +247,7 @@ class _PlanSetupPageState extends State<PlanSetupPage> {
         _runPeriod ??= profile.runPeriod;
         _wakeTime ??= profile.wakeTime;
         _sleepTime ??= profile.sleepTime;
+        _profileLastAssessment = profile.lastAssessment;
         // Capacidade MEDIDA: avaliação fresca (≤14d) prefilla o step de
         // capacidade com selo "medido". Só quando o user ainda não mexeu
         // (draft restaurado vence).
@@ -555,6 +559,7 @@ class _PlanSetupPageState extends State<PlanSetupPage> {
       case _Step.assessmentOffer:
         return StepAssessmentOffer(
           onRunNow: () => context.push('/assessment-run'),
+          lastAssessment: _profileLastAssessment,
         );
       case _Step.intro:
         return const OnboardingPrepStep();
