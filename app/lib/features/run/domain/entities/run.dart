@@ -95,9 +95,14 @@ class KmSplit {
   /// Calorias estimadas (kcal) do km. App não preenche — server calcula em
   /// CompleteRunUseCase via MET × peso × tempo do km e devolve no GET /runs/:id.
   final int? calories;
-  /// Ganho de elevação (m) do km — soma de deltas positivos de altitude dos
-  /// GPS points dentro do intervalo. Null quando o device não emite altitude.
+  /// Ganho de elevação (m) do km — deltas positivos de altitude com
+  /// histerese de 3m (só conta quando o acumulado desde a última referência
+  /// passa do threshold; ruído GPS de ±5-15m inflava o número antes).
+  /// Null quando o device não emite altitude.
   final double? elevationGain;
+  /// Perda de elevação (m) do km — espelho do ganho (mesma histerese).
+  /// Null em runs antigas / sem altitude.
+  final double? elevationLoss;
   /// Distância real do split em metros. Para splits completos fica null
   /// (server assume 1000m); para parciais preenche com a leftover (ex: 40m
   /// quando a corrida termina em 3.04km). Necessário pro server calcular
@@ -115,6 +120,7 @@ class KmSplit {
     this.maxBpm,
     this.calories,
     this.elevationGain,
+    this.elevationLoss,
     this.distanceM,
     this.isPartial = false,
   });
@@ -127,6 +133,7 @@ class KmSplit {
         maxBpm: (j['maxBpm'] as num?)?.toInt(),
         calories: (j['calories'] as num?)?.toInt(),
         elevationGain: (j['elevationGain'] as num?)?.toDouble(),
+        elevationLoss: (j['elevationLoss'] as num?)?.toDouble(),
         distanceM: (j['distanceM'] as num?)?.toDouble(),
         isPartial: (j['isPartial'] as bool?) ?? false,
       );
@@ -140,6 +147,7 @@ class KmSplit {
         if (avgBpm != null) 'avgBpm': avgBpm,
         if (maxBpm != null) 'maxBpm': maxBpm,
         if (elevationGain != null) 'elevationGain': elevationGain,
+        if (elevationLoss != null) 'elevationLoss': elevationLoss,
         if (distanceM != null) 'distanceM': distanceM,
         if (isPartial) 'isPartial': true,
       };
@@ -175,8 +183,15 @@ class KmSplit {
 
 /// Constrói List<KmSplit> a partir de pontos GPS. Computa em uma única
 /// passada: durationS, avgPaceMinKm, avgBpm (média dos points com BPM no
-/// intervalo do km) e elevationGain (soma de deltas positivos de altitude).
+/// intervalo do km) e elevação ganho/perda com HISTERESE de 3m.
 /// Calorias ficam null — server preenche no complete.
+///
+/// Histerese (padrão Garmin): mantém uma altitude de referência e só
+/// contabiliza ganho/perda quando o acumulado desde a referência passa de
+/// ±3m. Antes somávamos cada delta positivo bruto — ruído GPS de ±5-15m
+/// fabricava dezenas de metros de "ganho" em percurso plano (TF 82).
+const double _elevHysteresisM = 3.0;
+
 List<KmSplit> computeKmSplits(List<GpsPoint> points) {
   if (points.length < 2) return const [];
   final splits = <KmSplit>[];
@@ -188,7 +203,8 @@ List<KmSplit> computeKmSplits(List<GpsPoint> points) {
   int bpmCount = 0;
   int bpmMax = 0;
   double elevGain = 0;
-  double? prevAlt = points.first.altitude;
+  double elevLoss = 0;
+  double? refAlt = points.first.altitude;
   bool anyAlt = points.first.altitude != null;
 
   for (int i = 1; i < points.length; i++) {
@@ -202,11 +218,18 @@ List<KmSplit> computeKmSplits(List<GpsPoint> points) {
     }
     if (p1.altitude != null) {
       anyAlt = true;
-      if (prevAlt != null) {
-        final delta = p1.altitude! - prevAlt;
-        if (delta > 0) elevGain += delta;
+      if (refAlt == null) {
+        refAlt = p1.altitude;
+      } else {
+        final delta = p1.altitude! - refAlt;
+        if (delta >= _elevHysteresisM) {
+          elevGain += delta;
+          refAlt = p1.altitude;
+        } else if (delta <= -_elevHysteresisM) {
+          elevLoss += -delta;
+          refAlt = p1.altitude;
+        }
       }
-      prevAlt = p1.altitude;
     }
     while (cumDist >= (kmReached + 1) * 1000) {
       final kmDistM = cumDist - kmStartDist;
@@ -222,6 +245,7 @@ List<KmSplit> computeKmSplits(List<GpsPoint> points) {
           avgBpm: bpmCount > 0 ? (bpmSum / bpmCount).round() : null,
           maxBpm: bpmMax > 0 ? bpmMax : null,
           elevationGain: anyAlt ? double.parse(elevGain.toStringAsFixed(1)) : null,
+          elevationLoss: anyAlt ? double.parse(elevLoss.toStringAsFixed(1)) : null,
         ));
       }
       kmReached++;
@@ -231,6 +255,7 @@ List<KmSplit> computeKmSplits(List<GpsPoint> points) {
       bpmCount = 0;
       bpmMax = 0;
       elevGain = 0;
+      elevLoss = 0;
     }
   }
   // Split parcial final: cobre o tail da corrida que não fechou 1km
@@ -258,6 +283,7 @@ List<KmSplit> computeKmSplits(List<GpsPoint> points) {
         avgBpm: bpmCount > 0 ? (bpmSum / bpmCount).round() : null,
         maxBpm: bpmMax > 0 ? bpmMax : null,
         elevationGain: anyAlt ? double.parse(elevGain.toStringAsFixed(1)) : null,
+        elevationLoss: anyAlt ? double.parse(elevLoss.toStringAsFixed(1)) : null,
         distanceM: leftoverM,
         isPartial: true,
       ));

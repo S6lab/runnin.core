@@ -402,6 +402,7 @@ class _RunDetailPageState extends State<RunDetailPage> {
           bpm: s.avgBpm,
           calories: s.calories,
           elevationGainM: s.elevationGain,
+          elevationLossM: s.elevationLoss,
         ),
       );
     });
@@ -630,9 +631,14 @@ class _RunDataGrid extends StatelessWidget {
     if (stepsInRun != null && stepsInRun! > 0) {
       entries.add(('PASSOS', '$stepsInRun', null));
     }
-    // Ganho de elevação capturado via GPS/altímetro durante a corrida.
-    if (run.elevationGain != null && run.elevationGain! > 0) {
-      entries.add(('ELEVAÇÃO', '+${run.elevationGain!.round()}', 'm'));
+    // Elevação ganho/perda (histerese 3m nos splits). Splits são a fonte
+    // primária (têm gain E loss); run.elevationGain cobre runs antigas.
+    final splitGain = run.splits.fold<double>(0, (a, s) => a + (s.elevationGain ?? 0));
+    final splitLoss = run.splits.fold<double>(0, (a, s) => a + (s.elevationLoss ?? 0));
+    if (splitGain > 0 || splitLoss > 0) {
+      entries.add(('ELEVAÇÃO', '↑${splitGain.round()} ↓${splitLoss.round()}', 'm'));
+    } else if (run.elevationGain != null && run.elevationGain! > 0) {
+      entries.add(('ELEVAÇÃO', '↑${run.elevationGain!.round()}', 'm'));
     }
     if (run.xpEarned != null && run.xpEarned! > 0) {
       entries.add(('XP', '+${run.xpEarned}', null));

@@ -87,6 +87,21 @@ export async function postCoachLiveSession(req: Request, res: Response, next: Ne
       if (session.targetPace) head.push(`pace alvo ${session.targetPace}`);
       if (typeof session.durationMin === 'number') head.push(`~${session.durationMin}min`);
       briefingParts.push(head.join(' · '));
+      // Saudação situada no plano: "semana Y de X do plano {objetivo},
+      // hoje {dia}". Compacto de propósito — o briefing entra 2x no
+      // systemInstruction (cap 1200 tokens, truncamento dropa weather
+      // primeiro) e a saudação vira áudio (~+5s por frase).
+      const plan = runtime.currentPlan;
+      if (plan?.currentWeek) {
+        const weekday = new Intl.DateTimeFormat('pt-BR', {
+          weekday: 'long',
+          timeZone: 'America/Sao_Paulo',
+        }).format(new Date());
+        briefingParts.push(
+          `PLANO: "${plan.goal}" — semana ${plan.currentWeek.weekNumber} de ${plan.weeksCount}. Hoje é ${weekday}.`,
+          'Na SAUDAÇÃO inicial, situe o atleta: nome, semana Y de X do plano, dia da semana e a sessão de hoje — depois o briefing. Máximo 3 frases curtas.',
+        );
+      }
     } else {
       briefingParts.push('SESSÃO DE HOJE: corrida livre (sem roteiro planejado). Comente o esforço real.');
     }

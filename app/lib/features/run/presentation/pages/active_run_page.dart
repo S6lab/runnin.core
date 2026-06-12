@@ -1582,6 +1582,7 @@ class _ActiveStatsLayoutState extends State<_ActiveStatsLayout> {
                         avgBpm: s.avgBpm,
                         maxBpm: s.maxBpm,
                         elevationGain: s.elevationGain,
+                        elevationLoss: s.elevationLoss,
                         calories: s.calories,
                       );
                     }
@@ -1907,6 +1908,7 @@ class _SplitCard extends StatelessWidget {
   final int? avgBpm;
   final int? maxBpm;
   final double? elevationGain;
+  final double? elevationLoss;
   final int? calories;
   const _SplitCard({
     required this.kmLabel,
@@ -1916,6 +1918,7 @@ class _SplitCard extends StatelessWidget {
     this.avgBpm,
     this.maxBpm,
     this.elevationGain,
+    this.elevationLoss,
     this.calories,
   });
 
@@ -1979,9 +1982,16 @@ class _SplitCard extends StatelessWidget {
                   letterSpacing: 0.4,
                 ),
               ),
-            if (elevationGain != null && elevationGain! > 0)
+            if ((elevationGain ?? 0) > 0 || (elevationLoss ?? 0) > 0)
               Text(
-                '↑${elevationGain!.toStringAsFixed(0)}m',
+                [
+                  if ((elevationGain ?? 0) > 0)
+                    '↑${elevationGain!.toStringAsFixed(0)}m',
+                  if ((elevationLoss ?? 0) > 0)
+                    '↓${elevationLoss!.toStringAsFixed(0)}m',
+                ].join(' '),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: type.labelCaps.copyWith(
                   color: mutedFg,
                   fontSize: 9,

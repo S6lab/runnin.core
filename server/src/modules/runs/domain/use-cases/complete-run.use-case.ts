@@ -20,6 +20,8 @@ const KmSplitInputSchema = z.object({
   /** TF 75 Fase 10: BPM máximo do split (pico). Cliente reporta. */
   maxBpm: z.number().optional(),
   elevationGain: z.number().optional(),
+  /** Perda de elevação (m) do km — histerese 3m, espelho do ganho. */
+  elevationLoss: z.number().optional(),
   /** Distância real do split (m). Opcional — splits de 1km completo omitem.
    *  Splits parciais (tail < 1km) enviam o leftover real pra calorias
    *  serem calculadas proporcionalmente. */
@@ -129,6 +131,7 @@ export class CompleteRunUseCase {
       if (typeof s.avgBpm === 'number') base.avgBpm = s.avgBpm;
       if (typeof s.maxBpm === 'number') base.maxBpm = s.maxBpm;
       if (typeof s.elevationGain === 'number') base.elevationGain = s.elevationGain;
+      if (typeof s.elevationLoss === 'number') base.elevationLoss = s.elevationLoss;
       if (typeof s.distanceM === 'number') base.distanceM = s.distanceM;
       if (s.isPartial === true) base.isPartial = true;
       return base;

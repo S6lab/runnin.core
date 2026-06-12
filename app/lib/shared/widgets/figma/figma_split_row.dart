@@ -16,6 +16,7 @@ class FigmaSplitRow extends StatelessWidget {
     this.bpm,
     this.calories,
     this.elevationGainM,
+    this.elevationLossM,
   });
 
   final String kmLabel;
@@ -28,14 +29,19 @@ class FigmaSplitRow extends StatelessWidget {
   /// Calorias estimadas (kcal) do km — computado server-side via MET ×
   /// peso × tempo do km. Quando presente, renderiza ao lado do bpm.
   final int? calories;
-  /// Ganho de elevação (m) do km — soma de deltas+ de altitude. Renderiza
-  /// como `+12m` na linha meta abaixo do pace.
+  /// Ganho de elevação (m) do km (histerese 3m). Renderiza como `↑12m`
+  /// na linha meta abaixo do pace.
   final double? elevationGainM;
+  /// Perda de elevação (m) do km. Renderiza como `↓8m` ao lado do ganho.
+  final double? elevationLossM;
 
   @override
   Widget build(BuildContext context) {
     final barColor = isBest ? context.runninPalette.primary : FigmaColors.textDim;
-    final hasMeta = bpm != null || calories != null || elevationGainM != null;
+    final hasMeta = bpm != null ||
+        calories != null ||
+        elevationGainM != null ||
+        elevationLossM != null;
     final mainRow = Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
@@ -89,7 +95,10 @@ class FigmaSplitRow extends StatelessWidget {
     final metaParts = <String>[
       if (bpm != null) '${bpm}bpm',
       if (calories != null) '${calories}kcal',
-      if (elevationGainM != null) '+${elevationGainM!.toStringAsFixed(elevationGainM! >= 10 ? 0 : 1)}m',
+      if (elevationGainM != null && elevationGainM! > 0)
+        '↑${elevationGainM!.toStringAsFixed(elevationGainM! >= 10 ? 0 : 1)}m',
+      if (elevationLossM != null && elevationLossM! > 0)
+        '↓${elevationLossM!.toStringAsFixed(elevationLossM! >= 10 ? 0 : 1)}m',
     ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

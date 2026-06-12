@@ -13,9 +13,11 @@ export interface KmSplit {
   /** Calorias estimadas (kcal) do km — server preenche em CompleteRunUseCase
    *  usando MET escalonado por pace × peso × tempo do km. */
   calories?: number;
-  /** Ganho de elevação (m) do km — soma de deltas positivos de altitude
-   *  dos GPS points dentro do km. Null quando o device não emite altitude. */
+  /** Ganho de elevação (m) do km — deltas de altitude com histerese de 3m
+   *  (cliente filtra ruído GPS). Null quando o device não emite altitude. */
   elevationGain?: number;
+  /** Perda de elevação (m) do km — espelho do ganho (mesma histerese). */
+  elevationLoss?: number;
   /** Distância real do split em metros. Splits completos ficam undefined
    *  (server assume 1000m). Preenchido só em splits parciais (tail da
    *  corrida, ex: 40m de uma corrida de 3.04km). */
