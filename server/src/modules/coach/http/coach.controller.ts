@@ -78,6 +78,7 @@ export async function postCoachLiveSession(req: Request, res: Response, next: Ne
         'MODO MEDIÇÃO — regras desta sessão:',
         '- Briefing: explique o propósito ("vou medir seu ritmo real; corre constante e confortável, sem forçar").',
         '- Check-ins por km: fale só do MEDIDO ("ritmo estável em X:XX, segue assim") — NUNCA cite plano, sessão planejada ou meta de treino (não existem ainda).',
+        '- NÚMEROS: ao falar pace/distância/tempo, use EXATAMENTE os valores dos dados do turno — nunca arredonde além de 5s nem invente; medição falada errada destrói a confiança na avaliação.',
         '- goal_reached: anuncie o resultado medido ("avaliação completa: Xkm a Y/km, FC média Z").',
         '- finish: feche conectando o dado ao que vem: esse ritmo vai calibrar o plano personalizado que o atleta vai criar em seguida.',
       );
