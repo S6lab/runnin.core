@@ -14,6 +14,7 @@ import 'package:runnin/features/run/data/datasources/run_local_datasource.dart';
 import 'package:runnin/core/debug/mock_gps_service.dart';
 import 'package:runnin/core/logger/logger.dart';
 import 'package:runnin/core/notifications/run_bg_notification_service.dart';
+import 'package:runnin/core/router/app_router.dart' show runInProgress;
 import 'package:runnin/features/run/data/datasources/run_remote_datasource.dart';
 import 'package:runnin/features/run/data/datasources/run_coach_remote_datasource.dart';
 import 'package:runnin/features/run/data/audio_session_keepalive.dart';
@@ -863,6 +864,11 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
         // Modo local-first: se API falhar no start, a corrida ainda começa com GPS.
         runId = _buildLocalRunId();
       }
+
+      // Arma o guard do router: logout/queda de sessão NÃO redireciona
+      // enquanto a corrida estiver viva (token revogado mid-run derrubava
+      // o atleta pro /login no fim da avaliação — TF 82).
+      runInProgress.value = true;
 
       emit(
         state.copyWith(
@@ -2159,6 +2165,8 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
   }
 
   void _stop() {
+    // Libera o guard do router: sem corrida ativa, logout pode redirecionar.
+    runInProgress.value = false;
     _gpsSub?.cancel();
     _gpsPollTimer?.cancel();
     _timer?.cancel();

@@ -101,6 +101,13 @@ void clearOnboardingCache() {
   _settingsBoxOrNull()?.delete(_onboardingCacheKey);
 }
 
+/// True enquanto há corrida ATIVA (start → complete/abandon). O redirect
+/// de auth consulta isto: perder a sessão Firebase no meio da corrida
+/// (token revogado, troca de senha em outro device) NÃO pode arrancar o
+/// atleta da tela — a corrida segue local e o re-login acontece depois.
+/// (TF 82: reset de conta derrubou o user pro /login no fim da avaliação.)
+final ValueNotifier<bool> runInProgress = ValueNotifier<bool>(false);
+
 final appRouter = GoRouter(
   navigatorKey: rootNavigatorKey,
   initialLocation: _initialLocation(),
@@ -132,6 +139,15 @@ final appRouter = GoRouter(
 
     // Daqui em diante, rotas privadas: precisa estar logado.
     if (!loggedIn) {
+      // EXCEÇÃO: corrida ativa no shell de corrida. Sessão caiu no meio
+      // (token revogado/expirado) — segura o atleta na tela; GPS/timer são
+      // locais e o sync re-tenta depois do re-login.
+      final inRunShell = loc.startsWith('/run') ||
+          loc.startsWith('/prep') ||
+          loc.startsWith('/report');
+      if (runInProgress.value && inRunShell) {
+        return null;
+      }
       // Logout ou acesso direto sem auth → manda pra login (não pra onboarding).
       return '/login';
     }
