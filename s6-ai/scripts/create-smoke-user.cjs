@@ -6,13 +6,26 @@
  *   GOOGLE_APPLICATION_CREDENTIALS=runnin-google-service-account.json \
  *   SMOKE_PW='...' node ../s6-ai/scripts/create-smoke-user.cjs
  */
+const fs = require('fs');
+const path = require('path');
 const admin = require('firebase-admin');
 
+// Credencial: GOOGLE_APPLICATION_CREDENTIALS ou a SA key do server (gitignored).
+if (!process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+  const saPath = path.join(__dirname, '..', '..', 'server', 'runnin-google-service-account.json');
+  if (fs.existsSync(saPath)) process.env.GOOGLE_APPLICATION_CREDENTIALS = saPath;
+}
 admin.initializeApp();
 const email = process.env.SMOKE_EMAIL || 'smoke-bot@s6lab.ai';
-const pw = process.env.SMOKE_PW;
+// Senha: SMOKE_PW ou /tmp/smoke-bot-pw.txt (gerado pelo runbook, nunca commitado).
+let pw = process.env.SMOKE_PW;
 if (!pw) {
-  console.error('SMOKE_PW obrigatório');
+  try {
+    pw = fs.readFileSync('/tmp/smoke-bot-pw.txt', 'utf8').trim();
+  } catch { /* cai no erro abaixo */ }
+}
+if (!pw) {
+  console.error('SMOKE_PW (ou /tmp/smoke-bot-pw.txt) obrigatório');
   process.exit(1);
 }
 
