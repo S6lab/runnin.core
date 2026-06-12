@@ -273,8 +273,10 @@ List<KmSplit> computeKmSplits(List<GpsPoint> points) {
       // Ex: 40m em 12s → 5:00/km. Mantém formato mm:ss/km no avgPaceMinKm
       // pra UI renderizar igual aos splits completos.
       final paceSecPerKm = (leftoverS / leftoverM) * 1000.0;
-      final paceMin = paceSecPerKm ~/ 60;
-      final paceSec = (paceSecPerKm % 60).round();
+      // Total arredondado ANTES de separar ((%60).round()→60 dava "5:60").
+      final paceTotal = paceSecPerKm.round();
+      final paceMin = paceTotal ~/ 60;
+      final paceSec = paceTotal % 60;
       splits.add(KmSplit(
         kmIndex: kmReached,
         durationS: leftoverS.round(),

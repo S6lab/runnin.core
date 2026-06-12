@@ -300,8 +300,10 @@ class _PlanSetupPageState extends State<PlanSetupPage> {
       return null;
     }
     final paceSec = _capacityTimeSec! / _capacityDistanceKm!;
-    final m = paceSec ~/ 60;
-    final s = (paceSec % 60).round();
+    // Total arredondado ANTES de separar ((%60).round()→60 dava "5:60").
+    final total = paceSec.round();
+    final m = total ~/ 60;
+    final s = total % 60;
     return '$m:${s.toString().padLeft(2, '0')}';
   }
 

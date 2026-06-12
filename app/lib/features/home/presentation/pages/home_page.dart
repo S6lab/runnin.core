@@ -1983,8 +1983,10 @@ String? _averagePace(List<Run> runs) {
   );
   if (totalDistanceKm <= 0) return null;
   final secPerKm = totalDurationS / totalDistanceKm;
-  final min = (secPerKm ~/ 60).toInt();
-  final sec = (secPerKm % 60).round();
+  // Total arredondado ANTES de separar ((%60).round()→60 dava "5:60").
+  final total = secPerKm.round();
+  final min = total ~/ 60;
+  final sec = total % 60;
   return '$min:${sec.toString().padLeft(2, '0')}';
 }
 

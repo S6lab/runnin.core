@@ -147,8 +147,10 @@ function classifyAssessmentEffort(opts: {
 function formatPace(distanceM: number, durationS: number): string {
   if (distanceM <= 0) return '--:--';
   const paceSecPerKm = (durationS / distanceM) * 1000;
-  const min = Math.floor(paceSecPerKm / 60);
-  const sec = Math.round(paceSecPerKm % 60);
+  // Total arredondado ANTES de separar (round(%60)→60 gerava "5:60").
+  const total = Math.round(paceSecPerKm);
+  const min = Math.floor(total / 60);
+  const sec = total % 60;
   return `${min}:${sec.toString().padStart(2, '0')}`;
 }
 

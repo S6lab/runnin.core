@@ -1421,8 +1421,10 @@ class _ActiveStatsLayoutState extends State<_ActiveStatsLayout> {
     // Pace ACUMULADO por km (tempo total até o km / nº de km), em mm:ss/km.
     String fmtPaceSec(double secPerKm) {
       if (secPerKm <= 0) return '--:--';
-      final m = secPerKm ~/ 60;
-      final s = (secPerKm % 60).round();
+      // Total arredondado ANTES de separar ((%60).round()→60 dava "5:60").
+      final total = secPerKm.round();
+      final m = total ~/ 60;
+      final s = total % 60;
       return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
     }
 

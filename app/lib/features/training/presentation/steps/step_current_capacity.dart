@@ -148,8 +148,10 @@ class _StepCurrentCapacityState extends State<StepCurrentCapacity> {
       return null;
     }
     final paceSecPerKm = widget.timeSeconds! / widget.selectedDistanceKm!;
-    final m = paceSecPerKm ~/ 60;
-    final s = (paceSecPerKm % 60).round();
+    // Total arredondado ANTES de separar ((%60).round()→60 dava "5:60").
+    final total = paceSecPerKm.round();
+    final m = total ~/ 60;
+    final s = total % 60;
     return '$m:${s.toString().padLeft(2, '0')}';
   }
 

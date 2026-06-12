@@ -418,8 +418,10 @@ function paceToSec(pace: string | undefined): number | null {
 }
 
 function secToPace(sec: number): string {
-  const m = Math.floor(sec / 60);
-  const s = Math.round(sec % 60);
+  // Total arredondado ANTES de separar (round(%60)→60 gerava "5:60").
+  const total = Math.round(sec);
+  const m = Math.floor(total / 60);
+  const s = total % 60;
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 

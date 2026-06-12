@@ -37,8 +37,10 @@ class DashboardDatasource {
     String? avgPace;
     if (totalDistanceKm > 0 && totalDurationS > 0) {
       final paceSecPerKm = totalDurationS / totalDistanceKm;
-      final paceMin = (paceSecPerKm / 60).floor();
-      final paceSec = (paceSecPerKm % 60).round();
+      // Total arredondado ANTES de separar ((%60).round()→60 dava "5:60").
+      final total = paceSecPerKm.round();
+      final paceMin = total ~/ 60;
+      final paceSec = total % 60;
       avgPace = '$paceMin:${paceSec.toString().padLeft(2, '0')}';
     }
 
