@@ -35,6 +35,11 @@ export interface ClampInputs {
   /** Pico semanal necessário pra RACE (de validateVolumeForGoal). Trava
    *  absoluta — a rampa nunca passa disso. */
   requiredPeakKm?: number | null;
+  /** TETO de volume semanal por nível×distância (matriz v2). Protege
+   *  principalmente FLOW e janelas longas, onde a rampa de 10% sem teto
+   *  deixava o LLM estourar (22km/sem × rampa 16sem ≈ 57km). Sempre ≥
+   *  requiredPeakKm por construção da tabela. */
+  levelPeakCapKm?: number | null;
 }
 
 export interface ClampOp {
@@ -64,13 +69,21 @@ function sumKm(week: PlanWeek): number {
 }
 
 /** Cap de volume da semana N (1-based) dado o volume reportado. */
-function weeklyCap(currentWeeklyKm: number, weekIdx: number, peak: number | null | undefined): number {
+function weeklyCap(
+  currentWeeklyKm: number,
+  weekIdx: number,
+  peak: number | null | undefined,
+  levelCap: number | null | undefined,
+): number {
   // Floor garante que iniciante reportando volume baixo (0-3 km/sem) não
   // fica preso em cap insignificante — a rampa precisa subir de uma base
   // realista pra atingir o peak da meta. Match validateVolumeForGoal.
   const base = Math.max(RAMP_BASE_FLOOR_KM, currentWeeklyKm);
-  const cap = base * (RAMP_BASE + RAMP_STEP * weekIdx);
-  if (typeof peak === 'number' && peak > 0) return Math.min(cap, peak);
+  let cap = base * (RAMP_BASE + RAMP_STEP * weekIdx);
+  if (typeof peak === 'number' && peak > 0) cap = Math.min(cap, peak);
+  // Teto por nível (matriz v2) — nunca abaixo do peak necessário (tabela
+  // garante levelCap ≥ requiredPeak), então não impede a meta.
+  if (typeof levelCap === 'number' && levelCap > 0) cap = Math.min(cap, Math.max(levelCap, peak ?? 0));
   return cap;
 }
 
@@ -91,7 +104,7 @@ export function clampSessionsToCaps(
   // estourar volume sem checagem.
   for (let i = 0; i < out.length; i++) {
     const w = out[i];
-    const cap = weeklyCap(inputs.currentWeeklyKm ?? 0, i, inputs.requiredPeakKm);
+    const cap = weeklyCap(inputs.currentWeeklyKm ?? 0, i, inputs.requiredPeakKm, inputs.levelPeakCapKm);
     const total = sumKm(w);
     if (total > cap && total > 0) {
       // Separa sessão-meta (preservada) das outras (escaláveis). Sem isso,

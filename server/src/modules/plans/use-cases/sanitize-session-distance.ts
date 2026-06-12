@@ -1,12 +1,15 @@
 import { RunnerLevel } from '@modules/users/domain/user.entity';
 import { PlanWeek } from '../domain/plan.entity';
 import { logger } from '@shared/logger/logger';
-import { MAX_KM_PER_SESSION, RaceDistanceKm } from './plan-windows.constants';
+import {
+  MAX_KM_PER_SESSION,
+  MAX_LONG_RUN_RATIO_BY_LEVEL,
+  RaceDistanceKm,
+} from './plan-windows.constants';
 
-/** Cap de ratio long-run/total-da-semana. Above isso = base aeróbica
- *  inexistente (W15 do edu tinha 78%). Mantém em 50% por padrão (decidido
- *  com user). */
-export const MAX_LONG_RUN_RATIO = 0.50;
+/** Fallback do ratio long-run/total quando o nível não vem no ctx.
+ *  Valores por nível na matriz v2: MAX_LONG_RUN_RATIO_BY_LEVEL. */
+export const MAX_LONG_RUN_RATIO = 0.40;
 
 /**
  * Clampa distanceKm em MAX_KM_PER_SESSION pro nível. LLM ocasionalmente
@@ -34,6 +37,8 @@ interface SessionLike {
   distanceKm: number;
   type?: string;
   dayOfWeek?: number;
+  /** Sessão-meta (prova) — isenta do clamp de ratio. */
+  isTarget?: boolean;
 }
 
 /**
@@ -70,14 +75,19 @@ export function enforceWeeklyLongRunRatio<T extends SessionLike>(
     if (sessions[i].distanceKm > sessions[maxIdx].distanceKm) maxIdx = i;
   }
   const long = sessions[maxIdx];
+  // Sessão-meta (prova) domina a race week por desenho — não clampa.
+  if (long.isTarget === true) return sessions;
+  // Ratio por nível (matriz v2): iniciante 35%, int/av 40%.
+  const maxRatio = ctx.level != null
+    ? MAX_LONG_RUN_RATIO_BY_LEVEL[ctx.level] ?? MAX_LONG_RUN_RATIO
+    : MAX_LONG_RUN_RATIO;
   const ratio = long.distanceKm / total;
-  if (ratio <= MAX_LONG_RUN_RATIO) return sessions;
+  if (ratio <= maxRatio) return sessions;
 
   const sumOfOthers = total - long.distanceKm;
   // Pra ratio = X: long' = (X / (1-X)) × others
-  // X=0.50 → long' = others
   const newLongDistance = Math.max(1, Math.round(
-    (MAX_LONG_RUN_RATIO / (1 - MAX_LONG_RUN_RATIO)) * sumOfOthers * 10,
+    (maxRatio / (1 - maxRatio)) * sumOfOthers * 10,
   ) / 10);
 
   logger.warn('plan.week.long_run_ratio.clamped', {

@@ -379,16 +379,23 @@ class LevelBlockedForDistance extends AdmissibilityIssue {
   });
   @override
   String get explanation {
+    // Matriz v2: bloqueio sempre vem com o CAMINHO de progressão — o user
+    // sabe exatamente o que destrava a distância (Fase D automatiza).
     if (distanceKm == 42) {
-      return 'Maratona pede base de intermediário/avançado. Começa com uma '
-          'distância menor como Fase 1.';
+      return 'Maratona pede base de intermediário/avançado. Caminho: fecha '
+          'um ciclo de 21K e sustenta ~35km/sem por 4 semanas — aí a '
+          'maratona libera.';
     }
     if (distanceKm == 21) {
       if (levelHint == 'nunca_corri') {
-        return 'Meia maratona precisa de base — quem nunca correu começa com 5K ou 10K.';
+        return 'Meia maratona precisa de base — quem nunca correu começa '
+            'com 5K ou 10K. Caminho: fecha um ciclo de 10K e, com ~4 '
+            'semanas de volume regular registrado, a meia libera.';
       }
       if (levelHint == 'esporadico') {
-        return 'Meia maratona precisa de base — corridas esporádicas pedem 5K ou 10K primeiro.';
+        return 'Meia maratona precisa de base — corridas esporádicas pedem '
+            '10K primeiro. Caminho: fecha um ciclo de 10K e, com ~4 '
+            'semanas de volume regular registrado, a meia libera.';
       }
     }
     return '${distanceKm}K não está liberado pra você. Tenta uma distância menor.';

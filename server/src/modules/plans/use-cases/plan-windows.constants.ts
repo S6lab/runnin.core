@@ -91,6 +91,34 @@ export const PEAK_WEEKLY_KM: Record<RaceDistanceKm, number> = {
  *  no horizonte do plano. */
 export const WEEKLY_RAMP_RATE = 1.10;
 
+/** TETO de volume semanal por (distância × nível) — matriz v2 (aprovada
+ *  2026-06-12). A rampa de 10% sem teto deixava o LLM estourar volume em
+ *  janelas longas; o clamp por sessão não cobria a SOMA da semana.
+ *  Sempre ≥ PEAK_WEEKLY_KM (mínimo da meta) — o teto nunca impede o pico
+ *  necessário. */
+export const PEAK_WEEKLY_KM_CAP: Record<RaceDistanceKm, Record<RunnerLevel, number>> = {
+  5:  { iniciante: 25, intermediario: 35, avancado: 50 },
+  10: { iniciante: 30, intermediario: 45, avancado: 60 },
+  21: { iniciante: 40, intermediario: 55, avancado: 75 },
+  42: { iniciante: 55, intermediario: 70, avancado: 95 },
+};
+
+/** Teto semanal pra planos FLOW (sem distância de prova). Usa a coluna
+ *  21K como referência de "treino de forma" sustentável por nível. */
+export const FLOW_WEEKLY_KM_CAP: Record<RunnerLevel, number> = {
+  iniciante: 40,
+  intermediario: 55,
+  avancado: 75,
+};
+
+/** Ratio máximo longão/volume-semanal por nível — matriz v2 (era 50% flat;
+ *  literatura: ≤30-35%). Race week é isenta (sessão-meta preservada). */
+export const MAX_LONG_RUN_RATIO_BY_LEVEL: Record<RunnerLevel, number> = {
+  iniciante: 0.35,
+  intermediario: 0.40,
+  avancado: 0.40,
+};
+
 /** Base mínima de volume semanal pra iniciar a rampa. Walk-run permite
  *  ~5km/sem desde a primeira semana mesmo pra quem nunca correu
  *  (Couch-to-5K). Sem esse floor, iniciante absoluto fica preso em base=2

@@ -1,10 +1,14 @@
-# Matriz de regras de geração de plano — v2 (DRAFT pra revisão)
+# Matriz de regras de geração de plano — v2 (APROVADA)
 
-> **Status: DRAFT.** Cada valor abaixo tem justificativa de 1 linha. Revisar
-> valor a valor — editar direto na tabela. Aprovado ⇒ vira
-> `plan-windows.constants.ts` v2 (fonte única) ⇒ exposto pelo endpoint
-> `GET /plans/admissibility-config` ⇒ validators consomem ⇒ Fase D pluga a
-> dimensão "medido vs declarado".
+> **Status: APROVADA pelo Eduardo em 2026-06-12.** Decisões das 4 perguntas
+> abertas: (1) esporádico+21K segue BLOQUEADO com caminho de progressão
+> explícito no redirect; (2) longão apertado pra 35% iniciante / 40%
+> int-avançado (era 50% flat); (3) TETO de pico semanal por nível×distância
+> ADICIONADO com os valores da SAÍDA 5 (FLOW usa a coluna 21K); (4) buckets
+> de volume mantidos como propostos.
+> Implementação: `plan-windows.constants.ts` (PEAK_WEEKLY_KM_CAP,
+> FLOW_WEEKLY_KM_CAP, MAX_LONG_RUN_RATIO_BY_LEVEL) ⇒ exposta no endpoint
+> `GET /plans/admissibility-config` ⇒ Fase D pluga "medido vs declarado".
 >
 > **Regras de desenho** (fixas, não são valores a revisar):
 > 1. Capacidade MEDIDA (assessment/corridas reais) pode LIBERAR células;
