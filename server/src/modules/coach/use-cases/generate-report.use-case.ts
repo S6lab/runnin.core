@@ -10,8 +10,8 @@ import {
 import { CoachReport, CoachReportSections } from '../domain/coach-report.entity';
 import { CoachReportRepository } from '../domain/coach-report.repository';
 import { CoachRuntimeContextService } from './coach-runtime-context.service';
-import { getFirestore } from '@shared/infra/firebase/firebase.client';
 import { Plan, PlanRevision, PlanSession, effectivePlanWeeks } from '@modules/plans/domain/plan.entity';
+import { PlanRepository } from '@modules/plans/domain/plan.repository';
 import { currentWeekNumber } from '@modules/plans/use-cases/checkpoint-shared';
 
 /**
@@ -35,6 +35,7 @@ export class GenerateReportUseCase {
   constructor(
     private readonly reports: CoachReportRepository,
     private readonly runs: RunRepository,
+    private readonly plans: PlanRepository,
   ) {}
 
   async execute(run: Run, userId: string): Promise<string> {
@@ -314,15 +315,7 @@ export class GenerateReportUseCase {
 
   private async _fetchCurrentPlan(userId: string): Promise<Plan | null> {
     try {
-      const snap = await getFirestore()
-        .collection(`users/${userId}/plans`)
-        .orderBy('createdAt', 'desc')
-        .limit(1)
-        .get();
-      if (snap.empty) return null;
-      const doc = snap.docs[0];
-      if (!doc) return null;
-      return { id: doc.id, userId, ...doc.data() } as Plan;
+      return await this.plans.findCurrent(userId);
     } catch {
       return null;
     }

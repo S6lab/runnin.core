@@ -8,6 +8,24 @@ import { logger } from '@shared/logger/logger';
 
 const PORT = Number(process.env.PORT ?? 3000);
 
+// Rastro estruturado pra crashes de processo: sem isso um unhandled
+// derrubava o container e o Cloud Logging só via o stack cru do Node,
+// invisível pros filtros de severity/alertas.
+process.on('unhandledRejection', (reason) => {
+  logger.error('process.unhandled_rejection', {
+    reason: reason instanceof Error ? reason.message : String(reason),
+    stack: reason instanceof Error ? reason.stack : undefined,
+  });
+});
+process.on('uncaughtException', (err) => {
+  logger.error('process.uncaught_exception', {
+    err: err.message,
+    stack: err.stack,
+  });
+  // Estado possivelmente corrompido — deixa o Cloud Run reciclar o container.
+  process.exit(1);
+});
+
 // Inicializa Firebase antes de subir o servidor
 getFirebaseApp();
 

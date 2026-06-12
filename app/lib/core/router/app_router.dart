@@ -10,6 +10,7 @@ import 'package:runnin/features/admin/presentation/pages/prompts_admin_page.dart
 import 'package:runnin/features/admin/presentation/pages/coach_ai_admin_page.dart';
 import 'package:runnin/features/admin/presentation/pages/plan_rules_admin_page.dart';
 import 'package:runnin/features/admin/presentation/pages/roteiro_templates_admin_page.dart';
+import 'package:runnin/features/admin/presentation/pages/admin_tech_page.dart';
 import 'package:runnin/features/admin/presentation/pages/admin_tokens_page.dart';
 import 'package:runnin/features/admin/presentation/pages/admin_coach_runtime_page.dart';
 import 'package:runnin/features/intro/presentation/pages/intro_page.dart';
@@ -193,6 +194,7 @@ final appRouter = GoRouter(
     GoRoute(path: '/admin/plan-rules', builder: (_, _) => const PlanRulesAdminPage()),
     GoRoute(path: '/admin/roteiro-templates', builder: (_, _) => const RoteiroTemplatesAdminPage()),
     GoRoute(path: '/admin/tokens', builder: (_, _) => const AdminTokensPage()),
+    GoRoute(path: '/admin/tech', builder: (_, _) => const AdminTechPage()),
     GoRoute(path: '/admin/coach-runtime', builder: (_, _) => const AdminCoachRuntimePage()),
     GoRoute(path: '/intro', builder: (_, _) => const IntroPage()),
     GoRoute(

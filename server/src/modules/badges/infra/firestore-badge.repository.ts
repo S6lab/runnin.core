@@ -12,7 +12,9 @@ export class FirestoreBadgeRepository implements BadgeRepository {
   private col = (uid: string) => getFirestore().collection(`users/${uid}/badges`);
 
   async listByUser(uid: string): Promise<Badge[]> {
-    const snap = await this.col(uid).orderBy('unlockedAt', 'desc').get();
+    // Catálogo de badges é finito (~dezenas); 200 é teto de segurança pra
+    // query não ficar unbounded caso o catálogo cresça.
+    const snap = await this.col(uid).orderBy('unlockedAt', 'desc').limit(200).get();
     return snap.docs.map((d) => d.data() as Badge);
   }
 

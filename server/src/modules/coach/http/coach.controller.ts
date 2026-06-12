@@ -13,6 +13,7 @@ import { s6WsProxyEnabled } from '@shared/infra/s6ai/s6-proxy';
 import { FirestoreCoachReportRepository } from '../infra/firestore-coach-report.repository';
 import { FirestoreCoachMessageLogRepository } from '../infra/firestore-coach-message-log.repository';
 import { FirestoreRunRepository } from '@modules/runs/infra/firestore-run.repository';
+import { FirestorePlanRepository } from '@modules/plans/infra/firestore-plan.repository';
 import { NotFoundError } from '@shared/errors/app-error';
 import { logger } from '@shared/logger/logger';
 
@@ -21,7 +22,11 @@ const runRepoForReports = new FirestoreRunRepository();
 const coachMessageLogRepo = new FirestoreCoachMessageLogRepository();
 const coachChat = new CoachChatUseCase();
 const getReport = new GetCoachReportUseCase(reportRepo);
-const generateReport = new GenerateReportUseCase(reportRepo, runRepoForReports);
+const generateReport = new GenerateReportUseCase(
+  reportRepo,
+  runRepoForReports,
+  new FirestorePlanRepository(),
+);
 const generatePeriodAnalysis = new GeneratePeriodAnalysisUseCase(runRepoForReports, reportRepo);
 const logLiveTurn = new LogLiveTurnUseCase(coachMessageLogRepo);
 const listCoachMessages = new ListCoachMessagesUseCase(coachMessageLogRepo);

@@ -1,5 +1,11 @@
+import { FieldPath } from 'firebase-admin/firestore';
 import { getFirestore } from '@shared/infra/firebase/firebase.client';
 import { logger } from '@shared/logger/logger';
+
+/** Teto de docs por query de usage: 1 doc = 1 user×dia, então 5000 cobre
+ *  ~166 users ativos num range de 30d. Evita query unbounded se a base
+ *  crescer; pra mais que isso, mover pra BigQuery sink. */
+const MAX_USAGE_DOCS = 5000;
 
 /** Range de datas (YYYY-MM-DD, inclusive ambos extremos). */
 export interface UsageRange {
@@ -118,6 +124,7 @@ export class GetLlmUsageUseCase {
     const snap = await db.collectionGroup('llm_usage')
       .where('date', '>=', range.from)
       .where('date', '<=', range.to)
+      .limit(MAX_USAGE_DOCS)
       .get();
 
     const byUser = new Map<string, TopUser>();
@@ -143,8 +150,12 @@ export class GetLlmUsageUseCase {
   /** Custo de chamadas SYSTEM (crons, sem userId) no range. */
   async systemUsage(range: UsageRange): Promise<UsageBreakdown> {
     const db = getFirestore();
+    // Doc id = YYYY-MM-DD: range por documentId em vez de fetch-all.
     const snap = await db.collection('system').doc('llm_usage')
-      .collection('daily').get();
+      .collection('daily')
+      .where(FieldPath.documentId(), '>=', range.from)
+      .where(FieldPath.documentId(), '<=', range.to)
+      .get();
     const docs = snap.docs;
     return this._aggregate(docs, range);
   }
@@ -154,8 +165,13 @@ export class GetLlmUsageUseCase {
     args: { range: UsageRange; userId?: string | null },
   ): Promise<FirebaseFirestore.QueryDocumentSnapshot[]> {
     if (args.userId) {
+      // Doc id = YYYY-MM-DD: range por documentId evita ler o histórico
+      // inteiro do user (query era unbounded).
       const snap = await db.collection('users').doc(args.userId)
-        .collection('llm_usage').get();
+        .collection('llm_usage')
+        .where(FieldPath.documentId(), '>=', args.range.from)
+        .where(FieldPath.documentId(), '<=', args.range.to)
+        .get();
       return snap.docs;
     }
     // All users via collection group
@@ -163,6 +179,7 @@ export class GetLlmUsageUseCase {
       const snap = await db.collectionGroup('llm_usage')
         .where('date', '>=', args.range.from)
         .where('date', '<=', args.range.to)
+        .limit(MAX_USAGE_DOCS)
         .get();
       return snap.docs.filter((d) => d.ref.parent.parent?.parent?.id === 'users');
     } catch (err) {

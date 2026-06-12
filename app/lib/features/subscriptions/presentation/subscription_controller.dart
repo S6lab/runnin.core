@@ -25,6 +25,14 @@ class SubscriptionController extends ChangeNotifier {
   PlanFeatures get features => current.plan.features;
   PlanLimits get limits => current.plan.limits;
 
+  /// Hook de teste: integration tests precisam atravessar gates premium
+  /// (ex: wizard do plano) sem rede. NÃO usar fora de teste.
+  @visibleForTesting
+  void debugOverrideSubscription(UserSubscription? sub) {
+    _current = sub;
+    notifyListeners();
+  }
+
   Future<void> refresh() async {
     _loading = true;
     notifyListeners();
