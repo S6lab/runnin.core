@@ -242,7 +242,9 @@ class _ReportPageState extends State<ReportPage> {
             // semana pra propor revisão do plano. Aparece pra todo mundo
             // (freemium + premium) — sem feedback, cron não tem leitura
             // subjetiva pra correlacionar com os números.
-            if (_run != null) ...[
+            // Avaliação NÃO mostra: o feedback alimenta revisão de plano,
+            // que ainda não existe — o CTA do card cobre o próximo passo.
+            if (_run != null && _run!.assessmentTargetKm == null) ...[
               _FeedbackBlock(
                 palette: palette,
                 selected: _selectedKinds,

@@ -113,7 +113,17 @@ export class GenerateReportUseCase {
       }
     }
 
-    const planContext = runtime.currentPlan
+    // Corrida de AVALIAÇÃO: o report não pode citar objetivo/plano antigo
+    // nem sugerir "próxima sessão" — o plano ainda vai NASCER deste
+    // resultado (TF 82: report citava "objetivo 10K" do profile velho).
+    const isAssessment = typeof run.assessmentTargetKm === 'number' && run.assessmentTargetKm > 0;
+    const planContext = isAssessment
+      ? [
+          `CORRIDA DE AVALIAÇÃO (alvo ${run.assessmentTargetKm}km) — ainda NÃO existe plano.`,
+          'REGRAS deste report: NÃO cite objetivo/meta antiga do perfil; NÃO sugira "próxima sessão" (não há plano);',
+          'foque no resultado MEDIDO (distância, pace, FC/esforço se houver) e feche orientando a criar o plano personalizado — é ele que nasce desta medição.',
+        ].join(' ')
+      : runtime.currentPlan
       ? `Plano: ${runtime.currentPlan.goal} (${runtime.currentPlan.level}, semana atual ${runtime.currentPlan.currentWeek?.weekNumber ?? 'N/A'})`
       : 'Sem plano ativo.';
 
@@ -185,8 +195,22 @@ export class GenerateReportUseCase {
       ]);
       const recentRuns = recentResult.runs;
 
-      const planContextEnriched = this._buildEnrichedPlanContext(plan);
-      const planAdaptResult = this._buildPlanAdaptResult(plan, run.completedAt ?? run.createdAt);
+      // Avaliação: substitui o contexto de plano pelas regras de medição —
+      // sem isso a fase B citava objetivo antigo e inventava "próxima
+      // sessão" de um plano que ainda não existe.
+      const isAssessmentRun = typeof run.assessmentTargetKm === 'number' && run.assessmentTargetKm > 0;
+      const planContextEnriched = isAssessmentRun
+        ? [
+            `CORRIDA DE AVALIAÇÃO (alvo ${run.assessmentTargetKm}km) — NÃO existe plano ativo; ele será criado A PARTIR deste resultado.`,
+            'REGRAS: runAnalysis = leitura do medido (pace real, FC/esforço quando houver).',
+            'planEvolution = o que esse ritmo significa como BASE do plano que vem (sem citar plano/objetivo antigo).',
+            'nextSessions = NÃO invente sessões; oriente a criar o plano personalizado agora — a capacidade medida já está salva.',
+            'recommendations = recuperação pós-esforço + quando refazer a avaliação.',
+          ].join('\n')
+        : this._buildEnrichedPlanContext(plan);
+      const planAdaptResult = isAssessmentRun
+        ? ''
+        : this._buildPlanAdaptResult(plan, run.completedAt ?? run.createdAt);
       const recentRunsContext = recentRuns
         .filter(r => r.status === 'completed')
         .slice(0, 10)

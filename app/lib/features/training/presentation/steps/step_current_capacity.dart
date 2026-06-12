@@ -24,6 +24,11 @@ class StepCurrentCapacity extends StatefulWidget {
   /// de volume insuficiente em tempo real.
   final int? raceDistanceKm;
   final int? weeksCount;
+  /// Resultado da avaliação MEDIDA fresca (ex: "1.2km a 4:00/km · hoje").
+  /// Renderiza card selecionável acima do formulário — tocar aplica o
+  /// medido. Null = sem avaliação fresca.
+  final String? assessmentLabel;
+  final VoidCallback? onUseAssessment;
 
   final ValueChanged<bool> onAlreadyRunsChange;
   final ValueChanged<int> onDistanceChange;
@@ -43,6 +48,8 @@ class StepCurrentCapacity extends StatefulWidget {
     required this.onDistanceChange,
     required this.onTimeChange,
     required this.onWeeklyKmChange,
+    this.assessmentLabel,
+    this.onUseAssessment,
   });
 
   @override
@@ -80,6 +87,25 @@ class _StepCurrentCapacityState extends State<StepCurrentCapacity> {
     // Sem isso o teclado cobria o campo e o user nem sabia que existia.
     _minFocus.addListener(_handleTimeFocus);
     _secFocus.addListener(_handleTimeFocus);
+  }
+
+  @override
+  void didUpdateWidget(covariant StepCurrentCapacity old) {
+    super.didUpdateWidget(old);
+    // O parent pode recalcular o tempo de fora (ex: manter o pace MEDIDO
+    // ao trocar a distância, ou aplicar a avaliação pelo card). Sem este
+    // sync os controllers ficavam com o texto velho e a UI mentia.
+    if (widget.timeSeconds != old.timeSeconds && widget.timeSeconds != null) {
+      final current =
+          (int.tryParse(_minCtrl.text.trim()) ?? 0) * 60 +
+          (int.tryParse(_secCtrl.text.trim()) ?? 0);
+      if (current != widget.timeSeconds) {
+        final m = widget.timeSeconds! ~/ 60;
+        final s = widget.timeSeconds! % 60;
+        _minCtrl.text = m > 0 ? m.toString() : '';
+        _secCtrl.text = s.toString().padLeft(2, '0');
+      }
+    }
   }
 
   void _handleTimeFocus() {
@@ -143,6 +169,53 @@ class _StepCurrentCapacityState extends State<StepCurrentCapacity> {
           text: 'Coach calibra a primeira semana sem te jogar em pace ou volume que não cabe.',
         ),
         const SizedBox(height: 22),
+        // Avaliação MEDIDA fresca: card selecionável — aplica o resultado
+        // real com 1 toque (e trava o pace ao trocar distância). Edição
+        // manual nos chips/tempo continua livre por baixo.
+        if (widget.assessmentLabel != null && widget.onUseAssessment != null) ...[
+          InkWell(
+            onTap: widget.onUseAssessment,
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: palette.primary.withValues(alpha: 0.10),
+                border: Border.all(color: palette.primary),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.speed, size: 20, color: palette.primary),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'USAR MINHA AVALIAÇÃO',
+                          style: context.runninType.labelMd.copyWith(
+                            color: palette.primary,
+                            letterSpacing: 1.2,
+                            fontSize: 11,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          widget.assessmentLabel!,
+                          style: context.runninType.bodySm.copyWith(
+                            color: palette.text,
+                            height: 1.4,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Icon(Icons.chevron_right, color: palette.primary),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+        ],
         // "Já corre?" toggle
         Row(
           children: [

@@ -96,6 +96,28 @@ class _PlanSetupPageState extends State<PlanSetupPage> {
   /// step de capacidade recalcula o TEMPO mantendo o pace — o pace é o
   /// dado confiável, não o par distância+tempo (que era sintético).
   int? _measuredPaceSec;
+  /// Quando o draft restaurado foi salvo — avaliação MAIS NOVA que o draft
+  /// vence o draft nos campos de capacidade (draft de ontem não pode
+  /// esconder a medição de hoje).
+  DateTime? _draftSavedAt;
+
+  /// Aplica o resultado medido da avaliação nos campos de capacidade.
+  /// Usado pelo prefill automático E pelo card "USAR MINHA AVALIAÇÃO".
+  void _applyMeasuredAssessment(LastAssessment a, DateTime at) {
+    _alreadyRuns = true;
+    _capacityDistanceKm = a.completedKm.floor().clamp(1, 100);
+    final paceSec = _paceLabelToSec(a.paceMinKm);
+    if (paceSec != null) {
+      _measuredPaceSec = paceSec;
+      _capacityTimeSec = (paceSec * a.completedKm).round();
+    }
+    final effortNote = (a.effortLabel == 'forte' || a.effortLabel == 'maximo')
+        ? ' (esforço alto — pace base ${a.easyPaceMinKm ?? a.paceMinKm})'
+        : '';
+    _historyHint =
+        'MEDIDO na avaliação de ${at.day.toString().padLeft(2, '0')}/${at.month.toString().padLeft(2, '0')}: '
+        '${a.completedKm.toStringAsFixed(1)}km a ${a.paceMinKm}/km$effortNote';
+  }
   String? _runPeriod;
   String? _wakeTime;
   String? _sleepTime;
@@ -183,6 +205,7 @@ class _PlanSetupPageState extends State<PlanSetupPage> {
         _clearDraft();
         return;
       }
+      _draftSavedAt = savedAt;
       T? enumFrom<T>(List<T> values, String? v, String Function(T) key) {
         if (v == null) return null;
         for (final e in values) {
@@ -254,28 +277,17 @@ class _PlanSetupPageState extends State<PlanSetupPage> {
         _sleepTime ??= profile.sleepTime;
         _profileLastAssessment = profile.lastAssessment;
         // Capacidade MEDIDA: avaliação fresca (≤14d) prefilla o step de
-        // capacidade com selo "medido". Só quando o user ainda não mexeu
-        // (draft restaurado vence).
+        // capacidade. Aplica quando o user ainda não mexeu OU quando a
+        // avaliação é MAIS NOVA que o draft restaurado — draft de ontem
+        // não pode esconder a medição de hoje (TF 82: 17:10 do rascunho
+        // antigo enterrou a avaliação de 1.2km a 4:00).
         final a = profile.lastAssessment;
         final at = a != null ? DateTime.tryParse(a.at) : null;
-        if (a != null &&
-            at != null &&
-            DateTime.now().difference(at).inDays <= 14 &&
-            _alreadyRuns == null &&
-            a.completedKm > 0) {
-          _alreadyRuns = true;
-          _capacityDistanceKm = a.completedKm.floor().clamp(1, 100);
-          final paceSec = _paceLabelToSec(a.paceMinKm);
-          if (paceSec != null) {
-            _measuredPaceSec = paceSec;
-            _capacityTimeSec = (paceSec * a.completedKm).round();
-          }
-          final effortNote = (a.effortLabel == 'forte' || a.effortLabel == 'maximo')
-              ? ' (esforço alto — pace base ${a.easyPaceMinKm ?? a.paceMinKm})'
-              : '';
-          _historyHint =
-              'MEDIDO na avaliação de ${at.day.toString().padLeft(2, '0')}/${at.month.toString().padLeft(2, '0')}: '
-              '${a.completedKm.toStringAsFixed(1)}km a ${a.paceMinKm}/km$effortNote';
+        final fresh = at != null && DateTime.now().difference(at).inDays <= 14;
+        final beatsDraft = _alreadyRuns == null ||
+            (_draftSavedAt != null && at != null && at.isAfter(_draftSavedAt!));
+        if (a != null && at != null && fresh && beatsDraft && a.completedKm > 0) {
+          _applyMeasuredAssessment(a, at);
         }
       });
     } catch (_) {/* sem profile = sem checks de age/medical */}
@@ -679,12 +691,25 @@ class _PlanSetupPageState extends State<PlanSetupPage> {
           onLongRunMaxMinutesChange: (m) => setState(() => _longRunMaxMinutes = m),
         );
       case _Step.currentCapacity:
+        // Card "USAR MINHA AVALIAÇÃO": presente quando há medição fresca.
+        final assess = _profileLastAssessment;
+        final assessAt = assess != null ? DateTime.tryParse(assess.at) : null;
+        final assessFresh = assessAt != null &&
+            DateTime.now().difference(assessAt).inDays <= 14 &&
+            (assess?.completedKm ?? 0) > 0;
         return StepCurrentCapacity(
           selectedDistanceKm: _capacityDistanceKm,
           timeSeconds: _capacityTimeSec,
           weeklyKm: _weeklyKm,
           alreadyRuns: _alreadyRuns,
           historyHint: _historyHint,
+          assessmentLabel: assessFresh
+              ? '${assess!.completedKm.toStringAsFixed(1)}km a ${assess.paceMinKm}/km · '
+                  '${assessAt.day.toString().padLeft(2, '0')}/${assessAt.month.toString().padLeft(2, '0')}'
+              : null,
+          onUseAssessment: assessFresh
+              ? () => setState(() => _applyMeasuredAssessment(assess!, assessAt))
+              : null,
           raceDistanceKm: _goalKind == PlanGoalKind.race ? _raceDistanceKm : null,
           weeksCount: _weeksCount,
           onAlreadyRunsChange: (v) => setState(() {

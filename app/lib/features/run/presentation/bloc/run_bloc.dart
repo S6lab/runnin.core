@@ -1513,7 +1513,13 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
       _kmBpmSamples.clear();
       // Cue 1: km_reached (info imediato sobre o km que acabou).
       // _lastCoachKm já dedup (1x por km), sem cooldown adicional.
-      if (_alertPrefs['kmAlert'] == true) {
+      // TF 82: quando o goal_reached vai disparar NESTE mesmo update
+      // (cruzar a meta cruza um km), o km_reached é suprimido — os dois
+      // juntos faziam o coach anunciar "avaliação finalizada" 2x.
+      final goalWillFire = !_goalReachedFired &&
+          _plannedDistanceM != null &&
+          newDistance >= _plannedDistanceM!;
+      if (_alertPrefs['kmAlert'] == true && !goalWillFire) {
         // Alvo: segment.targetPace > session.targetPace > null. Sem alvo no
         // payload, o LLM não conseguia entregar a fala "seu pace foi X, alvo
         // Y" que o user pediu — ficava com narração genérica.
