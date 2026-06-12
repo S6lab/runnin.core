@@ -218,6 +218,11 @@ class StepRaceTiming extends StatelessWidget {
   /// Início resolvido (meia-noite local) — fonte das projeções de data.
   final DateTime startDate;
 
+  /// Dias de treino marcados (1=seg..7=dom). Quando o início escolhido cai
+  /// fora deles, mostramos o aviso "1º treino cai em X" + ação rápida.
+  final Set<int> availableDays;
+  final ValueChanged<int> onAddTrainingDay;
+
   // Parte 2 — janela
   final int raceDistanceKm;
   final String level;
@@ -247,6 +252,8 @@ class StepRaceTiming extends StatelessWidget {
     required this.customStartDate,
     required this.onStartSelect,
     required this.startDate,
+    required this.availableDays,
+    required this.onAddTrainingDay,
     required this.raceDistanceKm,
     required this.level,
     required this.levelHint,
@@ -483,6 +490,19 @@ class StepRaceTiming extends StatelessWidget {
           ),
         ],
       ),
+      // Início fora dos dias de treino: o plano COMEÇA na data escolhida,
+      // mas o 1º treino cai no próximo dia marcado — explicitar aqui mata
+      // o "pedi HOJE e não tem treino hoje" (TF: quinta fora de seg/qua/
+      // sex/sáb). Ação rápida adiciona o dia.
+      if (availableDays.isNotEmpty && !availableDays.contains(startDate.weekday))
+        Padding(
+          padding: const EdgeInsets.only(top: 10),
+          child: StartDayNotice(
+            startDate: startDate,
+            availableDays: availableDays,
+            onAddTrainingDay: onAddTrainingDay,
+          ),
+        ),
       const SizedBox(height: 22),
     ];
 
@@ -647,6 +667,74 @@ class StepRaceTiming extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: children,
     );
+  }
+}
+
+/// Aviso "o início escolhido não é dia de treino" + ação rápida. Público
+/// pra reuso no caminho FLOW (step de startDate do wizard).
+class StartDayNotice extends StatelessWidget {
+  final DateTime startDate;
+  final Set<int> availableDays;
+  final ValueChanged<int> onAddTrainingDay;
+
+  const StartDayNotice({
+    super.key,
+    required this.startDate,
+    required this.availableDays,
+    required this.onAddTrainingDay,
+  });
+
+  static const _dowLong = ['', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado', 'domingo'];
+
+  int? _nextTrainingDow() {
+    if (availableDays.isEmpty) return null;
+    for (var i = 1; i <= 7; i++) {
+      final dow = ((startDate.weekday - 1 + i) % 7) + 1;
+      if (availableDays.contains(dow)) return dow;
+    }
+    return null;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.runninPalette;
+    final type = context.runninType;
+    final startName = _dowLong[startDate.weekday];
+    final next = _nextTrainingDow();
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: palette.warning.withValues(alpha: 0.08),
+        border: Border.all(color: palette.warning.withValues(alpha: 0.5)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '$startName não está nos seus dias de treino — o plano começa '
+            'nessa data, mas o 1º treino cai ${next != null ? _comDia(next) : 'no próximo dia marcado'}.',
+            style: type.bodySm.copyWith(color: palette.text, height: 1.4),
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton(
+            onPressed: () => onAddTrainingDay(startDate.weekday),
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size(0, 34),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+            ),
+            child: Text('TREINAR ${startName.toUpperCase()} TAMBÉM'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ignore: unused_field
+  static const _pre = ' ';
+  String _comDia(int dow) {
+    final name = _dowLong[dow];
+    return (dow == 6 || dow == 7) ? 'no $name' : 'na $name';
   }
 }
 

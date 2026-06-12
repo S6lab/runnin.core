@@ -2,10 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/shared/widgets/figma/export.dart';
 
-/// Liga a pré-jornada de assessment na criação do plano. Fica `false` até a
-/// rota /assessment-run existir (Fase C) — a tela já está pronta atrás da
-/// flag pra ligar sem refactor.
-const bool kAssessmentRunEnabled = false;
+/// Pré-jornada de assessment na criação do plano. Ligada na Fase C junto
+/// com a rota /assessment-run (medição end-to-end).
+const bool kAssessmentRunEnabled = true;
 
 /// Pré-jornada do wizard: oferece a corrida de avaliação ANTES da intro.
 /// [CORRER AGORA] → /assessment-run (coach mede ritmo real; wizard prefilla

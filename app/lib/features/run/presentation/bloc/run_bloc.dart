@@ -51,6 +51,10 @@ class StartRun extends RunEvent {
   /// é Watch — Watch já cobre o display, LA mirroreia como banner "Abrir
   /// no iPhone" sobrepondo a ActiveRunScreen.
   final String? startSource;
+  /// Corrida de AVALIAÇÃO: alvo em km. Seta _plannedDistanceM (goal_reached
+  /// dispara no alvo) e marca a run no server — o resultado medido vira
+  /// capacidade no profile.
+  final double? assessmentTargetKm;
   /// True = corrida em esteira: GPS nem inicia (zero drift, menos bateria),
   /// distância vem do painel da esteira no finish (CompleteRun.manualDistanceM)
   /// e cues dependentes de GPS (km/pace/no_movement) não disparam.
@@ -63,6 +67,7 @@ class StartRun extends RunEvent {
     this.planSessionId,
     this.isPremium,
     this.startSource,
+    this.assessmentTargetKm,
     this.indoor = false,
   });
 }
@@ -370,6 +375,8 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
   /// pelo cue `goal_reached`: quando o user passa do alvo, o coach avisa
   /// "sua sessão termina aqui" e oferece continuar (sem auto-complete).
   double? _plannedDistanceM;
+  /// Alvo da corrida de AVALIAÇÃO (km). Null = corrida normal.
+  double? _assessmentTargetKm;
   /// One-shot: garante que `goal_reached` dispare 1x por run mesmo se o
   /// user continuar correndo passado o alvo (esperado — coach disse "se
   /// quiser continuar, eu sigo"). Reset no _onStart.
@@ -782,6 +789,12 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
     _plannedDistanceM = null;
     _plannedDurationS = null;
     _goalReachedFired = false;
+    _assessmentTargetKm = event.assessmentTargetKm;
+    if (event.assessmentTargetKm != null && event.assessmentTargetKm! > 0) {
+      // Avaliação: o alvo escolhido vira meta de distância — goal_reached
+      // dispara no km certo mesmo sem planSessionId (gap do Free Run).
+      _plannedDistanceM = event.assessmentTargetKm! * 1000;
+    }
     // Premium: usa LiveRunCoachSession (Gemini Live). Freemium: TTS local
     // de telemetria a cada km. Default true mantém retro-compat se um
     // caller antigo não passar o flag.
@@ -843,6 +856,7 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
           targetDistance: event.targetDistance,
           planSessionId: event.planSessionId,
           environment: _indoor ? 'indoor' : null,
+          assessmentTargetKm: event.assessmentTargetKm,
         );
         runId = run.id;
       } catch (_) {
@@ -914,6 +928,7 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
             final ok = await _coachSession.open(
               planSessionId: _planSessionId,
               runId: startRunId,
+              assessmentTargetKm: _assessmentTargetKm,
             );
             if (ok && !isClosed) {
               _coachSession.sendEvent('start', {

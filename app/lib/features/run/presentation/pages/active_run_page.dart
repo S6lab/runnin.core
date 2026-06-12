@@ -46,6 +46,9 @@ class ActiveRunPage extends StatelessWidget {
   final bool autoStart;
   /// True = corrida em esteira: GPS desligado, distância informada no finish.
   final bool indoor;
+  /// Alvo da corrida de AVALIAÇÃO (km). Seta a meta de distância do bloc
+  /// (goal_reached) e marca a run no server como assessment.
+  final double? assessmentTargetKm;
   const ActiveRunPage({
     super.key,
     this.initialType = 'Free Run',
@@ -54,6 +57,7 @@ class ActiveRunPage extends StatelessWidget {
     this.isPremium,
     this.autoStart = false,
     this.indoor = false,
+    this.assessmentTargetKm,
   });
 
   @override
@@ -79,6 +83,7 @@ class ActiveRunPage extends StatelessWidget {
         isPremium: isPremium,
         autoStart: autoStart,
         indoor: indoor,
+        assessmentTargetKm: assessmentTargetKm,
       ),
     );
   }
@@ -111,6 +116,7 @@ class _ActiveRunView extends StatefulWidget {
   /// inicia corrida com iPhone fora do shell (ver WatchStartListener).
   final bool autoStart;
   final bool indoor;
+  final double? assessmentTargetKm;
   const _ActiveRunView({
     required this.initialType,
     this.planSessionId,
@@ -118,6 +124,7 @@ class _ActiveRunView extends StatefulWidget {
     this.isPremium,
     this.autoStart = false,
     this.indoor = false,
+    this.assessmentTargetKm,
   });
 
   @override
@@ -182,6 +189,7 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
               alertPrefs: widget.alertPrefs,
               isPremium: isPremium,
               indoor: widget.indoor,
+              assessmentTargetKm: widget.assessmentTargetKm,
             ));
       }
     });
@@ -581,6 +589,7 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
                             alertPrefs: widget.alertPrefs,
                             isPremium: isPremium,
                             indoor: widget.indoor,
+                            assessmentTargetKm: widget.assessmentTargetKm,
                           ));
                     },
                   ),

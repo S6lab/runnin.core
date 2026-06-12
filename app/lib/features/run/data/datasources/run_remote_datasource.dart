@@ -13,6 +13,7 @@ class RunRemoteDatasource {
     String? targetDistance,
     String? planSessionId,
     String? environment,
+    double? assessmentTargetKm,
   }) async {
     final res = await _dio.post(
       '/runs',
@@ -22,6 +23,7 @@ class RunRemoteDatasource {
         'targetDistance': ?targetDistance,
         'planSessionId': ?planSessionId,
         'environment': ?environment,
+        'assessmentTargetKm': ?assessmentTargetKm,
       },
     );
     return Run.fromJson(res.data as Map<String, dynamic>);

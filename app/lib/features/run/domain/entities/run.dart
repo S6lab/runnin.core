@@ -335,6 +335,9 @@ class Run {
   /// 'indoor' = esteira (distância do painel/estimativa, sem GPS).
   /// Null/'outdoor' = corrida de rua (runs antigas não têm o campo).
   final String? environment;
+  /// Alvo da corrida de AVALIAÇÃO (km). Presença marca a run como
+  /// assessment — ReportPage mostra o card "Avaliação concluída".
+  final double? assessmentTargetKm;
   final List<KmSplit> splits;
   /// Feedback subjetivo submetido pelo user na ReportPage (chips + note).
   /// Substitui o fluxo de checkpoint "solto" — agora a leitura do user
@@ -370,6 +373,7 @@ class Run {
     this.planSessionId,
     this.coachQuote,
     this.environment,
+    this.assessmentTargetKm,
     this.splits = const [],
     this.userFeedback = const [],
     this.feedbackAt,
@@ -400,6 +404,7 @@ class Run {
     planSessionId: j['planSessionId'] as String?,
     coachQuote: j['coachQuote'] as String?,
     environment: j['environment'] as String?,
+    assessmentTargetKm: (j['assessmentTargetKm'] as num?)?.toDouble(),
     splits: j['splits'] != null
         ? (j['splits'] as List)
             .map((e) => KmSplit.fromJson(e as Map<String, dynamic>))

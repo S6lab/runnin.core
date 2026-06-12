@@ -2,6 +2,41 @@ import 'package:dio/dio.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:runnin/core/network/api_client.dart';
 
+/// Resultado da corrida de avaliação persistido no profile pelo server.
+class LastAssessment {
+  final String runId;
+  final String at; // ISO
+  final double targetKm;
+  final double completedKm;
+  final String paceMinKm; // M:SS
+  final int? avgBpm;
+
+  const LastAssessment({
+    required this.runId,
+    required this.at,
+    required this.targetKm,
+    required this.completedKm,
+    required this.paceMinKm,
+    this.avgBpm,
+  });
+
+  static LastAssessment? fromJson(Map<String, dynamic>? j) {
+    if (j == null) return null;
+    final runId = j['runId'] as String?;
+    final at = j['at'] as String?;
+    final paceMinKm = j['paceMinKm'] as String?;
+    if (runId == null || at == null || paceMinKm == null) return null;
+    return LastAssessment(
+      runId: runId,
+      at: at,
+      targetKm: (j['targetKm'] as num?)?.toDouble() ?? 0,
+      completedKm: (j['completedKm'] as num?)?.toDouble() ?? 0,
+      paceMinKm: paceMinKm,
+      avgBpm: (j['avgBpm'] as num?)?.toInt(),
+    );
+  }
+}
+
 class UserProfile {
   final String id;
   /// Redundância intencional do uid pra trace cross-system. Igual ao [id].
@@ -46,6 +81,10 @@ class UserProfile {
   final String? unitsSystem;
   final String? paceFormat;
   final String? timeFormat;
+  /// Resultado da última corrida de AVALIAÇÃO (capacidade MEDIDA).
+  /// Persistido pelo server no complete-run. Wizard prefilla com selo
+  /// "medido" quando fresco.
+  final LastAssessment? lastAssessment;
 
   const UserProfile({
     required this.id,
@@ -85,6 +124,7 @@ class UserProfile {
     this.unitsSystem,
     this.paceFormat,
     this.timeFormat,
+    this.lastAssessment,
   });
 
   bool get isPro {
@@ -147,6 +187,9 @@ class UserProfile {
     unitsSystem: j['unitsSystem'] as String?,
     paceFormat: j['paceFormat'] as String?,
     timeFormat: j['timeFormat'] as String?,
+    lastAssessment: LastAssessment.fromJson(
+      j['lastAssessment'] as Map<String, dynamic>?,
+    ),
   );
 }
 

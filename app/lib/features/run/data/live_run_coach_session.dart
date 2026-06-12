@@ -91,23 +91,33 @@ class LiveRunCoachSession {
 
   /// Abre a sessão: cria no runnin-api (que chama o s6-ai) e conecta o WS.
   /// Retorna false se não conseguiu (corrida segue sem voz).
-  Future<bool> open({String? planSessionId, String? runId}) async {
+  Future<bool> open({
+    String? planSessionId,
+    String? runId,
+    double? assessmentTargetKm,
+  }) async {
     if (_open) return true;
     _runId = runId;
     _intentionalClose = false;
 
-    final created = await _createSession(planSessionId);
+    final created = await _createSession(planSessionId, assessmentTargetKm);
     if (!created) return false;
     final ok = await _connect();
     if (ok) _reconnectAttempt = 0;
     return ok;
   }
 
-  Future<bool> _createSession(String? planSessionId) async {
+  Future<bool> _createSession(
+    String? planSessionId,
+    double? assessmentTargetKm,
+  ) async {
     try {
       final weather = locationWeatherController.weather;
       final body = <String, dynamic>{
         'planSessionId': ?planSessionId,
+        // Corrida de AVALIAÇÃO: server troca o briefing pra persona de
+        // MEDIÇÃO (sem citar plano/meta de treino, que ainda não existem).
+        'assessmentTargetKm': ?assessmentTargetKm,
         if (weather != null) ...{
           'temperatureC': weather.temperatureC,
           'humidityPercent': weather.humidityPercent,

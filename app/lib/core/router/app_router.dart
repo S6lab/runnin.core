@@ -27,6 +27,7 @@ import 'package:runnin/features/run/presentation/pages/active_run_page.dart';
 import 'package:runnin/features/run/presentation/pages/report_page.dart';
 import 'package:runnin/features/run/presentation/pages/share_page.dart';
 import 'package:runnin/features/run/presentation/pages/plan_loading_page.dart';
+import 'package:runnin/features/training/presentation/pages/assessment_run_page.dart';
 import 'package:runnin/features/training/presentation/pages/training_page.dart';
 import 'package:runnin/features/training/presentation/pages/plan_detail_page.dart';
 import 'package:runnin/features/training/presentation/pages/day_detail_page.dart';
@@ -242,6 +243,7 @@ final appRouter = GoRouter(
             bool? isPremium;
             bool autoStart = false;
             bool indoor = false;
+            double? assessmentTargetKm;
             if (extra is String && extra.isNotEmpty) {
               type = extra;
             } else if (extra is Map<String, dynamic>) {
@@ -254,6 +256,8 @@ final appRouter = GoRouter(
               isPremium = extra['isPremium'] as bool?;
               autoStart = extra['autoStart'] == true;
               indoor = extra['indoor'] == true;
+              assessmentTargetKm =
+                  (extra['assessmentTargetKm'] as num?)?.toDouble();
             }
             return ActiveRunPage(
               initialType: type,
@@ -262,6 +266,7 @@ final appRouter = GoRouter(
               isPremium: isPremium,
               autoStart: autoStart,
               indoor: indoor,
+              assessmentTargetKm: assessmentTargetKm,
             );
           },
         ),
@@ -283,6 +288,12 @@ final appRouter = GoRouter(
         GoRoute(
           path: '/training/criar-plano',
           builder: (_, _) => const PlanSetupPage(),
+        ),
+        // Corrida de avaliação (pré-jornada do plano). SEM paywall — a
+        // medição alimenta o wizard; freemium corre com TTS local.
+        GoRoute(
+          path: '/assessment-run',
+          builder: (_, _) => const AssessmentRunPage(),
         ),
         GoRoute(
           path: '/training/plan-detail',

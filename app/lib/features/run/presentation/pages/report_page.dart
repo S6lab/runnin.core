@@ -215,6 +215,13 @@ class _ReportPageState extends State<ReportPage> {
             if (_run?.xpEarned != null && _run!.xpEarned! > 0)
               const SizedBox(height: 24),
 
+            // Corrida de AVALIAÇÃO: o ritmo medido já está no profile —
+            // CTA leva direto pro wizard, que prefilla com selo "medido".
+            if (_run?.assessmentTargetKm != null) ...[
+              _AssessmentDoneCard(run: _run!, palette: palette),
+              const SizedBox(height: 24),
+            ],
+
             // Coach report — texto contínuo. Pending mostra skeleton.
             // summary_ready/ready mostra summary curto + hint "análise
             // completa em segundos". Enriched mostra summary expandido
@@ -746,6 +753,53 @@ class _FeedbackNoteField extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Card pós-avaliação: resultado medido + CTA pro wizard de plano (que
+/// prefilla a capacidade com o dado do profile, selo "medido").
+class _AssessmentDoneCard extends StatelessWidget {
+  final Run run;
+  final RunninPalette palette;
+  const _AssessmentDoneCard({required this.run, required this.palette});
+
+  @override
+  Widget build(BuildContext context) {
+    final type = context.runninType;
+    final km = run.distanceM / 1000;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: palette.primary.withValues(alpha: 0.10),
+        border: Border.all(color: palette.primary),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'AVALIAÇÃO CONCLUÍDA',
+            style: type.labelCaps.copyWith(color: palette.primary),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '${km.toStringAsFixed(1)}km a ${run.avgPace ?? '—'}/km'
+            '${run.avgBpm != null ? ' · FC média ${run.avgBpm}' : ''}. '
+            'Esse é seu ritmo MEDIDO — o plano sai calibrado por ele.',
+            style: type.bodySm.copyWith(color: palette.text, height: 1.45),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            height: 44,
+            child: ElevatedButton(
+              onPressed: () => context.go('/training/criar-plano'),
+              child: const Text('CRIAR MEU PLANO /'),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

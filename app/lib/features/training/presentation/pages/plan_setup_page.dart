@@ -244,6 +244,26 @@ class _PlanSetupPageState extends State<PlanSetupPage> {
         _runPeriod ??= profile.runPeriod;
         _wakeTime ??= profile.wakeTime;
         _sleepTime ??= profile.sleepTime;
+        // Capacidade MEDIDA: avaliação fresca (≤14d) prefilla o step de
+        // capacidade com selo "medido". Só quando o user ainda não mexeu
+        // (draft restaurado vence).
+        final a = profile.lastAssessment;
+        final at = a != null ? DateTime.tryParse(a.at) : null;
+        if (a != null &&
+            at != null &&
+            DateTime.now().difference(at).inDays <= 14 &&
+            _alreadyRuns == null &&
+            a.completedKm > 0) {
+          _alreadyRuns = true;
+          _capacityDistanceKm = a.completedKm.floor().clamp(1, 100);
+          final paceSec = _paceLabelToSec(a.paceMinKm);
+          if (paceSec != null) {
+            _capacityTimeSec = (paceSec * a.completedKm).round();
+          }
+          _historyHint =
+              'MEDIDO na avaliação de ${at.day.toString().padLeft(2, '0')}/${at.month.toString().padLeft(2, '0')}: '
+              '${a.completedKm.toStringAsFixed(1)}km a ${a.paceMinKm}/km';
+        }
       });
     } catch (_) {/* sem profile = sem checks de age/medical */}
   }
@@ -685,6 +705,10 @@ class _PlanSetupPageState extends State<PlanSetupPage> {
             _explicitRaceDate = null;
           }),
           startDate: _startDateValue(),
+          availableDays: _availableDays,
+          onAddTrainingDay: (dow) => setState(() {
+            _availableDays = {..._availableDays, dow};
+          }),
           raceDistanceKm: _raceDistanceKm ?? 10,
           level: _level?.backendLevel ?? 'iniciante',
           levelHint: _level?.levelHint,
@@ -711,13 +735,32 @@ class _PlanSetupPageState extends State<PlanSetupPage> {
           onSleepTimeSelect: (t) => setState(() => _sleepTime = t),
         );
       case _Step.startDate:
-        return OnboardingStartDateStep(
-          selected: _startChoice,
-          customDate: _customDate,
-          onSelect: (choice, date) => setState(() {
-            _startChoice = choice;
-            _customDate = date;
-          }),
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            OnboardingStartDateStep(
+              selected: _startChoice,
+              customDate: _customDate,
+              onSelect: (choice, date) => setState(() {
+                _startChoice = choice;
+                _customDate = date;
+              }),
+            ),
+            // Mesmo aviso do raceTiming: início fora dos dias de treino
+            // gera "pedi HOJE e não tem treino hoje".
+            if (_availableDays.isNotEmpty &&
+                !_availableDays.contains(_startDateValue().weekday))
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: StartDayNotice(
+                  startDate: _startDateValue(),
+                  availableDays: _availableDays,
+                  onAddTrainingDay: (dow) => setState(() {
+                    _availableDays = {..._availableDays, dow};
+                  }),
+                ),
+              ),
+          ],
         );
     }
   }
