@@ -114,9 +114,23 @@ workflows:
             --build-number=$PROJECT_BUILD_NUMBER \
             --dart-define=API_BASE_URL=$API_BASE_URL_PROD \
             --dart-define=FIREBASE_VAPID_KEY=$FIREBASE_VAPID_KEY
+      # Wear OS standalone APK pro Galaxy Watch / Pixel Watch. Build separado
+      # via gradle (flutter build não enxerga módulo :wear). Mesma keystore
+      # do :app — obrigatório pro Wearable Data Layer pairing funcionar
+      # (Google exige assinatura idêntica entre phone e watch apps com
+      # mesmo applicationId).
+      #
+      # Distribuição: por enquanto upload manual no Play Console (Wear OS
+      # track separado do phone track). Quando a feature for liberada,
+      # podemos adicionar bundle ou usar Multi-APK delivery automática.
+      - name: Build Wear OS APK (signed)
+        script: |
+          cd app/android
+          ./gradlew :wear:assembleRelease
     artifacts:
       - app/build/**/outputs/**/*.aab
       - app/build/**/outputs/**/mapping.txt
+      - app/build/wear/outputs/apk/release/*.apk
     publishing:
       google_play:
         credentials: $GOOGLE_PLAY_SERVICE_ACCOUNT_JSON

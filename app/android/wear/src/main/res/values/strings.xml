@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Runnin</string>
+    <string name="workout_notification_title">RUNNIN.AI</string>
+    <string name="workout_notification_text">Corrida em andamento</string>
+    <string name="workout_channel_name">Corrida ativa</string>
+</resources>

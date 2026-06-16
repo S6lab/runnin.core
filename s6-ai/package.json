@@ -8,7 +8,8 @@
     "build": "tsc && tsc-alias",
     "start": "node dist/main.js",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "smoke": "ts-node-dev --transpile-only --quiet -r tsconfig-paths/register scripts/live-smoke.ts"
   },
   "license": "ISC",
   "type": "commonjs",

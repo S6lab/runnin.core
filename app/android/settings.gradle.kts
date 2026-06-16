@@ -25,6 +25,10 @@ plugins {
     id("com.google.firebase.crashlytics") version("2.8.1") apply false
     // END: FlutterFire Configuration
     id("org.jetbrains.kotlin.android") version "2.2.20" apply false
+    // Compose Compiler plugin (necessário pro módulo :wear que usa Compose).
+    // Versão obrigatoriamente casada com kotlin: 2.2.20.
+    id("org.jetbrains.kotlin.plugin.compose") version "2.2.20" apply false
 }
 
 include(":app")
+include(":wear")

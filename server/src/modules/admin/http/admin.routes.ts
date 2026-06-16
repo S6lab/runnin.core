@@ -34,6 +34,7 @@ import {
   getUsageTopUsers,
   getUsageSystem,
   getUsagePricing,
+  getTechMetrics,
   getCoachRuntimeConfigAdmin,
   patchCoachRuntimeConfigAdmin,
 } from './admin.controller';
@@ -93,6 +94,7 @@ adminRouter.get('/wiring-status', getAdminWiringStatus);
 // ─── LLM Usage / Token tracking ──────────────────────────────────────────
 // Métricas de gasto por modelo, user, use case e dia. Custo em USD usando
 // tabela hardcoded em llm-pricing.ts.
+adminRouter.get('/metrics/tech', getTechMetrics);          // saúde + erros + custo (aba TECH)
 adminRouter.get('/usage/tokens', getUsageTokens);          // ?from&to&userId?
 adminRouter.get('/usage/top-users', getUsageTopUsers);     // ?from&to&limit
 adminRouter.get('/usage/system', getUsageSystem);          // crons sem userId

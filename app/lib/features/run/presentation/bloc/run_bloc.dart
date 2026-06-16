@@ -330,7 +330,8 @@ class RunState {
 
 // ── BLoC ─────────────────────────────────────────────────────────────────────
 class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
-  final _remote = RunRemoteDatasource();
+  // Injetável só pra integration tests dirigirem o fluxo sem rede.
+  final RunRemoteDatasource _remote;
   final _userRemote = UserRemoteDatasource();
   // Sessão de coach via s6-ai (microsserviço dono do socket Gemini).
   // Rotação, preamble, fila anti-sobreposição (CueQueue) e fallback HTTP
@@ -588,7 +589,9 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
   static const _flushBatchSize = 30;
   static const _flushIntervalS = 30;
 
-  RunBloc() : super(const RunState()) {
+  RunBloc({RunRemoteDatasource? remote})
+      : _remote = remote ?? RunRemoteDatasource(),
+        super(const RunState()) {
     // Inscreve no stream de pareamento do Watch — ativo o ciclo de vida
     // todo do bloc (não só durante corrida). Pre-run page consome via
     // BlocBuilder pra renderizar banner "Conecte um Watch" / "Instale o app
@@ -825,7 +828,10 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
     try {
       // Indoor (esteira): GPS nem é checado — corrida roda por tempo + BPM,
       // distância entra no finish via painel da esteira.
-      if (!_indoor) {
+      // GPS mock (debug/integration test): o stream vem do MockGpsService,
+      // então permissão/serviço reais não podem bloquear o start (o dialog
+      // nativo de permissão travaria o teste no simulador).
+      if (!_indoor && !mockGpsService.enabled) {
         final serviceEnabled = await Geolocator.isLocationServiceEnabled();
         if (!serviceEnabled) {
           throw Exception('Ative o GPS do dispositivo para iniciar a corrida.');

@@ -1,0 +1,47 @@
+# CI — suítes estáticas das 3 bases em todo push/PR.
+# Integration tests (simulador) e smoke do live coach ficam FORA do CI por
+# ora (precisam de macOS/segredos) — rodam via docs/smoke-runbook.md.
+name: ci
+
+on:
+  push:
+    branches: [main, release, release-android, release-ios]
+  pull_request:
+
+jobs:
+  server:
+    runs-on: ubuntu-latest
+    defaults:
+      run: { working-directory: server }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: server/package-lock.json }
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - run: npx vitest run
+
+  s6-ai:
+    runs-on: ubuntu-latest
+    defaults:
+      run: { working-directory: s6-ai }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: s6-ai/package-lock.json }
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - run: npx vitest run
+
+  app:
+    runs-on: ubuntu-latest
+    defaults:
+      run: { working-directory: app }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with: { channel: stable, cache: true }
+      - run: flutter pub get
+      # infos não bloqueiam (12 pré-existentes); warnings/errors seguem fatais.
+      - run: flutter analyze --no-fatal-infos lib
+      - run: flutter test

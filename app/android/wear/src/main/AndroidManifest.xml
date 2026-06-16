@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- Wear OS standalone app marker. Sem este uses-feature o Play Store
+         rejeita o APK como "phone app" e não permite instalação direta no
+         relógio. -->
+    <uses-feature android:name="android.hardware.type.watch" />
+
+    <!-- Sensors do relógio (PPG / oxímetro) — Health Services usa BODY_SENSORS.
+         BODY_SENSORS_BACKGROUND não é necessário porque ExerciseClient mantém
+         a coleta ativa enquanto a session estiver rodando (Wear OS dispensa
+         foreground service nesse modo). -->
+    <uses-permission android:name="android.permission.BODY_SENSORS" />
+    <!-- Para SpO2 contínuo durante o exercício em Wear OS 5+ (paridade com
+         Apple Watch Series 6+ oximeter). -->
+    <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
+    <!-- Wakelock pra extended runtime durante run (paralelo do
+         WKExtendedRuntimeSession do watchOS). -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- Foreground service de tipo "health" pra manter o app ativo durante a
+         corrida com tela apagada — equivalente do extended runtime no watchOS. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_HEALTH" />
+
+    <application
+        android:label="@string/app_name"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:theme="@android:style/Theme.DeviceDefault"
+        android:allowBackup="false"
+        tools:targetApi="30">
+
+        <!-- Standalone marker: Wear app NÃO depende do phone pra rodar
+             (mesma stance do Apple Watch app — abre direto sem o iPhone). -->
+        <meta-data
+            android:name="com.google.android.wearable.standalone"
+            android:value="true" />
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.DeviceDefault">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- WearableListenerService recebe MessageClient / DataClient pushes
+             do phone (start/stop workout + state context). Equivalente do
+             SessionDelegate iOS recebendo WCSession.didReceive*.
+
+             Filtros pelas paths que nós definimos: /runnin/* — qualquer push
+             do phone com essa raíz é roteado pra cá. -->
+        <service
+            android:name=".bridge.PhoneListenerService"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.google.android.gms.wearable.MESSAGE_RECEIVED" />
+                <data android:scheme="wear" android:host="*"
+                      android:pathPrefix="/runnin/" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="com.google.android.gms.wearable.DATA_CHANGED" />
+                <data android:scheme="wear" android:host="*"
+                      android:pathPrefix="/runnin/" />
+            </intent-filter>
+        </service>
+
+        <!-- Foreground service de tipo health — segura a app rodando durante
+             a run mesmo com tela apagada. ExerciseClient sozinho cobre a
+             coleta de samples, mas o dispatch da app (timers, Compose
+             recomposition) precisa do FG service pra continuar. -->
+        <service
+            android:name=".workout.WorkoutForegroundService"
+            android:foregroundServiceType="health"
+            android:exported="false" />
+    </application>
+</manifest>

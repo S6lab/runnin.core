@@ -8,6 +8,22 @@ import { logger } from '@shared/logger/logger';
 
 const PORT = Number(process.env.PORT ?? 8080);
 
+// Rastro estruturado pra crashes de processo (espelho do runnin-api):
+// unhandled em sessão WS/Gemini derrubava o container sem log indexável.
+process.on('unhandledRejection', (reason) => {
+  logger.error('process.unhandled_rejection', {
+    reason: reason instanceof Error ? reason.message : String(reason),
+    stack: reason instanceof Error ? reason.stack : undefined,
+  });
+});
+process.on('uncaughtException', (err) => {
+  logger.error('process.uncaught_exception', {
+    err: err.message,
+    stack: err.stack,
+  });
+  process.exit(1);
+});
+
 // Inicializa Firebase antes de subir o servidor (verificação de ID tokens +
 // Firestore do serviço: app_config/prompts, llm_usage, live_sessions).
 getFirebaseApp();

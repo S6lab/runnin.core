@@ -6,6 +6,9 @@
 **/.gradle/
 **/DerivedData/
 
+# APK output folders (local manual-upload bundles)
+builds-*/
+
 # Dependencies
 **/node_modules/
 **/.pub-cache/

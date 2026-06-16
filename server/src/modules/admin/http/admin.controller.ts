@@ -981,9 +981,21 @@ export async function postDevLogin(req: Request, res: Response, next: NextFuncti
 
 // === Admin: LLM usage / token tracking ===
 import { GetLlmUsageUseCase } from '../use-cases/get-llm-usage.use-case';
+import { GetTechMetricsUseCase } from '../use-cases/get-tech-metrics.use-case';
 import { LLM_PRICING_USD_PER_1M } from '@shared/infra/llm/llm-pricing';
 
 const _usageUC = new GetLlmUsageUseCase();
+const _techMetricsUC = new GetTechMetricsUseCase();
+
+/** GET /admin/metrics/tech — aba TECH: saúde dos serviços + erros 24h/7d
+ *  (system/errors/daily) + custo LLM hoje/7d. */
+export async function getTechMetrics(_req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    res.json(await _techMetricsUC.execute());
+  } catch (err) {
+    next(err);
+  }
+}
 
 function _resolveRange(req: Request): { from: string; to: string } | null {
   const from = (req.query['from'] as string) ?? '';

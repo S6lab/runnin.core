@@ -509,6 +509,8 @@ class _DrivePanel extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 24),
       child: Column(
         children: [
+          _TechMetricsEntry(canRead: session.canRead),
+          const SizedBox(height: 8),
           _CoachAiConsoleEntry(canRead: session.canRead),
           const SizedBox(height: 8),
           _PromptsConsoleEntry(canRead: session.canRead),
@@ -1108,6 +1110,26 @@ class _CoachRuntimeEntry extends StatelessWidget {
         subtitle: const Text('Distância entre cues, cooldowns, rotação Live, reconnect cap — parametrizar sem deploy'),
         trailing: const Icon(Icons.chevron_right),
         onTap: () => GoRouter.of(context).push('/admin/coach-runtime'),
+      ),
+    );
+  }
+}
+
+class _TechMetricsEntry extends StatelessWidget {
+  final bool canRead;
+  const _TechMetricsEntry({required this.canRead});
+
+  @override
+  Widget build(BuildContext context) {
+    if (!canRead) return const SizedBox.shrink();
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 0, vertical: 0),
+      child: ListTile(
+        leading: const Icon(Icons.monitor_heart_outlined),
+        title: const Text('TECH · Saúde & Custos'),
+        subtitle: const Text('Healthz dos serviços, erros 24h/7d, custo LLM do dia'),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => GoRouter.of(context).push('/admin/tech'),
       ),
     );
   }
