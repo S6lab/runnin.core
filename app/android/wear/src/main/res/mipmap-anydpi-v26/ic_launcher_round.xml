@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Wear OS faz mask circular automaticamente em adaptive-icon, mas pra
+     dispositivos mais antigos (Wear OS 2.x) o launcher procura ic_launcher_round
+     separadamente. Aponta pro mesmo asset adaptive — a mask circular do
+     próprio launcher cuida do recorte. -->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@color/ic_launcher_background"/>
+    <foreground>
+        <inset
+            android:drawable="@drawable/ic_launcher_foreground"
+            android:inset="16%" />
+    </foreground>
+</adaptive-icon>

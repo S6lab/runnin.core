@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- Capabilities anunciadas pra Wearable Data Layer. O phone usa
+         `CapabilityClient.getCapability("runnin_wear_app", FILTER_REACHABLE)`
+         pra detectar se o app Wear OS está instalado e reachable no Watch
+         pareado. Sem essa declaração, `appInstalled=false` sempre — phone
+         não sabe que pode mandar startWorkout/stopWorkout.
+
+         Equivalente Android do `WCSession.isWatchAppInstalled` do iOS.
+
+         Convenção: snake_case, unique no namespace do app. Phone busca por
+         essa mesma string. -->
+    <string-array name="android_wear_capabilities" translatable="false">
+        <item>runnin_wear_app</item>
+    </string-array>
+</resources>

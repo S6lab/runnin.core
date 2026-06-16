@@ -74,4 +74,7 @@ dependencies {
     // plugin — fallback silencioso em devices antigos.
     implementation("androidx.health:health-services-client:1.1.0-rc02")
     implementation("com.google.guava:guava:33.4.0-android")
+    // Wearable Data Layer — comunicação com o app Wear OS (Galaxy Watch).
+    // Equivalente Android do WatchConnectivity (WCSession) do iOS.
+    implementation("com.google.android.gms:play-services-wearable:19.0.0")
 }

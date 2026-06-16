@@ -75,6 +75,16 @@ class WorkoutRealtimePlugin : FlutterPlugin, MethodCallHandler, EventChannel.Str
     eventChannel = EventChannel(binding.binaryMessenger, "runnin/workout_realtime/events")
     eventChannel?.setStreamHandler(this)
     measureClient = HealthServices.getClient(binding.applicationContext).measureClient
+
+    // Wearable Data Layer bridge — recebe MessageClient/DataClient pushes do
+    // app Wear OS (Galaxy Watch). Listener service no Manifest acorda
+    // automaticamente quando o Watch publica. Emite no MESMO eventSink (com
+    // formato `bpm`/`watch_command`/`watch_status` que Flutter já parseia).
+    WearableBridge.attach(binding.applicationContext)
+    WearableBridge.eventEmitter = { payload ->
+      handler.post { eventSink?.success(payload) }
+    }
+    WearableBridge.emitWatchStatus()
   }
 
   override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
@@ -84,6 +94,7 @@ class WorkoutRealtimePlugin : FlutterPlugin, MethodCallHandler, EventChannel.Str
     eventChannel?.setStreamHandler(null)
     eventChannel = null
     measureClient = null
+    WearableBridge.eventEmitter = null
   }
 
   override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
@@ -97,10 +108,33 @@ class WorkoutRealtimePlugin : FlutterPlugin, MethodCallHandler, EventChannel.Str
   override fun onMethodCall(call: MethodCall, result: Result) {
     when (call.method) {
       "checkAvailability" -> checkAvailability(result)
-      "start" -> startMeasure(result)
+      "start" -> {
+        startMeasure(result)
+        // Manda o Watch ligar a ExerciseSession (paralelo do iOS
+        // notifyWatch("startWorkout") em WorkoutRealtimePlugin.swift L359).
+        WearableBridge.sendStartWorkout()
+      }
       "pause" -> pauseMeasure(result)
       "resume" -> resumeMeasure(result)
-      "stop" -> stopMeasure(result)
+      "stop" -> {
+        stopMeasure(result)
+        WearableBridge.sendStopWorkout()
+      }
+      "pushRunState" -> {
+        @Suppress("UNCHECKED_CAST")
+        val args = call.arguments as? Map<String, Any?> ?: emptyMap()
+        WearableBridge.pushRunState(args)
+        result.success(null)
+      }
+      "refreshWatchStatus" -> {
+        WearableBridge.emitWatchStatus()
+        result.success(null)
+      }
+      "getLastCachedBpm", "consumePendingWatchStart", "clearPendingWatchStart" -> {
+        // Não há cache nativo no Android phone — sem suspend de Dart engine
+        // como no iOS background. Retorna null pra Flutter usar fallback.
+        result.success(null)
+      }
       else -> result.notImplemented()
     }
   }

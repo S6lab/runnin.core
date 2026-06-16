@@ -108,10 +108,29 @@ Faltam as configurações no Apple Developer Console e Firebase.
 ### Wear OS BPM
 - [WorkoutRealtimePlugin.kt](app/src/main/kotlin/com/s6lab/runnin/WorkoutRealtimePlugin.kt)
   usa `androidx.health.services.client.MeasureClient` que requer Wear OS
-  pareado + capability `HEART_RATE_BPM`.
+  pareado + capability `HEART_RATE_BPM`. Esse é o caminho legado — funciona
+  sem nosso app no Watch.
 - Em devices Android sem Wear OS, `checkAvailability` retorna `no_capability`
   e BPM live fica null (UI mostra "—"). Comportamento esperado mas pode
   surfacing pra um banner explicativo igual ao no_hr_source do iOS.
+
+### Galaxy Watch / Pixel Watch — app Wear OS standalone (1.0.4+84)
+- Módulo `wear/` (Compose + Wear Material2). Paridade com Apple Watch:
+  4 telas (PreRun/Briefing/ActiveRun/RunCompleted), SlideToConfirm,
+  RunninLogo, splits, orphan overlay.
+- Comunica com phone via Wearable Data Layer (MessageClient + DataClient),
+  equivalente do WCSession iOS. Paths em [WearPaths.kt](app/src/main/kotlin/com/s6lab/runnin/WearPaths.kt).
+- BPM live: `ExerciseClient` (Health Services) — equivalente do
+  HKWorkoutSession do iOS. Same restart-on-stale logic.
+- APK release em `app/build/wear/outputs/apk/release/wear-release.apk`,
+  assinado com a mesma keystore do phone (obrigatório pro pareamento).
+- Distribuição: por enquanto upload manual no Play Console como app Wear OS
+  standalone separado (mesmo `applicationId=com.s6lab.runnin`).
+- Pendências de validação em device real (Galaxy Watch 4+):
+  - permissão BODY_SENSORS prompt UX
+  - ExerciseClient fallback de dataTypes não-suportados
+  - SpO2: hoje skip (Health Services 1.1 não expõe em ExerciseUpdate; precisa
+    de `PassiveMonitoringClient` separado — TODO)
 
 ### Crashlytics dSYM equivalente
 - Android: o NDK upload pra Crashlytics já está configurado via
