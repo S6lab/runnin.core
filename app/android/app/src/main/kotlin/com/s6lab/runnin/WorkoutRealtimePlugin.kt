@@ -1,5 +1,9 @@
 package com.s6lab.runnin
 
+import android.content.ActivityNotFoundException
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
@@ -47,6 +51,7 @@ class WorkoutRealtimePlugin : FlutterPlugin, MethodCallHandler, EventChannel.Str
   private var measureClient: MeasureClient? = null
   private var registered = false
   private val handler = Handler(Looper.getMainLooper())
+  private var appContext: Context? = null
 
   private val callback = object : MeasureCallback {
     // Em 1.1.0-rc02 a assinatura mudou de DataType<*, *> pra DeltaDataType<*, *>.
@@ -74,6 +79,7 @@ class WorkoutRealtimePlugin : FlutterPlugin, MethodCallHandler, EventChannel.Str
     methodChannel?.setMethodCallHandler(this)
     eventChannel = EventChannel(binding.binaryMessenger, "runnin/workout_realtime/events")
     eventChannel?.setStreamHandler(this)
+    appContext = binding.applicationContext
     measureClient = HealthServices.getClient(binding.applicationContext).measureClient
 
     // Wearable Data Layer bridge — recebe MessageClient/DataClient pushes do
@@ -134,6 +140,14 @@ class WorkoutRealtimePlugin : FlutterPlugin, MethodCallHandler, EventChannel.Str
         // Não há cache nativo no Android phone — sem suspend de Dart engine
         // como no iOS background. Retorna null pra Flutter usar fallback.
         result.success(null)
+      }
+      "openHealthConnectSettings" -> {
+        // Deeplink pra tela de permissões do Health Connect do nosso app.
+        // Tenta primeiro o intent novo (Android 14+ HC builtin), depois o
+        // legacy (HC instalado via Play Store), e por fim Play Store no app
+        // do HC pra user instalar/atualizar. Retorna true se conseguiu abrir
+        // algum dos intents.
+        result.success(openHealthConnectSettings())
       }
       else -> result.notImplemented()
     }
@@ -232,6 +246,41 @@ class WorkoutRealtimePlugin : FlutterPlugin, MethodCallHandler, EventChannel.Str
       // best-effort
     }
     registered = false
+  }
+
+  /**
+   * Abre a tela de gerenciamento de permissões do Health Connect com o app
+   * Runnin pré-selecionado. Tenta 3 caminhos em sequência:
+   *   1. `androidx.health.ACTION_HEALTH_CONNECT_SETTINGS` — Health Connect
+   *      instalado como app standalone (Wear OS 3+, phones com HC store).
+   *   2. `android.health.connect.action.HEALTH_HOME_SETTINGS` — HC builtin
+   *      no Android 14+ (system-integrated).
+   *   3. Play Store no listing do HC — fallback se HC nem está instalado.
+   *
+   * Retorna `true` no primeiro que conseguir lançar a Activity, `false` se
+   * todos falharem. Caller (Flutter) usa o bool pra decidir se deve mostrar
+   * snack "Erro ao abrir Health Connect".
+   */
+  private fun openHealthConnectSettings(): Boolean {
+    val ctx = appContext ?: return false
+    val intents = listOf(
+      Intent("androidx.health.ACTION_HEALTH_CONNECT_SETTINGS"),
+      Intent("android.health.connect.action.HEALTH_HOME_SETTINGS"),
+      Intent(Intent.ACTION_VIEW,
+        Uri.parse("market://details?id=com.google.android.apps.healthdata")),
+    )
+    for (i in intents) {
+      i.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+      try {
+        ctx.startActivity(i)
+        return true
+      } catch (_: ActivityNotFoundException) {
+        // tenta próximo
+      } catch (_: Exception) {
+        // tenta próximo
+      }
+    }
+    return false
   }
 
   private fun emit(payload: Map<String, Any?>) {

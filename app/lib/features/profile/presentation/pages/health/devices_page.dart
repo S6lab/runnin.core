@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show MethodChannel;
 import 'package:runnin/core/analytics/analytics_service.dart';
 import 'package:runnin/core/theme/app_palette.dart';
 import 'package:runnin/core/theme/design_system_tokens.dart';
@@ -355,9 +356,13 @@ class _HealthDevicesPageState extends State<HealthDevicesPage> {
 
   void _showPermissionDeniedDialog(BuildContext context, _ProviderSpec p) {
     final isApple = p.name == 'Apple Health';
-    final settingsPath = isApple
-        ? 'Ajustes do iPhone > Privacidade e Segurança > Saúde > runnin'
-        : 'Configurações do Android > Apps > Health Connect > runnin';
+    final body = isApple
+        ? 'Pra ler seus dados do ${p.name}, libere o acesso em '
+            'Ajustes > Privacidade e Segurança > Saúde > runnin. '
+            'Depois toque em "Tentar de novo".'
+        : 'Pra ler seus dados do ${p.name}, abra o app Health Connect '
+            'e libere as permissões pro runnin. Você pode tentar de novo '
+            'aqui ou abrir o Health Connect direto pelos botões abaixo.';
     showDialog(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -370,8 +375,7 @@ class _HealthDevicesPageState extends State<HealthDevicesPage> {
           ),
         ),
         content: Text(
-          'Pra ler seus dados de ${p.name}, libere o acesso em:\n\n$settingsPath\n\n'
-          'Depois volte aqui e tente conectar de novo.',
+          body,
           style: context.runninType.bodySm.copyWith(
             height: 1.5,
             color: FigmaColors.textSecondary,
@@ -381,15 +385,75 @@ class _HealthDevicesPageState extends State<HealthDevicesPage> {
           TextButton(
             onPressed: () => Navigator.pop(dialogContext),
             child: Text(
-              'OK',
+              'Cancelar',
+              style: context.runninType.labelMd.copyWith(
+                color: FigmaColors.textSecondary,
+              ),
+            ),
+          ),
+          // Android: botão que pula direto pra tela de permissões do
+          // Health Connect via deeplink nativo (WorkoutRealtimePlugin.kt).
+          // iOS pula esse botão — Apple não tem deeplink direto pra Health.
+          if (!isApple)
+            TextButton(
+              onPressed: () async {
+                Navigator.pop(dialogContext);
+                final opened = await _openHealthConnectSettings();
+                if (!context.mounted) return;
+                if (!opened) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'Não foi possível abrir o Health Connect. '
+                        'Instale ou atualize pela Play Store.',
+                      ),
+                      duration: Duration(seconds: 4),
+                    ),
+                  );
+                }
+              },
+              child: Text(
+                'Abrir Health Connect',
+                style: context.runninType.labelMd.copyWith(
+                  color: context.runninPalette.primary,
+                ),
+              ),
+            ),
+          // Re-dispara o flow de request (chama health package de novo).
+          // Útil quando o user negou no popup e quer reabrir o dialog
+          // nativo sem ir nas configurações.
+          TextButton(
+            onPressed: () {
+              Navigator.pop(dialogContext);
+              _connectViaHealthBridge(context, p);
+            },
+            child: Text(
+              'Tentar de novo',
               style: context.runninType.labelMd.copyWith(
                 color: context.runninPalette.primary,
+                fontWeight: FontWeight.w600,
               ),
             ),
           ),
         ],
       ),
     );
+  }
+
+  /// Bridge pro method nativo Android `openHealthConnectSettings` no
+  /// [WorkoutRealtimePlugin.kt]. Tenta deeplink HC instalado, depois HC
+  /// builtin (Android 14+), depois Play Store. Retorna `true` se abriu
+  /// qualquer um.
+  static const _nativeChannel = MethodChannel('runnin/workout_realtime');
+  Future<bool> _openHealthConnectSettings() async {
+    if (!Platform.isAndroid) return false;
+    try {
+      final result =
+          await _nativeChannel.invokeMethod<bool>('openHealthConnectSettings');
+      return result == true;
+    } catch (_) {
+      return false;
+    }
   }
 
   void _showProviderDialog(BuildContext context, _ProviderSpec p) {

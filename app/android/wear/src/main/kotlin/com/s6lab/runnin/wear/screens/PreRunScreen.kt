@@ -50,9 +50,12 @@ fun PreRunScreen() {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Row(Modifier.fillMaxWidth().padding(top = 4.dp)) {
+        // Logo centralizada — em display redondo top-LEFT é cortado.
+        androidx.compose.foundation.layout.Box(
+            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+            contentAlignment = androidx.compose.ui.Alignment.Center,
+        ) {
             RunninLogo()
-            Spacer(Modifier.weight(1f))
         }
 
         Text(

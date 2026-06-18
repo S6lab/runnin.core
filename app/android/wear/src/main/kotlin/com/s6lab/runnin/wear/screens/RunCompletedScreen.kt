@@ -49,9 +49,12 @@ fun RunCompletedScreen() {
             .padding(horizontal = 6.dp, vertical = 6.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Row(Modifier.fillMaxWidth().padding(top = 2.dp)) {
+        // Logo centralizada — em display redondo top-LEFT é cortado.
+        androidx.compose.foundation.layout.Box(
+            modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
+            contentAlignment = androidx.compose.ui.Alignment.Center,
+        ) {
             RunninLogo()
-            Spacer(Modifier.weight(1f))
         }
         Text(
             text = "CORRIDA CONCLUÍDA",

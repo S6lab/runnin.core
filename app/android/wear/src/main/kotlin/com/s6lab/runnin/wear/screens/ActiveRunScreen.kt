@@ -263,19 +263,14 @@ private fun SplitRow(split: WatchSplit) {
 
 @Composable
 private fun Header() {
-    val state = WatchRunState.shared
-    Row(
+    // Logo centralizada — display redondo corta top-left.
+    // runType movido pra cá vai cortar no canto top-right; omitido (info já
+    // foi apresentada no Briefing antes de iniciar).
+    Box(
         modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
+        contentAlignment = Alignment.Center,
     ) {
         RunninLogo()
-        Spacer(Modifier.weight(1f))
-        Text(
-            text = state.runType.uppercase(),
-            color = Color.White.copy(alpha = 0.5f),
-            style = scaledFont(8f, FontWeight.Medium),
-            maxLines = 1,
-        )
     }
 }
 
