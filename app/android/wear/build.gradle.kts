@@ -23,7 +23,11 @@ android {
         // health-services 1.1.x já requer 30 também — alinhado.
         minSdk = 30
         targetSdk = 34
-        versionCode = 1
+        // Track Wear OS dedicada tem série de versionCode INDEPENDENTE do
+        // phone. Code 1 queimou em tentativa anterior de upload (Play Console
+        // marca como usado mesmo se a release foi rejeitada). Bumpando pra 10
+        // pra dar folga — próximas releases incrementam +1.
+        versionCode = 10
         versionName = "1.0.0"
     }
 
