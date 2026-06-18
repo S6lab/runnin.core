@@ -25,10 +25,10 @@ android {
         targetSdk = 34
         // Track Wear OS dedicada tem série de versionCode INDEPENDENTE do
         // phone. Code 1 queimou em tentativa anterior de upload (Play Console
-        // marca como usado mesmo se a release foi rejeitada). Bumpando pra 10
-        // pra dar folga — próximas releases incrementam +1.
-        versionCode = 10
-        versionName = "1.0.0"
+        // marca como usado mesmo se a release foi rejeitada). Bumpando pra 11
+        // — fix de logo cortada em display redondo + safe padding 14→20dp.
+        versionCode = 11
+        versionName = "1.0.1"
     }
 
     compileOptions {

@@ -115,13 +115,12 @@ private fun WearApp() {
     }
 
     // Safe area pro display redondo do Galaxy Watch / Pixel Watch.
-    // Em tela circular, o inscribed-square tem lado ~70% do diâmetro — os
-    // 14dp de padding garantem que conteúdo (texto da RunninLogo, chips de
-    // run_type, page indicator) não fica cortado nos cantos do círculo.
-    // Em tela quadrada (raro em Wear OS moderno) reduz o útil em 28dp total
-    // mas é um trade-off aceitável.
+    // 14dp não foi suficiente em device real (logo cortou). 20dp dá cobertura
+    // mínima sem matar área útil. CONTEÚDO TOP/BOTTOM precisa estar
+    // HORIZONTALMENTE CENTRALIZADO além disso (cada screen já ajustada),
+    // senão a quina top-left/top-right corta apesar do padding.
     val isRound = LocalConfiguration.current.isScreenRound
-    val safePadding = if (isRound) 14.dp else 4.dp
+    val safePadding = if (isRound) 20.dp else 4.dp
     androidx.compose.foundation.layout.Box(
         modifier = Modifier
             .fillMaxSize()
