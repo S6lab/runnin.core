@@ -8,6 +8,7 @@ import {
   postInvalidateCache,
   getUsersList,
   patchUserPlan,
+  postCreateUser,
   postSeedTester,
   postRagReindex,
   postRagPurge,
@@ -69,6 +70,7 @@ adminRouter.post('/prompts/preview', postPromptPreview);
 adminRouter.get('/prompts/defaults', getPromptDefaults);
 adminRouter.post('/prompts/invalidate-cache', postInvalidateCache);
 adminRouter.get('/users', getUsersList);
+adminRouter.post('/users', postCreateUser);
 adminRouter.patch('/users/:userId/plan', patchUserPlan);
 adminRouter.post('/users/:userId/reset', postUserReset);
 adminRouter.get('/rag/status', getRagStatus);

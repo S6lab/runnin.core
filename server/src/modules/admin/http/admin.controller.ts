@@ -181,6 +181,7 @@ import { FirestoreUserRepository } from '@modules/users/infra/firestore-user.rep
 import { getAuth, getFirestore, getStorageBucket } from '@shared/infra/firebase/firebase.client';
 import { logger } from '@shared/logger/logger';
 import { SeedTesterUseCase } from '../use-cases/seed-tester.use-case';
+import { CreateUserUseCase, CreateUserSchema } from '../use-cases/create-user.use-case';
 import {
   invalidateRunningKnowledgeStorageCache,
   getRunningKnowledgeCorpusWithStorage,
@@ -188,6 +189,7 @@ import {
 
 const userRepo = new FirestoreUserRepository();
 const seedTester = new SeedTesterUseCase();
+const createUserUC = new CreateUserUseCase();
 
 const SeedTesterSchema = z.object({
   phone: z.string().optional(),
@@ -801,6 +803,39 @@ export async function patchUserPlan(req: Request, res: Response, next: NextFunct
     await userRepo.upsert({ ...existing, subscriptionPlanId: plan });
     res.json({ ok: true, userId, plan });
   } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * POST /admin/users — cria user em Firebase Auth + Firestore com plano
+ * escolhido. Diferente do tester/seed: não seta claim admin nem biometrics;
+ * é a rota de provisionamento "produtivo" usada pelo painel admin.
+ *
+ * Body: { email?, phone?, name?, plan, password? }
+ * Erros:
+ *  - 400 zod: validação (email inválido, phone fora de E.164, nenhum dos dois)
+ *  - 409 firebase: auth/email-already-exists, auth/phone-number-already-exists
+ *  - 400 firebase: auth/invalid-phone-number, auth/invalid-email
+ */
+export async function postCreateUser(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const input = CreateUserSchema.parse(req.body);
+    const result = await createUserUC.execute(input);
+    res.status(201).json(result);
+  } catch (err) {
+    const code = (err as { code?: string })?.code;
+    if (typeof code === 'string' && code.startsWith('auth/')) {
+      const conflict =
+        code === 'auth/email-already-exists' ||
+        code === 'auth/phone-number-already-exists' ||
+        code === 'auth/uid-already-exists';
+      res.status(conflict ? 409 : 400).json({
+        error: code,
+        message: (err as Error).message,
+      });
+      return;
+    }
     next(err);
   }
 }
