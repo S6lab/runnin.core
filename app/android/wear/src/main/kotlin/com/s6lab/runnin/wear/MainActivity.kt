@@ -1,8 +1,10 @@
 package com.s6lab.runnin.wear
 
 import android.Manifest
+import android.app.Activity
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -10,12 +12,14 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.s6lab.runnin.wear.bridge.WearableMessenger
@@ -112,6 +116,27 @@ private fun WearApp() {
                     workout.stop()
                 }
             }
+    }
+
+    // KEEP_SCREEN_ON enquanto a run está ativa/pausada. WorkoutForegroundService
+    // mantém o PROCESSO vivo, mas Wear OS desliga a tela em ~5s sem interação
+    // e ao tocar volta pro watch face em vez da Activity — usuário relata que
+    // "app fica minimizando" durante a corrida. Flag aplicada via DisposableEffect
+    // pra ligar só durante active/paused e desligar no completed/idle (preserva
+    // bateria no resto do tempo). Paridade com `WKExtendedRuntimeSession` do
+    // watchOS, que já mantém o display ligado durante a session.
+    val view = LocalView.current
+    val keepScreenOn = status == WatchStatus.active || status == WatchStatus.paused
+    DisposableEffect(keepScreenOn) {
+        val window = (view.context as? Activity)?.window
+        if (keepScreenOn) {
+            window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        } else {
+            window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+        onDispose {
+            window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
     }
 
     // Safe area pro display redondo do Galaxy Watch / Pixel Watch.

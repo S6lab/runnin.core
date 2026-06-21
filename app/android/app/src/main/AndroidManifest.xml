@@ -81,6 +81,25 @@
                 <action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE" />
             </intent-filter>
         </activity>
+
+        <!-- Health Connect built-in (Android 14+): exige um receiver pra
+             VIEW_PERMISSION_USAGE + category HEALTH_PERMISSIONS. Sem isso,
+             o Health Connect classifica o app como "Atualização necessária"
+             na lista de apps de saúde e toque leva direto pra Play Store
+             em vez de abrir as permissões. activity-alias aponta pra
+             MainActivity (que ja tem o handler de ACTION_SHOW_PERMISSIONS_
+             RATIONALE) e exige a permissão START_VIEW_PERMISSION_USAGE
+             como o sistema requer. -->
+        <activity-alias
+            android:name="ViewPermissionUsageActivity"
+            android:exported="true"
+            android:targetActivity=".MainActivity"
+            android:permission="android.permission.START_VIEW_PERMISSION_USAGE">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW_PERMISSION_USAGE" />
+                <category android:name="android.intent.category.HEALTH_PERMISSIONS" />
+            </intent-filter>
+        </activity-alias>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

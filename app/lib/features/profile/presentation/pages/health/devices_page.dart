@@ -356,17 +356,24 @@ class _HealthDevicesPageState extends State<HealthDevicesPage> {
 
   void _showPermissionDeniedDialog(BuildContext context, _ProviderSpec p) {
     final isApple = p.name == 'Apple Health';
+    // No Android, Health Connect tem rate-limit: depois de 2 negações o
+    // requestAuthorization vira no-op (retorna false sem abrir sheet).
+    // Por isso o caminho real é o user ir nas Configurações do Health
+    // Connect e marcar manualmente — "Tentar de novo" só re-disparava
+    // o mesmo dialog em loop. Em iOS, o caminho é Ajustes > Saúde.
     final body = isApple
         ? 'Pra ler seus dados do ${p.name}, libere o acesso em '
             'Ajustes > Privacidade e Segurança > Saúde > runnin. '
-            'Depois toque em "Tentar de novo".'
-        : 'Pra ler seus dados do ${p.name}, abra o app Health Connect '
-            'e libere as permissões pro runnin. Você pode tentar de novo '
-            'aqui ou abrir o Health Connect direto pelos botões abaixo.';
+            'Depois reabra esta tela.'
+        : 'Pra ler seus dados do ${p.name}, abra o Health Connect '
+            'e libere as permissões pro runnin. Depois reabra esta tela.';
     showDialog(
       context: context,
+      // bgBase é sólido (0xFF050510). surfaceCard antigo era 3% opacidade
+      // branca — sobre o backdrop escuro o dialog ficava quase invisível.
+      barrierColor: Colors.black.withValues(alpha: 0.72),
       builder: (dialogContext) => AlertDialog(
-        backgroundColor: FigmaColors.surfaceCard,
+        backgroundColor: FigmaColors.bgBase,
         title: Text(
           'Permissão negada',
           style: context.runninType.bodyMd.copyWith(
@@ -391,9 +398,9 @@ class _HealthDevicesPageState extends State<HealthDevicesPage> {
               ),
             ),
           ),
-          // Android: botão que pula direto pra tela de permissões do
-          // Health Connect via deeplink nativo (WorkoutRealtimePlugin.kt).
-          // iOS pula esse botão — Apple não tem deeplink direto pra Health.
+          // Android: deeplink direto pra tela de permissões do Health Connect
+          // via WorkoutRealtimePlugin.kt. iOS não tem deeplink — usuário
+          // segue a instrução do body manualmente.
           if (!isApple)
             TextButton(
               onPressed: () async {
@@ -416,25 +423,10 @@ class _HealthDevicesPageState extends State<HealthDevicesPage> {
                 'Abrir Health Connect',
                 style: context.runninType.labelMd.copyWith(
                   color: context.runninPalette.primary,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ),
-          // Re-dispara o flow de request (chama health package de novo).
-          // Útil quando o user negou no popup e quer reabrir o dialog
-          // nativo sem ir nas configurações.
-          TextButton(
-            onPressed: () {
-              Navigator.pop(dialogContext);
-              _connectViaHealthBridge(context, p);
-            },
-            child: Text(
-              'Tentar de novo',
-              style: context.runninType.labelMd.copyWith(
-                color: context.runninPalette.primary,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
         ],
       ),
     );

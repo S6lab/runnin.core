@@ -22,6 +22,14 @@
           }
         },
         {
+          "client_id": "506126899076-a8elreq9t1luv6ajq223gpo1jftbmpj3.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.s6lab.runnin",
+            "certificate_hash": "c230aa8eb4f5a2df00b186e6a0f55441701695f2"
+          }
+        },
+        {
           "client_id": "506126899076-7k8v4rdhrbkgovm28gllkjdlofii4phq.apps.googleusercontent.com",
           "client_type": 3
         }
