@@ -1,5 +1,5 @@
 import { getFirestore } from '@shared/infra/firebase/firebase.client';
-import { Plan } from '../domain/plan.entity';
+import { Plan, PlanRevision, PlanWeek } from '../domain/plan.entity';
 import { PlanRepository } from '../domain/plan.repository';
 
 export class FirestorePlanRepository implements PlanRepository {
@@ -45,5 +45,30 @@ export class FirestorePlanRepository implements PlanRepository {
 
   async update(planId: string, userId: string, data: Partial<Plan>): Promise<void> {
     await this.col(userId).doc(planId).update(data as Record<string, unknown>);
+  }
+
+  async appendWeeklyRevisionLog(
+    planId: string,
+    userId: string,
+    weekNumber: number,
+    payload: { logEntry: PlanRevision; adjustedWeeks: PlanWeek[]; updatedAt: string },
+  ): Promise<{ appended: boolean }> {
+    const db = getFirestore();
+    const ref = this.col(userId).doc(planId);
+    return db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      if (!snap.exists) return { appended: false };
+      const data = snap.data() as Partial<Plan>;
+      const current = (data.revisions ?? []) as PlanRevision[];
+      if (current.some((r) => r.weekNumber === weekNumber)) {
+        return { appended: false };
+      }
+      tx.update(ref, {
+        adjustedWeeks: payload.adjustedWeeks,
+        revisions: [...current, payload.logEntry],
+        updatedAt: payload.updatedAt,
+      });
+      return { appended: true };
+    });
   }
 }

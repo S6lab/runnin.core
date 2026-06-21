@@ -1,4 +1,3 @@
-import { v4 as uuid } from 'uuid';
 import { parseWeightKg } from '@modules/users/domain/user-metrics';
 import { PlanRepository } from '../domain/plan.repository';
 import { PlanRevision } from '../domain/plan-revision.entity';
@@ -37,7 +36,11 @@ import { logger } from '@shared/logger/logger';
  * Substitui o fluxo antigo de propose → user aceita → resolve. Não há mais
  * passo de aprovação manual: o plano se atualiza sozinho.
  *
- * Idempotência: se já existe revisão `applied` pra essa weekIndex, pula.
+ * Idempotência: id da revisão é determinístico (`${planId}_w${weekNumber}`)
+ * e o write usa Firestore `.create()`, que falha com ALREADY_EXISTS no
+ * segundo worker concorrente — blinda contra Cloud Scheduler retry e
+ * Cloud Tasks redelivery. O append em `plan.revisions[]` roda em transação
+ * que releia o array e dedupe por weekNumber (defense-in-depth).
  */
 export class ApplyWeeklyRevisionUseCase {
   constructor(
@@ -60,10 +63,17 @@ export class ApplyWeeklyRevisionUseCase {
     if (!plan) throw new NotFoundError('Plan');
     if (plan.status !== 'ready') throw new PlanNotReadyError();
 
-    // Idempotência: cron pode disparar duas vezes (retry, fan-out) — se já
-    // aplicou revisão pra essa semana, não roda análise de novo.
-    const existing = await this.revisionRepo.listByPlan(planId, userId);
-    if (existing.some((r) => r.weekIndex === weekNumber && r.status === 'applied')) {
+    // ID determinístico por (plano, semana) — `.create()` em saveIfAbsent
+    // falha com ALREADY_EXISTS no segundo write concorrente. Substitui o
+    // guard otimista "check-then-act" anterior, que duplicava sob race com
+    // o LLM no meio (Cloud Tasks at-least-once + cron retry).
+    const revisionId = `${planId}_w${weekNumber}`;
+
+    // Otimização: evita rodar LLM se a revisão dessa semana JÁ ficou pronta
+    // em execução anterior (cron rodado 2x sequencial no mesmo domingo).
+    // Não é o guard de correção — o guard atômico é o saveIfAbsent abaixo.
+    const earlyExisting = await this.revisionRepo.findById(revisionId, userId);
+    if (earlyExisting?.status === 'applied') {
       return { reason: 'already_applied' };
     }
 
@@ -128,7 +138,7 @@ export class ApplyWeeklyRevisionUseCase {
         });
 
     const revision: PlanRevision = {
-      id: uuid(),
+      id: revisionId,
       planId,
       userId,
       weekIndex: weekNumber,
@@ -141,7 +151,13 @@ export class ApplyWeeklyRevisionUseCase {
       createdAt: now,
       appliedAt: now,
     };
-    await this.revisionRepo.save(revision);
+    const { created } = await this.revisionRepo.saveIfAbsent(revision);
+    if (!created) {
+      // Worker concorrente venceu o race após o earlyExisting check. Bail
+      // sem tocar em plan.revisions[] / notificar — outro worker fará isso.
+      logger.info('weekly_revision.race_lost', { planId, userId, weekNumber, revisionId });
+      return { reason: 'already_applied' };
+    }
 
     const logEntry: PlanRevisionLog = {
       weekNumber,
@@ -159,11 +175,20 @@ export class ApplyWeeklyRevisionUseCase {
     // ATENÇÃO: NÃO mexer em `plan.weeks` — é a BASE IMUTÁVEL exibida em
     // "VER PLANO BASE". Salva o snapshot novo em `adjustedWeeks`, que é
     // o que as telas de treino vigente leem via `effectivePlanWeeks`.
-    await this.planRepo.update(planId, userId, {
+    //
+    // Defense-in-depth: a transação relê o plano e deduplica por weekNumber
+    // antes do append. Cobre o caso de o array já ter sido populado por outra
+    // origem (admin diagnose, migração) sem passar pela coleção PlanRevision.
+    const append = await this.planRepo.appendWeeklyRevisionLog(planId, userId, weekNumber, {
+      logEntry,
       adjustedWeeks: newAdjustedWeeks,
-      revisions: [...(plan.revisions ?? []), logEntry],
       updatedAt: now,
     });
+    if (!append.appended) {
+      logger.warn('weekly_revision.log_already_present', {
+        planId, userId, weekNumber, revisionId,
+      });
+    }
 
     if (cp) {
       await this.checkpointRepo.update(planId, weekNumber, userId, {

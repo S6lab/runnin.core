@@ -13,6 +13,24 @@ export class FirestorePlanRevisionRepository implements PlanRevisionRepository {
     return revision;
   }
 
+  async saveIfAbsent(revision: PlanRevision): Promise<{ created: boolean }> {
+    const { id, userId, ...data } = revision;
+    try {
+      await this.revisionsCol(userId).doc(id).create(data);
+      return { created: true };
+    } catch (err) {
+      // Firestore lança ALREADY_EXISTS (code 6 / "6 ALREADY_EXISTS") quando
+      // o doc já existe — sinal de que outro worker (cron retry, Cloud Task
+      // redelivery, race com path admin) já gravou. Bail silencioso.
+      const msg = err instanceof Error ? err.message : String(err);
+      const code = (err as { code?: number | string } | undefined)?.code;
+      if (code === 6 || code === 'already-exists' || msg.includes('ALREADY_EXISTS')) {
+        return { created: false };
+      }
+      throw err;
+    }
+  }
+
   async findById(id: string, userId: string): Promise<PlanRevision | null> {
     const d = await this.revisionsCol(userId).doc(id).get();
     if (!d.exists) return null;
