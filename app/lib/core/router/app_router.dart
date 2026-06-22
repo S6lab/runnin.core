@@ -5,14 +5,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:runnin/core/logger/logger.dart';
 import 'package:runnin/core/router/router_fallback_page.dart';
-import 'package:runnin/features/admin/presentation/pages/admin_page.dart';
-import 'package:runnin/features/admin/presentation/pages/prompts_admin_page.dart';
-import 'package:runnin/features/admin/presentation/pages/coach_ai_admin_page.dart';
-import 'package:runnin/features/admin/presentation/pages/plan_rules_admin_page.dart';
-import 'package:runnin/features/admin/presentation/pages/roteiro_templates_admin_page.dart';
-import 'package:runnin/features/admin/presentation/pages/admin_tech_page.dart';
-import 'package:runnin/features/admin/presentation/pages/admin_tokens_page.dart';
-import 'package:runnin/features/admin/presentation/pages/admin_coach_runtime_page.dart';
 import 'package:runnin/features/intro/presentation/pages/intro_page.dart';
 import 'package:runnin/features/paywall/presentation/pages/paywall_page.dart';
 import 'package:runnin/features/subscriptions/presentation/pages/benefit_activation_page.dart';
@@ -119,12 +111,7 @@ final appRouter = GoRouter(
     // pra empurrar pro /login.
     final loggedIn = user != null && !user.isAnonymous;
     final loc = state.matchedLocation;
-    final path = state.uri.path;
     final onboardingStatus = onboardingCacheStatus();
-
-    if (loc == '/admin' || path == '/admin' || path.startsWith('/admin/')) {
-      return null;
-    }
 
     // Public routes (no auth needed). SplashPage advances itself.
     const publicRoutes = {'/splash', '/login'};
@@ -188,14 +175,6 @@ final appRouter = GoRouter(
   },
   routes: [
     GoRoute(path: '/splash', builder: (_, _) => const SplashPage()),
-    GoRoute(path: '/admin', builder: (_, _) => const AdminPage()),
-    GoRoute(path: '/admin/prompts', builder: (_, _) => const PromptsAdminPage()),
-    GoRoute(path: '/admin/coach-ai', builder: (_, _) => const CoachAiAdminPage()),
-    GoRoute(path: '/admin/plan-rules', builder: (_, _) => const PlanRulesAdminPage()),
-    GoRoute(path: '/admin/roteiro-templates', builder: (_, _) => const RoteiroTemplatesAdminPage()),
-    GoRoute(path: '/admin/tokens', builder: (_, _) => const AdminTokensPage()),
-    GoRoute(path: '/admin/tech', builder: (_, _) => const AdminTechPage()),
-    GoRoute(path: '/admin/coach-runtime', builder: (_, _) => const AdminCoachRuntimePage()),
     GoRoute(path: '/intro', builder: (_, _) => const IntroPage()),
     GoRoute(
       path: '/coach-live',
@@ -416,7 +395,6 @@ final appRouter = GoRouter(
 
 String _initialLocation() {
   final path = Uri.base.path;
-  if (path == '/admin' || path.startsWith('/admin/')) return '/admin';
   // Deep links (anything beyond '/') skip the splash and go to that path.
   if (path.length > 1) return path;
   return '/splash';

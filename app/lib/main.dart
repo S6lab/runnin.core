@@ -52,25 +52,19 @@ Future<void> _runApp() async {
   // RunBloc — aqui é só init de canal/handler.
   unawaited(runBgNotificationService.init());
 
-  final isAdminEntry =
-      Uri.base.path == '/admin' || Uri.base.path.startsWith('/admin/');
-
   // Gate de manutenção / atualização obrigatória (Remote Config). Roda em
   // background — não bloqueia o boot; quando resolve, o builder do app exibe
   // a tela de bloqueio se necessário. Fail-open em caso de erro.
-  if (!isAdminEntry) {
-    forceUpdateController.check();
-  }
+  forceUpdateController.check();
 
   // Limpa qualquer sessão anônima leftover (do tempo em que a app fazia
   // signInAnonymously no boot). Sem isso, o user reabre o app já "logado"
   // como anônimo, pula a tela /login e cai direto em onboarding.
-  if (!isAdminEntry &&
-      FirebaseAuth.instance.currentUser?.isAnonymous == true) {
+  if (FirebaseAuth.instance.currentUser?.isAnonymous == true) {
     await FirebaseAuth.instance.signOut();
   }
 
-  if (!isAdminEntry && FirebaseAuth.instance.currentUser != null) {
+  if (FirebaseAuth.instance.currentUser != null) {
     try {
       await UserRemoteDatasource().provisionMe();
     } catch (_) {
