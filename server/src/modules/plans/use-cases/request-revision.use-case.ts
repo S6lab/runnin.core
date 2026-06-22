@@ -150,7 +150,15 @@ export class RequestRevisionUseCase {
       updatedAt: updatedPlan.updatedAt,
     });
 
-    const revisionId = uuid();
+    // ID determinístico por (plano, semana) — mesma estratégia do
+    // apply-weekly-revision. Garante 1 doc por (plano, semana) na
+    // collection planRevisions, sem importar quantas vezes o user (ou
+    // adaptação automática pós-run) dispare. Antes era uuid() + save(),
+    // que duplicava docs sob retry/auto-trigger; cleanup feito em
+    // server/scripts/dedupe-plan-revisions.js.
+    // weekNumber é 1-based (igual ao apply-weekly-revision) pra que ambos
+    // os caminhos produzam o MESMO id pra mesma semana civil.
+    const revisionId = `${plan.id}_w${currentWeekIndex + 1}`;
     const appliedAt = new Date().toISOString();
     const createdAt = appliedAt;
     const revision: PlanRevision = {
@@ -169,6 +177,8 @@ export class RequestRevisionUseCase {
       appliedAt,
     };
 
+    // `save()` faz `.set(id)` — idempotente por id. 2 calls com mesmo
+    // (planId, weekIndex) sobrescrevem o mesmo doc em vez de duplicar.
     await this.revisions.save(revision);
 
     // Adaptações automáticas não consomem cota do usuário.
