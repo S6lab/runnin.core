@@ -214,10 +214,18 @@ class HealthSyncService {
   /// by design — Apple não confirma quais permissions de saúde foram
   /// granted, pra evitar deduzir condições). Use [permissionsBreakdownFromSamples]
   /// no iOS pra resultados confiáveis via proxy de query.
+  // Tipos exclusivos do Apple HealthKit — não existem no Health Connect.
+  // Filtrados do breakdown no Android pra evitar entradas sempre-falsas.
+  static const _iosOnlyTypes = <HealthDataType>{
+    HealthDataType.APPLE_MOVE_TIME,
+    HealthDataType.APPLE_STAND_TIME,
+  };
+
   Future<Map<String, bool>> permissionsBreakdown() async {
     if (!isSupported) return const {};
     final granted = <String, bool>{};
     for (final t in _types) {
+      if (!kIsWeb && Platform.isAndroid && _iosOnlyTypes.contains(t)) continue;
       try {
         final ok = await _health.hasPermissions([t], permissions: [HealthDataAccess.READ]);
         granted[_typeMap[t] ?? t.name] = ok ?? false;

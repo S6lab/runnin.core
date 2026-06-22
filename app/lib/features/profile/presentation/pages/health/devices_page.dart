@@ -82,11 +82,20 @@ class _HealthDevicesPageState extends State<HealthDevicesPage> {
     setState(() => _permissionsLoading = true);
     analytics.logEvent('wearable_permissions_check_tapped', params: const {});
     try {
-      // permissionsBreakdownFromSamples = proxy via query 7d (iOS quirk:
-      // hasPermissions sempre retorna null/false pra reads). Aceita "sem
-      // dado no período" como "sem permissão" — limitação documentada no
-      // subtítulo do painel.
-      final result = await healthSyncService.permissionsBreakdownFromSamples();
+      final Map<String, bool> result;
+      if (!kIsWeb && Platform.isAndroid) {
+        // Android: hasPermissions() consulta o Health Connect diretamente e
+        // retorna o status real das permissões. permissionsBreakdownFromSamples()
+        // é um workaround pra iOS (que sempre retorna null/false pra reads) e
+        // no Android devolve false pra TODOS os tipos quando não há dados nos
+        // últimos 7d — mesmo com permissões corretamente concedidas.
+        result = await healthSyncService.permissionsBreakdown();
+      } else {
+        // iOS: hasPermissions() sempre retorna null/false pra read permissions
+        // (privacidade Apple). Proxy via query: se existe dado nos últimos 7d
+        // = permissão concedida.
+        result = await healthSyncService.permissionsBreakdownFromSamples();
+      }
       if (!mounted) return;
       setState(() {
         _permissionsCache = result;
@@ -99,6 +108,14 @@ class _HealthDevicesPageState extends State<HealthDevicesPage> {
 
   Future<void> _requestMissingPermissions() async {
     analytics.logEvent('wearable_permissions_request_again_tapped', params: const {});
+    if (!kIsWeb && Platform.isAndroid) {
+      // Android: depois de 2+ recusas, Health Connect aplica rate-limiting e
+      // requestAuthorization não abre mais o diálogo (retorna false em silêncio).
+      // Caminho real: abre as configurações do Health Connect pra o user
+      // conceder manualmente. Ao voltar, o botão "VERIFICAR DE NOVO" atualiza.
+      await _openHealthConnectSettings();
+      return;
+    }
     await healthSyncService.ensureAuthorizations();
     // Reverificar depois pra UI refletir o que o user concedeu agora.
     await _checkPermissions();
@@ -596,9 +613,12 @@ class _PermissionsPanel extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Verifica quais tipos de dados o app conseguiu LER nos últimos '
-            '7 dias. Tipos com ✗ podem estar sem permissão OU apenas sem '
-            'dado disponível no período (ambíguo, limitação da Apple).',
+            (!kIsWeb && Platform.isAndroid)
+                ? 'Verifica as permissões concedidas ao app no Health Connect. '
+                    'Tipos com ✗ não foram autorizados — toque em SOLICITAR NOVAMENTE.'
+                : 'Verifica quais tipos de dados o app conseguiu LER nos últimos '
+                    '7 dias. Tipos com ✗ podem estar sem permissão OU apenas sem '
+                    'dado disponível no período (ambíguo, limitação da Apple).',
             style: context.runninType.bodyXs.copyWith(
               height: 1.5,
               color: FigmaColors.textMuted,

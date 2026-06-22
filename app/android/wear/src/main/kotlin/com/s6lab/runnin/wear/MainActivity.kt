@@ -2,6 +2,7 @@ package com.s6lab.runnin.wear
 
 import android.Manifest
 import android.app.Activity
+import android.content.ContextWrapper
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.view.WindowManager
@@ -118,22 +119,25 @@ private fun WearApp() {
             }
     }
 
-    // KEEP_SCREEN_ON enquanto a run está ativa/pausada. WorkoutForegroundService
-    // mantém o PROCESSO vivo, mas Wear OS desliga a tela em ~5s sem interação
-    // e ao tocar volta pro watch face em vez da Activity — usuário relata que
-    // "app fica minimizando" durante a corrida. Flag aplicada via DisposableEffect
-    // pra ligar só durante active/paused e desligar no completed/idle (preserva
-    // bateria no resto do tempo). Paridade com `WKExtendedRuntimeSession` do
-    // watchOS, que já mantém o display ligado durante a session.
+    // KEEP_SCREEN_ON sempre que o app está em foreground — Wear OS desliga a
+    // tela em ~5s sem interação e ao tocar volta pro watch face em vez da
+    // Activity ("app fica minimizando"). Sem a flag, o 1º toque acorda a tela
+    // e não registra o clique no botão (INICIAR / PAUSAR parecem não funcionar).
+    //
+    // Cobrimos TODOS os estados (inclusive idle/briefing) porque o problema
+    // ocorre também nas telas pré-run, não só durante a corrida ativa.
+    //
+    // Bug original: `view.context as? Activity` retornava null — Compose
+    // embrulha o contexto em ContextWrapper e o cast direto falha silenciosamente.
+    // Fix: percorre a cadeia de ContextWrapper até encontrar a Activity real.
     val view = LocalView.current
-    val keepScreenOn = status == WatchStatus.active || status == WatchStatus.paused
-    DisposableEffect(keepScreenOn) {
-        val window = (view.context as? Activity)?.window
-        if (keepScreenOn) {
-            window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        } else {
-            window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+    DisposableEffect(Unit) {
+        var ctx: android.content.Context = view.context
+        while (ctx is ContextWrapper && ctx !is Activity) {
+            ctx = ctx.baseContext
         }
+        val window = (ctx as? Activity)?.window
+        window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         onDispose {
             window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         }
