@@ -34,7 +34,8 @@ class HealthDevicesPage extends StatefulWidget {
   State<HealthDevicesPage> createState() => _HealthDevicesPageState();
 }
 
-class _HealthDevicesPageState extends State<HealthDevicesPage> {
+class _HealthDevicesPageState extends State<HealthDevicesPage>
+    with WidgetsBindingObserver {
   // Connection state local — combina:
   //   (a) profile.hasWearable persistido no perfil (set pelo onboarding step e
   //       pelo _connectViaHealthBridge abaixo),
@@ -51,10 +52,35 @@ class _HealthDevicesPageState extends State<HealthDevicesPage> {
   Map<String, bool>? _permissionsCache;
   bool _permissionsLoading = false;
 
+  /// Quando user clica "SOLICITAR NOVAMENTE" e a gente abre Health Connect
+  /// Settings, ele perde o contexto do app. Quando volta (app resume), a
+  /// gente re-checa permissões + dispara sync automaticamente — sem isso
+  /// o user veria a UI parada e teria que clicar "VERIFICAR DE NOVO".
+  bool _awaitingHcReturn = false;
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _refreshConnectionState();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) return;
+    if (!_awaitingHcReturn) return;
+    _awaitingHcReturn = false;
+    // Voltou do Health Connect Settings: re-checa permissões pra atualizar
+    // a checklist visual + dispara sync best-effort pra puxar os dados que
+    // o user agora liberou (sono, BPM, etc).
+    _checkPermissions();
+    unawaited(healthSyncService.syncSince());
   }
 
   Future<void> _refreshConnectionState() async {
@@ -112,13 +138,18 @@ class _HealthDevicesPageState extends State<HealthDevicesPage> {
       // Android: depois de 2+ recusas, Health Connect aplica rate-limiting e
       // requestAuthorization não abre mais o diálogo (retorna false em silêncio).
       // Caminho real: abre as configurações do Health Connect pra o user
-      // conceder manualmente. Ao voltar, o botão "VERIFICAR DE NOVO" atualiza.
+      // conceder manualmente. Marca _awaitingHcReturn pra didChangeAppLifecycle
+      // re-checar permissões + disparar sync quando o user voltar pro app.
+      _awaitingHcReturn = true;
       await _openHealthConnectSettings();
       return;
     }
     await healthSyncService.ensureAuthorizations();
     // Reverificar depois pra UI refletir o que o user concedeu agora.
     await _checkPermissions();
+    // Best-effort: puxa o que o user acabou de liberar pra HealthKit começar
+    // a alimentar imediatamente em vez de só no próximo boot/sync agendado.
+    unawaited(healthSyncService.syncSince());
   }
 
   Future<void> _openIOSSettings() async {
@@ -815,25 +846,5 @@ const _kCompatibleProviders = <_ProviderSpec>[
     name: 'Garmin Connect',
     metrics: 'BPM · Sono · Passos · HRV (via OAuth)',
     icon: Icons.track_changes_outlined,
-  ),
-  _ProviderSpec(
-    name: 'Fitbit',
-    metrics: 'BPM · Sono · ECG · SpO2 (via OAuth)',
-    icon: Icons.favorite_outline,
-  ),
-  _ProviderSpec(
-    name: 'Polar Flow',
-    metrics: 'BPM · ECG · Sono (via OAuth)',
-    icon: Icons.monitor_heart_outlined,
-  ),
-  _ProviderSpec(
-    name: 'COROS',
-    metrics: 'BPM · Sono · HRV (via OAuth)',
-    icon: Icons.directions_run_outlined,
-  ),
-  _ProviderSpec(
-    name: 'Whoop',
-    metrics: 'BPM · HRV · Recovery (via OAuth)',
-    icon: Icons.bolt_outlined,
   ),
 ];

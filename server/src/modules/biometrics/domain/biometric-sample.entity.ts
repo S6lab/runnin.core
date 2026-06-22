@@ -54,9 +54,6 @@ export type BiometricSource =
   | 'apple_health'
   | 'health_connect'    // Google Health Connect (Android)
   | 'garmin'
-  | 'polar'
-  | 'fitbit'
-  | 'whoop'
   | 'manual'            // input manual no app
   | 'terra'             // aggregator opcional (fase 2)
   | 'seed';             // dados de teste/seed
