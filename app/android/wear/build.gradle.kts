@@ -27,8 +27,9 @@ android {
         // phone. Code 1 queimou em tentativa anterior de upload (Play Console
         // marca como usado mesmo se a release foi rejeitada). 11 trouxe fix
         // de logo cortada em display redondo + safe padding 14→20dp. 12
-        // adiciona FLAG_KEEP_SCREEN_ON durante run pra app parar de minimizar.
-        versionCode = 12
+        // adicionou FLAG_KEEP_SCREEN_ON durante run; uploaded mas precisou
+        // re-upload por conta de rebuild do phone — 13 incrementa o canal.
+        versionCode = 13
         versionName = "1.0.2"
     }
 
