@@ -214,9 +214,21 @@ export class RequestRevisionUseCase {
     currentWeekIndex: number,
   ): Plan['weeks'] {
     const oldPrefix = originalWeeks.slice(0, currentWeekIndex);
+    // 1-based: current week + 2 próximas devem ficar `full`. LLM costuma
+    // devolver sem detailLevel → UI mostra a current week como locked.
+    // Mesma regra do apply-weekly-revision (hydrate-revised-sessions:24-25).
+    const currentWeekNumberOneBased = currentWeekIndex + 1;
+    const fullWeeks = new Set<number>([
+      currentWeekNumberOneBased,
+      currentWeekNumberOneBased + 1,
+      currentWeekNumberOneBased + 2,
+    ]);
     const hydrated: PlanWeek[] = newWeeks.map((w) => ({
       ...w,
       sessions: w.sessions.map((s) => ({ ...s, id: uuid() })),
+      detailLevel: fullWeeks.has(w.weekNumber)
+        ? ('full' as const)
+        : ('skeleton' as const),
     }));
     return [...oldPrefix, ...hydrated];
   }
