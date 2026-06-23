@@ -1106,6 +1106,16 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
             .stream()
             .listen((pos) => add(_GpsUpdate(pos)));
       } else {
+        // Native: seed o mapa IMEDIATAMENTE com o último fix conhecido
+        // (cache do device). Cold-start sai do prédio = primeiros fixes
+        // costumam ter accuracy 100-2000m e caíam no filtro de 150m abaixo.
+        // Resultado pré-fix: 3min andando, mapa em branco, user cancela.
+        // Agora: lastKnown serve de seed pro mapa abrir e ficar centrado;
+        // _onGpsUpdate aceita o primeiro ponto sem filtro de display.
+        Geolocator.getLastKnownPosition().then((pos) {
+          if (pos != null && !isClosed) add(_GpsUpdate(pos));
+        }).catchError((_) {});
+
         _gpsSub = Geolocator.getPositionStream(
           locationSettings: _runLocationSettings(),
         ).listen((pos) => add(_GpsUpdate(pos)));
@@ -1336,9 +1346,18 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
       // ignore: avoid_print
       print('gps.web.point.accept accuracy=${pos.accuracy.toStringAsFixed(0)}m');
     } else if (pos.accuracy > _displayAccuracyThreshold) {
+      // Cold-start saindo do prédio: primeiros fixes têm accuracy 100-2000m
+      // e caíam todos aqui silenciosamente — mapa nunca abria mesmo com user
+      // andando. Sempre aceita o PRIMEIRO ponto pra UI centralizar; só conta
+      // distância quando accuracy ≤ _accuracyThreshold (15m), gate aplicado
+      // mais abaixo, então essa lenidade não infla métricas de corrida.
+      if (state.points.isNotEmpty) {
+        // ignore: avoid_print
+        print('gps.point.dropped accuracy=${pos.accuracy.toStringAsFixed(0)}m threshold=${_displayAccuracyThreshold.toStringAsFixed(0)}m');
+        return;
+      }
       // ignore: avoid_print
-      print('gps.point.dropped accuracy=${pos.accuracy.toStringAsFixed(0)}m threshold=${_displayAccuracyThreshold.toStringAsFixed(0)}m');
-      return;
+      print('gps.point.seed_accepted accuracy=${pos.accuracy.toStringAsFixed(0)}m (acima do threshold, primeiro ponto pra abrir mapa)');
     }
 
     // pos.altitude: geolocator devolve 0 quando o device não disponibiliza
