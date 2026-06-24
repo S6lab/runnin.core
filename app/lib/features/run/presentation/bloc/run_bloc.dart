@@ -585,6 +585,14 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
   // se rejeitarmos com base no native threshold, mapa nunca abre.
   static final double _accuracyThreshold = kIsWeb ? 5000.0 : 15.0;
   static final double _displayAccuracyThreshold = kIsWeb ? 10000.0 : 150.0;
+  /// Janela em ms após o início da corrida onde o display threshold fica
+  /// LENIENT (até `_warmupDisplayThreshold`m). Sem isso, cold-start
+  /// outdoor (saindo do prédio) com fixes 100-1000m fica com mapa
+  /// parado por 1-3min porque TODOS os pontos caem no filter de 150m.
+  /// Distância continua estrita (`_accuracyThreshold`=15m) — warm-up só
+  /// libera o DISPLAY pra UI mostrar progresso.
+  static const _warmupWindowMs = 60_000;
+  static const _warmupDisplayThreshold = 500.0;
   static const stationaryDistanceThresholdM = 10.0;
   static const _flushBatchSize = 30;
   static const _flushIntervalS = 30;
@@ -1345,19 +1353,30 @@ class RunBloc extends Bloc<RunEvent, RunState> with WidgetsBindingObserver {
     if (kIsWeb) {
       // ignore: avoid_print
       print('gps.web.point.accept accuracy=${pos.accuracy.toStringAsFixed(0)}m');
-    } else if (pos.accuracy > _displayAccuracyThreshold) {
-      // Cold-start saindo do prédio: primeiros fixes têm accuracy 100-2000m
-      // e caíam todos aqui silenciosamente — mapa nunca abria mesmo com user
-      // andando. Sempre aceita o PRIMEIRO ponto pra UI centralizar; só conta
-      // distância quando accuracy ≤ _accuracyThreshold (15m), gate aplicado
-      // mais abaixo, então essa lenidade não infla métricas de corrida.
-      if (state.points.isNotEmpty) {
+    } else {
+      // Threshold de display dinâmico:
+      //   - Primeiro ponto (seed): aceita qualquer accuracy
+      //   - Warm-up (primeiros 60s da corrida): _warmupDisplayThreshold (500m)
+      //   - Resto da corrida: _displayAccuracyThreshold (150m)
+      // Distância só é contada com accuracy ≤ 15m (_accuracyThreshold,
+      // checado mais abaixo), então a lenidade do warm-up só afeta DISPLAY.
+      final startedAt = _startedAtMs;
+      final inWarmup = startedAt != null &&
+          (DateTime.now().millisecondsSinceEpoch - startedAt) < _warmupWindowMs;
+      final effectiveDisplay =
+          inWarmup ? _warmupDisplayThreshold : _displayAccuracyThreshold;
+      if (pos.accuracy > effectiveDisplay) {
+        if (state.points.isNotEmpty) {
+          // ignore: avoid_print
+          print('gps.point.dropped accuracy=${pos.accuracy.toStringAsFixed(0)}m threshold=${effectiveDisplay.toStringAsFixed(0)}m warmup=$inWarmup');
+          return;
+        }
         // ignore: avoid_print
-        print('gps.point.dropped accuracy=${pos.accuracy.toStringAsFixed(0)}m threshold=${_displayAccuracyThreshold.toStringAsFixed(0)}m');
-        return;
+        print('gps.point.seed_accepted accuracy=${pos.accuracy.toStringAsFixed(0)}m (acima do threshold, primeiro ponto pra abrir mapa)');
+      } else if (inWarmup && pos.accuracy > _displayAccuracyThreshold) {
+        // ignore: avoid_print
+        print('gps.point.warmup_accepted accuracy=${pos.accuracy.toStringAsFixed(0)}m (warm-up window)');
       }
-      // ignore: avoid_print
-      print('gps.point.seed_accepted accuracy=${pos.accuracy.toStringAsFixed(0)}m (acima do threshold, primeiro ponto pra abrir mapa)');
     }
 
     // pos.altitude: geolocator devolve 0 quando o device não disponibiliza

@@ -59,13 +59,17 @@ class _HealthDevicesPageState extends State<HealthDevicesPage>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state != AppLifecycleState.resumed) return;
-    if (!_awaitingHcReturn) return;
-    _awaitingHcReturn = false;
-    // Voltou do Health Connect Settings: re-checa permissões pra atualizar
-    // a checklist visual + dispara sync best-effort pra puxar os dados que
-    // o user agora liberou (sono, BPM, etc).
-    _checkPermissions();
-    unawaited(healthSyncService.syncSince());
+    // SEMPRE re-checa conexão ao voltar do background — user pode ter
+    // pareado Wear OS app, mudado permissão em Ajustes, etc. Sem isso o
+    // ícone "Conectado" ficava stale (parceiro relatou: pareou Wear OS,
+    // voltou pra app, ícone ainda mostrava desconectado).
+    _refreshConnectionState();
+    if (_awaitingHcReturn) {
+      _awaitingHcReturn = false;
+      // Voltou do Health Connect Settings: re-checa permissões + sync.
+      _checkPermissions();
+      unawaited(healthSyncService.syncSince());
+    }
   }
 
   Future<void> _refreshConnectionState() async {
