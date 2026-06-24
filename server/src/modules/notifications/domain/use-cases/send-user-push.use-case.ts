@@ -41,12 +41,30 @@ export class SendUserPushUseCase {
             token: d.token,
             notification: { title: input.title, body: input.body },
             data: input.data ?? {},
+            // iOS: garante som/badge/banner (FCM monta auto, mas tem casos
+            // de devices ficarem silenciosos sem `apns` explícito).
+            apns: {
+              headers: { 'apns-priority': '10' },
+              payload: {
+                aps: {
+                  alert: { title: input.title, body: input.body },
+                  sound: 'default',
+                  badge: 1,
+                },
+              },
+            },
+            // Android: high priority + channel pro Doze mode não atrasar.
+            android: {
+              priority: 'high',
+              notification: { sound: 'default', channelId: 'runnin_default' },
+            },
           });
           sent++;
         } catch (err) {
           logger.warn('push.user.send_failed', {
             uid: userId,
             tokenId: d.id,
+            platform: d.platform,
             err: String(err),
           });
         }

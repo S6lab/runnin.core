@@ -12,21 +12,6 @@ import 'package:runnin/shared/widgets/figma/figma_device_card.dart';
 import 'package:runnin/shared/widgets/figma/figma_top_nav.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-/// Tipo canônico (vide _typeMap em health_sync_service) → label legível
-/// pro UI de permissões. Fora dessa lista cai num default `key.toUpperCase()`.
-const Map<String, String> _kPermissionLabels = {
-  'bpm': 'Batimentos cardíacos',
-  'resting_bpm': 'FC em repouso',
-  'hrv': 'Variabilidade FC (HRV)',
-  'sleep_hours': 'Sono total',
-  'sleep_deep': 'Sono profundo',
-  'steps': 'Passos',
-  'calories_burned': 'Calorias gastas',
-  'spo2': 'Oxigenação (SpO2)',
-  'weight': 'Peso',
-  'respiratory_rate': 'Respiração',
-};
-
 class HealthDevicesPage extends StatefulWidget {
   const HealthDevicesPage({super.key});
 
@@ -676,74 +661,93 @@ class _PermissionsPanel extends StatelessWidget {
 
   List<Widget> _buildResultList(BuildContext context, dynamic palette) {
     final entries = data!.entries.toList();
-    // Ordem amigável: sono, batimentos, repouso, hrv, calorias, passos, resto.
-    const order = [
-      'sleep_hours', 'sleep_deep', 'bpm', 'resting_bpm', 'hrv',
-      'calories_burned', 'steps', 'spo2', 'weight', 'respiratory_rate',
-    ];
-    entries.sort((a, b) {
-      final ai = order.indexOf(a.key);
-      final bi = order.indexOf(b.key);
-      return (ai == -1 ? 999 : ai).compareTo(bi == -1 ? 999 : bi);
-    });
+    final granted = entries.where((e) => e.value).length;
+    final missing = entries.length - granted;
+    final allOk = missing == 0;
+
     return [
-      for (final e in entries)
-        Padding(
-          padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-          child: Row(
-            children: [
-              Icon(
-                e.value ? Icons.check_circle_outline : Icons.cancel_outlined,
-                size: 16,
-                color: e.value ? palette.primary : FigmaColors.textMuted,
-              ),
-              const SizedBox(width: AppSpacing.md),
-              Expanded(
-                child: Text(
-                  _kPermissionLabels[e.key] ?? e.key.toUpperCase(),
-                  style: context.runninType.bodySm.copyWith(
-                    color: e.value ? FigmaColors.textPrimary : FigmaColors.textMuted,
-                  ),
-                ),
-              ),
-            ],
+      // Resumo agregado: 1 linha grande, sem listar item por item.
+      Container(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        decoration: BoxDecoration(
+          color: allOk
+              ? palette.primary.withValues(alpha: 0.08)
+              : FigmaColors.borderDefault,
+          border: Border.all(
+            color: allOk ? palette.primary : FigmaColors.borderDefault,
+            width: 1.0,
           ),
         ),
-      const SizedBox(height: AppSpacing.md),
-      _PermissionsCtaButton(
-        label: 'SOLICITAR NOVAMENTE',
-        onTap: onRequestAgain,
-        primary: true,
-      ),
-      const SizedBox(height: AppSpacing.sm),
-      // Row de 2 botões secundários: Saúde (instruções) + Ajustes do app.
-      // Ordem: Saúde primeiro porque é o caso de uso real do user que
-      // precisa ativar tipos faltantes; Ajustes do App é caminho geral
-      // (notifications etc) e raramente é o que ele quer.
-      if (onOpenHealth != null || onOpenSettings != null)
-        Row(
+        child: Row(
           children: [
-            if (onOpenHealth != null)
-              Expanded(
-                child: _PermissionsCtaButton(
-                  label: 'ABRIR SAÚDE',
-                  onTap: onOpenHealth!,
-                  primary: false,
-                ),
+            Icon(
+              allOk ? Icons.check_circle_outline : Icons.error_outline,
+              size: 20,
+              color: allOk ? palette.primary : FigmaColors.textPrimary,
+            ),
+            const SizedBox(width: AppSpacing.md),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    allOk
+                        ? 'Permissões em dia'
+                        : '$missing ${missing == 1 ? "permissão pendente" : "permissões pendentes"}',
+                    style: context.runninType.bodyMd.copyWith(
+                      color: FigmaColors.textPrimary,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    allOk
+                        ? '$granted/${entries.length} tipos liberados'
+                        : 'Toque em SOLICITAR NOVAMENTE pra liberar os faltantes',
+                    style: context.runninType.bodyXs.copyWith(
+                      color: FigmaColors.textMuted,
+                    ),
+                  ),
+                ],
               ),
-            if (onOpenHealth != null && onOpenSettings != null)
-              const SizedBox(width: AppSpacing.sm),
-            if (onOpenSettings != null)
-              Expanded(
-                child: _PermissionsCtaButton(
-                  label: 'AJUSTES DO APP',
-                  onTap: onOpenSettings!,
-                  primary: false,
-                ),
-              ),
+            ),
           ],
         ),
-      const SizedBox(height: AppSpacing.sm),
+      ),
+      const SizedBox(height: AppSpacing.md),
+      if (!allOk) ...[
+        _PermissionsCtaButton(
+          label: 'SOLICITAR NOVAMENTE',
+          onTap: onRequestAgain,
+          primary: true,
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        // Row de 2 botões secundários: Saúde (instruções) + Ajustes do app.
+        if (onOpenHealth != null || onOpenSettings != null)
+          Row(
+            children: [
+              if (onOpenHealth != null)
+                Expanded(
+                  child: _PermissionsCtaButton(
+                    label: 'ABRIR SAÚDE',
+                    onTap: onOpenHealth!,
+                    primary: false,
+                  ),
+                ),
+              if (onOpenHealth != null && onOpenSettings != null)
+                const SizedBox(width: AppSpacing.sm),
+              if (onOpenSettings != null)
+                Expanded(
+                  child: _PermissionsCtaButton(
+                    label: 'AJUSTES DO APP',
+                    onTap: onOpenSettings!,
+                    primary: false,
+                  ),
+                ),
+            ],
+          ),
+        const SizedBox(height: AppSpacing.sm),
+      ],
       _PermissionsCtaButton(
         label: 'VERIFICAR DE NOVO',
         onTap: onCheck,

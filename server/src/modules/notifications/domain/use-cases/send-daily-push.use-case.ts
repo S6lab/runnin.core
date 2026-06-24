@@ -82,15 +82,37 @@ export class SendDailyPushUseCase {
             token: d.token,
             notification: { title: msg.title, body: msg.body },
             data: { kind: 'daily_motivational', route: today ? '/training' : '/home' },
+            // iOS: sem o bloco `apns` explícito o FCM monta um payload
+            // funcional a partir de `notification`, mas alguns devices
+            // ficam sem som/badge. Setamos explícito pra garantir.
+            apns: {
+              headers: { 'apns-priority': '10' },
+              payload: {
+                aps: {
+                  alert: { title: msg.title, body: msg.body },
+                  sound: 'default',
+                  badge: 1,
+                },
+              },
+            },
+            // Android: high priority pra entregar mesmo em Doze mode.
+            android: {
+              priority: 'high',
+              notification: { sound: 'default', channelId: 'runnin_default' },
+            },
           });
           sent++;
         } catch (err) {
           logger.warn('push.daily.send_failed', {
-            uid: userId, tokenId: d.id, err: String(err),
+            uid: userId, tokenId: d.id, platform: d.platform, err: String(err),
           });
         }
       }),
     );
+    logger.info('push.daily.batch', {
+      uid: userId, sent, total: tokens.length,
+      platforms: tokens.map((t) => t.platform).join(','),
+    });
     return { sent, skipped: null };
   }
 }
